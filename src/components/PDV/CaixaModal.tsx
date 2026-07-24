@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Receipt,
-  ArrowRight,
 } from 'lucide-react';
 import { CashRegisterSession, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -28,8 +27,6 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
   caixaSession,
   user,
 }) => {
-  if (!isOpen) return null;
-
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
 
   // Forms state
@@ -42,10 +39,11 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
   const [sangriaAmount, setSangriaAmount] = useState<string>('');
   const [sangriaReason, setSangriaReason] = useState<string>('');
 
-  const [declaredCash, setDeclaredCash] = useState<string>('');
   const [closeNotes, setCloseNotes] = useState<string>('');
 
   const [activeTab, setActiveTab] = useState<'resumo' | 'suprimento' | 'sangria' | 'fechar'>('resumo');
+
+  if (!isOpen) return null;
 
   const handleOpenCaixa = (e: React.FormEvent) => {
     e.preventDefault();

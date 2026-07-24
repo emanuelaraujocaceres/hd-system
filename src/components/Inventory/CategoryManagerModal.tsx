@@ -15,13 +15,13 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   onClose,
   categories,
 }) => {
-  if (!isOpen) return null;
-
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [editingDesc, setEditingDesc] = useState('');
+
+  if (!isOpen) return null;
 
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();

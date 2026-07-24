@@ -5,13 +5,10 @@ import {
   Package,
   DollarSign,
   Users,
-  FileText,
   Settings,
   Building2,
   Lock,
   Unlock,
-  ChevronDown,
-  Sparkles,
   RefreshCw,
   LogOut,
 } from 'lucide-react';
@@ -98,24 +95,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Store Branch Dropdown */}
-        <div className="relative">
-          <select
-            value={currentBranch.id}
-            onChange={(e) => {
-              const b = branches.find((branch) => branch.id === e.target.value);
-              if (b) onSelectBranch(b);
-            }}
-            className="w-full text-xs font-medium bg-slate-800/90 dark:bg-[#18181b] text-slate-200 dark:text-[#a1a1aa] border border-slate-700/80 dark:border-[#27272a] rounded-lg px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-          >
-            {branches.map((b) => (
-              <option key={b.id} value={b.id} className="bg-slate-900 dark:bg-[#09090b] text-slate-200">
-                {b.name} ({b.city})
-              </option>
-            ))}
-          </select>
-          <Building2 className="w-3.5 h-3.5 text-slate-400 dark:text-[#71717a] absolute right-2.5 top-2.5 pointer-events-none" />
-        </div>
+        {/* Store Branch Dropdown — Admin Only */}
+        {isAdmin && (
+          <div className="relative">
+            <select
+              value={currentBranch.id}
+              onChange={(e) => {
+                const b = branches.find((branch) => branch.id === e.target.value);
+                if (b) onSelectBranch(b);
+              }}
+              className="w-full text-xs font-medium bg-slate-800/90 dark:bg-[#18181b] text-slate-200 dark:text-[#a1a1aa] border border-slate-700/80 dark:border-[#27272a] rounded-lg px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            >
+              {branches.map((b) => (
+                <option key={b.id} value={b.id} className="bg-slate-900 dark:bg-[#09090b] text-slate-200">
+                  {b.name} ({b.city})
+                </option>
+              ))}
+            </select>
+            <Building2 className="w-3.5 h-3.5 text-slate-400 dark:text-[#71717a] absolute right-2.5 top-2.5 pointer-events-none" />
+          </div>
+        )}
       </div>
 
       {/* Caixa Status Quick Box */}

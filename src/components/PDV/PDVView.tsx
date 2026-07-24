@@ -62,7 +62,6 @@ export const PDVView: React.FC<PDVViewProps> = ({
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
-  const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 

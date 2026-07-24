@@ -10,10 +10,6 @@ import {
   Copy,
   Check,
   Split,
-  Percent,
-  Receipt,
-  Sparkles,
-  ArrowRight,
 } from 'lucide-react';
 import {
   CartItem,
@@ -56,8 +52,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   user,
   onSaleSuccess,
 }) => {
-  if (!isOpen) return null;
-
   const totalAmount = Math.max(0, subtotal - discount);
 
   const [method, setMethod] = useState<PaymentMethod>('pix');
@@ -92,6 +86,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       return () => clearTimeout(timer);
     }
   }, [method, pixPaid]);
+
+  if (!isOpen) return null;
 
   const changeDue = Math.max(0, cashGiven - totalAmount);
 

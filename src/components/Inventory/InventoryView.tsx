@@ -3,7 +3,6 @@ import {
   Package,
   Plus,
   Search,
-  Filter,
   Barcode,
   Edit2,
   Trash2,
@@ -21,7 +20,7 @@ import {
   Sparkles,
   RefreshCw,
 } from 'lucide-react';
-import { Product, Category, Supplier, StockMovement, UserProfile } from '../../types';
+import { Product, Category, Supplier, StockMovement, UserProfile, SystemSettings } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { BarcodeLabelModal } from './BarcodeLabelModal';
@@ -32,7 +31,7 @@ interface InventoryViewProps {
   products: Product[];
   categories: Category[];
   suppliers: Supplier[];
-  settings: any;
+  settings: SystemSettings;
   user: UserProfile;
 }
 

@@ -29,8 +29,6 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
   currentBranch,
   onAccountAdded,
 }) => {
-  if (!isOpen) return null;
-
   const [isScanning, setIsScanning] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -39,6 +37,8 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  if (!isOpen) return null;
 
   const handleStartCamera = async () => {
     try {

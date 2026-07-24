@@ -29,6 +29,7 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('pdv');
   const [darkMode, setDarkMode] = useState<boolean>(true);
   const [isCaixaModalOpen, setIsCaixaModalOpen] = useState<boolean>(false);
+  const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
 
   // App State loaded from storageService
   const [products, setProducts] = useState<Product[]>([]);
@@ -61,7 +62,7 @@ export const App: React.FC = () => {
 
     refreshState();
     const unsubscribe = storageService.subscribe(refreshState);
-    return () => unsubscribe();
+    return () => { unsubscribe(); };
   }, []);
 
   const handleSelectBranch = (branch: StoreBranch) => {
@@ -135,13 +136,23 @@ export const App: React.FC = () => {
         onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
         onResetDemo={() => storageService.resetDemoData()}
         onLogout={handleLogout}
+        isMobileOpen={isMobileOpen}
+        setIsMobileOpen={setIsMobileOpen}
       />
+
+      {/* Mobile backdrop overlay when sidebar is open */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-slate-900/60 backdrop-blur-sm lg:hidden transition-opacity"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-slate-50 dark:bg-[#09090b]">
         {/* Header Bar */}
         <Header
-          onToggleMobileMenu={() => {}}
+          onToggleMobileMenu={() => setIsMobileOpen((prev) => !prev)}
           currentTab={activeTab}
           setCurrentTab={setActiveTab}
           products={products}
@@ -252,7 +263,7 @@ export const App: React.FC = () => {
       <CaixaModal
         isOpen={isCaixaModalOpen}
         onClose={() => setIsCaixaModalOpen(false)}
-        session={caixaSession}
+        caixaSession={caixaSession}
         user={user}
       />
     </div>

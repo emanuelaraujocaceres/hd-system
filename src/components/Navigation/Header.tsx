@@ -9,10 +9,8 @@ import {
   ShoppingCart,
   Sun,
   Moon,
-  Sparkles,
   Lock,
   Unlock,
-  Building2,
   LogOut,
 } from 'lucide-react';
 import { Product, CashRegisterSession, UserProfile, StoreBranch } from '../../types';
@@ -108,28 +106,6 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="hidden sm:inline-block px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-bold tracking-wider uppercase">
             ONLINE
           </span>
-
-          {/* Active Branch Selector Pill */}
-          {branches.length > 0 && currentBranch && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-semibold text-slate-700 dark:text-[#a1a1aa] shadow-sm">
-              <Building2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <select
-                value={currentBranch.id}
-                onChange={(e) => {
-                  const b = branches.find((branch) => branch.id === e.target.value);
-                  if (b && onSelectBranch) onSelectBranch(b);
-                }}
-                className="bg-transparent border-none font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer text-xs pr-1"
-                title="Trocar Filial Ativa"
-              >
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id} className="bg-white dark:bg-[#18181b] text-slate-900 dark:text-white">
-                    {b.name} ({b.city})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
         </div>
       </div>
 

@@ -31,8 +31,6 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   currentBranch,
   onProductsImported,
 }) => {
-  if (!isOpen) return null;
-
   const [scanType, setScanType] = useState<'product' | 'invoice'>('product');
   const [productMode, setProductMode] = useState<'unit' | 'box'>('box');
 
@@ -47,6 +45,8 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  if (!isOpen) return null;
 
   const handleStartCamera = async () => {
     try {
@@ -172,12 +172,12 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
 
     storageService.saveProduct(newProd);
 
-    // Record stock movement log
+    // Stock is already set in saveProduct; log the entry reason only
     const reasonText = isBox
       ? `Entrada Câmera: Caixa Atacado (${boxQty}un) - Filial ${currentBranch?.name || 'Matriz'}`
       : `Entrada Câmera: Reconhecimento de Embalagem - Filial ${currentBranch?.name || 'Matriz'}`;
 
-    storageService.updateStock(newProd.id, 0, reasonText, 'Câmera IA HD-System');
+    storageService.updateStock(newProd.id, newProd.currentStock, reasonText, 'Câmera IA HD-System');
 
     posAudio.chime();
     if (onProductsImported) onProductsImported();
@@ -209,7 +209,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
       storageService.saveProduct(newProd);
 
       const reasonText = `Importação Nota Fiscal ${scannedInvoiceResult.invoiceNumber} - Fornecedor ${scannedInvoiceResult.supplierName}`;
-      storageService.updateStock(newProd.id, 0, reasonText, 'Leitor NF Câmera');
+      storageService.updateStock(newProd.id, newProd.currentStock, reasonText, 'Leitor NF Câmera');
     });
 
     posAudio.chime();

@@ -20,7 +20,6 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { Product, StoreBranch, SystemSettings } from '../../types';
-import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 
 interface TVShowcaseViewProps {

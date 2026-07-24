@@ -4,7 +4,6 @@ import {
   Building2,
   Printer,
   Store,
-  ShieldCheck,
   Save,
   Plus,
   Trash2,
@@ -16,20 +15,15 @@ import {
   Lock,
   Mail,
   UserPlus,
-  CheckSquare,
-  Square,
   Sparkles,
   CreditCard,
   Calendar,
   Zap,
   Download,
-  ExternalLink,
   Clock,
-  AlertCircle,
   Receipt,
   QrCode,
   RefreshCw,
-  ShieldAlert,
 } from 'lucide-react';
 import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, SubscriptionInfo, SubscriptionInvoice } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -485,7 +479,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 </label>
                 <select
                   value={printerPaperSize}
-                  onChange={(e) => setPrinterPaperSize(e.target.value as any)}
+                  onChange={(e) => setPrinterPaperSize(e.target.value as '80mm' | '58mm')}
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
                 >
                   <option value="80mm">80mm (Bobina Larga de Caixa)</option>

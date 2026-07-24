@@ -7,27 +7,12 @@ import {
   Package,
   Sparkles,
   RefreshCw,
-  Plus,
   ArrowUpRight,
   ArrowDownRight,
   Users,
   CreditCard,
   Building2,
 } from 'lucide-react';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-} from 'recharts';
 import { Product, Sale, CashRegisterSession, FinancialAccount } from '../../types';
 
 interface DashboardViewProps {
