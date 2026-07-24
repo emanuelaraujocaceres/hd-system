@@ -343,6 +343,10 @@ class StorageService {
     return branches[0] || { id: 'br-01', name: 'HD-System Matriz São Paulo', code: 'SP-01', cnpj: '12.345.678/0001-90', city: 'São Paulo', state: 'SP', address: 'Av. Paulista, 1000', phone: '(11) 3000-0000', isHeadquarters: true, active: true };
   }
 
+  getSelectedBranchId(): string {
+    return localStorage.getItem('hd_system_selected_branch_id') || '';
+  }
+
   setSelectedBranchId(id: string) {
     localStorage.setItem('hd_system_selected_branch_id', id);
     this.notify();

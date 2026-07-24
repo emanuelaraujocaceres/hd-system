@@ -5,18 +5,23 @@ import {
   Package,
   FileText,
   Boxes,
-  Sparkles,
   Check,
   RefreshCw,
   Upload,
-  AlertCircle,
   Building2,
-  DollarSign,
-  Barcode,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { Product, StoreBranch } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+
+interface InvoiceFormItem {
+  name: string;
+  barcode: string;
+  quantity: number;
+  unitPrice: number;
+}
 
 interface StockCameraScannerModalProps {
   isOpen: boolean;
@@ -34,13 +39,23 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   const [scanType, setScanType] = useState<'product' | 'invoice'>('product');
   const [productMode, setProductMode] = useState<'unit' | 'box'>('box');
 
-  const [isScanning, setIsScanning] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
-  // Results
-  const [scannedProductResult, setScannedProductResult] = useState<any | null>(null);
-  const [scannedInvoiceResult, setScannedInvoiceResult] = useState<any | null>(null);
+  // Product form fields
+  const [formName, setFormName] = useState('');
+  const [formBarcode, setFormBarcode] = useState('');
+  const [formCategory, setFormCategory] = useState('Geral');
+  const [formCostPrice, setFormCostPrice] = useState<number>(10);
+  const [formSalePrice, setFormSalePrice] = useState<number>(15);
+  const [formQty, setFormQty] = useState<number>(1);
+
+  // Invoice form fields
+  const [invSupplierName, setInvSupplierName] = useState('');
+  const [invInvoiceNumber, setInvInvoiceNumber] = useState('');
+  const [invItems, setInvItems] = useState<InvoiceFormItem[]>([
+    { name: '', barcode: '', quantity: 1, unitPrice: 0 },
+  ]);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -51,8 +66,6 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   const handleStartCamera = async () => {
     try {
       setCapturedImage(null);
-      setScannedProductResult(null);
-      setScannedInvoiceResult(null);
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
@@ -92,7 +105,6 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
         const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
         setCapturedImage(dataUrl);
         handleStopCamera();
-        processImageWithAI(dataUrl);
       }
     }
   };
@@ -106,94 +118,88 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
           const dataUrl = evt.target.result as string;
           setCapturedImage(dataUrl);
           handleStopCamera();
-          processImageWithAI(dataUrl);
         }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const processImageWithAI = async (dataUrl: string) => {
-    setIsScanning(true);
-    posAudio.chime();
+  const resetProductForm = () => {
+    setFormName('');
+    setFormBarcode('');
+    setFormCategory('Geral');
+    setFormCostPrice(10);
+    setFormSalePrice(15);
+    setFormQty(1);
+  };
 
-    try {
-      const endpoint = scanType === 'product' ? '/api/ai/scan-product' : '/api/ai/scan-invoice';
-      const bodyPayload =
-        scanType === 'product'
-          ? { imageBase64: dataUrl, mode: productMode }
-          : { imageBase64: dataUrl };
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyPayload),
-      });
-
-      const data = await res.json();
-      if (data.result) {
-        if (scanType === 'product') {
-          setScannedProductResult(data.result);
-        } else {
-          setScannedInvoiceResult(data.result);
-        }
-        posAudio.chime();
-      }
-    } catch (err) {
-      console.error('Erro na análise da foto:', err);
-    } finally {
-      setIsScanning(false);
-    }
+  const resetInvoiceForm = () => {
+    setInvSupplierName('');
+    setInvInvoiceNumber('');
+    setInvItems([{ name: '', barcode: '', quantity: 1, unitPrice: 0 }]);
   };
 
   const handleConfirmAddProduct = () => {
-    if (!scannedProductResult) return;
-
-    const isBox = scannedProductResult.isBox || productMode === 'box';
-    const boxQty = scannedProductResult.boxQuantity || 12;
+    const isBox = productMode === 'box';
 
     const newProd: Product = {
       id: `prod-${Date.now()}`,
-      name: scannedProductResult.name || 'Produto Escaneado Câmera',
-      barcode: scannedProductResult.barcode || `${Math.floor(7890000000000 + Math.random() * 999999999)}`,
+      name: formName || 'Produto Escaneado Câmera',
+      barcode: formBarcode || `${Math.floor(7890000000000 + Math.random() * 999999999)}`,
       sku: `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
-      category: scannedProductResult.category || 'Geral',
+      category: formCategory || 'Geral',
       unit: isBox ? 'cx' : 'un',
-      costPrice: scannedProductResult.costPrice || 10.0,
-      salePrice: scannedProductResult.price || 15.0,
-      currentStock: isBox ? boxQty : 1,
+      costPrice: formCostPrice || 10.0,
+      salePrice: formSalePrice || 15.0,
+      currentStock: isBox ? formQty * 12 : formQty,
       minStock: 5,
       maxStock: 100,
       imageUrl:
         'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&q=80',
       active: true,
       updatedAt: new Date().toISOString(),
+      storeBranchId: currentBranch?.id,
     };
 
     storageService.saveProduct(newProd);
 
-    // Stock is already set in saveProduct; log the entry reason only
     const reasonText = isBox
-      ? `Entrada Câmera: Caixa Atacado (${boxQty}un) - Filial ${currentBranch?.name || 'Matriz'}`
-      : `Entrada Câmera: Reconhecimento de Embalagem - Filial ${currentBranch?.name || 'Matriz'}`;
+      ? `Entrada Câmera: Caixa Atacado (${formQty}cx) - Filial ${currentBranch?.name || 'Matriz'}`
+      : `Entrada Câmera: ${formQty}un - Filial ${currentBranch?.name || 'Matriz'}`;
 
-    storageService.updateStock(newProd.id, newProd.currentStock, reasonText, 'Câmera IA HD-System');
+    storageService.updateStock(newProd.id, newProd.currentStock, reasonText, 'Câmera HD-System');
 
     posAudio.chime();
     if (onProductsImported) onProductsImported();
     onClose();
   };
 
-  const handleConfirmImportInvoice = () => {
-    if (!scannedInvoiceResult || !scannedInvoiceResult.items) return;
+  const handleAddInvoiceItem = () => {
+    setInvItems([...invItems, { name: '', barcode: '', quantity: 1, unitPrice: 0 }]);
+  };
 
-    scannedInvoiceResult.items.forEach((item: any, idx: number) => {
+  const handleRemoveInvoiceItem = (index: number) => {
+    if (invItems.length <= 1) return;
+    setInvItems(invItems.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateInvoiceItem = (index: number, field: keyof InvoiceFormItem, value: string | number) => {
+    const updated = [...invItems];
+    updated[index] = { ...updated[index], [field]: value };
+    setInvItems(updated);
+  };
+
+  const handleConfirmImportInvoice = () => {
+    const validItems = invItems.filter((item) => item.name.trim() !== '');
+    if (validItems.length === 0) return;
+
+    validItems.forEach((item, idx) => {
       const newProd: Product = {
         id: `prod-inv-${Date.now()}-${idx}`,
         name: item.name,
         barcode: item.barcode || `${Math.floor(7890000000000 + Math.random() * 999999999)}`,
         sku: `NF-${item.barcode?.slice(-4) || idx}`,
-        category: item.category || 'Geral',
+        category: 'Geral',
         unit: 'un',
         costPrice: item.unitPrice || 10.0,
         salePrice: (item.unitPrice || 10.0) * 1.4,
@@ -204,11 +210,12 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
           'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80',
         active: true,
         updatedAt: new Date().toISOString(),
+        storeBranchId: currentBranch?.id,
       };
 
       storageService.saveProduct(newProd);
 
-      const reasonText = `Importação Nota Fiscal ${scannedInvoiceResult.invoiceNumber} - Fornecedor ${scannedInvoiceResult.supplierName}`;
+      const reasonText = `Importação Nota Fiscal ${invInvoiceNumber || 'S/N'} - Fornecedor ${invSupplierName || 'Não informado'}`;
       storageService.updateStock(newProd.id, newProd.currentStock, reasonText, 'Leitor NF Câmera');
     });
 
@@ -230,11 +237,11 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span>Scanner Visual por Câmera</span>
                 <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-extrabold uppercase">
-                  Visão IA
+                  Manual
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Adicione produtos, caixas em atacado ou leia folhas de notas fiscais pela câmera
+                Tire uma foto e preencha os dados manualmente usando a foto como referência
               </p>
             </div>
           </div>
@@ -269,7 +276,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
               onClick={() => {
                 setScanType('product');
                 setCapturedImage(null);
-                setScannedProductResult(null);
+                resetProductForm();
               }}
               className={`py-2 rounded-lg flex items-center justify-center gap-2 transition-all ${
                 scanType === 'product'
@@ -285,7 +292,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
               onClick={() => {
                 setScanType('invoice');
                 setCapturedImage(null);
-                setScannedInvoiceResult(null);
+                resetInvoiceForm();
               }}
               className={`py-2 rounded-lg flex items-center justify-center gap-2 transition-all ${
                 scanType === 'invoice'
@@ -341,7 +348,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                     Aponta a câmera do celular para {scanType === 'product' ? 'a embalagem ou caixa' : 'a folha da nota fiscal'}
                   </h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
-                    A IA lê o código de barras, nome na embalagem, itens da nota e inclui direto no estoque da filial selecionada.
+                    Tire uma foto e preencha os dados manualmente usando a imagem como referência.
                   </p>
                 </div>
 
@@ -399,134 +406,201 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                     className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2"
                   >
                     <Camera className="w-4 h-4" />
-                    <span>CAPTURAR E ANALISAR FOTO</span>
+                    <span>CAPTURAR FOTO</span>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Captured Image Preview & AI Loading */}
-            {capturedImage && (
+            {/* Captured Image Preview + Product Manual Entry Form */}
+            {capturedImage && scanType === 'product' && (
               <div className="space-y-4">
-                <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-[#27272a] max-h-48 bg-slate-900 flex items-center justify-center">
-                  <img src={capturedImage} alt="Foto Capturada" className="w-full h-48 object-cover opacity-80" />
-                  {isScanning && (
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center text-white space-y-2">
-                      <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
-                      <span className="text-xs font-bold flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-amber-400" />
-                        Analisando com Visão Computacional IA...
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-end">
+                <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-[#27272a] bg-slate-900">
+                  <img src={capturedImage} alt="Foto Capturada" className="w-full max-h-64 object-contain" />
                   <button
                     onClick={() => {
                       setCapturedImage(null);
-                      setScannedProductResult(null);
-                      setScannedInvoiceResult(null);
+                      resetProductForm();
                       handleStartCamera();
                     }}
-                    className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                    className="absolute top-2 right-2 p-1.5 bg-black/60 text-white rounded-lg text-xs hover:bg-black/80 transition-colors"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Tirar outra foto
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Manual Entry Form */}
+                <div className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 space-y-3">
+                  <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider flex items-center gap-1">
+                    <Package className="w-4 h-4" />
+                    Preencha os dados do produto (use a foto como referência):
+                  </span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      placeholder="Nome do Produto"
+                      className="col-span-2 px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <input
+                      value={formBarcode}
+                      onChange={(e) => setFormBarcode(e.target.value)}
+                      placeholder="Código de Barras (EAN-13)"
+                      className="px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <input
+                      value={formCategory}
+                      onChange={(e) => setFormCategory(e.target.value)}
+                      placeholder="Categoria"
+                      className="px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <input
+                      value={formCostPrice}
+                      onChange={(e) => setFormCostPrice(Number(e.target.value))}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Preço Custo"
+                      className="px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <input
+                      value={formSalePrice}
+                      onChange={(e) => setFormSalePrice(Number(e.target.value))}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Preço Venda"
+                      className="px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <input
+                      value={formQty}
+                      onChange={(e) => setFormQty(Number(e.target.value))}
+                      type="number"
+                      min="1"
+                      placeholder="Quantidade"
+                      className="px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleConfirmAddProduct}
+                    className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>DAR ENTRADA NO ESTOQUE DA FILIAL</span>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* PRODUCT SCAN RESULT PREVIEW */}
-            {scannedProductResult && (
-              <div className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 space-y-3 animate-fadeIn">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1">
-                    <Check className="w-4 h-4" /> Producto Detectado com Sucesso!
+            {/* Captured Image Preview + Invoice Manual Entry Form */}
+            {capturedImage && scanType === 'invoice' && (
+              <div className="space-y-4">
+                <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-[#27272a] bg-slate-900">
+                  <img src={capturedImage} alt="Foto Capturada" className="w-full max-h-64 object-contain" />
+                  <button
+                    onClick={() => {
+                      setCapturedImage(null);
+                      resetInvoiceForm();
+                      handleStartCamera();
+                    }}
+                    className="absolute top-2 right-2 p-1.5 bg-black/60 text-white rounded-lg text-xs hover:bg-black/80 transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Manual Entry Form */}
+                <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-3">
+                  <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
+                    <FileText className="w-4 h-4" />
+                    Preencha os dados da nota fiscal (use a foto como referência):
                   </span>
-                  {scannedProductResult.isBox && (
-                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-extrabold">
-                      CAIXA ATACADO ({scannedProductResult.boxQuantity} UNIDADES)
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      value={invSupplierName}
+                      onChange={(e) => setInvSupplierName(e.target.value)}
+                      placeholder="Nome do Fornecedor"
+                      className="col-span-2 px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <input
+                      value={invInvoiceNumber}
+                      onChange={(e) => setInvInvoiceNumber(e.target.value)}
+                      placeholder="Número da Nota Fiscal"
+                      className="px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  {/* Invoice Items */}
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">
+                      Itens da Nota:
                     </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="text-slate-400 block text-[10px] font-bold">NOME / EMBALAGEM</span>
-                    <span className="font-bold text-slate-900 dark:text-white">{scannedProductResult.name}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] font-bold">CÓDIGO DE BARRAS</span>
-                    <span className="font-mono font-bold text-slate-900 dark:text-white flex items-center gap-1">
-                      <Barcode className="w-3.5 h-3.5 text-slate-400" />
-                      {scannedProductResult.barcode}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] font-bold">PREÇO DE CUSTO EST.</span>
-                    <span className="font-bold text-slate-900 dark:text-white">R$ {scannedProductResult.costPrice.toFixed(2)}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] font-bold">PREÇO DE VENDA SUGERIDO</span>
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400">R$ {scannedProductResult.price.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleConfirmAddProduct}
-                  className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>DAR ENTRADA NO ESTOQUE DA FILIAL</span>
-                </button>
-              </div>
-            )}
-
-            {/* INVOICE SCAN RESULT PREVIEW */}
-            {scannedInvoiceResult && scannedInvoiceResult.items && (
-              <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-3 animate-fadeIn">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                    <Check className="w-4 h-4" /> Nota Fiscal Reconhecida!
-                  </span>
-                  <span className="text-xs font-bold text-slate-900 dark:text-white">
-                    Total: R$ {scannedInvoiceResult.totalAmount.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="text-xs space-y-1">
-                  <p className="font-bold text-slate-900 dark:text-white">
-                    Fornecedor: {scannedInvoiceResult.supplierName} ({scannedInvoiceResult.invoiceNumber})
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    {scannedInvoiceResult.items.length} itens extraídos para inclusão direta no estoque:
-                  </p>
-                </div>
-
-                <div className="max-h-40 overflow-y-auto divide-y divide-slate-200 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-[#18181b]">
-                  {scannedInvoiceResult.items.map((item: any, idx: number) => (
-                    <div key={idx} className="p-2 flex items-center justify-between text-[11px]">
-                      <div>
-                        <span className="font-bold text-slate-900 dark:text-white block">{item.name}</span>
-                        <span className="text-slate-400 font-mono">EAN: {item.barcode}</span>
+                    {invItems.map((item, idx) => (
+                      <div key={idx} className="p-3 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400">ITEM {idx + 1}</span>
+                          {invItems.length > 1 && (
+                            <button
+                              onClick={() => handleRemoveInvoiceItem(idx)}
+                              className="p-1 text-red-400 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                        <input
+                          value={item.name}
+                          onChange={(e) => handleUpdateInvoiceItem(idx, 'name', e.target.value)}
+                          placeholder="Nome do Produto"
+                          className="w-full px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <div className="grid grid-cols-3 gap-2">
+                          <input
+                            value={item.barcode}
+                            onChange={(e) => handleUpdateInvoiceItem(idx, 'barcode', e.target.value)}
+                            placeholder="EAN"
+                            className="px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-[11px] font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <input
+                            value={item.quantity}
+                            onChange={(e) => handleUpdateInvoiceItem(idx, 'quantity', Number(e.target.value))}
+                            type="number"
+                            min="1"
+                            placeholder="Qtd"
+                            className="px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-[11px] font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <input
+                            value={item.unitPrice}
+                            onChange={(e) => handleUpdateInvoiceItem(idx, 'unitPrice', Number(e.target.value))}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="R$ Unit."
+                            className="px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-[11px] font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="font-bold text-slate-900 dark:text-white block">{item.quantity} un x R$ {item.unitPrice.toFixed(2)}</span>
-                        <span className="text-emerald-600 font-bold">R$ {item.totalPrice.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
 
-                <button
-                  onClick={handleConfirmImportInvoice}
-                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>IMPORTAR {scannedInvoiceResult.items.length} ITENS DIRETO AO ESTOQUE</span>
-                </button>
+                    <button
+                      onClick={handleAddInvoiceItem}
+                      className="w-full py-2 rounded-xl border border-dashed border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 font-bold text-xs hover:bg-emerald-500/5 transition-colors flex items-center justify-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Adicionar Item
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={handleConfirmImportInvoice}
+                    className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>IMPORTAR ITENS DIRETO AO ESTOQUE</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

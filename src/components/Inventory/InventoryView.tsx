@@ -54,6 +54,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [stockTargetProduct, setStockTargetProduct] = useState<Product | null>(null);
   const [stockDelta, setStockDelta] = useState<number>(10);
   const [stockReason, setStockReason] = useState<string>('Entrada de Nota de Fornecedor');
+  const [stockBarcodeSearch, setStockBarcodeSearch] = useState('');
+  const stockBarcodeFileRef = useRef<HTMLInputElement | null>(null);
 
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [barcodeTargetProduct, setBarcodeTargetProduct] = useState<Product | null>(null);
@@ -256,6 +258,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       imageUrl: formImageUrl || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80',
       active: true,
       updatedAt: new Date().toISOString(),
+      storeBranchId: user.storeBranchId,
     };
 
     storageService.saveProduct(newProd);
@@ -791,6 +794,61 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
               Ajuste / Entrada de Estoque: {stockTargetProduct.name}
             </h3>
+
+            {/* Barcode Search for Quick Stock Entry */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa]">
+                Buscar Produto por Código de Barras:
+              </label>
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={stockBarcodeSearch}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setStockBarcodeSearch(val);
+                      if (val.trim()) {
+                        const found = products.find(p => p.barcode === val.trim());
+                        if (found) {
+                          setStockTargetProduct(found);
+                        }
+                      }
+                    }}
+                    placeholder="Digite ou escaneie o código de barras..."
+                    className="w-full pl-10 pr-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-mono text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => stockBarcodeFileRef.current?.click()}
+                  className="px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 text-xs font-bold hover:bg-indigo-500/20 transition-colors flex items-center gap-1"
+                >
+                  <Camera className="w-4 h-4" />
+                  Ler Código
+                </button>
+                <input
+                  type="file"
+                  ref={stockBarcodeFileRef}
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => {
+                    // Camera file input - user scans barcode from captured image
+                  }}
+                  className="hidden"
+                />
+              </div>
+              {stockTargetProduct && (
+                <div className="p-2 rounded-lg bg-indigo-500/5 border border-indigo-500/20 flex items-center gap-2 text-xs">
+                  <img src={stockTargetProduct.imageUrl} alt="" className="w-8 h-8 rounded object-cover" />
+                  <div>
+                    <p className="font-bold text-slate-900 dark:text-white">{stockTargetProduct.name}</p>
+                    <p className="text-[10px] text-slate-400">Estoque atual: {stockTargetProduct.currentStock} {stockTargetProduct.unit}</p>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <form onSubmit={handleApplyStockAdjustment} className="space-y-3 text-xs">
               <div>

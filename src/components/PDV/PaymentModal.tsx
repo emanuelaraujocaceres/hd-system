@@ -38,6 +38,43 @@ interface PaymentModalProps {
   onSaleSuccess: (sale: Sale) => void;
 }
 
+function crc16Ccitt(str: string): string {
+  let crc = 0xFFFF;
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      if (crc & 0x8000) crc = (crc << 1) ^ 0x1021;
+      else crc <<= 1;
+      crc &= 0xFFFF;
+    }
+  }
+  return crc.toString(16).toUpperCase().padStart(4, '0');
+}
+
+function buildPixPayload(pixKey: string, amount: number, merchantName: string, merchantCity: string): string {
+  const tlv = (tag: string, value: string) => `${tag}${value.length.toString().padStart(2, '0')}${value}`;
+
+  const merchantNameClean = (merchantName || 'HD-SYSTEM').slice(0, 25);
+  const merchantCityClean = (merchantCity || 'SAO PAULO').slice(0, 15);
+  const amountStr = amount > 0 ? amount.toFixed(2) : '';
+
+  let payload = '';
+  payload += tlv('00', '01');  // Payload Format Indicator
+  payload += tlv('26', tlv('00', 'br.gov.bcb.pix') + tlv('01', pixKey));  // Merchant Account Info
+  payload += tlv('52', '0000');  // Merchant Category Code
+  payload += tlv('53', '986');  // Transaction Currency (BRL)
+  if (amount > 0) payload += tlv('54', amountStr);  // Transaction Amount
+  payload += tlv('58', 'BR');  // Country Code
+  payload += tlv('59', merchantNameClean);  // Merchant Name
+  payload += tlv('60', merchantCityClean);  // Merchant City
+  payload += tlv('62', tlv('05', '***'));  // Additional Data
+
+  const crcBase = payload + '6304';
+  const crc = crc16Ccitt(crcBase);
+
+  return crcBase + crc;
+}
+
 export const PaymentModal: React.FC<PaymentModalProps> = ({
   isOpen,
   onClose,
@@ -92,7 +129,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const changeDue = Math.max(0, cashGiven - totalAmount);
 
   const handleCopyPix = () => {
-    const pixPayload = `00020126580014br.gov.bcb.pix0136${settings.pixKey}520400005303986540${totalAmount.toFixed(2)}5802BR5920${settings.tradeName.slice(0, 20)}6009SAO PAULO62070503***63041D2B`;
+    const pixPayload = buildPixPayload(settings.pixKey, totalAmount, settings.tradeName, settings.city);
     navigator.clipboard.writeText(pixPayload);
     setPixCopied(true);
     posAudio.click();
@@ -424,7 +461,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 {/* METHOD: PIX */}
                 {method === 'pix' && (() => {
                   const activePixKey = settings.pixKey || 'Nenhuma chave configurada';
-                  const pixPayload = `00020126580014br.gov.bcb.pix0136${activePixKey}520400005303986540${totalAmount.toFixed(2)}5802BR5920${(settings.tradeName || 'HD-SYSTEM').slice(0, 20)}6009SAO PAULO62070503***63041D2B`;
+                  const pixPayload = buildPixPayload(settings.pixKey, totalAmount, settings.tradeName, settings.city);
                   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(pixPayload)}`;
 
                   return (
