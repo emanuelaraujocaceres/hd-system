@@ -1,0 +1,17 @@
+{
+  "short_name": "HD-System",
+  "name": "HD-System ERP & PDV SaaS",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "display": "standalone",
+  "orientation": "portrait",
+  "description": "Sistema ERP e Ponto de Venda (PDV) SaaS com Supabase, PWA offline e IA."
+}

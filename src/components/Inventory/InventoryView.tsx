@@ -1,0 +1,587 @@
+import React, { useState } from 'react';
+import {
+  Package,
+  Plus,
+  Search,
+  Filter,
+  Barcode,
+  Edit2,
+  Trash2,
+  AlertTriangle,
+  ArrowDownUp,
+  X,
+  Check,
+  Tag,
+  DollarSign,
+  Boxes,
+  Upload,
+} from 'lucide-react';
+import { Product, Category, Supplier, StockMovement, UserProfile } from '../../types';
+import { storageService } from '../../services/storageService';
+import { posAudio } from '../../services/audioService';
+import { BarcodeLabelModal } from './BarcodeLabelModal';
+
+interface InventoryViewProps {
+  products: Product[];
+  categories: Category[];
+  suppliers: Supplier[];
+  settings: any;
+  user: UserProfile;
+}
+
+export const InventoryView: React.FC<InventoryViewProps> = ({
+  products,
+  categories,
+  suppliers,
+  settings,
+  user,
+}) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
+
+  // Modals state
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  const [stockTargetProduct, setStockTargetProduct] = useState<Product | null>(null);
+  const [stockDelta, setStockDelta] = useState<number>(10);
+  const [stockReason, setStockReason] = useState<string>('Entrada de Nota de Fornecedor');
+
+  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+  const [barcodeTargetProduct, setBarcodeTargetProduct] = useState<Product | null>(null);
+
+  // Product Form state
+  const [formName, setFormName] = useState('');
+  const [formSku, setFormSku] = useState('');
+  const [formBarcode, setFormBarcode] = useState('');
+  const [formCategory, setFormCategory] = useState('Geral');
+  const [formUnit, setFormUnit] = useState<'un' | 'kg' | 'cx' | 'lit' | 'm'>('un');
+  const [formCostPrice, setFormCostPrice] = useState<number>(0);
+  const [formSalePrice, setFormSalePrice] = useState<number>(0);
+  const [formCurrentStock, setFormCurrentStock] = useState<number>(0);
+  const [formMinStock, setFormMinStock] = useState<number>(5);
+  const [formMaxStock, setFormMaxStock] = useState<number>(50);
+  const [formImageUrl, setFormImageUrl] = useState('');
+
+  const openNewProductModal = () => {
+    setEditingProduct(null);
+    setFormName('');
+    setFormSku(`SKU-${Math.floor(1000 + Math.random() * 9000)}`);
+    setFormBarcode(`789${Math.floor(1000000000 + Math.random() * 9000000000)}`);
+    setFormCategory(categories[0]?.name || 'Geral');
+    setFormUnit('un');
+    setFormCostPrice(10);
+    setFormSalePrice(19.9);
+    setFormCurrentStock(20);
+    setFormMinStock(5);
+    setFormMaxStock(100);
+    setFormImageUrl('https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80');
+    setIsProductModalOpen(true);
+  };
+
+  const openEditProductModal = (product: Product) => {
+    setEditingProduct(product);
+    setFormName(product.name);
+    setFormSku(product.sku);
+    setFormBarcode(product.barcode);
+    setFormCategory(product.category);
+    setFormUnit(product.unit);
+    setFormCostPrice(product.costPrice);
+    setFormSalePrice(product.salePrice);
+    setFormCurrentStock(product.currentStock);
+    setFormMinStock(product.minStock);
+    setFormMaxStock(product.maxStock);
+    setFormImageUrl(product.imageUrl);
+    setIsProductModalOpen(true);
+  };
+
+  const handleSaveProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newProd: Product = {
+      id: editingProduct ? editingProduct.id : `prod-${Date.now()}`,
+      sku: formSku,
+      barcode: formBarcode,
+      name: formName,
+      category: formCategory,
+      unit: formUnit,
+      costPrice: formCostPrice,
+      salePrice: formSalePrice,
+      currentStock: formCurrentStock,
+      minStock: formMinStock,
+      maxStock: formMaxStock,
+      imageUrl: formImageUrl || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80',
+      active: true,
+      updatedAt: new Date().toISOString(),
+    };
+
+    storageService.saveProduct(newProd);
+    posAudio.chime();
+    setIsProductModalOpen(false);
+  };
+
+  const handleDeleteProduct = (id: string) => {
+    if (confirm('Tem certeza que deseja excluir este produto do estoque?')) {
+      storageService.deleteProduct(id);
+      posAudio.click();
+    }
+  };
+
+  const handleApplyStockAdjustment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (stockTargetProduct) {
+      storageService.updateStock(stockTargetProduct.id, stockDelta, stockReason, user.name);
+      posAudio.chime();
+      setIsStockModalOpen(false);
+    }
+  };
+
+  // Filtered list
+  const filteredProducts = products.filter((p) => {
+    const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+    const term = searchTerm.toLowerCase().trim();
+    const matchesSearch =
+      !term ||
+      p.name.toLowerCase().includes(term) ||
+      p.barcode.includes(term) ||
+      p.sku.toLowerCase().includes(term);
+
+    let matchesStock = true;
+    if (stockFilter === 'low') matchesStock = p.currentStock <= p.minStock && p.currentStock > 0;
+    if (stockFilter === 'out') matchesStock = p.currentStock === 0;
+
+    return matchesCategory && matchesSearch && matchesStock;
+  });
+
+  return (
+    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+      {/* Top Header Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Package className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+            Catálogo & Gestão de Estoque
+          </h2>
+          <p className="text-xs text-slate-500">
+            Total de <span className="font-bold text-slate-900 dark:text-white">{products.length}</span> produtos cadastrados
+          </p>
+        </div>
+
+        <button
+          onClick={openNewProductModal}
+          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2 self-start sm:self-auto"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Cadastrar Novo Produto</span>
+        </button>
+      </div>
+
+      {/* Filter & Search Bar */}
+      <div className="p-4 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm space-y-3">
+        <div className="flex flex-col md:flex-row gap-3">
+          <div className="flex-1 relative">
+            <Search className="w-4 h-4 text-slate-400 dark:text-[#71717a] absolute left-3.5 top-3 pointer-events-none" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por nome, EAN-13 ou SKU..."
+              className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-[#a1a1aa] outline-none cursor-pointer"
+            >
+              <option value="all">Todas as Categorias</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={stockFilter}
+              onChange={(e) => setStockFilter(e.target.value as any)}
+              className="bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-[#a1a1aa] outline-none cursor-pointer"
+            >
+              <option value="all">Todos os Níveis de Estoque</option>
+              <option value="low">Apenas Estoque Baixo</option>
+              <option value="out">Esgotados (Zero)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Products Table */}
+      <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-[#09090b]/80 border-b border-slate-200 dark:border-[#27272a] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider">
+                <th className="py-3.5 px-4">Produto</th>
+                <th className="py-3.5 px-4">Código / EAN</th>
+                <th className="py-3.5 px-4">Categoria</th>
+                <th className="py-3.5 px-4">Preço Custo</th>
+                <th className="py-3.5 px-4">Preço Venda</th>
+                <th className="py-3.5 px-4">Margem %</th>
+                <th className="py-3.5 px-4">Estoque Atual</th>
+                <th className="py-3.5 px-4 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
+              {filteredProducts.map((p) => {
+                const margin = p.salePrice > 0 ? ((p.salePrice - p.costPrice) / p.salePrice) * 100 : 0;
+                const isLow = p.currentStock <= p.minStock;
+                const isOut = p.currentStock === 0;
+
+                return (
+                  <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={p.imageUrl}
+                          alt={p.name}
+                          className="w-10 h-10 rounded-xl object-cover bg-slate-100 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]"
+                        />
+                        <div>
+                          <p className="font-bold text-slate-900 dark:text-white">{p.name}</p>
+                          <p className="text-[10px] text-slate-400 dark:text-[#71717a] font-mono">SKU: {p.sku}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 font-mono text-slate-600 dark:text-[#a1a1aa]">
+                      {p.barcode}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#09090b] font-semibold text-slate-700 dark:text-[#a1a1aa] text-[11px] border border-transparent dark:border-[#27272a]">
+                        {p.category}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-slate-600 dark:text-[#a1a1aa]">
+                      R$ {p.costPrice.toFixed(2)}
+                    </td>
+                    <td className="py-3 px-4 font-bold text-emerald-600 dark:text-emerald-400">
+                      R$ {p.salePrice.toFixed(2)}
+                    </td>
+                    <td className="py-3 px-4 font-bold text-indigo-600 dark:text-indigo-400">
+                      {margin.toFixed(1)}%
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-[11px] ${
+                          isOut
+                            ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                            : isLow
+                            ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                            : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                        }`}
+                      >
+                        {isLow && <AlertTriangle className="w-3 h-3" />}
+                        {p.currentStock} {p.unit}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => {
+                            setStockTargetProduct(p);
+                            setIsStockModalOpen(true);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors"
+                          title="Ajustar / Registrar Entrada no Estoque"
+                        >
+                          <Boxes className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setBarcodeTargetProduct(p);
+                            setIsBarcodeModalOpen(true);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors"
+                          title="Gerar Folha de Etiquetas"
+                        >
+                          <Barcode className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => openEditProductModal(p)}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors"
+                          title="Editar Cadastro"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProduct(p.id)}
+                          className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors"
+                          title="Excluir Produto"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* CREATE / EDIT PRODUCT MODAL */}
+      {isProductModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between bg-slate-50 dark:bg-[#09090b]/50">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                {editingProduct ? 'Editar Produto' : 'Cadastrar Novo Produto'}
+              </h3>
+              <button onClick={() => setIsProductModalOpen(false)}>
+                <X className="w-5 h-5 text-slate-400 hover:text-slate-200" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProduct} className="p-6 overflow-y-auto space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                  Nome do Produto
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder="Ex: Coca-Cola 2L Zero Sugar"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                    Código de Barras (EAN-13)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formBarcode}
+                    onChange={(e) => setFormBarcode(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-mono text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                    Código SKU Interno
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formSku}
+                    onChange={(e) => setFormSku(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-mono text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                    Categoria
+                  </label>
+                  <select
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white outline-none"
+                  >
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                    Unidade de Medida
+                  </label>
+                  <select
+                    value={formUnit}
+                    onChange={(e) => setFormUnit(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white outline-none"
+                  >
+                    <option value="un">Unidade (un)</option>
+                    <option value="kg">Quilograma (kg)</option>
+                    <option value="cx">Caixa (cx)</option>
+                    <option value="lit">Litro (lit)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                    Preço de Custo (R$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={formCostPrice}
+                    onChange={(e) => setFormCostPrice(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                    Preço de Venda (R$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={formSalePrice}
+                    onChange={(e) => setFormSalePrice(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-emerald-600 dark:text-emerald-400 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                    Estoque Inicial
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={formCurrentStock}
+                    onChange={(e) => setFormCurrentStock(parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                    Estoque Mínimo
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={formMinStock}
+                    onChange={(e) => setFormMinStock(parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                    Estoque Máximo
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={formMaxStock}
+                    onChange={(e) => setFormMaxStock(parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                  URL da Imagem do Produto
+                </label>
+                <input
+                  type="url"
+                  value={formImageUrl}
+                  onChange={(e) => setFormImageUrl(e.target.value)}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-[#27272a] flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsProductModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] text-xs font-bold text-slate-700 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#27272a]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md"
+                >
+                  Salvar Produto
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* STOCK ADJUSTMENT MODAL */}
+      {isStockModalOpen && stockTargetProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              Ajuste / Entrada de Estoque: {stockTargetProduct.name}
+            </h3>
+
+            <form onSubmit={handleApplyStockAdjustment} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold mb-1">Quantidade da Movimentação (+ ou -)</label>
+                <input
+                  type="number"
+                  required
+                  value={stockDelta}
+                  onChange={(e) => setStockDelta(parseInt(e.target.value) || 0)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold text-base"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1">Motivo do Lançamento</label>
+                <input
+                  type="text"
+                  required
+                  value={stockReason}
+                  onChange={(e) => setStockReason(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsStockModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold"
+                >
+                  Confirmar Ajuste
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* BARCODE PRINT MODAL */}
+      <BarcodeLabelModal
+        isOpen={isBarcodeModalOpen}
+        onClose={() => setIsBarcodeModalOpen(false)}
+        product={barcodeTargetProduct}
+        settings={settings}
+      />
+    </div>
+  );
+};
