@@ -12,8 +12,10 @@ import {
   Sparkles,
   Lock,
   Unlock,
+  Building2,
+  LogOut,
 } from 'lucide-react';
-import { Product, CashRegisterSession } from '../../types';
+import { Product, CashRegisterSession, UserProfile, StoreBranch } from '../../types';
 import { posAudio } from '../../services/audioService';
 
 interface HeaderProps {
@@ -27,6 +29,11 @@ interface HeaderProps {
   setSoundEnabled: (enabled: boolean) => void;
   darkMode: boolean;
   setDarkMode: (dark: boolean) => void;
+  user: UserProfile;
+  branches?: StoreBranch[];
+  currentBranch?: StoreBranch;
+  onSelectBranch?: (b: StoreBranch) => void;
+  onLogout: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -40,6 +47,11 @@ export const Header: React.FC<HeaderProps> = ({
   setSoundEnabled,
   darkMode,
   setDarkMode,
+  user,
+  branches = [],
+  currentBranch,
+  onSelectBranch,
+  onLogout,
 }) => {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
 
@@ -47,16 +59,15 @@ export const Header: React.FC<HeaderProps> = ({
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
 
   const tabTitles: Record<string, { title: string; subtitle: string }> = {
-    pdv: { title: 'Ponto de Venda (PDV)', subtitle: 'Frente de caixa rápida com leitor e emissão NFC-e' },
+    pdv: { title: 'Ponto de Venda (PDV)', subtitle: 'Frente de caixa rápida com leitor de código de barras' },
     dashboard: { title: 'Painel Executivo ERP', subtitle: 'Visão geral de faturamento, vendas e relatórios IA' },
     inventory: { title: 'Gestão de Estoque & Catalog', subtitle: 'Cadastro de produtos, movimentações e código de barras' },
     finance: { title: 'Financeiro & Fluxo de Caixa', subtitle: 'Contas a pagar, contas a receber e DRE gerencial' },
     crm: { title: 'Clientes & Fornecedores (CRM)', subtitle: 'Cadastro de clientes, limite de crédito e parceiros' },
-    fiscal: { title: 'Módulo Fiscal & NFC-e', subtitle: 'Histórico de cupons fiscais emitidos e DANFE' },
-    settings: { title: 'Configurações do ERP', subtitle: 'Dados da empresa, impressoras e dados do SaaS' },
+    settings: { title: 'Configurações do ERP', subtitle: 'Dados da empresa, impressoras e assinatura Stripe HD-System' },
   };
 
-  const currentInfo = tabTitles[currentTab] || { title: 'Nexus ERP', subtitle: 'Sistema de Gestão SaaS' };
+  const currentInfo = tabTitles[currentTab] || { title: 'HD-System ERP', subtitle: 'Sistema de Gestão & PDV' };
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -90,13 +101,35 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         {/* Page Title & Status Pill */}
-        <div className="flex items-center gap-3">
-          <h2 className="font-serif-italic text-xl text-slate-900 dark:text-white leading-tight">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h2 className="font-serif-italic text-lg md:text-xl text-slate-900 dark:text-white leading-tight">
             {currentInfo.title}
           </h2>
-          <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-bold tracking-wider uppercase">
+          <span className="hidden sm:inline-block px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-bold tracking-wider uppercase">
             ONLINE
           </span>
+
+          {/* Active Branch Selector Pill */}
+          {branches.length > 0 && currentBranch && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-semibold text-slate-700 dark:text-[#a1a1aa] shadow-sm">
+              <Building2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <select
+                value={currentBranch.id}
+                onChange={(e) => {
+                  const b = branches.find((branch) => branch.id === e.target.value);
+                  if (b && onSelectBranch) onSelectBranch(b);
+                }}
+                className="bg-transparent border-none font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer text-xs pr-1"
+                title="Trocar Filial Ativa"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id} className="bg-white dark:bg-[#18181b] text-slate-900 dark:text-white">
+                    {b.name} ({b.city})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -164,6 +197,32 @@ export const Header: React.FC<HeaderProps> = ({
         >
           {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
         </button>
+
+        {/* User Account & Logout */}
+        <div className="pl-2 border-l border-slate-200 dark:border-[#27272a] flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a]">
+            <img
+              src={user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+              alt={user.name}
+              className="w-5 h-5 rounded-full object-cover"
+            />
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 max-w-[100px] truncate">
+              {user.name.split(' ')[0]}
+            </span>
+            <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+              {user.role === 'admin' ? 'ADMIN' : 'COLAB'}
+            </span>
+          </div>
+
+          <button
+            onClick={onLogout}
+            className="p-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-1 text-xs font-bold"
+            title="Sair da Conta (Logout)"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden md:inline">Sair</span>
+          </button>
+        </div>
       </div>
     </header>
   );

@@ -534,6 +534,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
         onClose={() => setIsReceiptOpen(false)}
         sale={completedSale}
         settings={settings}
+        customers={customers}
         onNewSale={() => {
           setIsReceiptOpen(false);
           setCart([]);

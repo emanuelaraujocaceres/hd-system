@@ -10,6 +10,7 @@ import {
   SystemSettings,
   UserProfile,
   StockMovement,
+  SubscriptionInfo,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -21,22 +22,27 @@ import {
   INITIAL_FINANCIAL_ACCOUNTS,
   INITIAL_BRANCHES,
   INITIAL_USER,
+  INITIAL_USERS,
   INITIAL_SETTINGS,
+  INITIAL_SUBSCRIPTION,
 } from '../data/mockData';
 
 const KEYS = {
-  PRODUCTS: 'nexus_erp_products',
-  CATEGORIES: 'nexus_erp_categories',
-  CUSTOMERS: 'nexus_erp_customers',
-  SUPPLIERS: 'nexus_erp_suppliers',
-  SALES: 'nexus_erp_sales',
-  CAIXA: 'nexus_erp_caixa_session',
-  CAIXA_HISTORY: 'nexus_erp_caixa_history',
-  FINANCIAL: 'nexus_erp_financial_accounts',
-  MOVEMENTS: 'nexus_erp_stock_movements',
-  BRANCHES: 'nexus_erp_branches',
-  USER: 'nexus_erp_user_profile',
-  SETTINGS: 'nexus_erp_settings',
+  PRODUCTS: 'hd_system_products',
+  CATEGORIES: 'hd_system_categories',
+  CUSTOMERS: 'hd_system_customers',
+  SUPPLIERS: 'hd_system_suppliers',
+  SALES: 'hd_system_sales',
+  CAIXA: 'hd_system_caixa_session',
+  CAIXA_HISTORY: 'hd_system_caixa_history',
+  FINANCIAL: 'hd_system_financial_accounts',
+  MOVEMENTS: 'hd_system_stock_movements',
+  BRANCHES: 'hd_system_branches',
+  USER: 'hd_system_user_profile',
+  USERS_LIST: 'hd_system_users_list',
+  LOGGED_IN_EMAIL: 'hd_system_logged_in_email',
+  SETTINGS: 'hd_system_settings',
+  SUBSCRIPTION: 'hd_system_subscription',
 };
 
 class StorageService {
@@ -127,6 +133,22 @@ class StorageService {
   // --- CATEGORIES ---
   getCategories(): Category[] {
     return this.get<Category[]>(KEYS.CATEGORIES, INITIAL_CATEGORIES);
+  }
+
+  saveCategory(category: Category) {
+    const categories = this.getCategories();
+    const idx = categories.findIndex((c) => c.id === category.id);
+    if (idx >= 0) {
+      categories[idx] = category;
+    } else {
+      categories.push(category);
+    }
+    this.set(KEYS.CATEGORIES, categories);
+  }
+
+  deleteCategory(id: string) {
+    const categories = this.getCategories().filter((c) => c.id !== id);
+    this.set(KEYS.CATEGORIES, categories);
   }
 
   // --- CUSTOMERS ---
@@ -282,17 +304,124 @@ class StorageService {
     this.set(KEYS.FINANCIAL, accounts);
   }
 
-  // --- BRANCHES & USER ---
+  // --- BRANCHES ---
   getBranches(): StoreBranch[] {
     return this.get<StoreBranch[]>(KEYS.BRANCHES, INITIAL_BRANCHES);
   }
 
-  getUserProfile(): UserProfile {
+  saveBranch(branch: StoreBranch) {
+    const branches = this.getBranches();
+    const idx = branches.findIndex((b) => b.id === branch.id);
+    if (idx >= 0) {
+      branches[idx] = branch;
+    } else {
+      branches.push(branch);
+    }
+
+    // Ensure only 1 headquarters
+    if (branch.isHeadquarters) {
+      branches.forEach((b) => {
+        if (b.id !== branch.id) b.isHeadquarters = false;
+      });
+    }
+
+    this.set(KEYS.BRANCHES, branches);
+  }
+
+  deleteBranch(id: string) {
+    const branches = this.getBranches().filter((b) => b.id !== id);
+    this.set(KEYS.BRANCHES, branches);
+  }
+
+  getSelectedBranch(): StoreBranch {
+    const branches = this.getBranches();
+    const savedId = localStorage.getItem('hd_system_selected_branch_id');
+    if (savedId) {
+      const found = branches.find((b) => b.id === savedId);
+      if (found) return found;
+    }
+    return branches[0] || { id: 'br-01', name: 'HD-System Matriz São Paulo', code: 'SP-01', cnpj: '12.345.678/0001-90', city: 'São Paulo', state: 'SP', address: 'Av. Paulista, 1000', phone: '(11) 3000-0000', isHeadquarters: true, active: true };
+  }
+
+  setSelectedBranchId(id: string) {
+    localStorage.setItem('hd_system_selected_branch_id', id);
+    this.notify();
+  }
+
+  // --- USERS & GOOGLE COLLABORATORS ---
+  getUsers(): UserProfile[] {
+    return this.get<UserProfile[]>(KEYS.USERS_LIST, INITIAL_USERS);
+  }
+
+  saveUser(user: UserProfile) {
+    const users = this.getUsers();
+    const idx = users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
+    if (idx >= 0) {
+      users[idx] = { ...users[idx], ...user };
+    } else {
+      users.unshift(user);
+    }
+    this.set(KEYS.USERS_LIST, users);
+
+    // If active logged in user updated, refresh profile
+    const activeEmail = localStorage.getItem(KEYS.LOGGED_IN_EMAIL);
+    if (activeEmail && activeEmail.toLowerCase() === user.email.toLowerCase()) {
+      this.saveUserProfile(user);
+    }
+  }
+
+  deleteUser(id: string) {
+    const users = this.getUsers().filter((u) => u.id !== id);
+    this.set(KEYS.USERS_LIST, users);
+  }
+
+  getUserByEmail(email: string): UserProfile | undefined {
+    const users = this.getUsers();
+    return users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+  }
+
+  getUserProfile(): UserProfile | null {
+    const activeEmail = localStorage.getItem(KEYS.LOGGED_IN_EMAIL);
+    if (activeEmail === 'LOGGED_OUT') return null;
+
+    if (activeEmail) {
+      const found = this.getUserByEmail(activeEmail);
+      if (found) return found;
+    }
+    
+    // Default to initial user (Admin)
     return this.get<UserProfile>(KEYS.USER, INITIAL_USER);
   }
 
   saveUserProfile(user: UserProfile) {
     this.set(KEYS.USER, user);
+    localStorage.setItem(KEYS.LOGGED_IN_EMAIL, user.email);
+    this.notify();
+  }
+
+  loginWithGoogle(email: string): { success: boolean; user?: UserProfile; message?: string } {
+    const user = this.getUserByEmail(email);
+    if (!user) {
+      return {
+        success: false,
+        message: `A conta do Google (${email}) não está cadastrada no sistema. Peça a um Administrador para adicionar este e-mail no painel de Usuários & Permissões.`,
+      };
+    }
+
+    if (!user.active) {
+      return {
+        success: false,
+        message: `A conta (${email}) está inativa no momento. Entre em contato com o Administrador.`,
+      };
+    }
+
+    this.saveUserProfile(user);
+    return { success: true, user };
+  }
+
+  logout() {
+    localStorage.setItem(KEYS.LOGGED_IN_EMAIL, 'LOGGED_OUT');
+    this.notify();
   }
 
   // --- SETTINGS ---
@@ -302,6 +431,128 @@ class StorageService {
 
   saveSettings(settings: SystemSettings) {
     this.set(KEYS.SETTINGS, settings);
+  }
+
+  // --- SUBSCRIPTION & STRIPE ---
+  getSubscription(): SubscriptionInfo {
+    const sub = this.get<SubscriptionInfo>(KEYS.SUBSCRIPTION, INITIAL_SUBSCRIPTION);
+    
+    // Calculate dynamic days remaining
+    if (sub.nextBillingDate) {
+      const target = new Date(sub.nextBillingDate).getTime();
+      const now = new Date().getTime();
+      const diff = Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+      sub.daysRemaining = diff > 0 ? diff : 0;
+      if (diff <= 0) {
+        sub.status = 'past_due';
+      }
+    }
+    return sub;
+  }
+
+  saveSubscription(sub: SubscriptionInfo) {
+    this.set(KEYS.SUBSCRIPTION, sub);
+  }
+
+  renewSubscriptionViaStripe(paymentMethodDesc: string = 'Cartão de Crédito (Stripe)'): SubscriptionInfo {
+    const sub = this.getSubscription();
+    
+    // Extend next billing date by 30 days
+    const nextDate = new Date();
+    nextDate.setDate(nextDate.getDate() + 30);
+    const nextDateIso = nextDate.toISOString().split('T')[0];
+
+    const todayIso = new Date().toISOString().split('T')[0];
+    const newInvoice = {
+      id: `INV-${Date.now().toString().slice(-6)}`,
+      date: todayIso,
+      amount: sub.priceMonthly || 199.00,
+      status: 'paid' as const,
+      paymentMethod: paymentMethodDesc,
+      invoiceUrl: '#',
+    };
+
+    const updatedSub: SubscriptionInfo = {
+      ...sub,
+      status: 'active',
+      currentPeriodStart: todayIso,
+      currentPeriodEnd: nextDateIso,
+      nextBillingDate: nextDateIso,
+      daysRemaining: 30,
+      invoices: [newInvoice, ...(sub.invoices || [])],
+    };
+
+    this.saveSubscription(updatedSub);
+    return updatedSub;
+  }
+
+  // --- MULTI-BRANCH METRICS & OVERVIEW ---
+  getBranchMetrics(branchId: string) {
+    const branch = this.getBranches().find((b) => b.id === branchId);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const monthStr = new Date().toISOString().slice(0, 7);
+
+    // Sales for branch
+    const allSales = this.getSales();
+    const branchSales = allSales.filter((s) => !s.storeBranchId || s.storeBranchId === branchId);
+    
+    const todaySales = branchSales.filter((s) => s.date.startsWith(todayStr) && s.status === 'completed');
+    const todaySalesAmount = todaySales.reduce((acc, s) => acc + s.total, 0);
+    const todaySalesCount = todaySales.length;
+
+    const monthlySales = branchSales.filter((s) => s.date.startsWith(monthStr) && s.status === 'completed');
+    const monthlySalesAmount = monthlySales.reduce((acc, s) => acc + s.total, 0);
+
+    // Products for branch
+    const allProducts = this.getProducts();
+    const branchProducts = allProducts.filter((p) => !p.storeBranchId || p.storeBranchId === branchId);
+    const lowStockCount = branchProducts.filter((p) => p.currentStock <= p.minStock).length;
+
+    // Caixa session
+    const caixa = this.getActiveCaixaSession();
+    const isCaixaOpen = caixa && caixa.status === 'open' && (!caixa.storeBranchId || caixa.storeBranchId === branchId);
+    const caixaBalance = isCaixaOpen ? caixa.currentCashBalance : 0;
+
+    // Users
+    const users = this.getUsers();
+    const activeUsersCount = users.filter((u) => u.active && (!u.storeBranchId || u.storeBranchId === branchId)).length;
+
+    return {
+      branch,
+      todaySalesAmount,
+      todaySalesCount,
+      monthlySalesAmount,
+      lowStockCount,
+      totalProductsCount: branchProducts.length,
+      isCaixaOpen,
+      caixaBalance,
+      activeUsersCount,
+    };
+  }
+
+  getMultiBranchOverview() {
+    const branches = this.getBranches();
+    return branches.map((b) => this.getBranchMetrics(b.id));
+  }
+
+  // --- TV SHOWCASE ---
+  getTVProducts(): Product[] {
+    const products = this.getProducts();
+    const tvProds = products.filter((p) => p.active && p.showOnTV);
+    if (tvProds.length > 0) return tvProds;
+    // Fallback if none explicitly checked yet: return top 6 products so TV view looks amazing immediately
+    return products.slice(0, 6);
+  }
+
+  toggleProductTVShowcase(productId: string): boolean {
+    const products = this.getProducts();
+    const prod = products.find((p) => p.id === productId);
+    if (prod) {
+      prod.showOnTV = !prod.showOnTV;
+      this.saveProduct(prod);
+      return !!prod.showOnTV;
+    }
+    return false;
   }
 
   // --- RESET DEMO DATA ---
@@ -317,7 +568,10 @@ class StorageService {
     localStorage.removeItem(KEYS.MOVEMENTS);
     localStorage.removeItem(KEYS.BRANCHES);
     localStorage.removeItem(KEYS.USER);
+    localStorage.removeItem(KEYS.USERS_LIST);
+    localStorage.removeItem(KEYS.LOGGED_IN_EMAIL);
     localStorage.removeItem(KEYS.SETTINGS);
+    localStorage.removeItem(KEYS.SUBSCRIPTION);
     this.notify();
   }
 }

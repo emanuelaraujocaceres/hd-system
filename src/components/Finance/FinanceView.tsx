@@ -13,10 +13,12 @@ import {
   Building2,
   CreditCard,
   Building,
+  Camera,
 } from 'lucide-react';
 import { FinancialAccount, Sale, Product } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { BoletoCameraScannerModal } from './BoletoCameraScannerModal';
 
 interface FinanceViewProps {
   financialAccounts: FinancialAccount[];
@@ -34,6 +36,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBoletoModalOpen, setIsBoletoModalOpen] = useState(false);
   const [formTitle, setFormTitle] = useState('');
   const [formType, setFormType] = useState<'payable' | 'receivable'>('payable');
   const [formCategory, setFormCategory] = useState('Instalações');
@@ -145,6 +148,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </button>
           </div>
 
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsBoletoModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-emerald-600/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold text-xs hover:bg-emerald-600/20 transition-all flex items-center gap-1.5 shadow-sm"
+            title="Escanear Boleto Bancário via Câmera"
+          >
+            <Camera className="w-4 h-4" />
+            <span>Ler Boleto Câmera</span>
+          </button>
+
           <button
             onClick={() => setIsModalOpen(true)}
             className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
@@ -152,6 +165,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             <Plus className="w-4 h-4" />
             <span>Lançar Conta</span>
           </button>
+        </div>
         </div>
       </div>
 
@@ -423,6 +437,14 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           </div>
         </div>
       )}
+      {/* BOLETO CAMERA SCANNER MODAL */}
+      <BoletoCameraScannerModal
+        isOpen={isBoletoModalOpen}
+        onClose={() => setIsBoletoModalOpen(false)}
+        onAccountAdded={() => {
+          // Trigger reactive updates
+        }}
+      />
     </div>
   );
 };

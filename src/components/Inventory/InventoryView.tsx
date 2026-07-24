@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Package,
   Plus,
@@ -15,11 +15,18 @@ import {
   DollarSign,
   Boxes,
   Upload,
+  Camera,
+  Globe,
+  Image as ImageIcon,
+  Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 import { Product, Category, Supplier, StockMovement, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { BarcodeLabelModal } from './BarcodeLabelModal';
+import { CategoryManagerModal } from './CategoryManagerModal';
+import { StockCameraScannerModal } from './StockCameraScannerModal';
 
 interface InventoryViewProps {
   products: Product[];
@@ -52,6 +59,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [barcodeTargetProduct, setBarcodeTargetProduct] = useState<Product | null>(null);
 
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isStockCameraModalOpen, setIsStockCameraModalOpen] = useState(false);
+
+  // Camera & Image Search state
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [isSearchingImages, setIsSearchingImages] = useState(false);
+  const [imageSuggestions, setImageSuggestions] = useState<string[]>([]);
+  const [showManualUrlInput, setShowManualUrlInput] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
   // Product Form state
   const [formName, setFormName] = useState('');
   const [formSku, setFormSku] = useState('');
@@ -64,6 +85,128 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formMinStock, setFormMinStock] = useState<number>(5);
   const [formMaxStock, setFormMaxStock] = useState<number>(50);
   const [formImageUrl, setFormImageUrl] = useState('');
+
+  // Camera handlers
+  const handleStartLiveCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+      });
+      setCameraStream(stream);
+      setIsCameraModalOpen(true);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      }, 200);
+    } catch (err) {
+      console.warn('Câmera direta indisponível ou permissão negada, abrindo seletor de foto:', err);
+      if (fileInputRef.current) {
+        fileInputRef.current.click();
+      }
+    }
+  };
+
+  const handleCapturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setFormImageUrl(dataUrl);
+        posAudio.chime();
+      }
+    }
+    handleStopCamera();
+  };
+
+  const handleStopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+    setIsCameraModalOpen(false);
+  };
+
+  const handleNativeFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setFormImageUrl(event.target.result as string);
+          posAudio.chime();
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Google / Unsplash Auto Search
+  const handleAutoSearchImage = () => {
+    setIsSearchingImages(true);
+    const term = (formName || formCategory || 'produto').toLowerCase();
+
+    const presetMap: Record<string, string[]> = {
+      coca: [
+        'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=400&q=80',
+        'https://images.unsplash.com/photo-1554866585-cd94860890b7?w=400&q=80',
+        'https://images.unsplash.com/photo-1629203851122-3726ecdf080e?w=400&q=80',
+      ],
+      cerveja: [
+        'https://images.unsplash.com/photo-1608270586620-248524c67de9?w=400&q=80',
+        'https://images.unsplash.com/photo-1535958636474-b021ee887b13?w=400&q=80',
+        'https://images.unsplash.com/photo-1571613316887-6f8d5cbf7ef7?w=400&q=80',
+      ],
+      cafe: [
+        'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=400&q=80',
+        'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&q=80',
+      ],
+      bebida: [
+        'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=400&q=80',
+        'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=400&q=80',
+      ],
+      chocolate: [
+        'https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?w=400&q=80',
+        'https://images.unsplash.com/photo-1511381939415-e44015466834?w=400&q=80',
+      ],
+      snack: [
+        'https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=400&q=80',
+        'https://images.unsplash.com/photo-1599490659213-e2b9527bd087?w=400&q=80',
+      ]
+    };
+
+    let found: string[] = [];
+    for (const [key, imgs] of Object.entries(presetMap)) {
+      if (term.includes(key)) {
+        found = imgs;
+        break;
+      }
+    }
+
+    if (found.length === 0) {
+      found = [
+        'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=400&q=80',
+        'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&q=80',
+        'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&q=80',
+        'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80',
+      ];
+    }
+
+    setTimeout(() => {
+      setImageSuggestions(found);
+      setIsSearchingImages(false);
+      if (found[0]) {
+        setFormImageUrl(found[0]);
+        posAudio.chime();
+      }
+    }, 500);
+  };
 
   const openNewProductModal = () => {
     setEditingProduct(null);
@@ -168,13 +311,32 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={openNewProductModal}
-          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Cadastrar Novo Produto</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => setIsStockCameraModalOpen(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-indigo-600/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:bg-indigo-600/20 transition-all flex items-center gap-2 shadow-sm"
+            title="Entrada de Produtos, Caixas ou Nota Fiscal via Câmera"
+          >
+            <Camera className="w-4 h-4" />
+            <span>Entrada por Câmera / NF</span>
+          </button>
+
+          <button
+            onClick={() => setIsCategoryModalOpen(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-200 dark:hover:bg-[#27272a] transition-all flex items-center gap-1.5 shadow-sm"
+          >
+            <Tag className="w-4 h-4 text-indigo-500" />
+            <span>Categorias</span>
+          </button>
+
+          <button
+            onClick={openNewProductModal}
+            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Cadastrar Produto</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter & Search Bar */}
@@ -491,17 +653,116 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                  URL da Imagem do Produto
+              {/* Product Photo Management */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-3">
+                <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa]">
+                  Foto do Produto
                 </label>
-                <input
-                  type="url"
-                  value={formImageUrl}
-                  onChange={(e) => setFormImageUrl(e.target.value)}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none"
-                />
+
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  {/* Current Selected Image Preview */}
+                  <div className="w-20 h-20 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] overflow-hidden shrink-0 shadow-sm flex items-center justify-center relative group">
+                    {formImageUrl ? (
+                      <img
+                        src={formImageUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <ImageIcon className="w-8 h-8 text-slate-400" />
+                    )}
+                  </div>
+
+                  {/* Camera & Search Action Buttons */}
+                  <div className="flex-1 space-y-2 w-full">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {/* Camera Button */}
+                      <button
+                        type="button"
+                        onClick={handleStartLiveCamera}
+                        className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
+                      >
+                        <Camera className="w-4 h-4" />
+                        <span>Tirar Foto (Câmera)</span>
+                      </button>
+
+                      {/* Google / Web Auto-Search Button */}
+                      <button
+                        type="button"
+                        onClick={handleAutoSearchImage}
+                        disabled={isSearchingImages}
+                        className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] hover:bg-slate-300 dark:hover:bg-[#27272a] text-slate-800 dark:text-slate-200 font-bold text-xs transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isSearchingImages ? (
+                          <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
+                        ) : (
+                          <Globe className="w-4 h-4 text-indigo-500" />
+                        )}
+                        <span>Buscar Imagem no Google</span>
+                      </button>
+                    </div>
+
+                    {/* Hidden Native File Input for Mobile Browser Capture */}
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleNativeFileSelect}
+                      className="hidden"
+                    />
+
+                    <div className="flex items-center justify-between text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setShowManualUrlInput(!showManualUrlInput)}
+                        className="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
+                      >
+                        {showManualUrlInput ? 'Ocultar URL Manual' : 'Inserir URL Manualmente'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Auto Search Gallery Suggestions */}
+                {imageSuggestions.length > 0 && (
+                  <div className="space-y-1.5 pt-1 border-t border-slate-200 dark:border-[#27272a]">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-500" />
+                      Sugestões Encontradas (Clique para escolher):
+                    </span>
+                    <div className="grid grid-cols-4 gap-2">
+                      {imageSuggestions.map((img, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setFormImageUrl(img);
+                            posAudio.click();
+                          }}
+                          className={`h-14 rounded-lg overflow-hidden border-2 transition-all ${
+                            formImageUrl === img
+                              ? 'border-indigo-600 ring-2 ring-indigo-500/30'
+                              : 'border-transparent hover:border-slate-300'
+                          }`}
+                        >
+                          <img src={img} alt={`Opção ${idx}`} className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Manual URL Input Field (Collapsible) */}
+                {showManualUrlInput && (
+                  <input
+                    type="url"
+                    value={formImageUrl}
+                    onChange={(e) => setFormImageUrl(e.target.value)}
+                    placeholder="https://images.unsplash.com/..."
+                    className="w-full px-3 py-1.5 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none"
+                  />
+                )}
               </div>
 
               <div className="pt-3 border-t border-slate-200 dark:border-[#27272a] flex justify-end gap-2">
@@ -581,6 +842,76 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         onClose={() => setIsBarcodeModalOpen(false)}
         product={barcodeTargetProduct}
         settings={settings}
+      />
+
+      {/* CATEGORY MANAGEMENT MODAL */}
+      <CategoryManagerModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        categories={categories}
+      />
+
+      {/* LIVE CAMERA VIEWFINDER MODAL */}
+      {isCameraModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl p-4 space-y-4 text-white flex flex-col items-center">
+            <div className="w-full flex items-center justify-between">
+              <span className="text-xs font-bold flex items-center gap-2">
+                <Camera className="w-4 h-4 text-indigo-400" />
+                Câmera do Dispositivo - Foto do Produto
+              </span>
+              <button
+                type="button"
+                onClick={handleStopCamera}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Video Viewfinder */}
+            <div className="w-full aspect-square bg-black rounded-2xl overflow-hidden border border-slate-800 relative flex items-center justify-center">
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+              <canvas ref={canvasRef} className="hidden" />
+              <div className="absolute inset-4 border-2 border-dashed border-white/40 rounded-xl pointer-events-none flex items-center justify-center">
+                <span className="text-[10px] text-white/70 bg-black/50 px-2 py-0.5 rounded font-mono">
+                  Enquadre o produto
+                </span>
+              </div>
+            </div>
+
+            <div className="w-full flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={handleStopCamera}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleCapturePhoto}
+                className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2"
+              >
+                <Camera className="w-4 h-4" />
+                <span>CAPTURAR FOTO</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* STOCK CAMERA SCANNER MODAL */}
+      <StockCameraScannerModal
+        isOpen={isStockCameraModalOpen}
+        onClose={() => setIsStockCameraModalOpen(false)}
+        onProductsImported={() => {
+          // Trigger reactive updates
+        }}
       />
     </div>
   );

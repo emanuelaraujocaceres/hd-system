@@ -27,6 +27,7 @@ interface SidebarProps {
   caixaSession: CashRegisterSession;
   onOpenCaixaModal: () => void;
   onResetDemo: () => void;
+  onLogout: () => void;
   isMobileOpen?: boolean;
   setIsMobileOpen?: (open: boolean) => void;
 }
@@ -41,19 +42,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
   caixaSession,
   onOpenCaixaModal,
   onResetDemo,
+  onLogout,
   isMobileOpen,
   setIsMobileOpen,
 }) => {
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
+  const isAdmin = user.role === 'admin';
+  const perms = user.permissions || {
+    pdv: true,
+    inventory: true,
+    crm: true,
+    finance: true,
+    dashboard: true,
+    settings: true,
+  };
 
-  const menuItems = [
-    { id: 'pdv', label: 'PDV / Vendas', icon: ShoppingCart, badge: isCaixaOpen ? 'ABERTO' : 'FECHADO', badgeColor: isCaixaOpen ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20' },
-    { id: 'dashboard', label: 'Dashboard ERP', icon: LayoutDashboard },
-    { id: 'inventory', label: 'Estoque & Produtos', icon: Package },
-    { id: 'finance', label: 'Financeiro & DRE', icon: DollarSign },
-    { id: 'crm', label: 'Clientes & CRM', icon: Users },
-    { id: 'settings', label: 'Configurações', icon: Settings },
+  const allMenuItems = [
+    { id: 'pdv', label: 'PDV / Vendas', icon: ShoppingCart, permKey: 'pdv' as const, badge: isCaixaOpen ? 'ABERTO' : 'FECHADO', badgeColor: isCaixaOpen ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20' },
+    { id: 'dashboard', label: 'Dashboard ERP', icon: LayoutDashboard, permKey: 'dashboard' as const },
+    { id: 'inventory', label: 'Estoque & Produtos', icon: Package, permKey: 'inventory' as const },
+    { id: 'finance', label: 'Financeiro & DRE', icon: DollarSign, permKey: 'finance' as const },
+    { id: 'crm', label: 'Clientes & CRM', icon: Users, permKey: 'crm' as const },
+    { id: 'settings', label: 'Configurações & Filiais', icon: Settings, permKey: 'settings' as const },
   ];
+
+  const menuItems = allMenuItems.filter((item) => {
+    if (isAdmin) return true;
+    if (item.id === 'settings') return perms.settings;
+    return perms[item.permKey];
+  });
 
   const handleNavClick = (id: string) => {
     setCurrentTab(id);
@@ -71,11 +88,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-white shadow-md shadow-indigo-600/30">
-              S
+              HD
             </div>
             <div>
               <h1 className="font-serif-italic text-lg font-semibold tracking-tight text-slate-900 dark:text-white leading-tight flex items-center gap-1.5">
-                SaaS ERP <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 font-sans font-bold">PRO</span>
+                HD-System <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 font-sans font-bold">PRO</span>
               </h1>
             </div>
           </div>
@@ -154,24 +171,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
-      {/* User Info & Demo Reset */}
+      {/* User Info & Actions */}
       <div className="p-3 border-t border-slate-800 dark:border-[#27272a] space-y-2">
-        <div className="flex items-center gap-3 p-2 rounded-lg bg-slate-800/40 dark:bg-[#18181b] border border-slate-800 dark:border-[#27272a] hover:bg-slate-800/80 dark:hover:bg-[#27272a]/50 cursor-pointer transition-colors">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 ring-1 ring-indigo-500/30 shrink-0 overflow-hidden">
-            <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+        <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/40 dark:bg-[#18181b] border border-slate-800 dark:border-[#27272a]">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 ring-1 ring-indigo-500/30 shrink-0 overflow-hidden">
+              <img src={user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'} alt={user.name} className="w-full h-full object-cover" />
+            </div>
+            <div className="overflow-hidden min-w-0">
+              <p className="text-xs font-bold truncate text-slate-200 dark:text-white">{user.name}</p>
+              <p className="text-[10px] text-indigo-400 font-mono truncate">
+                {isAdmin ? 'ADMINISTRADOR' : 'COLABORADOR'}
+              </p>
+            </div>
           </div>
-          <div className="overflow-hidden">
-            <p className="text-xs font-medium truncate text-slate-200 dark:text-white">{user.name}</p>
-            <p className="text-[10px] text-slate-400 dark:text-[#71717a] truncate">Admin Enterprise</p>
-          </div>
+
+          <button
+            onClick={onLogout}
+            title="Sair da Conta (Logout)"
+            className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors shrink-0"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
 
         <button
           onClick={onResetDemo}
           title="Restaurar dados iniciais de demonstração"
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 dark:text-[#71717a] hover:text-slate-200 dark:hover:text-white hover:bg-slate-800/60 dark:hover:bg-[#18181b] border border-slate-800/60 dark:border-[#27272a] transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-medium text-slate-400 dark:text-[#71717a] hover:text-slate-200 dark:hover:text-white hover:bg-slate-800/60 dark:hover:bg-[#18181b] border border-slate-800/60 dark:border-[#27272a] transition-colors"
         >
-          <RefreshCw className="w-3.5 h-3.5" />
+          <RefreshCw className="w-3 h-3" />
           <span>Resetar Dados Demo</span>
         </button>
       </div>
