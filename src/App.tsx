@@ -10,8 +10,9 @@ import { SettingsView } from './components/Settings/SettingsView';
 import { CaixaModal } from './components/PDV/CaixaModal';
 import { GoogleLoginModal } from './components/Auth/GoogleLoginModal';
 import { storageService } from './services/storageService';
+import { syncService } from './services/syncService';
 import { posAudio } from './services/audioService';
-import { Lock, ShieldAlert } from 'lucide-react';
+import { Lock, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
 import {
   Product,
   Category,
@@ -93,6 +94,79 @@ export const App: React.FC = () => {
     posAudio.enabled = soundEnabled;
     localStorage.setItem('hd_system_sound_enabled', String(soundEnabled));
   }, [soundEnabled]);
+
+  // ─── SUPABASE REALTIME SYNC ──────────────────────────────────────
+  const [isSyncConnected, setIsSyncConnected] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+
+  useEffect(() => {
+    // Handler for remote changes from Supabase Realtime
+    const handleRemoteChange = (table: string, payload: any) => {
+      const event = payload.eventType; // INSERT, UPDATE, DELETE
+      const row = payload.new || payload.old;
+
+      console.log(`[HD-Sync] Remote ${event} on ${table}:`, row?.id);
+
+      switch (table) {
+        case 'products':
+          if (event === 'DELETE') storageService.removeProductFromRemote(row.id);
+          else storageService.updateProductFromRemote(row);
+          break;
+        case 'categories':
+          if (event === 'DELETE') storageService.removeCategoryFromRemote(row.id);
+          else storageService.updateCategoryFromRemote(row);
+          break;
+        case 'customers':
+          if (event === 'DELETE') storageService.removeCustomerFromRemote(row.id);
+          else storageService.updateCustomerFromRemote(row);
+          break;
+        case 'suppliers':
+          if (event === 'DELETE') storageService.removeSupplierFromRemote(row.id);
+          else storageService.updateSupplierFromRemote(row);
+          break;
+        case 'sales':
+          storageService.updateSaleFromRemote(row);
+          break;
+        case 'financial_transactions':
+          if (event === 'DELETE') storageService.removeFinancialFromRemote(row.id);
+          else storageService.updateFinancialFromRemote(row);
+          break;
+        case 'cash_sessions':
+          storageService.updateCaixaFromRemote(row);
+          break;
+        case 'store_branches':
+          storageService.updateBranchFromRemote(row);
+          break;
+        case 'stock_movements':
+          storageService.updateStockMovementFromRemote(row);
+          break;
+        case 'system_users':
+          storageService.updateUserFromRemote(row);
+          break;
+        case 'system_settings':
+          storageService.updateSettingsFromRemote(row);
+          break;
+      }
+
+      setLastSyncTime(new Date());
+    };
+
+    // Subscribe to Realtime
+    syncService.subscribeRealtime(handleRemoteChange);
+    setIsSyncConnected(true);
+
+    // Initial hydration from Supabase (load cloud data into localStorage)
+    const branchId = storageService.getSelectedBranchId();
+    storageService.hydrateFromCloud(branchId || undefined).then((ok) => {
+      if (ok) {
+        console.log('[HD-Sync] Initial cloud hydration OK');
+      }
+    });
+
+    return () => {
+      syncService.unsubscribeRealtime(handleRemoteChange);
+    };
+  }, []);
 
   const handleLogout = () => {
     storageService.logout();
@@ -262,8 +336,8 @@ export const App: React.FC = () => {
         <footer className="h-8 md:h-9 bg-white dark:bg-[#09090b] border-t border-slate-200 dark:border-[#27272a] px-3 sm:px-6 flex items-center justify-between text-[9px] md:text-[10px] text-slate-500 dark:text-[#52525b] uppercase tracking-widest font-bold select-none shrink-0">
           <div className="flex items-center gap-3 sm:gap-6">
             <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="hidden sm:inline">Status:</span> Operacional
+              <span className={`w-1.5 h-1.5 rounded-full ${isSyncConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
+              <span className="hidden sm:inline">Sync:</span> {isSyncConnected ? 'Online' : 'Offline'}
             </span>
             <span className="hidden sm:inline">Google Auth: Conectado ({user.email})</span>
             <span className="hidden md:inline">Perfil: {user.role === 'admin' ? 'Administrador' : 'Colaborador Restrito'}</span>
