@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Search,
   Barcode,
@@ -16,6 +16,11 @@ import {
   ChevronRight,
   RefreshCw,
   Tag,
+  Camera,
+  X,
+  CheckCircle2,
+  AlertTriangle,
+  Package,
 } from 'lucide-react';
 import {
   Product,
@@ -37,6 +42,7 @@ interface PDVViewProps {
   customers: Customer[];
   caixaSession: CashRegisterSession;
   onOpenCaixaModal: () => void;
+  onNavigateTab: (tab: string) => void;
   settings: SystemSettings;
   user: UserProfile;
 }
@@ -47,6 +53,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
   customers,
   caixaSession,
   onOpenCaixaModal,
+  onNavigateTab,
   settings,
   user,
 }) => {
@@ -62,6 +69,17 @@ export const PDVView: React.FC<PDVViewProps> = ({
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+
+  // Camera Scanner state
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannerStatus, setScannerStatus] = useState<'idle' | 'scanning' | 'found' | 'not_found'>('idle');
+  const [scannedBarcode, setScannedBarcode] = useState('');
+  const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const scannerIntervalRef = useRef<number | null>(null);
+  const lastScannedRef = useRef<string>('');
+  const scanCooldownRef = useRef(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -120,6 +138,18 @@ export const PDVView: React.FC<PDVViewProps> = ({
       return;
     }
 
+    // Check if adding 1 more would exceed stock
+    const existingItem = cart.find((item) => item.product.id === product.id);
+    const currentQtyInCart = existingItem ? existingItem.quantity : 0;
+    if (currentQtyInCart >= product.currentStock) {
+      posAudio.error();
+      alert(
+        `Estoque insuficiente! "${product.name}" tem apenas ${product.currentStock} ${product.unit}(s) disponível(is). ` +
+        `Você já adicionou ${currentQtyInCart} no carrinho.`
+      );
+      return;
+    }
+
     posAudio.beep();
 
     setCart((prev) => {
@@ -170,6 +200,18 @@ export const PDVView: React.FC<PDVViewProps> = ({
 
   // Modify Cart Item Quantity
   const handleUpdateQuantity = (productId: string, delta: number) => {
+    // Block increasing beyond available stock
+    if (delta > 0) {
+      const item = cart.find((i) => i.product.id === productId);
+      if (item && item.quantity >= item.product.currentStock) {
+        posAudio.error();
+        alert(
+          `Estoque insuficiente! "${item.product.name}" tem apenas ${item.product.currentStock} ${item.product.unit}(s) disponível(is).`
+        );
+        return;
+      }
+    }
+
     setCart((prev) =>
       prev
         .map((item) => {
@@ -205,6 +247,119 @@ export const PDVView: React.FC<PDVViewProps> = ({
       posAudio.click();
     }
   };
+
+  // ---- Camera Barcode Scanner ----
+  const startScanner = useCallback(async () => {
+    setIsScannerOpen(true);
+    setScannerStatus('scanning');
+    setScannedBarcode('');
+    setScannedProduct(null);
+    lastScannedRef.current = '';
+    scanCooldownRef.current = false;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+
+      // Use BarcodeDetector API if available (Chrome/Edge)
+      const BarcodeDetectorClass = (window as any).BarcodeDetector;
+      if (BarcodeDetectorClass) {
+        const detector = new BarcodeDetectorClass({
+          formats: ['ean_13', 'ean_8', 'code_128', 'qr_code', 'upc_a', 'upc_e', 'code_39', 'codabar'],
+        });
+
+        scannerIntervalRef.current = window.setInterval(async () => {
+          if (!videoRef.current || scanCooldownRef.current) return;
+          try {
+            const barcodes = await detector.detect(videoRef.current);
+            if (barcodes.length > 0) {
+              const raw = barcodes[0].rawValue.trim();
+              if (raw && raw !== lastScannedRef.current) {
+                scanCooldownRef.current = true;
+                lastScannedRef.current = raw;
+                handleBarcodeDetected(raw);
+                setTimeout(() => { scanCooldownRef.current = false; }, 2000);
+              }
+            }
+          } catch { /* ignore detection errors */ }
+        }, 500);
+      } else {
+        // BarcodeDetector not available — user can type barcode manually
+        setScannerStatus('scanning');
+      }
+    } catch (err) {
+      console.error('Camera error:', err);
+      stopScanner();
+      alert('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
+    }
+  }, []);
+
+  const stopScanner = () => {
+    if (scannerIntervalRef.current) {
+      clearInterval(scannerIntervalRef.current);
+      scannerIntervalRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setIsScannerOpen(false);
+    setScannerStatus('idle');
+    setScannedBarcode('');
+    setScannedProduct(null);
+  };
+
+  const handleBarcodeDetected = (barcode: string) => {
+    if (!isCaixaOpen) {
+      stopScanner();
+      onOpenCaixaModal();
+      return;
+    }
+
+    setScannedBarcode(barcode);
+
+    // Search product by barcode
+    const found = products.find((p) => p.barcode === barcode);
+
+    if (found) {
+      setScannedProduct(found);
+      setScannerStatus('found');
+      posAudio.beep();
+
+      // Auto-add to cart after a brief visual confirmation
+      setTimeout(() => {
+        handleAddToCart(found);
+        // Keep scanner open for next scan
+        setScannerStatus('scanning');
+        setScannedBarcode('');
+        setScannedProduct(null);
+        lastScannedRef.current = '';
+      }, 800);
+    } else {
+      setScannerStatus('not_found');
+      posAudio.error();
+    }
+  };
+
+  const handleScanManualSubmit = (barcode: string) => {
+    if (barcode.trim()) {
+      handleBarcodeDetected(barcode.trim());
+    }
+  };
+
+  // Cleanup scanner on unmount
+  useEffect(() => {
+    return () => {
+      if (scannerIntervalRef.current) clearInterval(scannerIntervalRef.current);
+      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
 
   // Calculate Totals
   const cartSubtotal = cart.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0);
@@ -253,16 +408,13 @@ export const PDVView: React.FC<PDVViewProps> = ({
             </button>
           </form>
 
-          {/* Direct Barcode Test Simulation Button */}
+          {/* Camera Barcode Scanner Button */}
           <button
-            onClick={() => {
-              const rand = products[Math.floor(Math.random() * products.length)];
-              if (rand) handleAddToCart(rand);
-            }}
-            className="hidden sm:flex px-4 py-2.5 rounded-2xl bg-indigo-600/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 hover:bg-indigo-600/20 text-xs font-bold transition-all items-center justify-center gap-1.5 whitespace-nowrap"
+            onClick={startScanner}
+            className="flex px-4 py-2.5 rounded-2xl bg-indigo-600/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 hover:bg-indigo-600/20 text-xs font-bold transition-all items-center justify-center gap-1.5 whitespace-nowrap"
           >
-            <Barcode className="w-4 h-4 text-indigo-500" />
-            <span>Simular Leitor (EAN-13)</span>
+            <Camera className="w-4 h-4 text-indigo-500" />
+            <span className="hidden sm:inline">Scanner Câmera</span>
           </button>
         </div>
 
@@ -432,12 +584,18 @@ export const PDVView: React.FC<PDVViewProps> = ({
                   >
                     <Minus className="w-3 h-3" />
                   </button>
-                  <span className="text-xs font-bold w-5 text-center text-slate-900 dark:text-white">
+                  <span className={`text-xs font-bold w-5 text-center ${item.quantity >= item.product.currentStock ? 'text-amber-500 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>
                     {item.quantity}
                   </span>
                   <button
                     onClick={() => handleUpdateQuantity(item.product.id, 1)}
-                    className="p-1 rounded text-slate-500 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#27272a]"
+                    disabled={item.quantity >= item.product.currentStock}
+                    className={`p-1 rounded transition-colors ${
+                      item.quantity >= item.product.currentStock
+                        ? 'text-slate-300 dark:text-[#3f3f46] cursor-not-allowed'
+                        : 'text-slate-500 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#27272a]'
+                    }`}
+                    title={item.quantity >= item.product.currentStock ? 'Estoque máximo atingido' : 'Adicionar mais'}
                   >
                     <Plus className="w-3 h-3" />
                   </button>
@@ -540,6 +698,129 @@ export const PDVView: React.FC<PDVViewProps> = ({
           searchInputRef.current?.focus();
         }}
       />
+
+      {/* Camera Barcode Scanner Modal */}
+      {isScannerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-[#18181b] rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-[#27272a]">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-[#27272a]">
+              <div className="flex items-center gap-2">
+                <Camera className="w-5 h-5 text-indigo-500" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Scanner de Câmera</h3>
+              </div>
+              <button onClick={stopScanner} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-[#27272a] text-slate-400">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Camera Preview */}
+            <div className="relative bg-black aspect-video">
+              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+              {/* Scan overlay */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-3/4 h-1/2 border-2 border-dashed border-white/60 rounded-2xl flex items-center justify-center">
+                  <span className="text-white/70 text-xs font-semibold bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
+                    Enquadre o código de barras ou QR Code
+                  </span>
+                </div>
+              </div>
+              {/* Scanning indicator */}
+              {scannerStatus === 'scanning' && (
+                <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-emerald-500/90 text-white px-2.5 py-1 rounded-full text-[10px] font-bold backdrop-blur-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  Escaneando...
+                </div>
+              )}
+            </div>
+
+            {/* Status / Result */}
+            <div className="p-4 space-y-3">
+              {/* Found product flash */}
+              {scannerStatus === 'found' && scannedProduct && (
+                <div className="flex items-center gap-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-500/30 rounded-xl animate-pulse">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Produto encontrado!</p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400">{scannedProduct.name} — Adicionando ao carrinho...</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Not found */}
+              {scannerStatus === 'not_found' && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-500/30 rounded-xl">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                    <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Produto não encontrado</p>
+                  </div>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mb-3">
+                    Código lido: <span className="font-mono font-bold">{scannedBarcode}</span>
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        stopScanner();
+                        onNavigateTab('inventory');
+                      }}
+                      className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Package className="w-3.5 h-3.5" />
+                      Cadastrar no Estoque
+                    </button>
+                    <button
+                      onClick={() => {
+                        setScannerStatus('scanning');
+                        setScannedBarcode('');
+                        setScannedProduct(null);
+                        lastScannedRef.current = '';
+                      }}
+                      className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors"
+                    >
+                      Escanear Novamente
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Manual barcode input (fallback when BarcodeDetector is not available) */}
+              {scannerStatus === 'scanning' && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const input = e.currentTarget.elements.namedItem('manualBarcode') as HTMLInputElement;
+                    if (input?.value) {
+                      handleScanManualSubmit(input.value);
+                      input.value = '';
+                    }
+                  }}
+                  className="flex gap-2"
+                >
+                  <input
+                    name="manualBarcode"
+                    type="text"
+                    placeholder="Digite o código manualmente..."
+                    className="flex-1 px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-colors"
+                  >
+                    OK
+                  </button>
+                </form>
+              )}
+
+              <button
+                onClick={stopScanner}
+                className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-600 dark:text-slate-400 text-xs font-bold transition-colors"
+              >
+                Fechar Scanner
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -27,7 +27,14 @@ import {
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('pdv');
-  const [darkMode, setDarkMode] = useState<boolean>(true);
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('hd_system_dark_mode');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('hd_system_sound_enabled');
+    return saved !== null ? saved === 'true' : true;
+  });
   const [isCaixaModalOpen, setIsCaixaModalOpen] = useState<boolean>(false);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
 
@@ -71,14 +78,21 @@ export const App: React.FC = () => {
     posAudio.click();
   };
 
-  // Sync dark mode class on document element
+  // Sync dark mode class on document element + persist to localStorage
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
+    localStorage.setItem('hd_system_dark_mode', String(darkMode));
   }, [darkMode]);
+
+  // Persist sound state to localStorage and sync with audioService
+  useEffect(() => {
+    posAudio.enabled = soundEnabled;
+    localStorage.setItem('hd_system_sound_enabled', String(soundEnabled));
+  }, [soundEnabled]);
 
   const handleLogout = () => {
     storageService.logout();
@@ -158,8 +172,8 @@ export const App: React.FC = () => {
           products={products}
           caixaSession={caixaSession}
           onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
-          soundEnabled={true}
-          setSoundEnabled={() => {}}
+          soundEnabled={soundEnabled}
+          setSoundEnabled={setSoundEnabled}
           darkMode={darkMode}
           setDarkMode={setDarkMode}
           user={user}
@@ -198,6 +212,7 @@ export const App: React.FC = () => {
                   customers={customers}
                   caixaSession={caixaSession}
                   onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
+                  onNavigateTab={(tab) => setActiveTab(tab)}
                   settings={settings}
                   user={user}
                 />
