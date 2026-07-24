@@ -98,9 +98,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       {/* Top Banner & Quick Action Buttons */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-6 rounded-2xl bg-[#18181b] border border-[#27272a] text-white shadow-xl">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-6 rounded-2xl bg-[#18181b] border border-[#27272a] text-white shadow-xl">
         <div>
           <h2 className="font-serif-italic text-2xl font-light tracking-tight flex items-center gap-3">
             Visão Geral ERP
@@ -132,54 +132,54 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* KPI METRIC CARDS GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
         {/* Card 1: Faturamento Hoje */}
-        <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46]">
+        <div className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46]">
           <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">Vendas Hoje</p>
-          <p className="text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
+          <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
             R$ {todayRevenue.toFixed(2)}
           </p>
-          <div className="mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
+          <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
             <ArrowUpRight className="w-3.5 h-3.5" />
             <span>↑ 12%</span> <span className="text-slate-400 dark:text-[#71717a]">vs ontem</span>
           </div>
         </div>
 
         {/* Card 2: Qtd Vendas Hoje */}
-        <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46]">
+        <div className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46]">
           <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">Transações</p>
-          <p className="text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
+          <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
             {totalSalesCount}
           </p>
-          <div className="mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
+          <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
             <span>↑ 5%</span> <span className="text-slate-400 dark:text-[#71717a]">ticket médio R$ {ticketMedio.toFixed(2)}</span>
           </div>
         </div>
 
         {/* Card 3: Alerta de Estoque Baixo */}
-        <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46]">
+        <div className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46]">
           <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">Itens em Baixa</p>
-          <p className="text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
+          <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
             {lowStockCount < 10 ? `0${lowStockCount}` : lowStockCount}
           </p>
-          <div className="mt-4 text-xs text-amber-500 flex items-center gap-1 font-medium">
+          <div className="mt-3 sm:mt-4 text-xs text-amber-500 flex items-center gap-1 font-medium">
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>! Alerta</span> <span className="text-slate-400 dark:text-[#71717a]">Reposição necessária</span>
           </div>
         </div>
 
         {/* Card 4: Assinatura Pro / Status SaaS */}
-        <div className="p-6 rounded-2xl bg-indigo-600 text-white shadow-md">
+        <div className="p-4 sm:p-6 rounded-2xl bg-indigo-600 text-white shadow-md">
           <p className="text-[10px] uppercase tracking-wider opacity-80 font-bold">Assinatura Pro</p>
-          <p className="text-3xl font-light mt-2 tracking-tighter font-serif-italic">Ativa</p>
-          <div className="mt-4 text-xs opacity-80 font-medium">
+          <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter font-serif-italic">Ativa</p>
+          <div className="mt-3 sm:mt-4 text-xs opacity-80 font-medium">
             Próximo faturamento: 12 Out
           </div>
         </div>
       </div>
 
       {/* AI COPILOT INSIGHTS SECTION */}
-      <div className="p-6 rounded-2xl bg-[#18181b] border border-[#27272a] text-white shadow-xl space-y-4">
+      <div className="p-4 sm:p-6 rounded-2xl bg-[#18181b] border border-[#27272a] text-white shadow-xl space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 flex items-center justify-center">
@@ -213,11 +213,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* CHARTS & TABLES GRID */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
         {/* Recent Activity Table */}
         <div className="lg:col-span-8 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-slate-200 dark:border-[#27272a] flex justify-between items-center">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Vendas Recentes</h3>
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 dark:border-[#27272a] flex justify-between items-center">
+            <h3 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">Vendas Recentes</h3>
             <button
               onClick={() => onNavigateTab('pdv')}
               className="text-[10px] text-slate-500 dark:text-[#a1a1aa] hover:text-slate-900 dark:hover:text-white underline tracking-widest uppercase font-bold"
@@ -225,58 +225,60 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Ver Todas
             </button>
           </div>
-          <table className="w-full text-left">
+          <div className="overflow-x-auto">
+          <table className="w-full text-left min-w-[400px]">
             <thead>
               <tr className="text-[10px] text-slate-500 dark:text-[#71717a] uppercase border-b border-slate-200 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b]/50">
-                <th className="px-6 py-3 font-bold">ID</th>
-                <th className="px-6 py-3 font-bold">Cliente</th>
-                <th className="px-6 py-3 font-bold">Status</th>
-                <th className="px-6 py-3 text-right font-bold">Valor</th>
+                <th className="px-3 sm:px-6 py-3 font-bold">ID</th>
+                <th className="px-3 sm:px-6 py-3 font-bold">Cliente</th>
+                <th className="px-3 sm:px-6 py-3 font-bold hidden sm:table-cell">Status</th>
+                <th className="px-3 sm:px-6 py-3 text-right font-bold">Valor</th>
               </tr>
             </thead>
             <tbody className="text-xs divide-y divide-slate-100 dark:divide-[#27272a] text-slate-800 dark:text-slate-200">
               {sales.slice(0, 5).map((sale) => (
                 <tr key={sale.id} className="hover:bg-slate-50 dark:hover:bg-[#27272a]/30 transition-colors">
-                  <td className="px-6 py-4 font-mono text-slate-500 dark:text-[#a1a1aa]">#{sale.code || sale.id.slice(-4)}</td>
-                  <td className="px-6 py-4 font-medium">{sale.customerName || 'Cliente Consumidor'}</td>
-                  <td className="px-6 py-4">
+                  <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-slate-500 dark:text-[#a1a1aa]">#{sale.code || sale.id.slice(-4)}</td>
+                  <td className="px-3 sm:px-6 py-3 sm:py-4 font-medium">{sale.customerName || 'Cliente Consumidor'}</td>
+                  <td className="px-3 sm:px-6 py-3 sm:py-4 hidden sm:table-cell">
                     <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[9px] font-bold uppercase tracking-wider">
                       CONCLUÍDO
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-right font-semibold">R$ {sale.total.toFixed(2)}</td>
+                  <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ {sale.total.toFixed(2)}</td>
                 </tr>
               ))}
               {sales.length === 0 && (
                 <>
                   <tr className="hover:bg-slate-50 dark:hover:bg-[#27272a]/30 transition-colors">
-                    <td className="px-6 py-4 font-mono text-[#a1a1aa]">#9281</td>
-                    <td className="px-6 py-4">Lucas Cavalcanti</td>
-                    <td className="px-6 py-4"><span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold">CONCLUÍDO</span></td>
-                    <td className="px-6 py-4 text-right font-semibold">R$ 450,00</td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-[#a1a1aa]">#9281</td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4">Lucas Cavalcanti</td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 hidden sm:table-cell"><span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold">CONCLUÍDO</span></td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ 450,00</td>
                   </tr>
                   <tr className="hover:bg-slate-50 dark:hover:bg-[#27272a]/30 transition-colors">
-                    <td className="px-6 py-4 font-mono text-[#a1a1aa]">#9280</td>
-                    <td className="px-6 py-4">Maria Julia Neves</td>
-                    <td className="px-6 py-4"><span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] font-bold">PENDENTE</span></td>
-                    <td className="px-6 py-4 text-right font-semibold">R$ 1.290,00</td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-[#a1a1aa]">#9280</td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4">Maria Julia Neves</td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 hidden sm:table-cell"><span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] font-bold">PENDENTE</span></td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ 1.290,00</td>
                   </tr>
                   <tr className="hover:bg-slate-50 dark:hover:bg-[#27272a]/30 transition-colors">
-                    <td className="px-6 py-4 font-mono text-[#a1a1aa]">#9279</td>
-                    <td className="px-6 py-4 font-medium">João Pedro Alves</td>
-                    <td className="px-6 py-4"><span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold">CONCLUÍDO</span></td>
-                    <td className="px-6 py-4 text-right font-semibold">R$ 89,90</td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-[#a1a1aa]">#9279</td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 font-medium">João Pedro Alves</td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 hidden sm:table-cell"><span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold">CONCLUÍDO</span></td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ 89,90</td>
                   </tr>
                 </>
               )}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* Right Column Widgets */}
-        <div className="lg:col-span-4 space-y-6">
+        <div className="lg:col-span-4 space-y-4 sm:space-y-6">
           {/* Upcoming Payments Widget */}
-          <div className="p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
+          <div className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
             <h3 className="text-xs uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a] mb-4">Próximos Pagamentos</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between text-xs">
@@ -296,12 +298,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* Highlight Product Widget */}
-          <div className="p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
+          <div className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
             <h3 className="text-xs uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a] mb-4">Destaque do Mês</h3>
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-xl">📦</div>
-              <div>
-                <p className="text-xs font-bold text-slate-900 dark:text-white">{products[0]?.name || 'Cerveja Artesanal IPA'}</p>
+              <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-xl shrink-0">📦</div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{products[0]?.name || 'Cerveja Artesanal IPA'}</p>
                 <p className="text-[10px] text-slate-500 dark:text-[#71717a]">412 unidades vendidas</p>
               </div>
             </div>

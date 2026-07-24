@@ -297,7 +297,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   });
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
       {/* Top Header Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -386,12 +386,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             <thead>
               <tr className="bg-slate-50 dark:bg-[#09090b]/80 border-b border-slate-200 dark:border-[#27272a] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider">
                 <th className="py-3.5 px-4">Produto</th>
-                <th className="py-3.5 px-4">Código / EAN</th>
-                <th className="py-3.5 px-4">Categoria</th>
-                <th className="py-3.5 px-4">Preço Custo</th>
+                <th className="py-3.5 px-4 hidden md:table-cell">Código / EAN</th>
+                <th className="py-3.5 px-4 hidden sm:table-cell">Categoria</th>
+                <th className="py-3.5 px-4 hidden lg:table-cell">Preço Custo</th>
                 <th className="py-3.5 px-4">Preço Venda</th>
-                <th className="py-3.5 px-4">Margem %</th>
-                <th className="py-3.5 px-4">Estoque Atual</th>
+                <th className="py-3.5 px-4 hidden md:table-cell">Margem %</th>
+                <th className="py-3.5 px-4">Estoque</th>
                 <th className="py-3.5 px-4 text-right">Ações</th>
               </tr>
             </thead>
@@ -416,21 +416,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 px-4 font-mono text-slate-600 dark:text-[#a1a1aa]">
+                    <td className="py-3 px-4 hidden md:table-cell font-mono text-slate-600 dark:text-[#a1a1aa]">
                       {p.barcode}
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="py-3 px-4 hidden sm:table-cell">
                       <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#09090b] font-semibold text-slate-700 dark:text-[#a1a1aa] text-[11px] border border-transparent dark:border-[#27272a]">
                         {p.category}
                       </span>
                     </td>
-                    <td className="py-3 px-4 font-semibold text-slate-600 dark:text-[#a1a1aa]">
+                    <td className="py-3 px-4 hidden lg:table-cell font-semibold text-slate-600 dark:text-[#a1a1aa]">
                       R$ {p.costPrice.toFixed(2)}
                     </td>
                     <td className="py-3 px-4 font-bold text-emerald-600 dark:text-emerald-400">
                       R$ {p.salePrice.toFixed(2)}
                     </td>
-                    <td className="py-3 px-4 font-bold text-indigo-600 dark:text-indigo-400">
+                    <td className="py-3 px-4 hidden md:table-cell font-bold text-indigo-600 dark:text-indigo-400">
                       {margin.toFixed(1)}%
                     </td>
                     <td className="py-3 px-4">
@@ -613,7 +613,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
                     Estoque Inicial
@@ -730,7 +730,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       <Sparkles className="w-3 h-3 text-amber-500" />
                       Sugestões Encontradas (Clique para escolher):
                     </span>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {imageSuggestions.map((img, idx) => (
                         <button
                           key={idx}

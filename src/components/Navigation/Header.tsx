@@ -87,30 +87,30 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="h-16 border-b border-slate-200 dark:border-[#27272a] bg-white/80 dark:bg-[#09090b]/80 backdrop-blur-md px-6 md:px-8 flex items-center justify-between sticky top-0 z-30 transition-colors">
-      <div className="flex items-center gap-4">
+    <header className="h-14 md:h-16 border-b border-slate-200 dark:border-[#27272a] bg-white/80 dark:bg-[#09090b]/80 backdrop-blur-md px-3 sm:px-5 md:px-8 flex items-center justify-between sticky top-0 z-30 transition-colors shrink-0">
+      <div className="flex items-center gap-2 md:gap-4 min-w-0">
         {/* Mobile menu trigger */}
         <button
           onClick={onToggleMobileMenu}
-          className="lg:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors"
+          className="lg:hidden p-1.5 md:p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors shrink-0"
           aria-label="Menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
         {/* Page Title & Status Pill */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          <h2 className="font-serif-italic text-lg md:text-xl text-slate-900 dark:text-white leading-tight">
+        <div className="flex flex-wrap items-center gap-1.5 md:gap-2.5 min-w-0">
+          <h2 className="font-serif-italic text-sm md:text-lg lg:text-xl text-slate-900 dark:text-white leading-tight truncate">
             {currentInfo.title}
           </h2>
-          <span className="hidden sm:inline-block px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-bold tracking-wider uppercase">
+          <span className="hidden sm:inline-block px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-bold tracking-wider uppercase shrink-0">
             ONLINE
           </span>
         </div>
       </div>
 
       {/* Action Buttons */}
-      <div className="flex items-center gap-3 md:gap-5">
+      <div className="flex items-center gap-1.5 sm:gap-3 md:gap-5 shrink-0">
         <div className="hidden lg:flex items-center gap-2 text-xs text-slate-500 dark:text-[#a1a1aa]">
           <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
           Sincronizado: Agora
@@ -120,18 +120,20 @@ export const Header: React.FC<HeaderProps> = ({
         {currentTab !== 'pdv' ? (
           <button
             onClick={() => setCurrentTab('pdv')}
-            className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-black text-xs font-bold rounded-full hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors shadow-sm flex items-center gap-2"
+            className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-slate-900 dark:bg-white text-white dark:text-black text-[10px] sm:text-xs font-bold rounded-full hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors shadow-sm flex items-center gap-1.5 sm:gap-2"
           >
             <ShoppingCart className="w-3.5 h-3.5" />
-            <span>ABRIR PDV</span>
+            <span className="hidden xs:inline sm:inline">ABRIR PDV</span>
+            <span className="xs:hidden sm:hidden">PDV</span>
           </button>
         ) : (
           <button
             onClick={onOpenCaixaModal}
-            className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-full hover:bg-indigo-500 transition-colors shadow-sm flex items-center gap-2"
+            className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-indigo-600 text-white text-[10px] sm:text-xs font-bold rounded-full hover:bg-indigo-500 transition-colors shadow-sm flex items-center gap-1.5 sm:gap-2"
           >
             {isCaixaOpen ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-            <span>CAIXA {isCaixaOpen ? 'ABERTO' : 'FECHADO'}</span>
+            <span className="hidden sm:inline">CAIXA {isCaixaOpen ? 'ABERTO' : 'FECHADO'}</span>
+            <span className="sm:hidden">{isCaixaOpen ? 'ABERTO' : 'FECHADO'}</span>
           </button>
         )}
 
@@ -139,7 +141,7 @@ export const Header: React.FC<HeaderProps> = ({
         {lowStockCount > 0 && (
           <button
             onClick={() => setCurrentTab('inventory')}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30 text-xs font-semibold hover:bg-amber-500/20 transition-all"
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30 text-xs font-semibold hover:bg-amber-500/20 transition-all"
             title={`${lowStockCount} produtos com estoque baixo`}
           >
             <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 animate-pulse" />
@@ -150,32 +152,23 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Sound FX Toggle */}
         <button
           onClick={handleSoundToggle}
-          className="p-2 rounded-xl text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors"
+          className="p-1.5 md:p-2 rounded-xl text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors"
           title={soundEnabled ? 'Sons do PDV Ativados' : 'Sons Mutos'}
         >
           {soundEnabled ? <Volume2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
         </button>
 
-        {/* Fullscreen Mode */}
-        <button
-          onClick={toggleFullscreen}
-          className="p-2 rounded-xl text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors hidden sm:block"
-          title={isFullscreen ? 'Sair da Tela Cheia' : 'Modo Tela Cheia (PDV)'}
-        >
-          {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-        </button>
-
         {/* Dark/Light Theme Toggle */}
         <button
           onClick={() => setDarkMode(!darkMode)}
-          className="p-2 rounded-xl text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors"
+          className="p-1.5 md:p-2 rounded-xl text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors"
           title={darkMode ? 'Modo Claro' : 'Modo Escuro'}
         >
           {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
         </button>
 
         {/* User Account & Logout */}
-        <div className="pl-2 border-l border-slate-200 dark:border-[#27272a] flex items-center gap-2">
+        <div className="pl-1.5 sm:pl-2 border-l border-slate-200 dark:border-[#27272a] flex items-center gap-1 sm:gap-2">
           <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a]">
             <img
               src={user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
@@ -192,7 +185,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={onLogout}
-            className="p-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-1 text-xs font-bold"
+            className="p-1.5 md:p-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-1 text-xs font-bold"
             title="Sair da Conta (Logout)"
           >
             <LogOut className="w-4 h-4" />

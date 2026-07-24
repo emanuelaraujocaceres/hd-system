@@ -211,7 +211,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
   const cartTotal = Math.max(0, cartSubtotal - discountAmount);
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)] bg-slate-100 dark:bg-[#09090b] overflow-hidden">
+    <div className="flex flex-col lg:flex-row h-full bg-slate-100 dark:bg-[#09090b] overflow-hidden">
       {/* LEFT COLUMN: PRODUCT SEARCH & CATALOG GRID */}
       <div className="flex-1 flex flex-col p-4 md:p-6 space-y-4 overflow-y-auto">
         {/* Closed Caixa Warning Banner */}
@@ -259,7 +259,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
               const rand = products[Math.floor(Math.random() * products.length)];
               if (rand) handleAddToCart(rand);
             }}
-            className="px-4 py-2.5 rounded-2xl bg-indigo-600/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 hover:bg-indigo-600/20 text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap"
+            className="hidden sm:flex px-4 py-2.5 rounded-2xl bg-indigo-600/10 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 hover:bg-indigo-600/20 text-xs font-bold transition-all items-center justify-center gap-1.5 whitespace-nowrap"
           >
             <Barcode className="w-4 h-4 text-indigo-500" />
             <span>Simular Leitor (EAN-13)</span>
@@ -346,7 +346,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
       </div>
 
       {/* RIGHT COLUMN: SHOPPING CART & PDV CHECKOUT */}
-      <div className="w-full lg:w-96 bg-white dark:bg-[#18181b] border-l border-slate-200 dark:border-[#27272a] flex flex-col h-full shadow-xl">
+      <div className="w-full lg:w-96 bg-white dark:bg-[#18181b] border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-[#27272a] flex flex-col lg:h-full max-h-[50vh] lg:max-h-none shadow-xl shrink-0 lg:shrink">
         {/* Cart Top Header */}
         <div className="p-4 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between bg-slate-50 dark:bg-[#09090b]/50">
           <div className="flex items-center gap-2">
