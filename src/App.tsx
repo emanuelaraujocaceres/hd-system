@@ -4,15 +4,18 @@ import { Header } from './components/Navigation/Header';
 import { PDVView } from './components/PDV/PDVView';
 import { DashboardView } from './components/Dashboard/DashboardView';
 import { InventoryView } from './components/Inventory/InventoryView';
+import { NFHistoryView } from './components/Inventory/NFHistoryView';
 import { FinanceView } from './components/Finance/FinanceView';
+import { SalesHistoryView } from './components/Finance/SalesHistoryView';
 import { CRMView } from './components/CRM/CRMView';
+import { FiadosView } from './components/CRM/FiadosView';
 import { SettingsView } from './components/Settings/SettingsView';
 import { CaixaModal } from './components/PDV/CaixaModal';
 import { GoogleLoginModal } from './components/Auth/GoogleLoginModal';
 import { storageService } from './services/storageService';
 import { syncService } from './services/syncService';
 import { posAudio } from './services/audioService';
-import { Lock, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
+import { Lock, ShieldAlert, Wifi, WifiOff, ArrowLeft } from 'lucide-react';
 import {
   Product,
   Category,
@@ -38,6 +41,30 @@ export const App: React.FC = () => {
   });
   const [isCaixaModalOpen, setIsCaixaModalOpen] = useState<boolean>(false);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
+  const [navHistory, setNavHistory] = useState<string[]>(['pdv']);
+
+  // Handle mobile back button - navigate to previous page instead of closing app
+  useEffect(() => {
+    const handleBackButton = (e: PopStateEvent) => {
+      if (navHistory.length > 1) {
+        e.preventDefault();
+        const previousTab = navHistory[navHistory.length - 2];
+        setActiveTab(previousTab);
+        setNavHistory(prev => prev.slice(0, -1));
+      }
+    };
+    window.addEventListener('popstate', handleBackButton);
+    return () => window.removeEventListener('popstate', handleBackButton);
+  }, [navHistory]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    if (navHistory[navHistory.length - 1] !== tab) {
+      setNavHistory(prev => [...prev, tab]);
+      window.history.pushState({ tab }, '', window.location.pathname);
+    }
+    setIsMobileOpen(false);
+  };
 
   // App State loaded from storageService
   const [products, setProducts] = useState<Product[]>([]);
@@ -153,17 +180,26 @@ export const App: React.FC = () => {
 
     // Subscribe to Realtime
     syncService.subscribeRealtime(handleRemoteChange);
-    setIsSyncConnected(true);
+
+    // Check connection health periodically
+    const checkConnection = async () => {
+      const healthy = await syncService.testConnection();
+      setIsSyncConnected(healthy && syncService.connected);
+    };
+    checkConnection();
+    const healthInterval = setInterval(checkConnection, 30000);
 
     // Initial hydration from Supabase (load cloud data into localStorage)
     const branchId = storageService.getSelectedBranchId();
     storageService.hydrateFromCloud(branchId || undefined).then((ok) => {
       if (ok) {
         console.log('[HD-Sync] Initial cloud hydration OK');
+        setIsSyncConnected(true);
       }
     });
 
     return () => {
+      clearInterval(healthInterval);
       syncService.unsubscribeRealtime(handleRemoteChange);
     };
   }, []);
@@ -204,8 +240,11 @@ export const App: React.FC = () => {
     if (tab === 'pdv') return !!perms.pdv;
     if (tab === 'dashboard') return !!perms.dashboard;
     if (tab === 'inventory') return !!perms.inventory;
+    if (tab === 'nf-history') return !!perms.inventory;
     if (tab === 'finance') return !!perms.finance;
+    if (tab === 'sales-history') return !!perms.finance;
     if (tab === 'crm') return !!perms.crm;
+    if (tab === 'fiados') return !!perms.crm;
     if (tab === 'settings') return !!perms.settings;
     return false;
   };
@@ -215,7 +254,7 @@ export const App: React.FC = () => {
       {/* Sidebar Navigation */}
       <Sidebar
         currentTab={activeTab}
-        setCurrentTab={setActiveTab}
+        setCurrentTab={handleTabChange}
         branches={branches}
         currentBranch={currentBranch}
         onSelectBranch={handleSelectBranch}
@@ -242,7 +281,7 @@ export const App: React.FC = () => {
         <Header
           onToggleMobileMenu={() => setIsMobileOpen((prev) => !prev)}
           currentTab={activeTab}
-          setCurrentTab={setActiveTab}
+          setCurrentTab={handleTabChange}
           products={products}
           caixaSession={caixaSession}
           onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
@@ -286,7 +325,7 @@ export const App: React.FC = () => {
                   customers={customers}
                   caixaSession={caixaSession}
                   onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
-                  onNavigateTab={(tab) => setActiveTab(tab)}
+                  onNavigateTab={handleTabChange}
                   settings={settings}
                   user={user}
                 />
@@ -296,9 +335,7 @@ export const App: React.FC = () => {
                 <DashboardView
                   sales={sales}
                   products={products}
-                  caixaSession={caixaSession}
-                  financialAccounts={financialAccounts}
-                  onNavigateTab={(tab) => setActiveTab(tab)}
+                  onNavigateTab={handleTabChange}
                   onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
                 />
               )}
@@ -313,16 +350,30 @@ export const App: React.FC = () => {
                 />
               )}
 
+              {activeTab === 'nf-history' && (
+                <NFHistoryView products={products} suppliers={suppliers} />
+              )}
+
               {activeTab === 'finance' && (
                 <FinanceView
                   financialAccounts={financialAccounts}
                   sales={sales}
                   products={products}
+                  user={user}
+                  onNavigateTab={handleTabChange}
                 />
               )}
 
+              {activeTab === 'sales-history' && (
+                <SalesHistoryView sales={sales} user={user} />
+              )}
+
               {activeTab === 'crm' && (
-                <CRMView customers={customers} suppliers={suppliers} />
+                <CRMView customers={customers} suppliers={suppliers} user={user} />
+              )}
+
+              {activeTab === 'fiados' && (
+                <FiadosView sales={sales} customers={customers} />
               )}
 
               {activeTab === 'settings' && (

@@ -84,7 +84,7 @@ ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
 -- 5. CRIAR TABELA DE CONFIGURAÇÕES DO SISTEMA (se não existir)
 -- ==========================================================================
 CREATE TABLE IF NOT EXISTS public.system_settings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id VARCHAR(100) PRIMARY KEY,
     organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE UNIQUE DEFAULT '00000000-0000-0000-0000-000000000001',
     settings JSONB NOT NULL DEFAULT '{}',
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

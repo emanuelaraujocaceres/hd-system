@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   Camera,
@@ -11,10 +11,28 @@ import {
   RefreshCw,
   Upload,
   Building2,
+  Clock,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Zap,
+  ZapOff,
 } from 'lucide-react';
 import { FinancialAccount, StoreBranch } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+
+const BOLETOS_STORAGE_KEY = 'hd_system_scanned_boletos';
+
+interface ScannedBoletoRecord {
+  id: string;
+  linhaDigitavel: string;
+  amount: number;
+  dueDate: string;
+  payer: string;
+  scanDate: string;
+  financialAccountId: string;
+}
 
 interface BoletoCameraScannerModalProps {
   isOpen: boolean;
@@ -34,11 +52,48 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [scannedBoleto, setScannedBoleto] = useState<any | null>(null);
 
+  // Flash toggle
+  const [flashOn, setFlashOn] = useState(false);
+
+  // Scanned boletos history
+  const [scannedBoletos, setScannedBoletos] = useState<ScannedBoletoRecord[]>([]);
+  const [showBoletosHistory, setShowBoletosHistory] = useState(false);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Keep streamRef in sync
+  useEffect(() => {
+    streamRef.current = cameraStream;
+  }, [cameraStream]);
+
+  // Load scanned boletos from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(BOLETOS_STORAGE_KEY);
+      if (stored) {
+        setScannedBoletos(JSON.parse(stored));
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, []);
 
   if (!isOpen) return null;
+
+  const toggleFlash = async () => {
+    const stream = streamRef.current;
+    if (!stream) return;
+    const track = stream.getVideoTracks()[0];
+    const capabilities = track.getCapabilities() as any;
+    if (capabilities.torch) {
+      const next = !flashOn;
+      await track.applyConstraints({ advanced: [{ torch: next }] as any });
+      setFlashOn(next);
+    }
+  };
 
   const handleStartCamera = async () => {
     try {
@@ -49,6 +104,7 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
         video: { facingMode: 'environment' },
       });
       setCameraStream(stream);
+      streamRef.current = stream;
 
       setTimeout(() => {
         if (videoRef.current) {
@@ -68,7 +124,9 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
     if (cameraStream) {
       cameraStream.getTracks().forEach((track) => track.stop());
       setCameraStream(null);
+      streamRef.current = null;
     }
+    setFlashOn(false);
   };
 
   const handleCapturePhoto = () => {
@@ -127,11 +185,33 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
     }
   };
 
+  const saveBoletoRecord = (linhaDigitavel: string, amount: number, dueDate: string, payer: string, financialAccountId: string) => {
+    const record: ScannedBoletoRecord = {
+      id: `bol-${Date.now()}`,
+      linhaDigitavel,
+      amount,
+      dueDate,
+      payer,
+      scanDate: new Date().toISOString(),
+      financialAccountId,
+    };
+
+    const updated = [record, ...scannedBoletos].slice(0, 50); // Keep last 50
+    setScannedBoletos(updated);
+    try {
+      localStorage.setItem(BOLETOS_STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
   const handleConfirmSavePayable = () => {
     if (!scannedBoleto) return;
 
+    const financialAccountId = `fin-bol-${Date.now()}`;
+
     const newPayable: FinancialAccount = {
-      id: `fin-bol-${Date.now()}`,
+      id: financialAccountId,
       title: `Boleto: ${scannedBoleto.supplierName || 'Fornecedor'}`,
       type: 'payable',
       category: scannedBoleto.category || 'Fornecedores',
@@ -142,16 +222,50 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
     };
 
     storageService.saveFinancialAccount(newPayable);
+
+    // Store boleto record in localStorage
+    saveBoletoRecord(
+      scannedBoleto.barcode || '',
+      scannedBoleto.amount || 0,
+      scannedBoleto.dueDate || '',
+      scannedBoleto.supplierName || '',
+      financialAccountId
+    );
+
     posAudio.chime();
     if (onAccountAdded) onAccountAdded();
     onClose();
   };
 
+  const handleDeleteBoletoRecord = (id: string) => {
+    const updated = scannedBoletos.filter((b) => b.id !== id);
+    setScannedBoletos(updated);
+    try {
+      localStorage.setItem(BOLETOS_STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+  };
+
+  const formatDate = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return iso;
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fadeIn">
-      <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center sm:p-4 bg-slate-900/80 backdrop-blur-md animate-fadeIn">
+      <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-[90vh] h-full sm:h-auto">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between bg-slate-50 dark:bg-[#09090b]/60">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between bg-slate-50 dark:bg-[#09090b]/60 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl">
               <FileCheck className="w-6 h-6" />
@@ -234,23 +348,40 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
             </div>
           )}
 
-          {/* Live Stream */}
+          {/* Live Stream — FULLSCREEN on mobile */}
           {cameraStream && !capturedImage && (
-            <div className="space-y-3">
-              <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden border border-slate-800 relative flex items-center justify-center">
+            <div className="fixed inset-0 sm:relative sm:inset-auto z-50 sm:z-auto bg-black flex flex-col">
+              <div className="relative flex-1 sm:w-full sm:aspect-video sm:rounded-2xl overflow-hidden sm:border sm:border-slate-800 flex items-center justify-center">
                 <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
                 <canvas ref={canvasRef} className="hidden" />
-                <div className="absolute inset-6 border-2 border-dashed border-white/50 rounded-2xl pointer-events-none flex items-center justify-center">
+
+                {/* Flash toggle */}
+                <button
+                  onClick={toggleFlash}
+                  className="absolute top-4 left-4 z-50 p-2 rounded-full backdrop-blur-sm transition-colors"
+                  style={{
+                    background: flashOn ? 'rgba(250, 204, 21, 0.9)' : 'rgba(0, 0, 0, 0.5)',
+                  }}
+                  title={flashOn ? 'Desligar Flash' : 'Ligar Flash'}
+                >
+                  {flashOn ? (
+                    <Zap className="w-5 h-5 text-black" fill="currentColor" />
+                  ) : (
+                    <ZapOff className="w-5 h-5 text-white/70" />
+                  )}
+                </button>
+
+                <div className="absolute inset-6 sm:inset-6 border-2 border-dashed border-white/50 rounded-2xl pointer-events-none flex items-center justify-center">
                   <span className="text-[10px] text-white/90 bg-black/60 px-3 py-1 rounded-full font-mono font-bold">
                     Enquadre o Boleto ou Linha Digitável
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 p-4 bg-slate-900 shrink-0 sm:bg-transparent">
                 <button
                   onClick={handleStopCamera}
-                  className="px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl"
+                  className="px-4 py-2.5 bg-slate-700 text-slate-200 font-bold text-xs rounded-xl sm:bg-slate-200 sm:dark:bg-slate-800 sm:text-slate-700 sm:dark:text-slate-300"
                 >
                   Cancelar
                 </button>
@@ -349,10 +480,71 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
               </button>
             </div>
           )}
+
+          {/* ─── SCANNED BOLETOS HISTORY ──────────────────────────── */}
+          {scannedBoletos.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 dark:border-[#27272a] overflow-hidden">
+              <button
+                onClick={() => setShowBoletosHistory(!showBoletosHistory)}
+                className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-[#09090b] hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors"
+              >
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <Clock className="w-4 h-4 text-emerald-500" />
+                  <span>Ver Boletos Escaneados</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-extrabold">
+                    {scannedBoletos.length}
+                  </span>
+                </div>
+                {showBoletosHistory ? (
+                  <ChevronUp className="w-4 h-4 text-slate-400" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                )}
+              </button>
+
+              {showBoletosHistory && (
+                <div className="p-3 space-y-2 max-h-64 overflow-y-auto bg-white dark:bg-[#18181b]">
+                  {scannedBoletos.map((boleto) => (
+                    <div
+                      key={boleto.id}
+                      className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-1.5 relative group"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                            {boleto.payer}
+                          </p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                            Escaneado: {formatDate(boleto.scanDate)}
+                          </p>
+                        </div>
+                        <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 ml-2 whitespace-nowrap">
+                          R$ {boleto.amount.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] text-slate-400 space-y-0.5">
+                          <p>Venc: {boleto.dueDate}</p>
+                          <p className="font-mono break-all">{boleto.linhaDigitavel}</p>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteBoletoRecord(boleto.id)}
+                          className="p-1 text-slate-300 hover:text-red-500 dark:text-slate-600 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                          title="Remover"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-50 dark:bg-[#09090b]/80 border-t border-slate-200 dark:border-[#27272a] flex justify-end">
+        <div className="p-4 bg-slate-50 dark:bg-[#09090b]/80 border-t border-slate-200 dark:border-[#27272a] flex justify-end shrink-0">
           <button
             onClick={() => {
               handleStopCamera();

@@ -18,6 +18,8 @@ import {
   Tag,
   Camera,
   X,
+  Zap,
+  ZapOff,
   CheckCircle2,
   AlertTriangle,
   Package,
@@ -80,6 +82,21 @@ export const PDVView: React.FC<PDVViewProps> = ({
   const scannerIntervalRef = useRef<number | null>(null);
   const lastScannedRef = useRef<string>('');
   const scanCooldownRef = useRef(false);
+  const [flashOn, setFlashOn] = useState(false);
+  const [scanFlash, setScanFlash] = useState(false);
+  const [scanSuccessProduct, setScanSuccessProduct] = useState<Product | null>(null);
+
+  const toggleFlash = useCallback(async () => {
+    const stream = streamRef.current;
+    if (!stream) return;
+    const track = stream.getVideoTracks()[0];
+    const capabilities = track.getCapabilities() as any;
+    if (capabilities.torch) {
+      const next = !flashOn;
+      await track.applyConstraints({ advanced: [{ torch: next }] as any });
+      setFlashOn(next);
+    }
+  }, [flashOn]);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -143,10 +160,81 @@ export const PDVView: React.FC<PDVViewProps> = ({
     const currentQtyInCart = existingItem ? existingItem.quantity : 0;
     if (currentQtyInCart >= product.currentStock) {
       posAudio.error();
-      alert(
-        `Estoque insuficiente! "${product.name}" tem apenas ${product.currentStock} ${product.unit}(s) disponível(is). ` +
-        `Você já adicionou ${currentQtyInCart} no carrinho.`
-      );
+      // Improved visual alert for insufficient stock
+      const alertHtml = `
+        <div style="font-family: inherit; padding: 16px; max-width: 320px;">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <div style="width: 48px; height: 48px; border-radius: 50%; background: #fef2f2; border: 2px solid #fecaca; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            </div>
+            <div>
+              <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #991b1b;">Estoque Insuficiente</h3>
+              <p style="margin: 4px 0 0; font-size: 13px; color: #7f1d1d;">Não é possível adicionar mais itens</p>
+            </div>
+          </div>
+          <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 12px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span style="font-size: 13px; color: #7f1d1d;">Produto</span>
+              <span style="font-size: 13px; font-weight: 600; color: #991b1b;">${product.name}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span style="font-size: 13px; color: #7f1d1d;">Disponível em estoque</span>
+              <span style="font-size: 13px; font-weight: 700; color: #ef4444;">${product.currentStock} ${product.unit}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span style="font-size: 13px; color: #7f1d1d;">Já no carrinho</span>
+              <span style="font-size: 13px; font-weight: 700; color: #f59e0b;">${currentQtyInCart} ${product.unit}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px solid #fecaca;">
+              <span style="font-size: 13px; color: #7f1d1d;">Máximo permitido</span>
+              <span style="font-size: 13px; font-weight: 700; color: #991b1b;">${product.currentStock} ${product.unit}</span>
+            </div>
+          </div>
+          <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+              <span style="font-size: 12px; font-weight: 600; color: #92400e;">Dica:</span>
+            </div>
+            <p style="margin: 0; font-size: 12px; color: #92400e;">Remova itens do carrinho ou finalize a venda atual antes de adicionar mais.</p>
+          </div>
+        </div>
+      `;
+      
+      // Create a custom modal-like alert
+      const alertContainer = document.createElement('div');
+      alertContainer.style.cssText = `
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+        display: flex; align-items: center; justify-content: center; padding: 16px;
+        animation: fadeIn 0.2s ease-out;
+      `;
+      alertContainer.innerHTML = `
+        <div style="
+          background: white; border-radius: 20px; max-width: 360px; width: 100%;
+          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+          overflow: hidden; animation: slideUp 0.3s ease-out;
+        ">
+          ${alertHtml}
+          <button onclick="this.closest('[data-alert]').remove()" style="
+            width: 100%; padding: 14px; margin-top: 16px;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white; border: none; border-radius: 12px;
+            font-size: 14px; font-weight: 700; cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.1s;
+          " onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform='scale(1)'">
+            Entendido
+          </button>
+        </div>
+        <style>
+          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        </style>
+      `;
+      alertContainer.setAttribute('data-alert', 'true');
+      document.body.appendChild(alertContainer);
+      
+      // Auto-remove after 8 seconds
+      setTimeout(() => alertContainer.remove(), 8000);
       return;
     }
 
@@ -283,12 +371,14 @@ export const PDVView: React.FC<PDVViewProps> = ({
               if (raw && raw !== lastScannedRef.current) {
                 scanCooldownRef.current = true;
                 lastScannedRef.current = raw;
+                setScanFlash(true);
+                setTimeout(() => setScanFlash(false), 400);
                 handleBarcodeDetected(raw);
                 setTimeout(() => { scanCooldownRef.current = false; }, 2000);
               }
             }
           } catch { /* ignore detection errors */ }
-        }, 500);
+        }, 300);
       } else {
         // BarcodeDetector not available — user can type barcode manually
         setScannerStatus('scanning');
@@ -313,6 +403,9 @@ export const PDVView: React.FC<PDVViewProps> = ({
     setScannerStatus('idle');
     setScannedBarcode('');
     setScannedProduct(null);
+    setFlashOn(false);
+    setScanFlash(false);
+    setScanSuccessProduct(null);
   };
 
   const handleBarcodeDetected = (barcode: string) => {
@@ -332,15 +425,18 @@ export const PDVView: React.FC<PDVViewProps> = ({
       setScannerStatus('found');
       posAudio.beep();
 
-      // Auto-add to cart after a brief visual confirmation
+      // Add to cart immediately
+      handleAddToCart(found);
+
+      // Show success overlay at top of camera for 1.5s, then reset
+      setScanSuccessProduct(found);
       setTimeout(() => {
-        handleAddToCart(found);
-        // Keep scanner open for next scan
+        setScanSuccessProduct(null);
         setScannerStatus('scanning');
         setScannedBarcode('');
         setScannedProduct(null);
         lastScannedRef.current = '';
-      }, 800);
+      }, 1500);
     } else {
       setScannerStatus('not_found');
       posAudio.error();
@@ -699,125 +795,156 @@ export const PDVView: React.FC<PDVViewProps> = ({
         }}
       />
 
-      {/* Camera Barcode Scanner Modal */}
+      {/* Camera Barcode Scanner — Fullscreen */}
       {isScannerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-[#18181b] rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-[#27272a]">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-[#27272a]">
-              <div className="flex items-center gap-2">
-                <Camera className="w-5 h-5 text-indigo-500" />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Scanner de Câmera</h3>
-              </div>
-              <button onClick={stopScanner} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-[#27272a] text-slate-400">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+        <div className="fixed inset-0 z-50 bg-black flex flex-col">
+          {/* Close button (top-right) */}
+          <button
+            onClick={stopScanner}
+            className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 backdrop-blur-sm transition-colors"
+            title="Fechar Scanner"
+          >
+            <X className="w-6 h-6" />
+          </button>
 
-            {/* Camera Preview */}
-            <div className="relative bg-black aspect-video">
-              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-              {/* Scan overlay */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-3/4 h-1/2 border-2 border-dashed border-white/60 rounded-2xl flex items-center justify-center">
-                  <span className="text-white/70 text-xs font-semibold bg-black/40 px-3 py-1 rounded-full backdrop-blur-sm">
-                    Enquadre o código de barras ou QR Code
-                  </span>
-                </div>
-              </div>
-              {/* Scanning indicator */}
-              {scannerStatus === 'scanning' && (
-                <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-emerald-500/90 text-white px-2.5 py-1 rounded-full text-[10px] font-bold backdrop-blur-sm">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                  Escaneando...
-                </div>
-              )}
-            </div>
+          {/* Flash toggle (top-left) */}
+          <button
+            onClick={toggleFlash}
+            className="absolute top-4 left-4 z-50 p-2 rounded-full backdrop-blur-sm transition-colors"
+            style={{
+              background: flashOn ? 'rgba(250, 204, 21, 0.9)' : 'rgba(0, 0, 0, 0.5)',
+            }}
+            title={flashOn ? 'Desligar Flash' : 'Ligar Flash'}
+          >
+            {flashOn ? (
+              <Zap className="w-6 h-6 text-black" fill="currentColor" />
+            ) : (
+              <ZapOff className="w-6 h-6 text-white/70" />
+            )}
+          </button>
 
-            {/* Status / Result */}
-            <div className="p-4 space-y-3">
-              {/* Found product flash */}
-              {scannerStatus === 'found' && scannedProduct && (
-                <div className="flex items-center gap-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-500/30 rounded-xl animate-pulse">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-500 shrink-0" />
-                  <div>
-                    <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Produto encontrado!</p>
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400">{scannedProduct.name} — Adicionando ao carrinho...</p>
-                  </div>
-                </div>
-              )}
+          {/* Video — fills remaining space */}
+          <div className="relative flex-1">
+            <video
+              ref={videoRef}
+              className="w-full h-full object-cover"
+              playsInline
+              muted
+            />
 
-              {/* Not found */}
-              {scannerStatus === 'not_found' && (
-                <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-500/30 rounded-xl">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
-                    <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Produto não encontrado</p>
-                  </div>
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mb-3">
-                    Código lido: <span className="font-mono font-bold">{scannedBarcode}</span>
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        stopScanner();
-                        onNavigateTab('inventory');
-                      }}
-                      className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <Package className="w-3.5 h-3.5" />
-                      Cadastrar no Estoque
-                    </button>
-                    <button
-                      onClick={() => {
-                        setScannerStatus('scanning');
-                        setScannedBarcode('');
-                        setScannedProduct(null);
-                        lastScannedRef.current = '';
-                      }}
-                      className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors"
-                    >
-                      Escanear Novamente
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Manual barcode input (fallback when BarcodeDetector is not available) */}
-              {scannerStatus === 'scanning' && (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const input = e.currentTarget.elements.namedItem('manualBarcode') as HTMLInputElement;
-                    if (input?.value) {
-                      handleScanManualSubmit(input.value);
-                      input.value = '';
-                    }
-                  }}
-                  className="flex gap-2"
-                >
-                  <input
-                    name="manualBarcode"
-                    type="text"
-                    placeholder="Digite o código manualmente..."
-                    className="flex-1 px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <button
-                    type="submit"
-                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-colors"
-                  >
-                    OK
-                  </button>
-                </form>
-              )}
-
-              <button
-                onClick={stopScanner}
-                className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-600 dark:text-slate-400 text-xs font-bold transition-colors"
+            {/* Scan overlay guide */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div
+                className="w-[80%] sm:w-3/4 h-[40%] sm:h-1/2 rounded-2xl flex items-center justify-center transition-all duration-300"
+                style={{
+                  border: `3px dashed ${scanFlash ? '#22c55e' : 'rgba(255,255,255,0.85)'}`,
+                  boxShadow: scanFlash
+                    ? '0 0 40px 12px rgba(34,197,94,0.5), inset 0 0 20px rgba(34,197,94,0.15)'
+                    : '0 0 20px 4px rgba(255,255,255,0.08)',
+                }}
               >
-                Fechar Scanner
-              </button>
+                <span className="text-white text-sm sm:text-base font-bold bg-black/50 px-4 py-1.5 rounded-full backdrop-blur-sm shadow-lg">
+                  Enquadre o código de barras ou QR Code
+                </span>
+              </div>
             </div>
+
+            {/* Success overlay — appears at top of camera when item is added */}
+            {scanSuccessProduct && (
+              <div className="absolute top-16 left-4 right-4 z-40 animate-[slideDown_0.25s_ease-out]">
+                <div className="flex items-center gap-3 p-3.5 bg-emerald-500/95 text-white rounded-2xl shadow-2xl backdrop-blur-sm border border-emerald-400/30">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold truncate">{scanSuccessProduct.name}</p>
+                    <p className="text-[11px] text-emerald-100 font-semibold">Adicionado ao carrinho!</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Scanning indicator */}
+            {scannerStatus === 'scanning' && !scanSuccessProduct && (
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-emerald-500/90 text-white px-2.5 py-1 rounded-full text-[10px] font-bold backdrop-blur-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                Escaneando...
+              </div>
+            )}
+          </div>
+
+          {/* Bottom sheet: status + manual input */}
+          <div className="bg-white dark:bg-[#18181b] rounded-t-3xl px-4 pt-4 pb-6 space-y-3 border-t border-slate-200 dark:border-[#27272a] max-h-[40vh] overflow-y-auto">
+            {/* Not found */}
+            {scannerStatus === 'not_found' && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-500/30 rounded-xl">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                  <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Produto não encontrado</p>
+                </div>
+                <p className="text-xs text-amber-600 dark:text-amber-400 mb-3">
+                  Código lido: <span className="font-mono font-bold">{scannedBarcode}</span>
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      stopScanner();
+                      onNavigateTab('inventory');
+                    }}
+                    className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    Cadastrar no Estoque
+                  </button>
+                  <button
+                    onClick={() => {
+                      setScannerStatus('scanning');
+                      setScannedBarcode('');
+                      setScannedProduct(null);
+                      lastScannedRef.current = '';
+                    }}
+                    className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors"
+                  >
+                    Escanear Novamente
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Manual barcode input */}
+            {scannerStatus === 'scanning' && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const input = e.currentTarget.elements.namedItem('manualBarcode') as HTMLInputElement;
+                  if (input?.value) {
+                    handleScanManualSubmit(input.value);
+                    input.value = '';
+                  }
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  name="manualBarcode"
+                  type="text"
+                  placeholder="Digite o código manualmente..."
+                  className="flex-1 px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-colors"
+                >
+                  OK
+                </button>
+              </form>
+            )}
+
+            <button
+              onClick={stopScanner}
+              className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-600 dark:text-slate-400 text-xs font-bold transition-colors"
+            >
+              Fechar Scanner
+            </button>
           </div>
         </div>
       )}

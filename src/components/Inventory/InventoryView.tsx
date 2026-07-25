@@ -382,8 +382,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </div>
       </div>
 
-      {/* Products Table */}
-      <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
+      {/* Products Table — Desktop (md+) */}
+      <div className="hidden md:block bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -494,6 +494,103 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Products Cards — Mobile (below md) */}
+      <div className="block md:hidden space-y-3">
+        {filteredProducts.map((p) => {
+          const isLow = p.currentStock <= p.minStock;
+          const isOut = p.currentStock === 0;
+
+          return (
+            <div
+              key={p.id}
+              className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm p-3.5 space-y-3"
+            >
+              {/* Top row: image + product info */}
+              <div className="flex items-start gap-3">
+                <img
+                  src={p.imageUrl}
+                  alt={p.name}
+                  className="w-14 h-14 rounded-xl object-cover bg-slate-100 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{p.name}</p>
+                  <p className="text-[10px] text-slate-400 dark:text-[#71717a] font-mono">SKU: {p.sku}</p>
+                  <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#09090b] font-semibold text-slate-700 dark:text-[#a1a1aa] text-[10px] border border-transparent dark:border-[#27272a]">
+                    {p.category}
+                  </span>
+                </div>
+              </div>
+
+              {/* Info row: price + stock */}
+              <div className="flex items-center justify-between">
+                <p className="font-bold text-sm text-emerald-600 dark:text-emerald-400">
+                  R$ {p.salePrice.toFixed(2)}
+                </p>
+                <span
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-[11px] ${
+                    isOut
+                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                      : isLow
+                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                  }`}
+                >
+                  {isLow && <AlertTriangle className="w-3 h-3" />}
+                  {p.currentStock} {p.unit}
+                </span>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 pt-1 border-t border-slate-100 dark:border-[#27272a]">
+                <button
+                  onClick={() => {
+                    setStockTargetProduct(p);
+                    setIsStockModalOpen(true);
+                  }}
+                  className="flex-1 py-2 rounded-xl text-[11px] font-bold text-slate-600 dark:text-[#a1a1aa] bg-slate-100 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] hover:bg-slate-200 dark:hover:bg-[#27272a] transition-colors flex items-center justify-center gap-1.5"
+                  title="Ajustar / Registrar Entrada no Estoque"
+                >
+                  <Boxes className="w-3.5 h-3.5" />
+                  Estoque
+                </button>
+                <button
+                  onClick={() => {
+                    setBarcodeTargetProduct(p);
+                    setIsBarcodeModalOpen(true);
+                  }}
+                  className="flex-1 py-2 rounded-xl text-[11px] font-bold text-slate-600 dark:text-[#a1a1aa] bg-slate-100 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] hover:bg-slate-200 dark:hover:bg-[#27272a] transition-colors flex items-center justify-center gap-1.5"
+                  title="Gerar Folha de Etiquetas"
+                >
+                  <Barcode className="w-3.5 h-3.5" />
+                  Etiqueta
+                </button>
+                <button
+                  onClick={() => openEditProductModal(p)}
+                  className="flex-1 py-2 rounded-xl text-[11px] font-bold text-slate-600 dark:text-[#a1a1aa] bg-slate-100 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] hover:bg-slate-200 dark:hover:bg-[#27272a] transition-colors flex items-center justify-center gap-1.5"
+                  title="Editar Cadastro"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  Editar
+                </button>
+                <button
+                  onClick={() => handleDeleteProduct(p.id)}
+                  className="py-2 px-3 rounded-xl text-rose-500 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 transition-colors flex items-center justify-center"
+                  title="Excluir Produto"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        {filteredProducts.length === 0 && (
+          <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm p-8 text-center">
+            <p className="text-sm text-slate-400 dark:text-[#71717a] font-semibold">Nenhum produto encontrado</p>
+          </div>
+        )}
       </div>
 
       {/* CREATE / EDIT PRODUCT MODAL */}

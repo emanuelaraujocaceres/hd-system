@@ -1,25 +1,16 @@
 import React, { useState } from 'react';
 import {
-  TrendingUp,
-  DollarSign,
   ShoppingCart,
   AlertTriangle,
   Package,
-  Sparkles,
-  RefreshCw,
   ArrowUpRight,
-  ArrowDownRight,
-  Users,
-  CreditCard,
-  Building2,
+  Sparkles,
 } from 'lucide-react';
-import { Product, Sale, CashRegisterSession, FinancialAccount } from '../../types';
+import { Product, Sale } from '../../types';
 
 interface DashboardViewProps {
   sales: Sale[];
   products: Product[];
-  caixaSession: CashRegisterSession;
-  financialAccounts: FinancialAccount[];
   onNavigateTab: (tab: string) => void;
   onOpenCaixaModal: () => void;
 }
@@ -27,13 +18,9 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   sales,
   products,
-  caixaSession,
-  financialAccounts,
   onNavigateTab,
   onOpenCaixaModal,
 }) => {
-  const [aiInsight, setAiInsight] = useState<string | null>(null);
-  const [loadingAi, setLoadingAi] = useState<boolean>(false);
 
   // Today's total sales calculations
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -44,54 +31,34 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const ticketMedio = totalSalesCount > 0 ? todayRevenue / totalSalesCount : 0;
 
   const lowStockCount = products.filter((p) => p.currentStock <= p.minStock).length;
-  const pendingPayables = financialAccounts
-    .filter((f) => f.type === 'payable' && f.status === 'pending')
-    .reduce((acc, f) => acc + f.amount, 0);
 
-  // Hourly Sales chart data simulation
-  const hourlyData = [
-    { hour: '08:00', vendas: 120 },
-    { hour: '10:00', vendas: 350 },
-    { hour: '12:00', vendas: 680 },
-    { hour: '14:00', vendas: 420 },
-    { hour: '16:00', vendas: 890 },
-    { hour: '18:00', vendas: todayRevenue > 0 ? todayRevenue : 540 },
-  ];
+  // AI Analysis State
+  const [aiInsight, setAiInsight] = useState<string>('');
+  const [loadingAi, setLoadingAi] = useState(false);
 
-  // Payment method breakdown data for PieChart
-  const paymentBreakdown = [
-    { name: 'PIX', value: todaySales.reduce((acc, s) => acc + (s.payments.find((p) => p.method === 'pix')?.amount || 0), 0) || 350, color: '#0ea5e9' },
-    { name: 'Dinheiro', value: todaySales.reduce((acc, s) => acc + (s.payments.find((p) => p.method === 'cash')?.amount || 0), 0) || 200, color: '#10b981' },
-    { name: 'Cartão Crédito', value: todaySales.reduce((acc, s) => acc + (s.payments.find((p) => p.method === 'credit_card')?.amount || 0), 0) || 450, color: '#6366f1' },
-    { name: 'Cartão Débito', value: todaySales.reduce((acc, s) => acc + (s.payments.find((p) => p.method === 'debit_card')?.amount || 0), 0) || 150, color: '#8b5cf6' },
-  ];
-
-  // Top products chart
-  const topProducts = products.slice(0, 5).map((p) => ({
-    name: p.name.slice(0, 15) + '...',
-    estoque: p.currentStock,
-    preco: p.salePrice,
-  }));
-
-  // Fetch AI Insights from server endpoint
   const handleFetchAiInsights = async () => {
     setLoadingAi(true);
+    setAiInsight('');
     try {
+      const lowStockProducts = products
+        .filter((p) => p.currentStock <= p.minStock)
+        .map((p) => ({ name: p.name, currentStock: p.currentStock, minStock: p.minStock }));
+
       const res = await fetch('/api/ai/insights', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          salesData: { todayRevenue, totalSalesCount, ticketMedio },
-          stockAlerts: products.filter((p) => p.currentStock <= p.minStock),
-          financialSummary: { pendingPayables },
+          salesData: { totalRevenue: todayRevenue, totalSales: totalSalesCount, ticketMedio },
+          stockAlerts: lowStockProducts,
+          financialSummary: { todayRevenue, totalSalesCount },
           promptType: 'geral',
         }),
       });
+
       const data = await res.json();
-      setAiInsight(data.insight);
-    } catch (e) {
-      console.error(e);
-      setAiInsight('Ocorreu um erro ao consultar a IA. Verifique sua conexão.');
+      setAiInsight(data.insight || 'Análise concluída sem retorno.');
+    } catch (err) {
+      setAiInsight('Erro ao conectar com o serviço de IA. Tente novamente.');
     } finally {
       setLoadingAi(false);
     }
@@ -134,7 +101,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* KPI METRIC CARDS GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
         {/* Card 1: Faturamento Hoje */}
-        <div className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46]">
+        <button onClick={() => onNavigateTab('finance')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
           <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">Vendas Hoje</p>
           <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
             R$ {todayRevenue.toFixed(2)}
@@ -143,10 +110,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <ArrowUpRight className="w-3.5 h-3.5" />
             <span>↑ 12%</span> <span className="text-slate-400 dark:text-[#71717a]">vs ontem</span>
           </div>
-        </div>
+        </button>
 
         {/* Card 2: Qtd Vendas Hoje */}
-        <div className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46]">
+        <button onClick={() => onNavigateTab('pdv')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
           <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">Transações</p>
           <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
             {totalSalesCount}
@@ -154,10 +121,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
             <span>↑ 5%</span> <span className="text-slate-400 dark:text-[#71717a]">ticket médio R$ {ticketMedio.toFixed(2)}</span>
           </div>
-        </div>
+        </button>
 
         {/* Card 3: Alerta de Estoque Baixo */}
-        <div className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46]">
+        <button onClick={() => onNavigateTab('inventory')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
           <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">Itens em Baixa</p>
           <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
             {lowStockCount < 10 ? `0${lowStockCount}` : lowStockCount}
@@ -166,50 +133,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>! Alerta</span> <span className="text-slate-400 dark:text-[#71717a]">Reposição necessária</span>
           </div>
-        </div>
+        </button>
 
         {/* Card 4: Assinatura Pro / Status SaaS */}
-        <div className="p-4 sm:p-6 rounded-2xl bg-indigo-600 text-white shadow-md">
+        <button onClick={() => onNavigateTab('settings')} className="p-4 sm:p-6 rounded-2xl bg-indigo-600 text-white shadow-md cursor-pointer hover:shadow-lg hover:scale-[1.01] transition-all text-left w-full">
           <p className="text-[10px] uppercase tracking-wider opacity-80 font-bold">Assinatura Pro</p>
           <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter font-serif-italic">Ativa</p>
           <div className="mt-3 sm:mt-4 text-xs opacity-80 font-medium">
             Próximo faturamento: 12 Out
           </div>
-        </div>
-      </div>
-
-      {/* AI COPILOT INSIGHTS SECTION */}
-      <div className="p-4 sm:p-6 rounded-2xl bg-[#18181b] border border-[#27272a] text-white shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 flex items-center justify-center">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-white">Relatório Inteligente IA</h3>
-              <p className="text-xs text-[#71717a]">Diagnóstico em tempo real de margens e vendas</p>
-            </div>
-          </div>
-
-          <button
-            onClick={handleFetchAiInsights}
-            disabled={loadingAi}
-            className="px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors flex items-center gap-2 shadow-sm"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingAi ? 'animate-spin' : ''}`} />
-            <span>{loadingAi ? 'Analisando...' : 'Gerar Análise IA'}</span>
-          </button>
-        </div>
-
-        {aiInsight ? (
-          <div className="p-4 rounded-xl bg-[#09090b] border border-[#27272a] text-xs text-[#a1a1aa] leading-relaxed whitespace-pre-line">
-            {aiInsight}
-          </div>
-        ) : (
-          <div className="p-4 rounded-xl bg-[#09090b]/50 border border-[#27272a] text-xs text-[#71717a] text-center">
-            Acione o motor IA para gerar recomendações táticas e otimização de precificação.
-          </div>
-        )}
+        </button>
       </div>
 
       {/* CHARTS & TABLES GRID */}
@@ -219,7 +152,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 dark:border-[#27272a] flex justify-between items-center">
             <h3 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">Vendas Recentes</h3>
             <button
-              onClick={() => onNavigateTab('pdv')}
+              onClick={() => onNavigateTab('finance')}
               className="text-[10px] text-slate-500 dark:text-[#a1a1aa] hover:text-slate-900 dark:hover:text-white underline tracking-widest uppercase font-bold"
             >
               Ver Todas
@@ -278,7 +211,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Right Column Widgets */}
         <div className="lg:col-span-4 space-y-4 sm:space-y-6">
           {/* Upcoming Payments Widget */}
-          <div className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
+          <button onClick={() => onNavigateTab('finance')} className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm cursor-pointer hover:shadow-md hover:border-slate-300 dark:hover:border-[#3f3f46] transition-all text-left w-full">
             <h3 className="text-xs uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a] mb-4">Próximos Pagamentos</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between text-xs">
@@ -295,10 +228,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <span className="font-bold text-slate-900 dark:text-white">R$ 4.620</span>
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Highlight Product Widget */}
-          <div className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
+          <button onClick={() => onNavigateTab('inventory')} className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm cursor-pointer hover:shadow-md hover:border-slate-300 dark:hover:border-[#3f3f46] transition-all text-left w-full">
             <h3 className="text-xs uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a] mb-4">Destaque do Mês</h3>
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-xl shrink-0">📦</div>
@@ -307,7 +240,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <p className="text-[10px] text-slate-500 dark:text-[#71717a]">412 unidades vendidas</p>
               </div>
             </div>
-          </div>
+          </button>
+        </div>
+      </div>
+
+      {/* AI INTELLIGENT REPORT SECTION */}
+      <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl overflow-hidden shadow-sm">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 dark:border-[#27272a] flex justify-between items-center">
+          <h3 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-purple-500" />
+            Relatório Inteligente IA
+          </h3>
+        </div>
+        <div className="p-4 sm:p-6">
+          <p className="text-xs text-slate-500 dark:text-[#71717a] mb-4">
+            Analise seu desempenho com inteligência artificial — vendas, estoque e oportunidades de lucro.
+          </p>
+          <button
+            onClick={handleFetchAiInsights}
+            disabled={loadingAi}
+            className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md transition-colors flex items-center gap-2"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>{loadingAi ? 'Analisando dados...' : 'Gerar Análise IA'}</span>
+          </button>
+
+          {aiInsight && (
+            <div className="mt-4 p-4 rounded-xl bg-purple-50 dark:bg-purple-500/5 border border-purple-200 dark:border-purple-500/20 text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+              {aiInsight}
+            </div>
+          )}
         </div>
       </div>
     </div>

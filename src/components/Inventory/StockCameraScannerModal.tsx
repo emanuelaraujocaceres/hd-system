@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   X,
   Camera,
@@ -11,6 +11,8 @@ import {
   Building2,
   Plus,
   Trash2,
+  Zap,
+  ZapOff,
 } from 'lucide-react';
 import { Product, StoreBranch } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -49,6 +51,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   const [formCostPrice, setFormCostPrice] = useState<number>(10);
   const [formSalePrice, setFormSalePrice] = useState<number>(15);
   const [formQty, setFormQty] = useState<number>(1);
+  const [unitsPerBox, setUnitsPerBox] = useState<number>(12);
 
   // Invoice form fields
   const [invSupplierName, setInvSupplierName] = useState('');
@@ -57,11 +60,52 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     { name: '', barcode: '', quantity: 1, unitPrice: 0 },
   ]);
 
+  // Flash toggle
+  const [flashOn, setFlashOn] = useState(false);
+
+  // Auto-scan state
+  const [autoScanActive, setAutoScanActive] = useState(false);
+  const scannerIntervalRef = useRef<number | null>(null);
+  const lastScannedRef = useRef<string>('');
+  const scanCooldownRef = useRef(false);
+
+  // Success overlay state
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successData, setSuccessData] = useState<{ name: string; quantity: number } | null>(null);
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Keep streamRef in sync
+  useEffect(() => {
+    streamRef.current = cameraStream;
+  }, [cameraStream]);
+
+  // Cleanup auto-scan on unmount/close
+  useEffect(() => {
+    return () => {
+      if (scannerIntervalRef.current) {
+        clearInterval(scannerIntervalRef.current);
+        scannerIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   if (!isOpen) return null;
+
+  const toggleFlash = useCallback(async () => {
+    const stream = streamRef.current;
+    if (!stream) return;
+    const track = stream.getVideoTracks()[0];
+    const capabilities = track.getCapabilities() as any;
+    if (capabilities.torch) {
+      const next = !flashOn;
+      await track.applyConstraints({ advanced: [{ torch: next }] as any });
+      setFlashOn(next);
+    }
+  }, [flashOn]);
 
   const handleStartCamera = async () => {
     try {
@@ -71,12 +115,15 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
         video: { facingMode: 'environment' },
       });
       setCameraStream(stream);
+      streamRef.current = stream;
 
       setTimeout(() => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.play().catch(() => {});
         }
+        // Start auto-scan when camera starts
+        startAutoScan();
       }, 200);
     } catch (err) {
       console.warn('Câmera indisponível ou negada:', err);
@@ -86,11 +133,82 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     }
   };
 
+  const startAutoScan = () => {
+    if (scannerIntervalRef.current) {
+      clearInterval(scannerIntervalRef.current);
+    }
+    setAutoScanActive(true);
+    scannerIntervalRef.current = window.setInterval(() => {
+      autoCaptureAndScan();
+    }, 1200);
+  };
+
+  const stopAutoScan = () => {
+    if (scannerIntervalRef.current) {
+      clearInterval(scannerIntervalRef.current);
+      scannerIntervalRef.current = null;
+    }
+    setAutoScanActive(false);
+  };
+
+  const autoCaptureAndScan = async () => {
+    if (scanCooldownRef.current) return;
+    if (!videoRef.current || !canvasRef.current) return;
+    if (scanType !== 'product') return; // Only auto-scan for product barcodes
+
+    const video = videoRef.current;
+    if (video.readyState < 2) return; // HAVE_CURRENT_DATA
+
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+
+    try {
+      // Attempt barcode detection via native BarcodeDetector API
+      if ('BarcodeDetector' in window) {
+        const bitmap = await createImageBitmap(canvas);
+        const detector = new (window as any).BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'] });
+        const barcodes = await detector.detect(bitmap);
+
+        if (barcodes && barcodes.length > 0) {
+          const code = barcodes[0].rawValue;
+          if (code && code !== lastScannedRef.current) {
+            lastScannedRef.current = code;
+            scanCooldownRef.current = true;
+
+            // Flash scan indicator
+            posAudio.chime();
+
+            // Stop auto-scan, set barcode, show captured image for form filling
+            stopAutoScan();
+            setCapturedImage(dataUrl);
+            setFormBarcode(code);
+            handleStopCamera();
+
+            setTimeout(() => {
+              scanCooldownRef.current = false;
+            }, 3000);
+          }
+        }
+      }
+    } catch {
+      // BarcodeDetector not available or error — fall back silently
+    }
+  };
+
   const handleStopCamera = () => {
+    stopAutoScan();
     if (cameraStream) {
       cameraStream.getTracks().forEach((track) => track.stop());
       setCameraStream(null);
+      streamRef.current = null;
     }
+    setFlashOn(false);
   };
 
   const handleCapturePhoto = () => {
@@ -131,6 +249,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     setFormCostPrice(10);
     setFormSalePrice(15);
     setFormQty(1);
+    setUnitsPerBox(12);
   };
 
   const resetInvoiceForm = () => {
@@ -141,6 +260,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
 
   const handleConfirmAddProduct = () => {
     const isBox = productMode === 'box';
+    const effectiveQty = isBox ? formQty * unitsPerBox : formQty;
 
     const newProd: Product = {
       id: `prod-${Date.now()}`,
@@ -151,7 +271,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
       unit: isBox ? 'cx' : 'un',
       costPrice: formCostPrice || 10.0,
       salePrice: formSalePrice || 15.0,
-      currentStock: isBox ? formQty * 12 : formQty,
+      currentStock: effectiveQty,
       minStock: 5,
       maxStock: 100,
       imageUrl:
@@ -164,14 +284,22 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     storageService.saveProduct(newProd);
 
     const reasonText = isBox
-      ? `Entrada Câmera: Caixa Atacado (${formQty}cx) - Filial ${currentBranch?.name || 'Matriz'}`
+      ? `Entrada Câmera: Caixa Atacado (${formQty}cx × ${unitsPerBox}un = ${effectiveQty}un) - Filial ${currentBranch?.name || 'Matriz'}`
       : `Entrada Câmera: ${formQty}un - Filial ${currentBranch?.name || 'Matriz'}`;
 
     storageService.updateStock(newProd.id, newProd.currentStock, reasonText, 'Câmera HD-System');
 
     posAudio.chime();
     if (onProductsImported) onProductsImported();
-    onClose();
+
+    // Show success overlay
+    setSuccessData({ name: newProd.name, quantity: effectiveQty });
+    setShowSuccess(true);
+    setTimeout(() => {
+      setShowSuccess(false);
+      setSuccessData(null);
+      onClose();
+    }, 2000);
   };
 
   const handleAddInvoiceItem = () => {
@@ -221,14 +349,46 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
 
     posAudio.chime();
     if (onProductsImported) onProductsImported();
-    onClose();
+
+    // Show success overlay for invoice
+    const totalItems = validItems.length;
+    const totalQty = validItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
+    setSuccessData({ name: `NF ${invInvoiceNumber || 'S/N'} — ${totalItems} itens`, quantity: totalQty });
+    setShowSuccess(true);
+    setTimeout(() => {
+      setShowSuccess(false);
+      setSuccessData(null);
+      onClose();
+    }, 2000);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-fadeIn">
-      <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center sm:p-4 bg-slate-900/80 backdrop-blur-md animate-fadeIn">
+      {/* Success Confirmation Overlay */}
+      {showSuccess && successData && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-[#18181b] rounded-3xl shadow-2xl p-8 flex flex-col items-center gap-4 animate-[scale-up_0.3s_ease-out] max-w-xs mx-4">
+            <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center animate-pulse">
+              <Check className="w-10 h-10 text-emerald-500" strokeWidth={3} />
+            </div>
+            <h3 className="text-lg font-extrabold text-slate-900 dark:text-white text-center">
+              Produto Adicionado!
+            </h3>
+            <div className="text-center space-y-1">
+              <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
+                {successData.name}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Quantidade: <span className="font-bold text-emerald-600 dark:text-emerald-400">{successData.quantity} un</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-[90vh] h-full sm:h-auto">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between bg-slate-50 dark:bg-[#09090b]/60">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between bg-slate-50 dark:bg-[#09090b]/60 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
               <Camera className="w-6 h-6" />
@@ -237,7 +397,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span>Scanner Visual por Câmera</span>
                 <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-extrabold uppercase">
-                  Manual
+                  {autoScanActive ? 'Auto-Scan' : 'Manual'}
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -293,6 +453,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                 setScanType('invoice');
                 setCapturedImage(null);
                 resetInvoiceForm();
+                stopAutoScan();
               }}
               className={`py-2 rounded-lg flex items-center justify-center gap-2 transition-all ${
                 scanType === 'invoice'
@@ -307,32 +468,53 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
 
           {/* Product Wholesale / Unit Sub-selector */}
           {scanType === 'product' && (
-            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-xs">
-              <span className="font-bold text-slate-700 dark:text-slate-300">Formato da Leitura:</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setProductMode('box')}
-                  className={`px-3 py-1 rounded-lg font-bold border transition-all ${
-                    productMode === 'box'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                      : 'bg-white dark:bg-[#18181b] text-slate-600 dark:text-slate-300 border-slate-300 dark:border-[#27272a]'
-                  }`}
-                >
-                  Caixa de Produtos (Atacado)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setProductMode('unit')}
-                  className={`px-3 py-1 rounded-lg font-bold border transition-all ${
-                    productMode === 'unit'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                      : 'bg-white dark:bg-[#18181b] text-slate-600 dark:text-slate-300 border-slate-300 dark:border-[#27272a]'
-                  }`}
-                >
-                  Unidade Avulsa
-                </button>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-xs">
+                <span className="font-bold text-slate-700 dark:text-slate-300">Formato da Leitura:</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setProductMode('box')}
+                    className={`px-3 py-1 rounded-lg font-bold border transition-all ${
+                      productMode === 'box'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-white dark:bg-[#18181b] text-slate-600 dark:text-slate-300 border-slate-300 dark:border-[#27272a]'
+                    }`}
+                  >
+                    Caixa de Produtos (Atacado)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProductMode('unit')}
+                    className={`px-3 py-1 rounded-lg font-bold border transition-all ${
+                      productMode === 'unit'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-white dark:bg-[#18181b] text-slate-600 dark:text-slate-300 border-slate-300 dark:border-[#27272a]'
+                    }`}
+                  >
+                    Unidade Avulsa
+                  </button>
+                </div>
               </div>
+
+              {/* Units per box input (shown when box mode is selected) */}
+              {productMode === 'box' && (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs">
+                  <span className="font-bold text-amber-700 dark:text-amber-400 whitespace-nowrap">
+                    Unidades por caixa:
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={unitsPerBox}
+                    onChange={(e) => setUnitsPerBox(Number(e.target.value) || 1)}
+                    className="w-20 px-3 py-1.5 rounded-lg bg-white dark:bg-[#18181b] border border-amber-300 dark:border-amber-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 text-center"
+                  />
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
+                    {formQty} cx × {unitsPerBox} un = <span className="text-emerald-600 dark:text-emerald-400">{formQty * unitsPerBox} un</span>
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -381,23 +563,51 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
               </div>
             )}
 
-            {/* Live Camera Feed */}
+            {/* Live Camera Feed — FULLSCREEN on mobile */}
             {cameraStream && !capturedImage && (
-              <div className="space-y-3">
-                <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden border border-slate-800 relative flex items-center justify-center">
+              <div className="fixed inset-0 sm:relative sm:inset-auto z-50 sm:z-auto bg-black flex flex-col">
+                <div className="relative flex-1 sm:w-full sm:aspect-video sm:rounded-2xl overflow-hidden sm:border sm:border-slate-800 flex items-center justify-center">
                   <video ref={videoRef} playsInline muted className="w-full h-full object-cover" />
                   <canvas ref={canvasRef} className="hidden" />
-                  <div className="absolute inset-6 border-2 border-dashed border-white/50 rounded-2xl pointer-events-none flex items-center justify-center">
+
+                  {/* Flash toggle */}
+                  <button
+                    onClick={toggleFlash}
+                    className="absolute top-4 left-4 z-50 p-2 rounded-full backdrop-blur-sm transition-colors"
+                    style={{
+                      background: flashOn ? 'rgba(250, 204, 21, 0.9)' : 'rgba(0, 0, 0, 0.5)',
+                    }}
+                    title={flashOn ? 'Desligar Flash' : 'Ligar Flash'}
+                  >
+                    {flashOn ? (
+                      <Zap className="w-5 h-5 text-black" fill="currentColor" />
+                    ) : (
+                      <ZapOff className="w-5 h-5 text-white/70" />
+                    )}
+                  </button>
+
+                  {/* Auto-scan indicator */}
+                  {autoScanActive && (
+                    <div className="absolute top-4 right-4 z-50 px-3 py-1 rounded-full backdrop-blur-sm bg-emerald-500/80 text-white text-[10px] font-bold flex items-center gap-1.5 animate-pulse">
+                      <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                      AUTO-SCAN ATIVO
+                    </div>
+                  )}
+
+                  <div className="absolute inset-6 sm:inset-6 border-2 border-dashed border-white/50 rounded-2xl pointer-events-none flex items-center justify-center">
                     <span className="text-[10px] text-white/90 bg-black/60 px-3 py-1 rounded-full font-mono font-bold">
-                      {scanType === 'product' ? 'Enquadre a Caixa/Embalagem ou Código' : 'Enquadre a Nota Fiscal em Papel'}
+                      {scanType === 'product' ? 'Enquadre a Caixa/Embalagem ou Código de Barras' : 'Enquadre a Nota Fiscal em Papel'}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-3 p-4 bg-slate-900 shrink-0 sm:bg-transparent">
                   <button
-                    onClick={handleStopCamera}
-                    className="px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl"
+                    onClick={() => {
+                      handleStopCamera();
+                      setCapturedImage(null);
+                    }}
+                    className="px-4 py-2.5 bg-slate-700 text-slate-200 font-bold text-xs rounded-xl sm:bg-slate-200 sm:dark:bg-slate-800 sm:text-slate-700 sm:dark:text-slate-300"
                   >
                     Cancelar
                   </button>
@@ -477,10 +687,25 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                       onChange={(e) => setFormQty(Number(e.target.value))}
                       type="number"
                       min="1"
-                      placeholder="Quantidade"
+                      placeholder={productMode === 'box' ? 'Qtd Caixas' : 'Quantidade'}
                       className="px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
+
+                  {/* Effective quantity display for box mode */}
+                  {productMode === 'box' && (
+                    <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs">
+                      <span className="text-amber-700 dark:text-amber-400 font-bold">
+                        Total de unidades:
+                      </span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-extrabold text-sm">
+                        {formQty * unitsPerBox} un
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        ({formQty} cx × {unitsPerBox} un/cx)
+                      </span>
+                    </div>
+                  )}
 
                   <button
                     onClick={handleConfirmAddProduct}
@@ -607,7 +832,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-50 dark:bg-[#09090b]/80 border-t border-slate-200 dark:border-[#27272a] flex justify-end">
+        <div className="p-4 bg-slate-50 dark:bg-[#09090b]/80 border-t border-slate-200 dark:border-[#27272a] flex justify-end shrink-0">
           <button
             onClick={() => {
               handleStopCamera();

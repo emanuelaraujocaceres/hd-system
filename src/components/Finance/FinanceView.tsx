@@ -14,8 +14,9 @@ import {
   CreditCard,
   Building,
   Camera,
+  Trash2,
 } from 'lucide-react';
-import { FinancialAccount, Sale, Product } from '../../types';
+import { FinancialAccount, Sale, Product, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { BoletoCameraScannerModal } from './BoletoCameraScannerModal';
@@ -24,12 +25,16 @@ interface FinanceViewProps {
   financialAccounts: FinancialAccount[];
   sales: Sale[];
   products: Product[];
+  user: UserProfile;
+  onNavigateTab: (tab: string) => void;
 }
 
 export const FinanceView: React.FC<FinanceViewProps> = ({
   financialAccounts,
   sales,
   products,
+  user,
+  onNavigateTab,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'contas' | 'dre'>('contas');
   const [filterType, setFilterType] = useState<'all' | 'payable' | 'receivable'>('all');
@@ -43,23 +48,27 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [formAmount, setFormAmount] = useState<number>(0);
   const [formDueDate, setFormDueDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [formRecipient, setFormRecipient] = useState('');
+  const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
+  const [expandedDreRow, setExpandedDreRow] = useState<string | null>(null);
 
   const handleSaveAccount = (e: React.FormEvent) => {
     e.preventDefault();
     const newAcc: FinancialAccount = {
-      id: `fin-${Date.now()}`,
+      id: editingAccount ? editingAccount.id : `fin-${Date.now()}`,
       title: formTitle,
       type: formType,
       category: formCategory,
       amount: formAmount,
       dueDate: formDueDate,
-      status: 'pending',
+      status: editingAccount ? editingAccount.status : 'pending',
+      paidDate: editingAccount?.paidDate,
       recipientOrPayer: formRecipient,
     };
 
     storageService.saveFinancialAccount(newAcc);
     posAudio.chime();
     setIsModalOpen(false);
+    setEditingAccount(null);
   };
 
   const handleMarkPaid = (account: FinancialAccount) => {
@@ -70,6 +79,35 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     };
     storageService.saveFinancialAccount(updated);
     posAudio.chime();
+  };
+
+  const handleOpenEditAccount = (account: FinancialAccount) => {
+    setEditingAccount(account);
+    setFormTitle(account.title);
+    setFormType(account.type);
+    setFormCategory(account.category);
+    setFormAmount(account.amount);
+    setFormDueDate(account.dueDate);
+    setFormRecipient(account.recipientOrPayer);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenNewAccount = () => {
+    setEditingAccount(null);
+    setFormTitle('');
+    setFormType('payable');
+    setFormCategory('Instalações');
+    setFormAmount(0);
+    setFormDueDate(new Date().toISOString().slice(0, 10));
+    setFormRecipient('');
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteAccount = (id: string) => {
+    if (confirm('Tem certeza que deseja excluir esta conta financeira?')) {
+      storageService.deleteFinancialAccount(id);
+      posAudio.chime();
+    }
   };
 
   // Calculations for Financial Accounts
@@ -159,7 +197,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           </button>
 
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenNewAccount}
             className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" />
@@ -249,7 +287,11 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   const isPaid = acc.status === 'paid';
 
                   return (
-                    <tr key={acc.id} className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors">
+                    <tr
+                      key={acc.id}
+                      onClick={() => handleOpenEditAccount(acc)}
+                      className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors cursor-pointer"
+                    >
                       <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">{acc.title}</td>
                       <td className="py-3 px-4">
                         <span
@@ -279,21 +321,103 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           {isPaid ? 'Pago / Baixado' : 'Pendente'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right">
-                        {!isPaid && (
-                          <button
-                            onClick={() => handleMarkPaid(acc)}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors"
-                          >
-                            Dar Baixa
-                          </button>
-                        )}
+                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {!isPaid && (
+                            <button
+                              onClick={() => handleMarkPaid(acc)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors"
+                            >
+                              Dar Baixa
+                            </button>
+                          )}
+                          {user.role === 'admin' && (
+                            <button
+                              onClick={() => handleDeleteAccount(acc.id)}
+                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                              title="Excluir Conta"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Vendas Realizadas */}
+          <div className="mt-6">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              Vendas Realizadas
+            </h3>
+            <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-[#09090b]/80 border-b border-slate-200 dark:border-[#27272a] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider">
+                    <th className="py-3.5 px-4">Código</th>
+                    <th className="py-3.5 px-4">Data</th>
+                    <th className="py-3.5 px-4">Cliente</th>
+                    <th className="py-3.5 px-4">Valor (R$)</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    {user.role === 'admin' && <th className="py-3.5 px-4 text-right">Ação</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
+                  {sales.map((sale) => (
+                    <tr key={sale.id} className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors">
+                      <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">{sale.code}</td>
+                      <td className="py-3 px-4 text-slate-600 dark:text-[#a1a1aa] font-medium">
+                        {new Date(sale.date).toLocaleDateString('pt-BR')}
+                      </td>
+                      <td className="py-3 px-4 text-slate-700 dark:text-[#a1a1aa]">{sale.customerName || 'Consumidor Final'}</td>
+                      <td className="py-3 px-4 font-extrabold text-emerald-600 dark:text-emerald-400">
+                        R$ {sale.total.toFixed(2)}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-1 rounded-lg font-bold text-[10px] ${
+                            sale.status === 'completed'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : sale.status === 'cancelled'
+                                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                          }`}
+                        >
+                          {sale.status === 'completed' ? 'Concluída' : sale.status === 'cancelled' ? 'Cancelada' : 'Pendente'}
+                        </span>
+                      </td>
+                      {user.role === 'admin' && (
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            onClick={() => {
+                              if (confirm(`Tem certeza que deseja excluir a venda ${sale.code}?`)) {
+                                storageService.deleteSale(sale.id);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                            title="Excluir venda"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                  {sales.length === 0 && (
+                    <tr>
+                      <td colSpan={user.role === 'admin' ? 6 : 5} className="py-8 text-center text-slate-400 dark:text-[#52525b] text-xs">
+                        Nenhuma venda registrada
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -312,39 +436,118 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           </div>
 
           <div className="space-y-2 text-xs font-medium text-slate-700 dark:text-[#a1a1aa]">
-            <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-[#09090b]">
-              <span className="font-bold text-slate-900 dark:text-white">(+) RECEITA BRUTA DE VENDAS (PDV)</span>
-              <span className="font-black text-emerald-600 dark:text-emerald-400">R$ {totalSalesRevenue.toFixed(2)}</span>
+            {/* (+) RECEITA BRUTA */}
+            <div
+              className="rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => onNavigateTab('sales-history')}
+            >
+              <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-[#09090b]">
+                <span className="font-bold text-slate-900 dark:text-white">(+) RECEITA BRUTA DE VENDAS (PDV)</span>
+                <span className="font-black text-emerald-600 dark:text-emerald-400">R$ {totalSalesRevenue.toFixed(2)}</span>
+              </div>
             </div>
 
-            <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-[#09090b]/50 pl-6 text-rose-600 dark:text-rose-400">
-              <span>(-) Impostos Fiscais Estimados (Simples Nacional)</span>
-              <span>- R$ {estimatedTaxes.toFixed(2)}</span>
+            {/* (-) Impostos */}
+            <div
+              className="rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => setExpandedDreRow(expandedDreRow === 'taxes' ? null : 'taxes')}
+            >
+              <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-[#09090b]/50 pl-6 text-rose-600 dark:text-rose-400">
+                <span>(-) Impostos Fiscais Estimados (Simples Nacional)</span>
+                <span>- R$ {estimatedTaxes.toFixed(2)}</span>
+              </div>
+              {expandedDreRow === 'taxes' && (
+                <div className="mx-6 mt-1 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
+                  <p className="font-bold text-rose-600 dark:text-rose-400">Como é calculado?</p>
+                  <p>Alíquota estimada do <strong>Simples Nacional</strong>: <strong>6%</strong> sobre a Receita Bruta.</p>
+                  <p>Cálculo: R$ {totalSalesRevenue.toFixed(2)} × 6% = <strong>R$ {estimatedTaxes.toFixed(2)}</strong></p>
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-between p-2.5 rounded-lg bg-indigo-500/10 font-bold text-indigo-900 dark:text-indigo-200">
-              <span>(=) RECEITA LÍQUIDA DE VENDAS</span>
-              <span>R$ {netSalesRevenue.toFixed(2)}</span>
+            {/* (=) RECEITA LÍQUIDA */}
+            <div
+              className="rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => setExpandedDreRow(expandedDreRow === 'netRevenue' ? null : 'netRevenue')}
+            >
+              <div className="flex justify-between p-2.5 rounded-lg bg-indigo-500/10 font-bold text-indigo-900 dark:text-indigo-200">
+                <span>(=) RECEITA LÍQUIDA DE VENDAS</span>
+                <span>R$ {netSalesRevenue.toFixed(2)}</span>
+              </div>
+              {expandedDreRow === 'netRevenue' && (
+                <div className="mx-6 mt-1 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/40 text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
+                  <p className="font-bold text-indigo-600 dark:text-indigo-400">Como é calculado?</p>
+                  <p>Receita Bruta - Impostos = Receita Líquida</p>
+                  <p>R$ {totalSalesRevenue.toFixed(2)} - R$ {estimatedTaxes.toFixed(2)} = <strong>R$ {netSalesRevenue.toFixed(2)}</strong></p>
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-[#09090b]/50 pl-6 text-amber-600 dark:text-amber-400">
-              <span>(-) Custo de Mercadorias Vendidas (CMV)</span>
-              <span>- R$ {totalCMV.toFixed(2)}</span>
+            {/* (-) CMV */}
+            <div
+              className="rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => setExpandedDreRow(expandedDreRow === 'cmv' ? null : 'cmv')}
+            >
+              <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-[#09090b]/50 pl-6 text-amber-600 dark:text-amber-400">
+                <span>(-) Custo de Mercadorias Vendidas (CMV)</span>
+                <span>- R$ {totalCMV.toFixed(2)}</span>
+              </div>
+              {expandedDreRow === 'cmv' && (
+                <div className="mx-6 mt-1 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
+                  <p className="font-bold text-amber-600 dark:text-amber-400">Como é calculado?</p>
+                  <p>Soma do <strong>custo de aquisição</strong> de cada produto vendido.</p>
+                  <p>Para cada venda: (Custo Unitário × Quantidade) dos itens. Se o custo não estiver cadastrado, estima-se 60% do preço de venda.</p>
+                  <p>Total CMV: <strong>R$ {totalCMV.toFixed(2)}</strong></p>
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-between p-2.5 rounded-lg bg-emerald-500/10 font-bold text-emerald-900 dark:text-emerald-200">
-              <span>(=) LUCRO BRUTO (Margem Bruta: {grossMargin.toFixed(1)}%)</span>
-              <span>R$ {grossProfit.toFixed(2)}</span>
+            {/* (=) LUCRO BRUTO */}
+            <div
+              className="rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => setExpandedDreRow(expandedDreRow === 'grossProfit' ? null : 'grossProfit')}
+            >
+              <div className="flex justify-between p-2.5 rounded-lg bg-emerald-500/10 font-bold text-emerald-900 dark:text-emerald-200">
+                <span>(=) LUCRO BRUTO (Margem Bruta: {grossMargin.toFixed(1)}%)</span>
+                <span>R$ {grossProfit.toFixed(2)}</span>
+              </div>
+              {expandedDreRow === 'grossProfit' && (
+                <div className="mx-6 mt-1 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
+                  <p className="font-bold text-emerald-600 dark:text-emerald-400">Como é calculado?</p>
+                  <p>Receita Líquida - CMV = Lucro Bruto</p>
+                  <p>R$ {netSalesRevenue.toFixed(2)} - R$ {totalCMV.toFixed(2)} = <strong>R$ {grossProfit.toFixed(2)}</strong></p>
+                  <p>Margem Bruta: ({grossProfit.toFixed(2)} / {totalSalesRevenue.toFixed(2)}) × 100 = <strong>{grossMargin.toFixed(1)}%</strong></p>
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-[#09090b]/50 pl-6 text-rose-600 dark:text-rose-400">
-              <span>(-) Despesas Operacionais / Instalações / Fornecedores</span>
-              <span>- R$ {totalOperatingExpenses.toFixed(2)}</span>
+            {/* (-) Despesas Operacionais */}
+            <div
+              className="rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => onNavigateTab('finance')}
+            >
+              <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-[#09090b]/50 pl-6 text-rose-600 dark:text-rose-400">
+                <span>(-) Despesas Operacionais / Instalações / Fornecedores</span>
+                <span>- R$ {totalOperatingExpenses.toFixed(2)}</span>
+              </div>
             </div>
 
-            <div className="flex justify-between p-3.5 rounded-xl bg-slate-900 dark:bg-[#09090b] text-white font-black text-sm tracking-wide border dark:border-[#27272a]">
-              <span>(=) LUCRO LÍQUIDO OPERACIONAL DO EXERCÍCIO</span>
-              <span className="text-emerald-400">R$ {netOperatingProfit.toFixed(2)}</span>
+            {/* (=) LUCRO LÍQUIDO */}
+            <div
+              className="rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => setExpandedDreRow(expandedDreRow === 'netProfit' ? null : 'netProfit')}
+            >
+              <div className="flex justify-between p-3.5 rounded-xl bg-slate-900 dark:bg-[#09090b] text-white font-black text-sm tracking-wide border dark:border-[#27272a]">
+                <span>(=) LUCRO LÍQUIDO OPERACIONAL DO EXERCÍCIO</span>
+                <span className="text-emerald-400">R$ {netOperatingProfit.toFixed(2)}</span>
+              </div>
+              {expandedDreRow === 'netProfit' && (
+                <div className="mx-6 mt-1 p-3 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
+                  <p className="font-bold text-slate-900 dark:text-white">Como é calculado?</p>
+                  <p>Lucro Bruto - Despesas Operacionais = Lucro Líquido</p>
+                  <p>R$ {grossProfit.toFixed(2)} - R$ {totalOperatingExpenses.toFixed(2)} = <strong className={netOperatingProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}>R$ {netOperatingProfit.toFixed(2)}</strong></p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -354,7 +557,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Lançar Nova Conta</h3>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              {editingAccount ? 'Editar Conta' : 'Lançar Nova Conta'}
+            </h3>
 
             <form onSubmit={handleSaveAccount} className="space-y-3 text-xs">
               <div>
@@ -421,7 +626,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => { setIsModalOpen(false); setEditingAccount(null); }}
                   className="px-4 py-2 rounded-xl border font-bold"
                 >
                   Cancelar

@@ -646,6 +646,12 @@ class StorageService {
     syncService.deleteRow('products', id);
   }
 
+  deleteSale(id: string) {
+    const sales = this.getSales().filter((s) => s.id !== id);
+    this.set(KEYS.SALES, sales);
+    syncService.deleteRow('sales', id);
+  }
+
   updateStock(productId: string, quantityDelta: number, reason: string, operatorName: string) {
     const products = this.getProducts();
     const prod = products.find((p) => p.id === productId);
@@ -721,6 +727,12 @@ class StorageService {
     this.syncCustomer(customer);
   }
 
+  deleteCustomer(id: string) {
+    const customers = this.getCustomers().filter((c) => c.id !== id);
+    this.set(KEYS.CUSTOMERS, customers);
+    syncService.deleteRow('customers', id);
+  }
+
   // --- SUPPLIERS ---
   getSuppliers(): Supplier[] {
     return this.get<Supplier[]>(KEYS.SUPPLIERS, INITIAL_SUPPLIERS);
@@ -736,6 +748,12 @@ class StorageService {
     }
     this.set(KEYS.SUPPLIERS, suppliers);
     this.syncSupplier(supplier);
+  }
+
+  deleteSupplier(id: string) {
+    const suppliers = this.getSuppliers().filter((s) => s.id !== id);
+    this.set(KEYS.SUPPLIERS, suppliers);
+    syncService.deleteRow('suppliers', id);
   }
 
   // --- SALES & PDV ---
@@ -860,6 +878,11 @@ class StorageService {
     }
     this.set(KEYS.FINANCIAL, accounts);
     this.syncFinancialAccount(acc);
+  }
+
+  deleteFinancialAccount(id: string) {
+    const accounts = this.getFinancialAccounts().filter((a) => a.id !== id);
+    this.set(KEYS.FINANCIAL, accounts);
   }
 
   // --- BRANCHES ---

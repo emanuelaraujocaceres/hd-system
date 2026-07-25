@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,
   CreditCard,
@@ -10,7 +10,10 @@ import {
   Copy,
   Check,
   Split,
+  Plus,
+  Minus,
 } from 'lucide-react';
+import QRCode from 'qrcode';
 import {
   CartItem,
   Customer,
@@ -51,11 +54,16 @@ function crc16Ccitt(str: string): string {
   return crc.toString(16).toUpperCase().padStart(4, '0');
 }
 
+/** Strip non-ASCII chars — PIX/BRCode uses ISO-8859-1 (Latin-1) */
+function stripAscii(str: string): string {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '').trim();
+}
+
 function buildPixPayload(pixKey: string, amount: number, merchantName: string, merchantCity: string): string {
   const tlv = (tag: string, value: string) => `${tag}${value.length.toString().padStart(2, '0')}${value}`;
 
-  const merchantNameClean = (merchantName || 'HD-SYSTEM').slice(0, 25);
-  const merchantCityClean = (merchantCity || 'SAO PAULO').slice(0, 15);
+  const merchantNameClean = stripAscii((merchantName || 'HD-SYSTEM')).slice(0, 25);
+  const merchantCityClean = stripAscii((merchantCity || 'SAO PAULO')).slice(0, 15);
   const amountStr = amount > 0 ? amount.toFixed(2) : '';
 
   let payload = '';
@@ -102,15 +110,58 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   // Split payment state
   const [isSplit, setIsSplit] = useState(false);
-  const [splitAmount1, setSplitAmount1] = useState<number>(Math.round(totalAmount / 2));
-  const [splitMethod1, setSplitMethod1] = useState<PaymentMethod>('cash');
-  const [splitMethod2, setSplitMethod2] = useState<PaymentMethod>('pix');
+  const [splitCount, setSplitCount] = useState<number>(2);
+  const [splitParts, setSplitParts] = useState<Array<{ amount: number; method: PaymentMethod }>>([
+    { amount: Math.round(totalAmount / 2), method: 'cash' },
+    { amount: totalAmount - Math.round(totalAmount / 2), method: 'pix' },
+  ]);
 
   const [loading, setLoading] = useState(false);
 
+  // QR Code data URL for PIX (generated async)
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+
+  // Generate QR code data URL whenever PIX details change
+  const generateQr = useCallback(async () => {
+    try {
+      const pixPayload = buildPixPayload(settings.pixKey, totalAmount, settings.tradeName, settings.city);
+      const dataUrl = await QRCode.toDataURL(pixPayload, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 250,
+        color: { dark: '#000000', light: '#FFFFFF' },
+      });
+      setQrDataUrl(dataUrl);
+    } catch (e) {
+      console.error('[HD-Sync] QR code generation failed:', e);
+      setQrDataUrl('');
+    }
+  }, [settings.pixKey, totalAmount, settings.tradeName, settings.city]);
+
+  useEffect(() => {
+    if (method === 'pix' && isOpen) {
+      generateQr();
+    }
+  }, [method, isOpen, generateQr]);
+
   useEffect(() => {
     setCashGiven(totalAmount);
-    setSplitAmount1(Math.round(totalAmount / 2));
+    setSplitParts((prev) => {
+      const count = prev.length;
+      const baseAmount = Math.floor((totalAmount / count) * 100) / 100;
+      const newParts: Array<{ amount: number; method: PaymentMethod }> = [];
+      let remaining = totalAmount;
+      for (let i = 0; i < count; i++) {
+        const method = prev[i]?.method || 'pix';
+        if (i === count - 1) {
+          newParts.push({ amount: Math.round(remaining * 100) / 100, method });
+        } else {
+          newParts.push({ amount: baseAmount, method });
+          remaining -= baseAmount;
+        }
+      }
+      return newParts;
+    });
   }, [totalAmount]);
 
   // Simulate auto PIX payment confirmation after 3.5 seconds
@@ -123,6 +174,33 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       return () => clearTimeout(timer);
     }
   }, [method, pixPaid]);
+
+  // Split helpers
+  const splitPartsTotal = splitParts.reduce((sum, p) => sum + p.amount, 0);
+  const isSplitValid = Math.abs(splitPartsTotal - totalAmount) < 0.01;
+
+  const redistributeSplit = (count: number) => {
+    setSplitCount(count);
+    const baseAmount = Math.floor((totalAmount / count) * 100) / 100;
+    setSplitParts((prev) => {
+      const newParts: Array<{ amount: number; method: PaymentMethod }> = [];
+      let remaining = totalAmount;
+      for (let i = 0; i < count; i++) {
+        const method = prev[i]?.method || 'pix';
+        if (i === count - 1) {
+          newParts.push({ amount: Math.round(remaining * 100) / 100, method });
+        } else {
+          newParts.push({ amount: baseAmount, method });
+          remaining -= baseAmount;
+        }
+      }
+      return newParts;
+    });
+  };
+
+  const updateSplitPart = (index: number, field: 'amount' | 'method', value: number | PaymentMethod) => {
+    setSplitParts((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
+  };
 
   if (!isOpen) return null;
 
@@ -178,11 +256,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         }
       } else {
         // Split payment
-        const splitAmount2 = Math.max(0, totalAmount - splitAmount1);
-        payments = [
-          { method: splitMethod1, amount: splitAmount1 },
-          { method: splitMethod2, amount: splitAmount2 },
-        ];
+        payments = splitParts.map((p) => ({ method: p.method, amount: p.amount }));
       }
 
       const saleCode = `VEN-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -350,52 +424,100 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             ) : (
               /* SPLIT PAYMENT UI */
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-3">
-                <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Dividir total de R$ {totalAmount.toFixed(2)} em duas formas:
-                </p>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                      Parte 1 (R$)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={splitAmount1}
-                      onChange={(e) => setSplitAmount1(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
-                    />
-                    <select
-                      value={splitMethod1}
-                      onChange={(e) => setSplitMethod1(e.target.value as PaymentMethod)}
-                      className="w-full mt-1 px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
+                {/* Header with +/- buttons */}
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Dividir em{' '}
+                    <span className="text-indigo-500 dark:text-indigo-400">{splitCount}</span> partes
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => splitCount > 2 && redistributeSplit(splitCount - 1)}
+                      disabled={splitCount <= 2}
+                      className="p-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 transition-colors"
                     >
-                      <option value="cash">Dinheiro</option>
-                      <option value="pix">PIX</option>
-                      <option value="credit_card">Cartão Crédito</option>
-                      <option value="debit_card">Cartão Débito</option>
-                    </select>
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="px-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                      {splitCount}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => splitCount < 6 && redistributeSplit(splitCount + 1)}
+                      disabled={splitCount >= 6}
+                      className="p-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-500 mb-1">
-                      Parte 2 (Restante: R$ {Math.max(0, totalAmount - splitAmount1).toFixed(2)})
-                    </label>
-                    <div className="px-3 py-1.5 bg-slate-200 dark:bg-slate-950 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300">
-                      R$ {Math.max(0, totalAmount - splitAmount1).toFixed(2)}
+                {/* Parts grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {splitParts.map((part, idx) => (
+                    <div key={idx}>
+                      <label className="block text-[11px] font-semibold text-slate-500 mb-1">
+                        Parte {idx + 1} (R$)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={part.amount}
+                        onChange={(e) => updateSplitPart(idx, 'amount', parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
+                      />
+                      <select
+                        value={part.method}
+                        onChange={(e) => updateSplitPart(idx, 'method', e.target.value as PaymentMethod)}
+                        className="w-full mt-1 px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
+                      >
+                        <option value="cash">Dinheiro</option>
+                        <option value="pix">PIX</option>
+                        <option value="credit_card">Cartão Crédito</option>
+                        <option value="debit_card">Cartão Débito</option>
+                      </select>
                     </div>
-                    <select
-                      value={splitMethod2}
-                      onChange={(e) => setSplitMethod2(e.target.value as PaymentMethod)}
-                      className="w-full mt-1 px-2 py-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs"
-                    >
-                      <option value="pix">PIX</option>
-                      <option value="credit_card">Cartão Crédito</option>
-                      <option value="debit_card">Cartão Débito</option>
-                      <option value="cash">Dinheiro</option>
-                    </select>
+                  ))}
+                </div>
+
+                {/* Summary bar */}
+                <div
+                  className={`p-2.5 rounded-lg border text-xs font-bold flex items-center justify-between ${
+                    isSplitValid
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+                  }`}
+                >
+                  <span>Soma das partes: R$ {splitPartsTotal.toFixed(2)}</span>
+                  <span>Total da venda: R$ {totalAmount.toFixed(2)}</span>
+                </div>
+
+                {!isSplitValid && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-rose-600 dark:text-rose-400 font-semibold">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>A soma das partes não confere com o total da venda.</span>
                   </div>
+                )}
+
+                {/* Add / Remove buttons */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => splitCount < 6 && redistributeSplit(splitCount + 1)}
+                    disabled={splitCount >= 6}
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-40 transition-colors"
+                  >
+                    + Adicionar Parte
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => splitCount > 2 && redistributeSplit(splitCount - 1)}
+                    disabled={splitCount <= 2}
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 disabled:opacity-40 transition-colors"
+                  >
+                    Remover Última
+                  </button>
                 </div>
               </div>
             )}
@@ -461,19 +583,21 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 {/* METHOD: PIX */}
                 {method === 'pix' && (() => {
                   const activePixKey = settings.pixKey || 'Nenhuma chave configurada';
-                  const pixPayload = buildPixPayload(settings.pixKey, totalAmount, settings.tradeName, settings.city);
-                  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(pixPayload)}`;
 
                   return (
                     <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/20 flex flex-col sm:flex-row items-center gap-4">
                       {/* Dynamic QR Code Box */}
                       <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex flex-col items-center shrink-0 w-44 text-center">
                         <div className="w-36 h-36 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center overflow-hidden p-1 relative">
-                          <img
-                            src={qrCodeUrl}
-                            alt="QR Code PIX"
-                            className="w-full h-full object-contain"
-                          />
+                          {qrDataUrl ? (
+                            <img
+                              src={qrDataUrl}
+                              alt="QR Code PIX"
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <div className="text-xs text-slate-400 animate-pulse">Gerando QR Code...</div>
+                          )}
                         </div>
                         <div className="mt-2 w-full">
                           <span className="text-[10px] text-slate-400 uppercase font-extrabold block">
@@ -603,7 +727,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           <button
             type="button"
             onClick={handleFinalize}
-            disabled={loading || (method === 'credit_account' && !selectedCustomer)}
+            disabled={loading || (method === 'credit_account' && !selectedCustomer) || (isSplit && !isSplitValid)}
             className="flex-1 py-3 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
           >
             {loading ? (

@@ -11,6 +11,8 @@ import {
   Unlock,
   RefreshCw,
   LogOut,
+  Receipt,
+  FileText,
 } from 'lucide-react';
 import { StoreBranch, UserProfile, CashRegisterSession } from '../../types';
 
@@ -55,12 +57,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const allMenuItems = [
-    { id: 'pdv', label: 'PDV / Vendas', icon: ShoppingCart, permKey: 'pdv' as const, badge: isCaixaOpen ? 'ABERTO' : 'FECHADO', badgeColor: isCaixaOpen ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20' },
-    { id: 'dashboard', label: 'Dashboard ERP', icon: LayoutDashboard, permKey: 'dashboard' as const },
-    { id: 'inventory', label: 'Estoque & Produtos', icon: Package, permKey: 'inventory' as const },
-    { id: 'finance', label: 'Financeiro & DRE', icon: DollarSign, permKey: 'finance' as const },
-    { id: 'crm', label: 'Clientes & CRM', icon: Users, permKey: 'crm' as const },
-    { id: 'settings', label: 'Configurações & Filiais', icon: Settings, permKey: 'settings' as const },
+    { id: 'pdv', label: 'Caixa', icon: ShoppingCart, permKey: 'pdv' as const, badge: isCaixaOpen ? 'ABERTO' : 'FECHADO', badgeColor: isCaixaOpen ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20' },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permKey: 'dashboard' as const },
+    { id: 'inventory', label: 'Estoque', icon: Package, permKey: 'inventory' as const },
+    { id: 'nf-history', label: 'Nota Fiscal', icon: FileText, permKey: 'inventory' as const },
+    { id: 'finance', label: 'Financeiro', icon: DollarSign, permKey: 'finance' as const },
+    { id: 'crm', label: 'Clientes/Fornecedores', icon: Users, permKey: 'crm' as const },
+    { id: 'fiados', label: 'Fiados', icon: Receipt, permKey: 'crm' as const },
+    { id: 'settings', label: 'Configurações', icon: Settings, permKey: 'settings' as const },
   ];
 
   const menuItems = allMenuItems.filter((item) => {
@@ -124,15 +128,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {isCaixaOpen ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
           </div>
           <div>
-            <p className="text-[11px] font-medium text-slate-400 dark:text-[#71717a]">Status do Caixa</p>
-            <p className={`text-xs font-bold ${isCaixaOpen ? 'text-emerald-400' : 'text-rose-400'}`}>
+            <p className="text-xs lg:text-[11px] font-medium text-slate-400 dark:text-[#71717a]">Status do Caixa</p>
+            <p className={`text-sm lg:text-xs font-bold ${isCaixaOpen ? 'text-emerald-400' : 'text-rose-400'}`}>
               {isCaixaOpen ? `Aberto (R$ ${caixaSession.currentCashBalance.toFixed(2)})` : 'Caixa Fechado'}
             </p>
           </div>
         </div>
         <button
           onClick={onOpenCaixaModal}
-          className="text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-slate-700 dark:bg-[#27272a] hover:bg-slate-600 dark:hover:bg-[#3f3f46] text-slate-200 dark:text-white transition-colors border border-slate-600/80 dark:border-transparent"
+          className="text-xs lg:text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-slate-700 dark:bg-[#27272a] hover:bg-slate-600 dark:hover:bg-[#3f3f46] text-slate-200 dark:text-white transition-colors border border-slate-600/80 dark:border-transparent"
         >
           {isCaixaOpen ? 'Gerenciar' : 'Abrir'}
         </button>
@@ -140,7 +144,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Navigation Menu */}
       <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
-        <p className="px-3 text-[10px] uppercase tracking-widest text-slate-500 dark:text-[#71717a] font-bold mb-2">Menu Principal</p>
+        <p className="px-3 text-[10px] lg:text-[10px] text-xs uppercase tracking-widest text-slate-500 dark:text-[#71717a] font-bold mb-2">Menu Principal</p>
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
@@ -148,20 +152,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => handleNavClick(item.id)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium transition-colors ${
+              className={`w-full flex items-center justify-between px-4 py-3 lg:px-3 lg:py-2.5 rounded-md text-base lg:text-xs font-medium transition-colors ${
                 isActive
                   ? 'bg-indigo-600 dark:bg-[#18181b] text-white border border-indigo-500 dark:border-[#27272a] font-semibold shadow-sm'
                   : 'text-slate-300 dark:text-[#a1a1aa] hover:text-white hover:bg-slate-800/80 dark:hover:bg-[#18181b]/60'
               }`}
             >
               <div className="flex items-center gap-3">
-                <div className={`w-4 h-4 rounded-md border flex items-center justify-center ${isActive ? 'border-indigo-400 dark:border-indigo-500 bg-indigo-500/20' : 'border-slate-600 dark:border-[#3f3f46]'}`}>
-                  <Icon className={`w-3 h-3 ${isActive ? 'text-white' : 'text-slate-400 dark:text-[#a1a1aa]'}`} />
+                <div className={`w-6 h-6 lg:w-4 lg:h-4 rounded-md border flex items-center justify-center ${isActive ? 'border-indigo-400 dark:border-indigo-500 bg-indigo-500/20' : 'border-slate-600 dark:border-[#3f3f46]'}`}>
+                  <Icon className={`w-4 h-4 lg:w-3 lg:h-3 ${isActive ? 'text-white' : 'text-slate-400 dark:text-[#a1a1aa]'}`} />
                 </div>
                 <span>{item.label}</span>
               </div>
               {item.badge && (
-                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${item.badgeColor}`}>
+                <span className={`text-[10px] lg:text-[9px] font-bold px-2 py-0.5 rounded-full border ${item.badgeColor}`}>
                   {item.badge}
                 </span>
               )}
@@ -173,17 +177,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* User Info & Actions */}
       <div className="p-3 border-t border-slate-800 dark:border-[#27272a] space-y-2">
         <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/40 dark:bg-[#18181b] border border-slate-800 dark:border-[#27272a]">
-          <div className="flex items-center gap-2.5 min-w-0">
+          <button
+            onClick={() => handleNavClick('settings')}
+            className="flex items-center gap-2.5 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+          >
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 ring-1 ring-indigo-500/30 shrink-0 overflow-hidden">
               <img src={user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'} alt={user.name} className="w-full h-full object-cover" />
             </div>
             <div className="overflow-hidden min-w-0">
-              <p className="text-xs font-bold truncate text-slate-200 dark:text-white">{user.name}</p>
-              <p className="text-[10px] text-indigo-400 font-mono truncate">
+              <p className="text-sm lg:text-xs font-bold truncate text-slate-200 dark:text-white">{user.name}</p>
+              <p className="text-xs lg:text-[10px] text-indigo-400 font-mono truncate">
                 {isAdmin ? 'ADMINISTRADOR' : 'COLABORADOR'}
               </p>
             </div>
-          </div>
+          </button>
 
           <button
             onClick={onLogout}
@@ -197,7 +204,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={onResetDemo}
           title="Restaurar dados iniciais de demonstração"
-          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-medium text-slate-400 dark:text-[#71717a] hover:text-slate-200 dark:hover:text-white hover:bg-slate-800/60 dark:hover:bg-[#18181b] border border-slate-800/60 dark:border-[#27272a] transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs lg:text-[11px] font-medium text-slate-400 dark:text-[#71717a] hover:text-slate-200 dark:hover:text-white hover:bg-slate-800/60 dark:hover:bg-[#18181b] border border-slate-800/60 dark:border-[#27272a] transition-colors"
         >
           <RefreshCw className="w-3 h-3" />
           <span>Resetar Dados Demo</span>

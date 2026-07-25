@@ -10,22 +10,27 @@ import {
   Phone,
   Mail,
   X,
+  Trash2,
+  Edit2,
 } from 'lucide-react';
-import { Customer, Supplier } from '../../types';
+import { Customer, Supplier, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 
 interface CRMViewProps {
   customers: Customer[];
   suppliers: Supplier[];
+  user: UserProfile;
 }
 
-export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
+export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) => {
+  const isAdmin = user.role === 'admin';
   const [activeTab, setActiveTab] = useState<'customers' | 'suppliers'>('customers');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Customer Modal state
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [custName, setCustName] = useState('');
   const [custCpfCnpj, setCustCpfCnpj] = useState('');
   const [custEmail, setCustEmail] = useState('');
@@ -34,6 +39,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
 
   // Supplier Modal state
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [supCompanyName, setSupCompanyName] = useState('');
   const [supTradeName, setSupTradeName] = useState('');
   const [supCnpj, setSupCnpj] = useState('');
@@ -41,31 +47,71 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
   const [supEmail, setSupEmail] = useState('');
   const [supPhone, setSupPhone] = useState('');
 
+  const handleOpenCustomerModal = (customer?: Customer) => {
+    if (customer) {
+      setEditingCustomer(customer);
+      setCustName(customer.name);
+      setCustCpfCnpj(customer.cpfCnpj);
+      setCustEmail(customer.email);
+      setCustPhone(customer.phone);
+      setCustLimit(customer.creditLimit);
+    } else {
+      setEditingCustomer(null);
+      setCustName('');
+      setCustCpfCnpj('');
+      setCustEmail('');
+      setCustPhone('');
+      setCustLimit(1000);
+    }
+    setIsCustomerModalOpen(true);
+  };
+
   const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
-    const newCust: Customer = {
-      id: `cli-${Date.now()}`,
+    const updatedCust: Customer = {
+      id: editingCustomer ? editingCustomer.id : `cli-${Date.now()}`,
       name: custName,
       cpfCnpj: custCpfCnpj,
       email: custEmail,
       phone: custPhone,
       creditLimit: custLimit,
-      currentBalance: 0,
-      loyaltyPoints: 50,
-      city: 'São Paulo',
-      state: 'SP',
-      createdAt: new Date().toISOString().slice(0, 10),
+      currentBalance: editingCustomer?.currentBalance || 0,
+      loyaltyPoints: editingCustomer?.loyaltyPoints || 50,
+      city: editingCustomer?.city || 'São Paulo',
+      state: editingCustomer?.state || 'SP',
+      createdAt: editingCustomer?.createdAt || new Date().toISOString().slice(0, 10),
     };
 
-    storageService.saveCustomer(newCust);
+    storageService.saveCustomer(updatedCust);
     posAudio.chime();
     setIsCustomerModalOpen(false);
   };
 
+  const handleOpenSupplierModal = (supplier?: Supplier) => {
+    if (supplier) {
+      setEditingSupplier(supplier);
+      setSupCompanyName(supplier.companyName);
+      setSupTradeName(supplier.tradeName);
+      setSupCnpj(supplier.cnpj);
+      setSupContact(supplier.contactName);
+      setSupEmail(supplier.email);
+      setSupPhone(supplier.phone);
+    } else {
+      setEditingSupplier(null);
+      setSupCompanyName('');
+      setSupTradeName('');
+      setSupCnpj('');
+      setSupContact('');
+      setSupEmail('');
+      setSupPhone('');
+    }
+    setIsSupplierModalOpen(true);
+  };
+
   const handleSaveSupplier = (e: React.FormEvent) => {
     e.preventDefault();
-    const newSup: Supplier = {
-      id: `sup-${Date.now()}`,
+    const updatedSup: Supplier = {
+      id: editingSupplier ? editingSupplier.id : `sup-${Date.now()}`,
       companyName: supCompanyName,
       tradeName: supTradeName,
       cnpj: supCnpj,
@@ -74,9 +120,23 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
       phone: supPhone,
     };
 
-    storageService.saveSupplier(newSup);
+    storageService.saveSupplier(updatedSup);
     posAudio.chime();
     setIsSupplierModalOpen(false);
+  };
+
+  const handleDeleteCustomer = (id: string) => {
+    if (confirm('Tem certeza que deseja excluir este cliente?')) {
+      storageService.deleteCustomer(id);
+      posAudio.chime();
+    }
+  };
+
+  const handleDeleteSupplier = (id: string) => {
+    if (confirm('Tem certeza que deseja excluir este fornecedor?')) {
+      storageService.deleteSupplier(id);
+      posAudio.chime();
+    }
   };
 
   const filteredCustomers = customers.filter(
@@ -132,7 +192,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
 
           <button
             onClick={() =>
-              activeTab === 'customers' ? setIsCustomerModalOpen(true) : setIsSupplierModalOpen(true)
+              activeTab === 'customers' ? handleOpenCustomerModal() : handleOpenSupplierModal()
             }
             className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
           >
@@ -168,11 +228,16 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
                 <th className="py-3.5 px-4">Limite de Crédito</th>
                 <th className="py-3.5 px-4">Saldo Devedor (Fiado)</th>
                 <th className="py-3.5 px-4">Pontos Fidelidade</th>
+                <th className="py-3.5 px-4 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
               {filteredCustomers.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors">
+                <tr
+                  key={c.id}
+                  onClick={() => handleOpenCustomerModal(c)}
+                  className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors cursor-pointer"
+                >
                   <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">{c.name}</td>
                   <td className="py-3 px-4 font-mono text-slate-600 dark:text-[#a1a1aa]">{c.cpfCnpj}</td>
                   <td className="py-3 px-4 text-slate-500 dark:text-[#71717a]">
@@ -191,6 +256,26 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
                       {c.loyaltyPoints} pts
                     </span>
                   </td>
+                  <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => handleOpenCustomerModal(c)}
+                        className="p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
+                        title="Editar Cliente"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDeleteCustomer(c.id)}
+                          className="p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors"
+                          title="Excluir Cliente"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -208,11 +293,16 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
                 <th className="py-3.5 px-4">CNPJ</th>
                 <th className="py-3.5 px-4">Contato Principal</th>
                 <th className="py-3.5 px-4">Email / Telefone</th>
+                <th className="py-3.5 px-4 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
               {filteredSuppliers.map((s) => (
-                <tr key={s.id} className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors">
+                <tr
+                  key={s.id}
+                  onClick={() => handleOpenSupplierModal(s)}
+                  className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors cursor-pointer"
+                >
                   <td className="py-3 px-4">
                     <p className="font-bold text-slate-900 dark:text-white">{s.tradeName}</p>
                     <p className="text-[10px] text-slate-400 dark:text-[#71717a]">{s.companyName}</p>
@@ -223,6 +313,26 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
                     <p>{s.email}</p>
                     <p className="font-semibold text-slate-700 dark:text-[#a1a1aa]">{s.phone}</p>
                   </td>
+                  <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => handleOpenSupplierModal(s)}
+                        className="p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
+                        title="Editar Fornecedor"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDeleteSupplier(s.id)}
+                          className="p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors"
+                          title="Excluir Fornecedor"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -230,11 +340,13 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
         </div>
       )}
 
-      {/* NEW CUSTOMER MODAL */}
+      {/* EDIT/NEW CUSTOMER MODAL */}
       {isCustomerModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Cadastrar Novo Cliente</h3>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              {editingCustomer ? 'Editar Cliente' : 'Cadastrar Novo Cliente'}
+            </h3>
 
             <form onSubmit={handleSaveCustomer} className="space-y-3 text-xs">
               <div>
@@ -310,7 +422,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold"
                 >
-                  Salvar Cliente
+                  {editingCustomer ? 'Salvar Alterações' : 'Salvar Cliente'}
                 </button>
               </div>
             </form>
@@ -318,11 +430,13 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
         </div>
       )}
 
-      {/* NEW SUPPLIER MODAL */}
+      {/* EDIT/NEW SUPPLIER MODAL */}
       {isSupplierModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Cadastrar Novo Fornecedor</h3>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              {editingSupplier ? 'Editar Fornecedor' : 'Cadastrar Novo Fornecedor'}
+            </h3>
 
             <form onSubmit={handleSaveSupplier} className="space-y-3 text-xs">
               <div>
@@ -374,6 +488,29 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold mb-1">E-mail</label>
+                  <input
+                    type="email"
+                    placeholder="fornecedor@email.com"
+                    value={supEmail}
+                    onChange={(e) => setSupEmail(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold mb-1">Telefone</label>
+                  <input
+                    type="text"
+                    placeholder="(11) 3000-0000"
+                    value={supPhone}
+                    onChange={(e) => setSupPhone(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl"
+                  />
+                </div>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -386,7 +523,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers }) => {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold"
                 >
-                  Salvar Fornecedor
+                  {editingSupplier ? 'Salvar Alterações' : 'Salvar Fornecedor'}
                 </button>
               </div>
             </form>
