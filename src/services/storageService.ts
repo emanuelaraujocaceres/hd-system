@@ -675,6 +675,65 @@ class StorageService {
       }
 
       console.log('[HD-Sync] Cloud hydration complete');
+
+      // ─── SYNC LOCAL DATA TO CLOUD IF CLOUD WAS EMPTY ──────────
+      // If Supabase returned no data for a table but we have local data,
+      // push it up so the cloud is populated.
+      const localProducts = this.getProducts();
+      if (products.length === 0 && localProducts.length > 0) {
+        console.log(`[HD-Sync] ☁️→☁️ Syncing ${localProducts.length} local products to cloud...`);
+        localProducts.forEach((p) => this.syncProduct(p));
+      }
+
+      if (categories.length === 0 && this.getCategories().length > 0) {
+        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getCategories().length} local categories to cloud...`);
+        this.getCategories().forEach((c) => this.syncCategory(c));
+      }
+
+      if (customers.length === 0 && this.getCustomers().length > 0) {
+        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getCustomers().length} local customers to cloud...`);
+        this.getCustomers().forEach((c) => this.syncCustomer(c));
+      }
+
+      if (suppliers.length === 0 && this.getSuppliers().length > 0) {
+        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getSuppliers().length} local suppliers to cloud...`);
+        this.getSuppliers().forEach((s) => this.syncSupplier(s));
+      }
+
+      if (sales.length === 0 && this.getSales().length > 0) {
+        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getSales().length} local sales to cloud...`);
+        this.getSales().forEach((s) => this.syncSale(s));
+      }
+
+      if (branches.length === 0 && this.getBranches().length > 0) {
+        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getBranches().length} local branches to cloud...`);
+        this.getBranches().forEach((b) => this.syncBranch(b));
+      }
+
+      if (financial.length === 0 && this.getFinancialAccounts().length > 0) {
+        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getFinancialAccounts().length} local financial accounts to cloud...`);
+        this.getFinancialAccounts().forEach((a) => this.syncFinancialAccount(a));
+      }
+
+      if (users.length === 0 && this.getUsers().length > 0) {
+        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getUsers().length} local users to cloud...`);
+        this.getUsers().forEach((u) => this.syncSystemUser(u));
+      }
+
+      if (movements.length === 0 && this.getMovements().length > 0) {
+        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getMovements().length} local stock movements to cloud...`);
+        this.getMovements().forEach((m) => this.syncStockMovement(m));
+      }
+
+      // Caixa session: only sync if we have an open session locally but none in cloud
+      if (caixa.length === 0) {
+        const localCaixa = this.getActiveCaixaSession();
+        if (localCaixa && localCaixa.status === 'open') {
+          console.log(`[HD-Sync] ☁️→☁️ Syncing active cash session to cloud...`);
+          this.syncCaixaSession(localCaixa);
+        }
+      }
+
       return true;
     } catch (e) {
       console.warn('[HD-Sync] Cloud hydration failed, using localStorage', e);
