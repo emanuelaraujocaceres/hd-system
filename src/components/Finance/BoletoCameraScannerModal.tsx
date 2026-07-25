@@ -358,8 +358,9 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
                 {/* Flash toggle */}
                 <button
                   onClick={toggleFlash}
-                  className="absolute top-4 left-4 z-50 p-2 rounded-full backdrop-blur-sm transition-colors"
+                  className="absolute left-4 z-50 p-2 rounded-full backdrop-blur-sm transition-colors"
                   style={{
+                    top: 'max(1rem, env(safe-area-inset-top))',
                     background: flashOn ? 'rgba(250, 204, 21, 0.9)' : 'rgba(0, 0, 0, 0.5)',
                   }}
                   title={flashOn ? 'Desligar Flash' : 'Ligar Flash'}
@@ -378,7 +379,7 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-3 p-4 bg-slate-900 shrink-0 sm:bg-transparent">
+              <div className="flex items-center justify-between gap-3 p-4 bg-slate-900 shrink-0 sm:bg-transparent" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
                 <button
                   onClick={handleStopCamera}
                   className="px-4 py-2.5 bg-slate-700 text-slate-200 font-bold text-xs rounded-xl sm:bg-slate-200 sm:dark:bg-slate-800 sm:text-slate-700 sm:dark:text-slate-300"

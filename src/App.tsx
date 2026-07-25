@@ -129,8 +129,19 @@ export const App: React.FC = () => {
   useEffect(() => {
     // Handler for remote changes from Supabase Realtime
     const handleRemoteChange = (table: string, payload: any) => {
+      // If we're receiving remote changes, we're connected
+      setIsSyncConnected(true);
       const event = payload.eventType; // INSERT, UPDATE, DELETE
       const row = payload.new || payload.old;
+
+      // Branch isolation: only accept changes that belong to current branch (or have no branch)
+      const currentBranchId = storageService.getSelectedBranchId();
+      if (currentBranchId && row?.store_branch_id) {
+        if (row.store_branch_id !== currentBranchId && row.store_branch_id !== null) {
+          console.log(`[HD-Sync] Ignoring cross-branch ${event} on ${table} (branch: ${row.store_branch_id})`);
+          return;
+        }
+      }
 
       console.log(`[HD-Sync] Remote ${event} on ${table}:`, row?.id);
 
@@ -152,14 +163,16 @@ export const App: React.FC = () => {
           else storageService.updateSupplierFromRemote(row);
           break;
         case 'sales':
-          storageService.updateSaleFromRemote(row);
+          if (event === 'DELETE') storageService.removeSaleFromRemote(row.id);
+          else storageService.updateSaleFromRemote(row);
           break;
         case 'financial_transactions':
           if (event === 'DELETE') storageService.removeFinancialFromRemote(row.id);
           else storageService.updateFinancialFromRemote(row);
           break;
         case 'cash_sessions':
-          storageService.updateCaixaFromRemote(row);
+          if (event === 'DELETE') storageService.removeCaixaFromRemote(row.id);
+          else storageService.updateCaixaFromRemote(row);
           break;
         case 'store_branches':
           storageService.updateBranchFromRemote(row);
@@ -168,7 +181,8 @@ export const App: React.FC = () => {
           storageService.updateStockMovementFromRemote(row);
           break;
         case 'system_users':
-          storageService.updateUserFromRemote(row);
+          if (event === 'DELETE') storageService.removeUserFromRemote(row.id);
+          else storageService.updateUserFromRemote(row);
           break;
         case 'system_settings':
           storageService.updateSettingsFromRemote(row);
@@ -184,7 +198,8 @@ export const App: React.FC = () => {
     // Check connection health periodically
     const checkConnection = async () => {
       const healthy = await syncService.testConnection();
-      setIsSyncConnected(healthy && syncService.connected);
+      // Consider connected if either the health check passed or the realtime channel is active
+      setIsSyncConnected(healthy || syncService.connected);
     };
     checkConnection();
     const healthInterval = setInterval(checkConnection, 30000);
@@ -276,7 +291,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden bg-slate-50 dark:bg-[#09090b]">
+      <div className="flex-1 flex flex-col min-w-0 h-dynamic overflow-hidden bg-slate-50 dark:bg-[#09090b]">
         {/* Header Bar */}
         <Header
           onToggleMobileMenu={() => setIsMobileOpen((prev) => !prev)}
@@ -294,6 +309,8 @@ export const App: React.FC = () => {
           currentBranch={currentBranch}
           onSelectBranch={handleSelectBranch}
           onLogout={handleLogout}
+          isSyncConnected={isSyncConnected}
+          lastSyncTime={lastSyncTime}
         />
 
         {/* Dynamic Main View Area */}
@@ -335,6 +352,7 @@ export const App: React.FC = () => {
                 <DashboardView
                   sales={sales}
                   products={products}
+                  user={user}
                   onNavigateTab={handleTabChange}
                   onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
                 />
@@ -373,7 +391,7 @@ export const App: React.FC = () => {
               )}
 
               {activeTab === 'fiados' && (
-                <FiadosView sales={sales} customers={customers} />
+                <FiadosView sales={sales} customers={customers} user={user} />
               )}
 
               {activeTab === 'settings' && (
@@ -384,7 +402,7 @@ export const App: React.FC = () => {
         </main>
 
         {/* Footer Info Bar */}
-        <footer className="h-8 md:h-9 bg-white dark:bg-[#09090b] border-t border-slate-200 dark:border-[#27272a] px-3 sm:px-6 flex items-center justify-between text-[9px] md:text-[10px] text-slate-500 dark:text-[#52525b] uppercase tracking-widest font-bold select-none shrink-0">
+        <footer className="h-8 md:h-9 safe-area-bottom bg-white dark:bg-[#09090b] border-t border-slate-200 dark:border-[#27272a] px-3 sm:px-6 flex items-center justify-between text-[9px] md:text-[10px] text-slate-500 dark:text-[#52525b] uppercase tracking-widest font-bold select-none shrink-0">
           <div className="flex items-center gap-3 sm:gap-6">
             <span className="flex items-center gap-1.5">
               <span className={`w-1.5 h-1.5 rounded-full ${isSyncConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>

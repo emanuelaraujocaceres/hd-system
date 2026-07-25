@@ -85,6 +85,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
   const [flashOn, setFlashOn] = useState(false);
   const [scanFlash, setScanFlash] = useState(false);
   const [scanSuccessProduct, setScanSuccessProduct] = useState<Product | null>(null);
+  const [scanPaused, setScanPaused] = useState(false);
 
   const toggleFlash = useCallback(async () => {
     const stream = streamRef.current;
@@ -428,15 +429,14 @@ export const PDVView: React.FC<PDVViewProps> = ({
       // Add to cart immediately
       handleAddToCart(found);
 
-      // Show success overlay at top of camera for 1.5s, then reset
+      // Show success overlay and PAUSE scanner — wait for user confirmation
       setScanSuccessProduct(found);
-      setTimeout(() => {
-        setScanSuccessProduct(null);
-        setScannerStatus('scanning');
-        setScannedBarcode('');
-        setScannedProduct(null);
-        lastScannedRef.current = '';
-      }, 1500);
+      setScanPaused(true);
+      // Stop the barcode polling interval so no duplicate scans happen
+      if (scannerIntervalRef.current) {
+        clearInterval(scannerIntervalRef.current);
+        scannerIntervalRef.current = null;
+      }
     } else {
       setScannerStatus('not_found');
       posAudio.error();
@@ -449,6 +449,48 @@ export const PDVView: React.FC<PDVViewProps> = ({
     }
   };
 
+  // Resume scanning after user confirms the success overlay
+  const handleScanNext = () => {
+    setScanSuccessProduct(null);
+    setScanPaused(false);
+    setScannerStatus('scanning');
+    setScannedBarcode('');
+    setScannedProduct(null);
+    lastScannedRef.current = '';
+
+    // Restart the barcode polling interval
+    const BarcodeDetectorClass = (window as any).BarcodeDetector;
+    if (BarcodeDetectorClass && videoRef.current) {
+      const detector = new BarcodeDetectorClass({
+        formats: ['ean_13', 'ean_8', 'code_128', 'qr_code', 'upc_a', 'upc_e', 'code_39', 'codabar'],
+      });
+      scannerIntervalRef.current = window.setInterval(async () => {
+        if (!videoRef.current || scanCooldownRef.current) return;
+        try {
+          const barcodes = await detector.detect(videoRef.current);
+          if (barcodes.length > 0) {
+            const raw = barcodes[0].rawValue.trim();
+            if (raw && raw !== lastScannedRef.current) {
+              scanCooldownRef.current = true;
+              lastScannedRef.current = raw;
+              setScanFlash(true);
+              setTimeout(() => setScanFlash(false), 400);
+              handleBarcodeDetected(raw);
+              setTimeout(() => { scanCooldownRef.current = false; }, 2000);
+            }
+          }
+        } catch { /* ignore detection errors */ }
+      }, 300);
+    }
+  };
+
+  // Close scanner from success overlay
+  const handleCloseScannerFromSuccess = () => {
+    setScanSuccessProduct(null);
+    setScanPaused(false);
+    stopScanner();
+  };
+
   // Cleanup scanner on unmount
   useEffect(() => {
     return () => {
@@ -456,6 +498,19 @@ export const PDVView: React.FC<PDVViewProps> = ({
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  // Back button exits camera scanner on mobile
+  useEffect(() => {
+    if (isScannerOpen) {
+      window.history.pushState({ scannerOpen: true }, '');
+      const handleBack = () => { stopScanner(); };
+      window.addEventListener('popstate', handleBack);
+      return () => {
+        window.removeEventListener('popstate', handleBack);
+        // Don't push/pop if scanner was closed by X button or by back itself
+      };
+    }
+  }, [isScannerOpen]);
 
   // Calculate Totals
   const cartSubtotal = cart.reduce((acc, item) => acc + item.quantity * item.unitPrice, 0);
@@ -612,7 +667,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
           <button
             onClick={handleClearCart}
             disabled={cart.length === 0}
-            className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 px-2.5 py-1 rounded-lg transition-colors disabled:opacity-30"
+            className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 px-2.5 py-2 rounded-lg transition-colors disabled:opacity-30 min-h-[44px] flex items-center"
             title="Limpar Carrinho (F2)"
           >
             Limpar (F2)
@@ -673,20 +728,20 @@ export const PDVView: React.FC<PDVViewProps> = ({
                 </div>
 
                 {/* Quantity Controls */}
-                <div className="flex items-center gap-1 bg-white dark:bg-[#18181b] p-1 rounded-lg border border-slate-200 dark:border-[#27272a]">
+                <div className="flex items-center gap-1 bg-white dark:bg-[#18181b] p-1.5 rounded-lg border border-slate-200 dark:border-[#27272a]">
                   <button
                     onClick={() => handleUpdateQuantity(item.product.id, -1)}
-                    className="p-1 rounded text-slate-500 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#27272a]"
+                    className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded text-slate-500 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#27272a]"
                   >
                     <Minus className="w-3 h-3" />
                   </button>
-                  <span className={`text-xs font-bold w-5 text-center ${item.quantity >= item.product.currentStock ? 'text-amber-500 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>
+                  <span className={`text-xs font-bold w-6 text-center ${item.quantity >= item.product.currentStock ? 'text-amber-500 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>
                     {item.quantity}
                   </span>
                   <button
                     onClick={() => handleUpdateQuantity(item.product.id, 1)}
                     disabled={item.quantity >= item.product.currentStock}
-                    className={`p-1 rounded transition-colors ${
+                    className={`p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded transition-colors ${
                       item.quantity >= item.product.currentStock
                         ? 'text-slate-300 dark:text-[#3f3f46] cursor-not-allowed'
                         : 'text-slate-500 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#27272a]'
@@ -700,7 +755,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
                 {/* Trash */}
                 <button
                   onClick={() => handleRemoveItem(item.product.id)}
-                  className="p-1.5 text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors"
+                  className="p-2.5 text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -801,7 +856,8 @@ export const PDVView: React.FC<PDVViewProps> = ({
           {/* Close button (top-right) */}
           <button
             onClick={stopScanner}
-            className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 backdrop-blur-sm transition-colors"
+            className="absolute right-4 z-50 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 backdrop-blur-sm transition-colors"
+            style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
             title="Fechar Scanner"
           >
             <X className="w-6 h-6" />
@@ -810,8 +866,9 @@ export const PDVView: React.FC<PDVViewProps> = ({
           {/* Flash toggle (top-left) */}
           <button
             onClick={toggleFlash}
-            className="absolute top-4 left-4 z-50 p-2 rounded-full backdrop-blur-sm transition-colors"
+            className="absolute left-4 z-50 p-2 rounded-full backdrop-blur-sm transition-colors"
             style={{
+              top: 'max(1rem, env(safe-area-inset-top))',
               background: flashOn ? 'rgba(250, 204, 21, 0.9)' : 'rgba(0, 0, 0, 0.5)',
             }}
             title={flashOn ? 'Desligar Flash' : 'Ligar Flash'}
@@ -851,22 +908,38 @@ export const PDVView: React.FC<PDVViewProps> = ({
 
             {/* Success overlay — appears at top of camera when item is added */}
             {scanSuccessProduct && (
-              <div className="absolute top-16 left-4 right-4 z-40 animate-[slideDown_0.25s_ease-out]">
-                <div className="flex items-center gap-3 p-3.5 bg-emerald-500/95 text-white rounded-2xl shadow-2xl backdrop-blur-sm border border-emerald-400/30">
-                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="w-5 h-5 text-white" />
+              <div className="absolute left-4 right-4 z-40 animate-[slideDown_0.25s_ease-out]" style={{ top: 'max(4rem, calc(env(safe-area-inset-top) + 1rem))' }}>
+                <div className="p-4 bg-emerald-500/95 text-white rounded-2xl shadow-2xl backdrop-blur-sm border border-emerald-400/30">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold truncate">{scanSuccessProduct.name}</p>
+                      <p className="text-[11px] text-emerald-100 font-semibold">Adicionado ao carrinho!</p>
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold truncate">{scanSuccessProduct.name}</p>
-                    <p className="text-[11px] text-emerald-100 font-semibold">Adicionado ao carrinho!</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleScanNext}
+                      className="flex-1 py-2.5 rounded-xl bg-white text-emerald-700 text-xs font-bold transition-colors hover:bg-emerald-50 active:scale-[0.98]"
+                    >
+                      Escanear Próximo
+                    </button>
+                    <button
+                      onClick={handleCloseScannerFromSuccess}
+                      className="flex-1 py-2.5 rounded-xl bg-emerald-700/50 text-white text-xs font-bold transition-colors hover:bg-emerald-700/70 active:scale-[0.98]"
+                    >
+                      Fechar Scanner
+                    </button>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Scanning indicator */}
-            {scannerStatus === 'scanning' && !scanSuccessProduct && (
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-emerald-500/90 text-white px-2.5 py-1 rounded-full text-[10px] font-bold backdrop-blur-sm">
+            {scannerStatus === 'scanning' && !scanPaused && (
+              <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-emerald-500/90 text-white px-2.5 py-1 rounded-full text-[10px] font-bold backdrop-blur-sm" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                 Escaneando...
               </div>
@@ -874,7 +947,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
           </div>
 
           {/* Bottom sheet: status + manual input */}
-          <div className="bg-white dark:bg-[#18181b] rounded-t-3xl px-4 pt-4 pb-6 space-y-3 border-t border-slate-200 dark:border-[#27272a] max-h-[40vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#18181b] rounded-t-3xl px-4 pt-4 space-y-3 border-t border-slate-200 dark:border-[#27272a] max-h-[40vh] overflow-y-auto" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
             {/* Not found */}
             {scannerStatus === 'not_found' && (
               <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-500/30 rounded-xl">

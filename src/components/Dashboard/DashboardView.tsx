@@ -5,12 +5,17 @@ import {
   Package,
   ArrowUpRight,
   Sparkles,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { Product, Sale } from '../../types';
+import { Product, Sale, UserProfile } from '../../types';
+import { storageService } from '../../services/storageService';
 
 interface DashboardViewProps {
   sales: Sale[];
   products: Product[];
+  user: UserProfile;
   onNavigateTab: (tab: string) => void;
   onOpenCaixaModal: () => void;
 }
@@ -18,9 +23,12 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   sales,
   products,
+  user,
   onNavigateTab,
   onOpenCaixaModal,
 }) => {
+  const isAdmin = user.role === 'admin';
+  const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
 
   // Today's total sales calculations
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -158,53 +166,201 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Ver Todas
             </button>
           </div>
-          <div className="overflow-x-auto">
-          <table className="w-full text-left min-w-[400px]">
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-left">
             <thead>
               <tr className="text-[10px] text-slate-500 dark:text-[#71717a] uppercase border-b border-slate-200 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b]/50">
                 <th className="px-3 sm:px-6 py-3 font-bold">ID</th>
                 <th className="px-3 sm:px-6 py-3 font-bold">Cliente</th>
-                <th className="px-3 sm:px-6 py-3 font-bold hidden sm:table-cell">Status</th>
+                <th className="px-3 sm:px-6 py-3 font-bold">Status</th>
                 <th className="px-3 sm:px-6 py-3 text-right font-bold">Valor</th>
               </tr>
             </thead>
             <tbody className="text-xs divide-y divide-slate-100 dark:divide-[#27272a] text-slate-800 dark:text-slate-200">
-              {sales.slice(0, 5).map((sale) => (
-                <tr key={sale.id} className="hover:bg-slate-50 dark:hover:bg-[#27272a]/30 transition-colors">
-                  <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-slate-500 dark:text-[#a1a1aa]">#{sale.code || sale.id.slice(-4)}</td>
-                  <td className="px-3 sm:px-6 py-3 sm:py-4 font-medium">{sale.customerName || 'Cliente Consumidor'}</td>
-                  <td className="px-3 sm:px-6 py-3 sm:py-4 hidden sm:table-cell">
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[9px] font-bold uppercase tracking-wider">
-                      CONCLUÍDO
-                    </span>
-                  </td>
-                  <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ {sale.total.toFixed(2)}</td>
-                </tr>
-              ))}
+              {sales.slice(0, 5).map((sale) => {
+                const isExpanded = expandedSaleId === sale.id;
+                return (
+                  <React.Fragment key={sale.id}>
+                    <tr
+                      onClick={() => setExpandedSaleId(isExpanded ? null : sale.id)}
+                      className="hover:bg-slate-50 dark:hover:bg-[#27272a]/30 transition-colors cursor-pointer"
+                    >
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-slate-500 dark:text-[#a1a1aa]">
+                        <span className="flex items-center gap-1.5">
+                          #{sale.code || sale.id.slice(-4)}
+                          {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        </span>
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 font-medium">{sale.customerName || 'Cliente Consumidor'}</td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[9px] font-bold uppercase tracking-wider">
+                          CONCLUÍDO
+                        </span>
+                      </td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ {sale.total.toFixed(2)}</td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={4} className="px-3 sm:px-6 py-4 bg-slate-50 dark:bg-[#09090b]/50 border-b border-slate-200 dark:border-[#27272a]">
+                          <div className="space-y-3">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold mb-2">Itens Comprados</p>
+                              <div className="space-y-1">
+                                {sale.items.map((item, idx) => (
+                                  <div key={idx} className="flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#18181b] border border-slate-100 dark:border-[#27272a]">
+                                    <span className="font-medium text-slate-900 dark:text-white">{item.productName}</span>
+                                    <span className="text-slate-500 dark:text-[#a1a1aa]">{item.quantity}x R$ {item.unitPrice.toFixed(2)} = R$ {item.total.toFixed(2)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 text-[11px]">
+                              <div>
+                                <span className="text-slate-500 dark:text-[#71717a] font-bold">Pagamento: </span>
+                                <span className="text-slate-900 dark:text-white font-medium">
+                                  {sale.payments.map((p) => {
+                                    const labels: Record<string, string> = { cash: 'Dinheiro', pix: 'PIX', credit_card: 'Cartão Crédito', debit_card: 'Cartão Débito', credit_account: 'Conta Fiado' };
+                                    return labels[p.method] || p.method;
+                                  }).join(', ')}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-slate-500 dark:text-[#71717a] font-bold">Operador: </span>
+                                <span className="text-slate-900 dark:text-white font-medium">{sale.operatorName}</span>
+                              </div>
+                            </div>
+                            {isAdmin && (
+                              <div className="pt-2 border-t border-slate-200 dark:border-[#27272a]">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm('Tem certeza que deseja excluir esta venda?')) {
+                                      storageService.deleteSale(sale.id);
+                                      setExpandedSaleId(null);
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-[10px] font-bold transition-colors flex items-center gap-1.5"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  Excluir Venda
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
               {sales.length === 0 && (
                 <>
                   <tr className="hover:bg-slate-50 dark:hover:bg-[#27272a]/30 transition-colors">
                     <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-[#a1a1aa]">#9281</td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4">Lucas Cavalcanti</td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 hidden sm:table-cell"><span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold">CONCLUÍDO</span></td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4"><span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold">CONCLUÍDO</span></td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ 450,00</td>
                   </tr>
                   <tr className="hover:bg-slate-50 dark:hover:bg-[#27272a]/30 transition-colors">
                     <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-[#a1a1aa]">#9280</td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4">Maria Julia Neves</td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 hidden sm:table-cell"><span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] font-bold">PENDENTE</span></td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4"><span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] font-bold">PENDENTE</span></td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ 1.290,00</td>
                   </tr>
                   <tr className="hover:bg-slate-50 dark:hover:bg-[#27272a]/30 transition-colors">
                     <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-[#a1a1aa]">#9279</td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 font-medium">João Pedro Alves</td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 hidden sm:table-cell"><span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold">CONCLUÍDO</span></td>
+                    <td className="px-3 sm:px-6 py-3 sm:py-4"><span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold">CONCLUÍDO</span></td>
                     <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ 89,90</td>
                   </tr>
                 </>
               )}
             </tbody>
           </table>
+          </div>
+
+          {/* Mobile card layout */}
+          <div className="block md:hidden p-3 space-y-3">
+            {sales.slice(0, 5).map((sale) => {
+              const isExpanded = expandedSaleId === sale.id;
+              return (
+                <div
+                  key={sale.id}
+                  onClick={() => setExpandedSaleId(isExpanded ? null : sale.id)}
+                  className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b]/50 border border-slate-200 dark:border-[#27272a] cursor-pointer active:bg-slate-100 dark:active:bg-[#27272a]/30 transition-colors"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-mono text-[11px] text-slate-500 dark:text-[#a1a1aa] font-bold">
+                      #{sale.code || sale.id.slice(-4)}
+                    </span>
+                    {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+                  </div>
+                  <p className="text-xs font-medium text-slate-900 dark:text-white mb-1.5">
+                    {sale.customerName || 'Cliente Consumidor'}
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[9px] font-bold uppercase tracking-wider">
+                      CONCLUÍDO
+                    </span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white">R$ {sale.total.toFixed(2)}</span>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-[#27272a] space-y-3">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold mb-2">Itens Comprados</p>
+                        <div className="space-y-1">
+                          {sale.items.map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#18181b] border border-slate-100 dark:border-[#27272a]">
+                              <span className="font-medium text-slate-900 dark:text-white">{item.productName}</span>
+                              <span className="text-slate-500 dark:text-[#a1a1aa]">{item.quantity}x R$ {item.unitPrice.toFixed(2)} = R$ {item.total.toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div>
+                          <span className="text-slate-500 dark:text-[#71717a] font-bold">Pagamento: </span>
+                          <span className="text-slate-900 dark:text-white font-medium">
+                            {sale.payments.map((p) => {
+                              const labels: Record<string, string> = { cash: 'Dinheiro', pix: 'PIX', credit_card: 'Cartão Crédito', debit_card: 'Cartão Débito', credit_account: 'Conta Fiado' };
+                              return labels[p.method] || p.method;
+                            }).join(', ')}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 dark:text-[#71717a] font-bold">Operador: </span>
+                          <span className="text-slate-900 dark:text-white font-medium">{sale.operatorName}</span>
+                        </div>
+                      </div>
+                      {isAdmin && (
+                        <div className="pt-2 border-t border-slate-200 dark:border-[#27272a]">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm('Tem certeza que deseja excluir esta venda?')) {
+                                storageService.deleteSale(sale.id);
+                                setExpandedSaleId(null);
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-[10px] font-bold transition-colors flex items-center gap-1.5"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Excluir Venda
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {sales.length === 0 && (
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b]/50 border border-slate-200 dark:border-[#27272a] text-center text-xs text-slate-400">
+                Nenhuma venda registrada hoje.
+              </div>
+            )}
           </div>
         </div>
 

@@ -50,6 +50,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [formRecipient, setFormRecipient] = useState('');
   const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
   const [expandedDreRow, setExpandedDreRow] = useState<string | null>(null);
+  const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
 
   const handleSaveAccount = (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,6 +142,17 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     .reduce((acc, a) => acc + a.amount, 0);
 
   const netOperatingProfit = grossProfit - totalOperatingExpenses;
+
+  const paymentMethodLabel = (method: string) => {
+    const labels: Record<string, string> = {
+      cash: 'Dinheiro',
+      pix: 'PIX',
+      credit_card: 'Cartão de Crédito',
+      debit_card: 'Cartão de Débito',
+      credit_account: 'Conta / Prazo',
+    };
+    return labels[method] || method;
+  };
 
   const filteredAccounts = financialAccounts.filter((a) => {
     if (filterType === 'payable') return a.type === 'payable';
@@ -267,7 +279,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </button>
           </div>
 
-          <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
+          {/* Desktop accounts table */}
+          <div className="hidden md:block bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 dark:bg-[#09090b]/80 border-b border-slate-200 dark:border-[#27272a] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider">
@@ -349,13 +362,103 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </table>
           </div>
 
+          {/* Mobile accounts cards */}
+          <div className="block md:hidden space-y-3">
+            {filteredAccounts.map((acc) => {
+              const isPayable = acc.type === 'payable';
+              const isPaid = acc.status === 'paid';
+
+              return (
+                <div
+                  key={acc.id}
+                  onClick={() => handleOpenEditAccount(acc)}
+                  className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm p-4 space-y-2.5 cursor-pointer active:scale-[0.98] transition-transform"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-tight">{acc.title}</h4>
+                    <span
+                      className={`shrink-0 px-2 py-0.5 rounded font-bold text-[10px] ${
+                        isPayable
+                          ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                          : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                      }`}
+                    >
+                      {isPayable ? 'PAGAR' : 'RECEBER'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                    <div>
+                      <span className="text-slate-400 dark:text-[#52525b]">Categoria</span>
+                      <p className="font-medium text-slate-700 dark:text-[#a1a1aa]">{acc.category}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 dark:text-[#52525b]">Fornecedor</span>
+                      <p className="font-medium text-slate-700 dark:text-[#a1a1aa] truncate">{acc.recipientOrPayer}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 dark:text-[#52525b]">Vencimento</span>
+                      <p className="font-medium text-slate-700 dark:text-[#a1a1aa]">{acc.dueDate}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 dark:text-[#52525b]">Status</span>
+                      <p>
+                        <span
+                          className={`px-2 py-0.5 rounded-lg font-bold text-[10px] ${
+                            isPaid
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                          }`}
+                        >
+                          {isPaid ? 'Pago / Baixado' : 'Pendente'}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-[#27272a]">
+                    <span className={`text-lg font-extrabold ${isPayable ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      R$ {acc.amount.toFixed(2)}
+                    </span>
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      {!isPaid && (
+                        <button
+                          onClick={() => handleMarkPaid(acc)}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors"
+                        >
+                          Dar Baixa
+                        </button>
+                      )}
+                      {user.role === 'admin' && (
+                        <button
+                          onClick={() => handleDeleteAccount(acc.id)}
+                          className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                          title="Excluir Conta"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {filteredAccounts.length === 0 && (
+              <div className="py-8 text-center text-slate-400 dark:text-[#52525b] text-xs">
+                Nenhuma conta financeira registrada
+              </div>
+            )}
+          </div>
+
           {/* Vendas Realizadas */}
           <div className="mt-6">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               Vendas Realizadas
             </h3>
-            <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
+
+            {/* Desktop sales table */}
+            <div className="hidden md:block bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-[#09090b]/80 border-b border-slate-200 dark:border-[#27272a] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider">
@@ -417,6 +520,139 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile sales cards */}
+            <div className="block md:hidden space-y-3">
+              {sales.map((sale) => {
+                const isExpanded = selectedSaleId === sale.id;
+                return (
+                  <div key={sale.id} className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
+                    <div
+                      onClick={() => setSelectedSaleId(isExpanded ? null : sale.id)}
+                      className="p-4 space-y-2.5 cursor-pointer active:scale-[0.98] transition-transform"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-bold text-sm text-slate-900 dark:text-white">{sale.code}</h4>
+                          <p className="text-xs text-slate-500 dark:text-[#71717a] mt-0.5">
+                            {new Date(sale.date).toLocaleDateString('pt-BR')}
+                          </p>
+                        </div>
+                        <span
+                          className={`shrink-0 px-2 py-0.5 rounded-lg font-bold text-[10px] ${
+                            sale.status === 'completed'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : sale.status === 'cancelled'
+                                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                          }`}
+                        >
+                          {sale.status === 'completed' ? 'Concluída' : sale.status === 'cancelled' ? 'Cancelada' : 'Pendente'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-500 dark:text-[#71717a]">
+                          {sale.customerName || 'Consumidor Final'}
+                        </span>
+                        <span className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
+                          R$ {sale.total.toFixed(2)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-[#27272a]">
+                        <span className="text-[10px] text-slate-400 dark:text-[#52525b] font-medium uppercase tracking-wider">
+                          {isExpanded ? 'Toque para fechar' : 'Toque para ver detalhes'}
+                        </span>
+                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          {user.role === 'admin' && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Tem certeza que deseja excluir a venda ${sale.code}?`)) {
+                                  storageService.deleteSale(sale.id);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                              title="Excluir venda"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expanded detail section */}
+                    {isExpanded && (
+                      <div className="border-t border-slate-100 dark:border-[#27272a] bg-slate-50/50 dark:bg-[#09090b]/40 px-4 py-3 space-y-3">
+                        {/* Items */}
+                        <div>
+                          <h5 className="text-[10px] font-bold text-slate-400 dark:text-[#52525b] uppercase tracking-wider mb-1.5">Itens da Venda</h5>
+                          <div className="space-y-1.5">
+                            {sale.items.map((item, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-xs">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="w-5 h-5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                    {item.quantity}x
+                                  </span>
+                                  <span className="text-slate-700 dark:text-[#a1a1aa] truncate">{item.productName}</span>
+                                </div>
+                                <span className="font-bold text-slate-900 dark:text-white shrink-0 ml-2">
+                                  R$ {item.total.toFixed(2)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Payment methods */}
+                        {sale.payments && sale.payments.length > 0 && (
+                          <div>
+                            <h5 className="text-[10px] font-bold text-slate-400 dark:text-[#52525b] uppercase tracking-wider mb-1.5">Formas de Pagamento</h5>
+                            <div className="space-y-1">
+                              {sale.payments.map((payment, idx) => (
+                                <div key={idx} className="flex items-center justify-between text-xs">
+                                  <span className="text-slate-600 dark:text-[#a1a1aa] flex items-center gap-1">
+                                    <CreditCard className="w-3 h-3" />
+                                    {paymentMethodLabel(payment.method)}
+                                  </span>
+                                  <span className="font-bold text-slate-900 dark:text-white">
+                                    R$ {payment.amount.toFixed(2)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Totals summary */}
+                        <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200 dark:border-[#27272a]">
+                          <span className="text-slate-500 dark:text-[#71717a]">Subtotal</span>
+                          <span className="text-slate-700 dark:text-[#a1a1aa]">R$ {sale.subtotal.toFixed(2)}</span>
+                        </div>
+                        {sale.discount > 0 && (
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-500 dark:text-[#71717a]">Desconto</span>
+                            <span className="text-rose-600 dark:text-rose-400">- R$ {sale.discount.toFixed(2)}</span>
+                          </div>
+                        )}
+
+                        {/* Operator */}
+                        <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200 dark:border-[#27272a]">
+                          <span className="text-slate-500 dark:text-[#71717a]">Operador(a)</span>
+                          <span className="font-medium text-slate-700 dark:text-[#a1a1aa]">{sale.operatorName}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {sales.length === 0 && (
+                <div className="py-8 text-center text-slate-400 dark:text-[#52525b] text-xs">
+                  Nenhuma venda registrada
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -21,6 +21,7 @@ export interface UserProfile {
   permissions: UserPermissions;
   active: boolean;
   createdAt?: string;
+  password?: string;
 }
 
 export interface StoreBranch {

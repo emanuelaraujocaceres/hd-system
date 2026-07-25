@@ -267,6 +267,24 @@ class StorageService {
     this.set(KEYS.PRODUCTS, products);
   }
 
+  removeSaleFromRemote(id: string) {
+    const sales = this.getSales().filter((s) => s.id !== id);
+    this.set(KEYS.SALES, sales);
+  }
+
+  removeCaixaFromRemote(id: string) {
+    // Only clear if it matches current session
+    const session = this.getActiveCaixaSession();
+    if (session && session.id === id) {
+      this.set(KEYS.CAIXA, { ...session, status: 'closed' });
+    }
+  }
+
+  removeUserFromRemote(id: string) {
+    const users = this.getUsers().filter((u) => u.id !== id);
+    this.set(KEYS.USERS_LIST, users);
+  }
+
   updateCategoryFromRemote(row: any) {
     const categories = this.getCategories();
     const mapped: Category = {
@@ -883,6 +901,7 @@ class StorageService {
   deleteFinancialAccount(id: string) {
     const accounts = this.getFinancialAccounts().filter((a) => a.id !== id);
     this.set(KEYS.FINANCIAL, accounts);
+    syncService.deleteRow('financial_transactions', id);
   }
 
   // --- BRANCHES ---
@@ -961,6 +980,7 @@ class StorageService {
   deleteUser(id: string) {
     const users = this.getUsers().filter((u) => u.id !== id);
     this.set(KEYS.USERS_LIST, users);
+    syncService.deleteRow('system_users', id);
   }
 
   getUserByEmail(email: string): UserProfile | undefined {

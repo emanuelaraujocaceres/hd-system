@@ -12,8 +12,11 @@ import {
   FileText,
   TrendingUp,
   X,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { Sale, Customer } from '../../types';
+import { Sale, Customer, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 
@@ -48,6 +51,7 @@ interface CustomerDebt {
 interface FiadosViewProps {
   sales: Sale[];
   customers: Customer[];
+  user: UserProfile;
 }
 
 // ─── Storage helpers ────────────────────────────────────────────
@@ -67,11 +71,13 @@ function storeCreditPayments(payments: CreditPayment[]) {
 }
 
 // ─── Component ──────────────────────────────────────────────────
-export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers }) => {
+export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }) => {
+  const isAdmin = user.role === 'admin';
   const [searchTerm, setSearchTerm] = useState('');
   const [creditPayments, setCreditPayments] = useState<CreditPayment[]>(getStoredCreditPayments);
   const [paymentModalSaleId, setPaymentModalSaleId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
 
   // ── Build debt data ────────────────────────────────────────────
   const customerDebts = useMemo<CustomerDebt[]>(() => {
@@ -265,6 +271,18 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers }) => {
     [paymentAmount, creditPayments, customerDebts, sales]
   );
 
+  // ── Delete credit payment handler (admin only) ──────────────────
+  const handleDeleteCreditPayment = useCallback(
+    (paymentId: string) => {
+      if (!confirm('Tem certeza que deseja excluir este registro de pagamento?')) return;
+      const updated = creditPayments.filter((cp) => cp.id !== paymentId);
+      setCreditPayments(updated);
+      storeCreditPayments(updated);
+      posAudio.chime();
+    },
+    [creditPayments]
+  );
+
   // ── Helpers ────────────────────────────────────────────────────
   const formatCurrency = (v: number) =>
     `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -343,18 +361,22 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers }) => {
             ? Math.round((debt.totalPaid / debt.totalDebt) * 100)
             : 100;
           const isFullyPaid = debt.remaining <= 0.01;
+          const isExpanded = expandedCustomerId === debt.customer.id;
 
           return (
             <div
               key={debt.customer.id}
-              className={`bg-white dark:bg-[#18181b] border rounded-2xl shadow-sm overflow-hidden transition-all ${
+              className={`bg-white dark:bg-[#18181b] border rounded-2xl shadow-sm overflow-hidden transition-all cursor-pointer ${
                 isFullyPaid
                   ? 'border-emerald-200 dark:border-emerald-900/50'
                   : 'border-slate-200 dark:border-[#27272a]'
-              }`}
+              } ${isExpanded ? 'ring-2 ring-amber-500/30' : ''}`}
             >
               {/* Card header */}
-              <div className="p-4 border-b border-slate-100 dark:border-[#27272a]">
+              <div
+                onClick={() => setExpandedCustomerId(isExpanded ? null : debt.customer.id)}
+                className="p-4 border-b border-slate-100 dark:border-[#27272a]"
+              >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <div
@@ -392,6 +414,9 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers }) => {
                       Em aberto
                     </span>
                   )}
+                  <span className="text-slate-400 dark:text-[#71717a] ml-1">
+                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </span>
                 </div>
 
                 {/* Financial summary */}
@@ -441,8 +466,9 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers }) => {
                 </div>
               </div>
 
-              {/* Items list */}
-              <div className="p-4">
+              {/* Items list - only shown when expanded */}
+              {isExpanded && (
+              <div className="p-4" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center gap-2 mb-3">
                   <ShoppingCart className="w-3.5 h-3.5 text-slate-400 dark:text-[#71717a]" />
                   <h4 className="text-[10px] font-bold text-slate-500 dark:text-[#71717a] uppercase tracking-wider">
@@ -519,6 +545,42 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers }) => {
                   </div>
                 </div>
 
+                {/* Admin: Credit payment history with delete */}
+                {isAdmin && creditPayments.filter((cp) => cp.customerId === debt.customer.id).length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 dark:border-[#27272a]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="w-3 h-3 text-emerald-500" />
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
+                        Pagamentos Registrados
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {creditPayments
+                        .filter((cp) => cp.customerId === debt.customer.id)
+                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                        .map((cp) => (
+                          <div key={cp.id} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/30">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                {formatCurrency(cp.amount)}
+                              </span>
+                              <span className="text-[10px] text-slate-500 dark:text-[#71717a]">
+                                {formatDate(cp.date)}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => handleDeleteCreditPayment(cp.id)}
+                              className="p-1 rounded-lg hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition-colors"
+                              title="Excluir Pagamento"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Payment button */}
                 {!isFullyPaid && (
                   <div className="mt-4">
@@ -536,6 +598,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers }) => {
                   </div>
                 )}
               </div>
+              )}
             </div>
           );
         })}

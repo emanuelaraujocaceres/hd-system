@@ -86,6 +86,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     dashboard: false,
     settings: false,
   });
+  const [userPassword, setUserPassword] = useState('');
 
   const refreshUsersList = () => {
     setUsersList(storageService.getUsers());
@@ -183,6 +184,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         dashboard: false,
         settings: false,
       });
+      setUserPassword(u.password || '');
     } else {
       setEditingUser(null);
       setUserName('');
@@ -197,6 +199,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         dashboard: false,
         settings: false,
       });
+      setUserPassword('');
     }
     setIsUserModalOpen(true);
   };
@@ -226,6 +229,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       } : userPermissions,
       active: true,
       createdAt: editingUser?.createdAt || new Date().toISOString().split('T')[0],
+      password: userPassword || editingUser?.password || undefined,
     };
 
     storageService.saveUser(newUser);
@@ -1530,6 +1534,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                   O colaborador usará este e-mail do Google para fazer login no sistema.
                 </p>
               </div>
+
+              {/* Password field - only shown when admin is editing another user or creating new */}
+              {isAdmin && (
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Senha de Acesso (Opcional):
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                    <input
+                      type="password"
+                      placeholder="Deixe vazio para manter a atual"
+                      value={userPassword}
+                      onChange={(e) => setUserPassword(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-medium"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Senha para login via e-mail. Se preenchida, o colaborador poderá usar tanto o Google quanto esta senha.
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

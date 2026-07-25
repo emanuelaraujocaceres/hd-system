@@ -136,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
         <button
           onClick={onOpenCaixaModal}
-          className="text-xs lg:text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-slate-700 dark:bg-[#27272a] hover:bg-slate-600 dark:hover:bg-[#3f3f46] text-slate-200 dark:text-white transition-colors border border-slate-600/80 dark:border-transparent"
+          className="text-xs lg:text-[11px] font-semibold px-2.5 py-2.5 rounded-md bg-slate-700 dark:bg-[#27272a] hover:bg-slate-600 dark:hover:bg-[#3f3f46] text-slate-200 dark:text-white transition-colors border border-slate-600/80 dark:border-transparent min-h-[44px] flex items-center justify-center"
         >
           {isCaixaOpen ? 'Gerenciar' : 'Abrir'}
         </button>
@@ -152,7 +152,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={item.id}
               onClick={() => handleNavClick(item.id)}
-              className={`w-full flex items-center justify-between px-4 py-3 lg:px-3 lg:py-2.5 rounded-md text-base lg:text-xs font-medium transition-colors ${
+              className={`w-full flex items-center justify-between px-4 py-3 lg:px-3 lg:py-2.5 min-h-[44px] rounded-md text-base lg:text-xs font-medium transition-colors ${
                 isActive
                   ? 'bg-indigo-600 dark:bg-[#18181b] text-white border border-indigo-500 dark:border-[#27272a] font-semibold shadow-sm'
                   : 'text-slate-300 dark:text-[#a1a1aa] hover:text-white hover:bg-slate-800/80 dark:hover:bg-[#18181b]/60'
@@ -195,7 +195,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={onLogout}
             title="Sair da Conta (Logout)"
-            className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors shrink-0"
+            className="p-2.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -204,7 +204,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={onResetDemo}
           title="Restaurar dados iniciais de demonstração"
-          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs lg:text-[11px] font-medium text-slate-400 dark:text-[#71717a] hover:text-slate-200 dark:hover:text-white hover:bg-slate-800/60 dark:hover:bg-[#18181b] border border-slate-800/60 dark:border-[#27272a] transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs lg:text-[11px] font-medium text-slate-400 dark:text-[#71717a] hover:text-slate-200 dark:hover:text-white hover:bg-slate-800/60 dark:hover:bg-[#18181b] border border-slate-800/60 dark:border-[#27272a] transition-colors min-h-[44px]"
         >
           <RefreshCw className="w-3 h-3" />
           <span>Resetar Dados Demo</span>

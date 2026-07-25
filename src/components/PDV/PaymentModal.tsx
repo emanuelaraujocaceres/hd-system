@@ -169,7 +169,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     if (method === 'pix' && !pixPaid) {
       const timer = setTimeout(() => {
         setPixPaid(true);
-        posAudio.beep();
       }, 3500);
       return () => clearTimeout(timer);
     }

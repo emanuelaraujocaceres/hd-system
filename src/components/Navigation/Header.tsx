@@ -32,6 +32,8 @@ interface HeaderProps {
   currentBranch?: StoreBranch;
   onSelectBranch?: (b: StoreBranch) => void;
   onLogout: () => void;
+  isSyncConnected?: boolean;
+  lastSyncTime?: Date | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -50,6 +52,8 @@ export const Header: React.FC<HeaderProps> = ({
   currentBranch,
   onSelectBranch,
   onLogout,
+  isSyncConnected = false,
+  lastSyncTime = null,
 }) => {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
 
@@ -92,7 +96,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Mobile menu trigger */}
         <button
           onClick={onToggleMobileMenu}
-          className="lg:hidden p-1.5 md:p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors shrink-0"
+          className="lg:hidden p-2.5 md:p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
           aria-label="Menu"
         >
           <Menu className="w-5 h-5" />
@@ -103,8 +107,12 @@ export const Header: React.FC<HeaderProps> = ({
           <h2 className="font-serif-italic text-sm md:text-lg lg:text-xl text-slate-900 dark:text-white leading-tight truncate">
             {currentInfo.title}
           </h2>
-          <span className="hidden sm:inline-block px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 text-[10px] font-bold tracking-wider uppercase shrink-0">
-            ONLINE
+          <span className={`hidden sm:inline-block px-2 py-0.5 rounded-full border text-[10px] font-bold tracking-wider uppercase shrink-0 ${
+            isSyncConnected
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
+              : 'border-amber-500/30 bg-amber-500/10 text-amber-500'
+          }`}>
+            {isSyncConnected ? 'ONLINE' : 'OFFLINE'}
           </span>
         </div>
       </div>
@@ -112,8 +120,13 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Action Buttons */}
       <div className="flex items-center gap-1.5 sm:gap-3 md:gap-5 shrink-0">
         <div className="hidden lg:flex items-center gap-2 text-xs text-slate-500 dark:text-[#a1a1aa]">
-          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-          Sincronizado: Agora
+          <span className={`w-2 h-2 rounded-full ${isSyncConnected ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+          Sync: {isSyncConnected
+            ? lastSyncTime
+              ? `Agora`
+              : 'Online'
+            : 'Offline'
+          }
         </div>
 
         {/* Quick PDV Shortcut Button */}
@@ -123,8 +136,8 @@ export const Header: React.FC<HeaderProps> = ({
             className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-slate-900 dark:bg-white text-white dark:text-black text-[10px] sm:text-xs font-bold rounded-full hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors shadow-sm flex items-center gap-1.5 sm:gap-2"
           >
             <ShoppingCart className="w-3.5 h-3.5" />
-            <span className="hidden xs:inline sm:inline">ABRIR PDV</span>
-            <span className="xs:hidden sm:hidden">PDV</span>
+            <span className="hidden sm:inline">ABRIR PDV</span>
+            <span className="sm:hidden">PDV</span>
           </button>
         ) : (
           <button
@@ -152,7 +165,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Sound FX Toggle */}
         <button
           onClick={handleSoundToggle}
-          className="p-1.5 md:p-2 rounded-xl text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors"
+          className="p-2.5 md:p-2 rounded-xl text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
           title={soundEnabled ? 'Sons do PDV Ativados' : 'Sons Mutos'}
         >
           {soundEnabled ? <Volume2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
@@ -161,7 +174,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Dark/Light Theme Toggle */}
         <button
           onClick={() => setDarkMode(!darkMode)}
-          className="p-1.5 md:p-2 rounded-xl text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors"
+          className="p-2.5 md:p-2 rounded-xl text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#18181b] transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
           title={darkMode ? 'Modo Claro' : 'Modo Escuro'}
         >
           {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
@@ -185,7 +198,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={onLogout}
-            className="p-1.5 md:p-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-1 text-xs font-bold"
+            className="p-2.5 md:p-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-1 text-xs font-bold min-w-[44px] min-h-[44px] justify-center"
             title="Sair da Conta (Logout)"
           >
             <LogOut className="w-4 h-4" />

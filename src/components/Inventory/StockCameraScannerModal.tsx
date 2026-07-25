@@ -69,6 +69,16 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   const lastScannedRef = useRef<string>('');
   const scanCooldownRef = useRef(false);
 
+  // Camera error state
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  // Barcode lookup state (when scanned product already exists)
+  const [existingProduct, setExistingProduct] = useState<Product | null>(null);
+
+  // AI invoice scanning state
+  const [aiScanning, setAiScanning] = useState(false);
+  const [aiScanError, setAiScanError] = useState<string | null>(null);
+
   // Success overlay state
   const [showSuccess, setShowSuccess] = useState(false);
   const [successData, setSuccessData] = useState<{ name: string; quantity: number } | null>(null);
@@ -110,12 +120,20 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   const handleStartCamera = async () => {
     try {
       setCapturedImage(null);
+      setCameraError(null);
+
+      // Check if getUserMedia is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setCameraError('Câmera não suportada neste navegador. Use o upload de foto.');
+        return;
+      }
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
       });
       setCameraStream(stream);
       streamRef.current = stream;
+      setCameraError(null);
 
       setTimeout(() => {
         if (videoRef.current) {
@@ -125,11 +143,17 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
         // Start auto-scan when camera starts
         startAutoScan();
       }, 200);
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Câmera indisponível ou negada:', err);
-      if (fileInputRef.current) {
-        fileInputRef.current.click();
+      let message = 'Câmera indisponível.';
+      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+        message = 'Permissão da câmera negada. Permita o acesso nas configurações do navegador ou use o upload de foto.';
+      } else if (err?.name === 'NotFoundError') {
+        message = 'Nenhuma câmera encontrada no dispositivo.';
+      } else if (err?.name === 'NotReadableError') {
+        message = 'Câmera em uso por outro aplicativo.';
       }
+      setCameraError(message);
     }
   };
 
@@ -169,10 +193,12 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
 
     try {
-      // Attempt barcode detection via native BarcodeDetector API
+      // Attempt barcode/QR detection via native BarcodeDetector API
       if ('BarcodeDetector' in window) {
         const bitmap = await createImageBitmap(canvas);
-        const detector = new (window as any).BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'] });
+        const detector = new (window as any).BarcodeDetector({
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'],
+        });
         const barcodes = await detector.detect(bitmap);
 
         if (barcodes && barcodes.length > 0) {
@@ -189,6 +215,16 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
             setCapturedImage(dataUrl);
             setFormBarcode(code);
             handleStopCamera();
+
+            // Look up existing product by barcode
+            const existing = storageService.getProducts().find(
+              (p) => p.barcode === code
+            );
+            if (existing) {
+              setExistingProduct(existing);
+            } else {
+              setExistingProduct(null);
+            }
 
             setTimeout(() => {
               scanCooldownRef.current = false;
@@ -250,12 +286,15 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     setFormSalePrice(15);
     setFormQty(1);
     setUnitsPerBox(12);
+    setExistingProduct(null);
   };
 
   const resetInvoiceForm = () => {
     setInvSupplierName('');
     setInvInvoiceNumber('');
     setInvItems([{ name: '', barcode: '', quantity: 1, unitPrice: 0 }]);
+    setAiScanning(false);
+    setAiScanError(null);
   };
 
   const handleConfirmAddProduct = () => {
@@ -300,6 +339,70 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
       setSuccessData(null);
       onClose();
     }, 2000);
+  };
+
+  // Add stock to an existing product found by barcode scan
+  const handleAddStockToExisting = () => {
+    if (!existingProduct) return;
+    const isBox = productMode === 'box';
+    const effectiveQty = isBox ? formQty * unitsPerBox : formQty;
+
+    const reasonText = isBox
+      ? `Entrada Câmera (Código existente): Caixa Atacado (${formQty}cx × ${unitsPerBox}un = ${effectiveQty}un) - Filial ${currentBranch?.name || 'Matriz'}`
+      : `Entrada Câmera (Código existente): ${formQty}un - Filial ${currentBranch?.name || 'Matriz'}`;
+
+    storageService.updateStock(existingProduct.id, effectiveQty, reasonText, 'Câmera HD-System');
+
+    posAudio.chime();
+    if (onProductsImported) onProductsImported();
+
+    setSuccessData({ name: existingProduct.name, quantity: effectiveQty });
+    setShowSuccess(true);
+    setTimeout(() => {
+      setShowSuccess(false);
+      setSuccessData(null);
+      onClose();
+    }, 2000);
+  };
+
+  // AI-powered invoice scanning
+  const handleAiScanInvoice = async () => {
+    if (!capturedImage) return;
+    setAiScanning(true);
+    setAiScanError(null);
+
+    try {
+      const response = await fetch('/api/ai/scan-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: capturedImage }),
+      });
+
+      if (!response.ok) throw new Error('Falha ao analisar nota fiscal');
+
+      const data = await response.json();
+      if (data.result) {
+        const r = data.result;
+        if (r.supplierName) setInvSupplierName(r.supplierName);
+        if (r.invoiceNumber) setInvInvoiceNumber(r.invoiceNumber);
+        if (r.items && Array.isArray(r.items) && r.items.length > 0) {
+          const mapped = r.items.map((item: any) => ({
+            name: item.name || '',
+            barcode: item.barcode || '',
+            quantity: item.quantity || 1,
+            unitPrice: item.unitPrice || 0,
+          }));
+          setInvItems(mapped);
+        }
+      } else {
+        setAiScanError('Não foi possível extrair dados da imagem.');
+      }
+    } catch (err: any) {
+      console.error('Erro IA scan invoice:', err);
+      setAiScanError(err?.message || 'Erro ao analisar imagem com IA.');
+    } finally {
+      setAiScanning(false);
+    }
   };
 
   const handleAddInvoiceItem = () => {
@@ -534,6 +637,12 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                   </p>
                 </div>
 
+                {cameraError && (
+                  <div className="w-full max-w-xs p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 font-bold">
+                    {cameraError}
+                  </div>
+                )}
+
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-xs">
                   <button
                     onClick={handleStartCamera}
@@ -573,8 +682,9 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                   {/* Flash toggle */}
                   <button
                     onClick={toggleFlash}
-                    className="absolute top-4 left-4 z-50 p-2 rounded-full backdrop-blur-sm transition-colors"
+                    className="absolute left-4 z-50 p-2 rounded-full backdrop-blur-sm transition-colors"
                     style={{
+                      top: 'max(1rem, env(safe-area-inset-top))',
                       background: flashOn ? 'rgba(250, 204, 21, 0.9)' : 'rgba(0, 0, 0, 0.5)',
                     }}
                     title={flashOn ? 'Desligar Flash' : 'Ligar Flash'}
@@ -588,7 +698,8 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
 
                   {/* Auto-scan indicator */}
                   {autoScanActive && (
-                    <div className="absolute top-4 right-4 z-50 px-3 py-1 rounded-full backdrop-blur-sm bg-emerald-500/80 text-white text-[10px] font-bold flex items-center gap-1.5 animate-pulse">
+                    <div className="absolute right-4 z-50 px-3 py-1 rounded-full backdrop-blur-sm bg-emerald-500/80 text-white text-[10px] font-bold flex items-center gap-1.5 animate-pulse"
+                      style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
                       <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
                       AUTO-SCAN ATIVO
                     </div>
@@ -601,7 +712,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-3 p-4 bg-slate-900 shrink-0 sm:bg-transparent">
+                <div className="flex items-center justify-between gap-3 p-4 bg-slate-900 shrink-0 sm:bg-transparent" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
                   <button
                     onClick={() => {
                       handleStopCamera();
@@ -643,8 +754,38 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                 <div className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 space-y-3">
                   <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider flex items-center gap-1">
                     <Package className="w-4 h-4" />
-                    Preencha os dados do produto (use a foto como referência):
+                    {existingProduct
+                      ? 'Produto encontrado! Adicione estoque ou crie novo:'
+                      : 'Preencha os dados do produto (use a foto como referência):'}
                   </span>
+
+                  {/* Existing product info banner */}
+                  {existingProduct && (
+                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                          Produto já cadastrado
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-700 dark:text-slate-300 space-y-1">
+                        <p><strong>Nome:</strong> {existingProduct.name}</p>
+                        <p><strong>Estoque atual:</strong> {existingProduct.currentStock} {existingProduct.unit}</p>
+                        <p><strong>Código:</strong> {existingProduct.barcode}</p>
+                      </div>
+                      <button
+                        onClick={handleAddStockToExisting}
+                        className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-4 h-4" />
+                        ADICIONAR {formQty} {productMode === 'box' ? `CAIXAS (${formQty * unitsPerBox}un)` : 'UNIDADES'} AO ESTOQUE
+                      </button>
+                      <div className="text-[10px] text-slate-400 text-center font-bold">
+                        — ou preencha abaixo para cadastrar como novo produto —
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-3">
                     <input
                       value={formName}
@@ -737,10 +878,35 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
 
                 {/* Manual Entry Form */}
                 <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-3">
-                  <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
-                    <FileText className="w-4 h-4" />
-                    Preencha os dados da nota fiscal (use a foto como referência):
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
+                      <FileText className="w-4 h-4" />
+                      Preencha os dados da nota fiscal (use a foto como referência):
+                    </span>
+                    <button
+                      onClick={handleAiScanInvoice}
+                      disabled={aiScanning}
+                      className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-[10px] font-bold transition-colors flex items-center gap-1.5"
+                    >
+                      {aiScanning ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          Analisando...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-3.5 h-3.5" />
+                          Extrair com IA
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {aiScanError && (
+                    <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-600 dark:text-red-400 font-bold">
+                      {aiScanError}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3">
                     <input
