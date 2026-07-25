@@ -989,8 +989,12 @@ class StorageService {
   }
 
   saveActiveCaixaSession(session: CashRegisterSession) {
+    console.log(`[HD-Sync] 💾 Salvando CAIXA localmente: id=${session.id}, status=${session.status}, caixinha R$ ${session.currentCashBalance.toFixed(2)}`);
+    console.log(`[HD-Sync] 💾 Conteúdo: operadora=${session.operatorName}, suprimentos=R$${session.suprimentos}, sangrias=R$${session.sangrias}, vendas cash=R$${session.totalSalesCash}`);
     this.set(KEYS.CAIXA, session);
+    console.log(`[HD-Sync] 💾 CAIXA salvo no localStorage (chave: ${KEYS.CAIXA}); agora enviando para Supabase`);
     this.syncCaixaSession(session);
+    console.log(`[HD-Sync] 💾 syncCaixaSession() executado`);
   }
 
   closeCaixaSession(notes?: string) {

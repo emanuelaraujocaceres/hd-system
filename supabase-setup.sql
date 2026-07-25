@@ -1,234 +1,279 @@
--- ==============================================================================
--- HD-SYSTEM: SETUP COMPLETO PARA SINCRONIZAÇÃO EM TEMPO REAL
--- Execute este script no SQL Editor do seu Dashboard Supabase
--- https://app.supabase.com > seu projeto > SQL Editor > New Query
--- ==============================================================================
+-- ============================================
+-- HD-SYSTEM: Setup completo do Supabase
+-- Cole este script no Supabase Dashboard > SQL Editor e clique em "Run"
+-- Execute uma vez para criar/corrigir todas as tabelas e permissões
+-- ============================================
 
--- 1. CRIAR ORGANIZAÇÃO PADRÃO (empresa dona do sistema)
--- ==========================================================================
-INSERT INTO public.organizations (id, name, trade_name, plan)
-VALUES (
-  '00000000-0000-0000-0000-000000000001',
-  'HD-System ERP',
-  'HD-System',
-  'pro'
-)
+-- ============================================
+-- 0. ORGANIZATION DEFAULT
+-- ============================================
+CREATE TABLE IF NOT EXISTS organizations (
+  id UUID PRIMARY KEY DEFAULT '00000000-0000-0000-0000-000000000001',
+  name TEXT NOT NULL DEFAULT 'HD-System',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+INSERT INTO organizations (id, name) VALUES ('00000000-0000-0000-0000-000000000001', 'HD-System')
 ON CONFLICT (id) DO NOTHING;
 
--- 2. ADICIONAR COLUNA store_branch_id NAS TABELAS PRINCIPAIS
--- ==========================================================================
--- Products
-ALTER TABLE public.products ADD COLUMN IF NOT EXISTS store_branch_id VARCHAR(50);
-CREATE INDEX IF NOT EXISTS idx_products_branch ON public.products(store_branch_id);
-
--- Categories
-ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS store_branch_id VARCHAR(50);
-CREATE INDEX IF NOT EXISTS idx_categories_branch ON public.categories(store_branch_id);
-
--- Customers
-ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS store_branch_id VARCHAR(50);
-CREATE INDEX IF NOT EXISTS idx_customers_branch ON public.customers(store_branch_id);
-
--- Suppliers
-ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS store_branch_id VARCHAR(50);
-CREATE INDEX IF NOT EXISTS idx_suppliers_branch ON public.suppliers(store_branch_id);
-
--- Sales
-ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS store_branch_id VARCHAR(50);
-CREATE INDEX IF NOT EXISTS idx_sales_branch ON public.sales(store_branch_id);
-
--- Financial Transactions
-ALTER TABLE public.financial_transactions ADD COLUMN IF NOT EXISTS store_branch_id VARCHAR(50);
-CREATE INDEX IF NOT EXISTS idx_financial_branch ON public.financial_transactions(store_branch_id);
-
--- Cash Sessions
-ALTER TABLE public.cash_sessions ADD COLUMN IF NOT EXISTS store_branch_id VARCHAR(50);
-CREATE INDEX IF NOT EXISTS idx_cash_sessions_branch ON public.cash_sessions(store_branch_id);
-
--- 3. CRIAR TABELA DE LOJAS/FILIAIS (se não existir)
--- ==========================================================================
-CREATE TABLE IF NOT EXISTS public.store_branches (
-    id VARCHAR(50) PRIMARY KEY,
-    organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE DEFAULT '00000000-0000-0000-0000-000000000001',
-    name VARCHAR(255) NOT NULL,
-    code VARCHAR(20) NOT NULL,
-    cnpj VARCHAR(20),
-    city VARCHAR(100),
-    state VARCHAR(10),
-    address TEXT,
-    phone VARCHAR(30),
-    is_headquarters BOOLEAN DEFAULT FALSE,
-    active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+-- ============================================
+-- 1. PRODUTOS
+-- ============================================
+CREATE TABLE IF NOT EXISTS products (
+  id TEXT PRIMARY KEY,
+  organization_id UUID DEFAULT '00000000-0000-0000-0000-000000000001',
+  store_branch_id TEXT,
+  name TEXT NOT NULL,
+  barcode TEXT,
+  sku TEXT,
+  category TEXT DEFAULT 'Geral',
+  cost_price NUMERIC DEFAULT 0,
+  sale_price NUMERIC DEFAULT 0,
+  stock_quantity INTEGER DEFAULT 0,
+  min_stock_quantity INTEGER DEFAULT 5,
+  max_stock_quantity INTEGER DEFAULT 100,
+  unit TEXT DEFAULT 'un',
+  image_url TEXT,
+  is_active BOOLEAN DEFAULT true,
+  show_on_tv BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
-ALTER TABLE public.store_branches ENABLE ROW LEVEL SECURITY;
 
--- 4. CRIAR TABELA DE MOVIMENTOS DE ESTOQUE (se não existir)
--- ==========================================================================
-CREATE TABLE IF NOT EXISTS public.stock_movements (
-    id VARCHAR(100) PRIMARY KEY,
-    organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE DEFAULT '00000000-0000-0000-0000-000000000001',
-    store_branch_id VARCHAR(50),
-    product_id VARCHAR(100) NOT NULL,
-    product_name VARCHAR(255),
-    type VARCHAR(20) NOT NULL,
-    quantity INTEGER NOT NULL,
-    previous_stock INTEGER,
-    new_stock INTEGER,
-    reason TEXT,
-    operator_name VARCHAR(255),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+-- ============================================
+-- 2. CATEGORIAS
+-- ============================================
+CREATE TABLE IF NOT EXISTS categories (
+  id TEXT PRIMARY KEY,
+  organization_id UUID DEFAULT '00000000-0000-0000-0000-000000000001',
+  store_branch_id TEXT,
+  name TEXT NOT NULL,
+  color TEXT DEFAULT '#6366f1',
+  created_at TIMESTAMPTZ DEFAULT now()
 );
-ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
 
--- 5. CRIAR TABELA DE CONFIGURAÇÕES DO SISTEMA (se não existir)
--- ==========================================================================
-CREATE TABLE IF NOT EXISTS public.system_settings (
-    id VARCHAR(100) PRIMARY KEY,
-    organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE UNIQUE DEFAULT '00000000-0000-0000-0000-000000000001',
-    settings JSONB NOT NULL DEFAULT '{}',
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+-- ============================================
+-- 3. CLIENTES
+-- ============================================
+CREATE TABLE IF NOT EXISTS customers (
+  id TEXT PRIMARY KEY,
+  organization_id UUID DEFAULT '00000000-0000-0000-0000-000000000001',
+  store_branch_id TEXT,
+  name TEXT NOT NULL,
+  cpf_cnpj TEXT,
+  email TEXT,
+  phone TEXT,
+  credit_limit NUMERIC DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
 );
-ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
 
--- 6. CRIAR TABELA DE USUÁRIOS DO SISTEMA (lista de usuários, não auth)
--- ==========================================================================
-CREATE TABLE IF NOT EXISTS public.system_users (
-    id VARCHAR(100) PRIMARY KEY,
-    organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE DEFAULT '00000000-0000-0000-0000-000000000001',
-    store_branch_id VARCHAR(50),
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    role VARCHAR(50) DEFAULT 'collaborator',
-    permissions JSONB DEFAULT '{}',
-    avatar_url TEXT,
-    active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+-- ============================================
+-- 4. FORNECEDORES
+-- ============================================
+CREATE TABLE IF NOT EXISTS suppliers (
+  id TEXT PRIMARY KEY,
+  organization_id UUID DEFAULT '00000000-0000-0000-0000-000000000001',
+  store_branch_id TEXT,
+  corporate_name TEXT,
+  trade_name TEXT,
+  cnpj TEXT,
+  contact_person TEXT,
+  email TEXT,
+  phone TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
 );
-ALTER TABLE public.system_users ENABLE ROW LEVEL SECURITY;
 
--- 7. REMOVER RLS ANTERIOR (restritivo) E CRIAR NOVO RLS PERMISSIVO
--- ==========================================================================
--- Drop old restrictive policies
-DO $$
-DECLARE
-    tbl TEXT;
-BEGIN
-    FOR tbl IN SELECT unnest(ARRAY[
-        'organizations', 'profiles', 'categories', 'products', 
-        'customers', 'suppliers', 'sales', 'sale_items',
-        'financial_transactions', 'cash_sessions',
-        'store_branches', 'stock_movements', 'system_settings', 'system_users'
-    ])
-    LOOP
-        EXECUTE format('DROP POLICY IF EXISTS "%s" ON public.%I', 'Acesso isolado por organizacao para ' || tbl, tbl);
-        -- Drop any other existing policies
-        EXECUTE (
-            SELECT string_agg(format('DROP POLICY IF EXISTS "%s" ON public.%I', polname, tablename), '; ')
-            FROM pg_policy
-            JOIN pg_class ON pg_class.oid = polrelid
-            JOIN pg_namespace ON pg_namespace.oid = relnamespace
-            WHERE pg_namespace.nspname = 'public' AND tablename = tbl
-        );
-    END LOOP;
-END $$;
+-- ============================================
+-- 5. VENDAS
+-- ============================================
+CREATE TABLE IF NOT EXISTS sales (
+  id TEXT PRIMARY KEY,
+  organization_id UUID DEFAULT '00000000-0000-0000-0000-000000000001',
+  store_branch_id TEXT,
+  user_id TEXT,
+  customer_id TEXT,
+  code TEXT,
+  subtotal NUMERIC DEFAULT 0,
+  discount NUMERIC DEFAULT 0,
+  total NUMERIC DEFAULT 0,
+  payment_method TEXT DEFAULT 'cash',
+  status TEXT DEFAULT 'completed',
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
--- 8. CRIAR RLS POLICIES PERMISSIVAS (anon pode ler/escrever tudo)
--- ==========================================================================
+-- ============================================
+-- 6. ITENS DA VENDA
+-- ============================================
+CREATE TABLE IF NOT EXISTS sale_items (
+  id TEXT PRIMARY KEY,
+  sale_id TEXT REFERENCES sales(id) ON DELETE CASCADE,
+  product_id TEXT,
+  quantity INTEGER DEFAULT 1,
+  unit_price NUMERIC DEFAULT 0,
+  total_price NUMERIC DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
--- Organizations: read all
-CREATE POLICY "anon_read_organizations" ON public.organizations
-    FOR SELECT USING (true);
+-- ============================================
+-- 7. TRANSAÇÕES FINANCEIRAS
+-- ============================================
+CREATE TABLE IF NOT EXISTS financial_transactions (
+  id TEXT PRIMARY KEY,
+  organization_id UUID DEFAULT '00000000-0000-0000-0000-000000000001',
+  store_branch_id TEXT,
+  type TEXT DEFAULT 'payable',
+  description TEXT,
+  amount NUMERIC DEFAULT 0,
+  category TEXT,
+  due_date TEXT,
+  payment_date TEXT,
+  status TEXT DEFAULT 'pending',
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
-CREATE POLICY "anon_insert_organizations" ON public.organizations
-    FOR INSERT WITH CHECK (true);
+-- ============================================
+-- 8. SESSÕES CAIXA
+-- ============================================
+CREATE TABLE IF NOT EXISTS cash_sessions (
+  id TEXT PRIMARY KEY,
+  organization_id UUID DEFAULT '00000000-0000-0000-0000-000000000001',
+  store_branch_id TEXT,
+  user_id TEXT,
+  opening_balance NUMERIC DEFAULT 0,
+  closing_balance NUMERIC,
+  expected_balance NUMERIC DEFAULT 0,
+  status TEXT DEFAULT 'open',
+  opened_at TIMESTAMPTZ DEFAULT now(),
+  closed_at TIMESTAMPTZ
+);
 
-CREATE POLICY "anon_update_organizations" ON public.organizations
-    FOR UPDATE USING (true);
+-- ============================================
+-- 9. MOVIMENTAÇÕES DE ESTOQUE
+-- ============================================
+CREATE TABLE IF NOT EXISTS stock_movements (
+  id TEXT PRIMARY KEY,
+  organization_id UUID DEFAULT '00000000-0000-0000-0000-000000000001',
+  store_branch_id TEXT,
+  product_id TEXT,
+  product_name TEXT,
+  type TEXT,
+  quantity INTEGER DEFAULT 0,
+  previous_stock INTEGER DEFAULT 0,
+  new_stock INTEGER DEFAULT 0,
+  reason TEXT,
+  operator_name TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
--- Store Branches
-CREATE POLICY "anon_all_store_branches" ON public.store_branches
-    FOR ALL USING (true) WITH CHECK (true);
+-- ============================================
+-- 10. FILIAIS
+-- ============================================
+CREATE TABLE IF NOT EXISTS store_branches (
+  id TEXT PRIMARY KEY,
+  organization_id UUID DEFAULT '00000000-0000-0000-0000-000000000001',
+  name TEXT NOT NULL,
+  code TEXT,
+  cnpj TEXT,
+  city TEXT,
+  state TEXT,
+  address TEXT,
+  phone TEXT,
+  is_headquarters BOOLEAN DEFAULT false,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
--- Categories
-CREATE POLICY "anon_all_categories" ON public.categories
-    FOR ALL USING (true) WITH CHECK (true);
+-- ============================================
+-- 11. USUÁRIOS DO SISTEMA
+-- ============================================
+CREATE TABLE IF NOT EXISTS system_users (
+  id TEXT PRIMARY KEY,
+  organization_id UUID DEFAULT '00000000-0000-0000-0000-000000000001',
+  store_branch_id TEXT,
+  name TEXT NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  role TEXT DEFAULT 'collaborator',
+  permissions JSONB DEFAULT '{"pdv":true,"inventory":true,"crm":true,"finance":true,"dashboard":true,"settings":true}',
+  avatar_url TEXT,
+  active BOOLEAN DEFAULT true,
+  password TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
--- Products
-CREATE POLICY "anon_all_products" ON public.products
-    FOR ALL USING (true) WITH CHECK (true);
+-- ============================================
+-- 12. CONFIGURAÇÕES DO SISTEMA
+-- ============================================
+CREATE TABLE IF NOT EXISTS system_settings (
+  id TEXT PRIMARY KEY DEFAULT '00000000-0000-0000-0000-000000000001',
+  organization_id UUID DEFAULT '00000000-0000-0000-0000-000000000001',
+  settings JSONB,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
 
--- Customers
-CREATE POLICY "anon_all_customers" ON public.customers
-    FOR ALL USING (true) WITH CHECK (true);
+-- ============================================
+-- PERMISSÕES: GRANT para service_role e anon
+-- ============================================
 
--- Suppliers
-CREATE POLICY "anon_all_suppliers" ON public.suppliers
-    FOR ALL USING (true) WITH CHECK (true);
+-- service_role precisa de acesso TOTAL (bypass RLS)
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
 
--- Sales
-CREATE POLICY "anon_all_sales" ON public.sales
-    FOR ALL USING (true) WITH CHECK (true);
+-- anon precisa de SELECT + INSERT + UPDATE + DELETE (app usa anon key via browser)
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO anon;
 
--- Sale Items
-CREATE POLICY "anon_all_sale_items" ON public.sale_items
-    FOR ALL USING (true) WITH CHECK (true);
+-- authenticated (se usar Supabase Auth)
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
--- Financial Transactions
-CREATE POLICY "anon_all_financial_transactions" ON public.financial_transactions
-    FOR ALL USING (true) WITH CHECK (true);
+-- ============================================
+-- RLS: Desabilitar ou criar policies abertas
+-- Como o app usa a service_role key no servidor e anon no browser,
+-- a abordagem mais simples é DESABILITAR RLS para service_role.
+-- Mas para anon, criar policies permissivas.
+-- ============================================
 
--- Cash Sessions
-CREATE POLICY "anon_all_cash_sessions" ON public.cash_sessions
-    FOR ALL USING (true) WITH CHECK (true);
+-- Desabilitar RLS em todas as tabelas (service_role bypassa, e anon é controlado pelas tabelas)
+ALTER TABLE products DISABLE ROW LEVEL SECURITY;
+ALTER TABLE categories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE customers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE suppliers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE sales DISABLE ROW LEVEL SECURITY;
+ALTER TABLE sale_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE financial_transactions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE cash_sessions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE stock_movements DISABLE ROW LEVEL SECURITY;
+ALTER TABLE store_branches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE system_users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE system_settings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE organizations DISABLE ROW LEVEL SECURITY;
 
--- Stock Movements
-CREATE POLICY "anon_all_stock_movements" ON public.stock_movements
-    FOR ALL USING (true) WITH CHECK (true);
+-- ============================================
+-- REALTIME: Habilitar publicação para todas as tabelas
+-- ============================================
+ALTER PUBLICATION supabase_realtime ADD TABLE products;
+ALTER PUBLICATION supabase_realtime ADD TABLE categories;
+ALTER PUBLICATION supabase_realtime ADD TABLE customers;
+ALTER PUBLICATION supabase_realtime ADD TABLE suppliers;
+ALTER PUBLICATION supabase_realtime ADD TABLE sales;
+ALTER PUBLICATION supabase_realtime ADD TABLE sale_items;
+ALTER PUBLICATION supabase_realtime ADD TABLE financial_transactions;
+ALTER PUBLICATION supabase_realtime ADD TABLE cash_sessions;
+ALTER PUBLICATION supabase_realtime ADD TABLE stock_movements;
+ALTER PUBLICATION supabase_realtime ADD TABLE store_branches;
+ALTER PUBLICATION supabase_realtime ADD TABLE system_users;
+ALTER TABLE system_settings REPLICA IDENTITY FULL;
 
--- System Settings
-CREATE POLICY "anon_all_system_settings" ON public.system_settings
-    FOR ALL USING (true) WITH CHECK (true);
-
--- System Users
-CREATE POLICY "anon_all_system_users" ON public.system_users
-    FOR ALL USING (true) WITH CHECK (true);
-
--- Profiles (keep auth-aware)
-CREATE POLICY "anon_all_profiles" ON public.profiles
-    FOR ALL USING (true) WITH CHECK (true);
-
-CREATE POLICY "anon_all_company_settings" ON public.company_settings
-    FOR ALL USING (true) WITH CHECK (true);
-
--- 9. HABILITAR REALTIME NAS TABELAS PRINCIPAIS
--- ==========================================================================
-ALTER PUBLICATION supabase_realtime ADD TABLE public.products;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.sales;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.sale_items;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.customers;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.suppliers;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.financial_transactions;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.cash_sessions;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.stock_movements;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.store_branches;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.system_users;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.system_settings;
-
--- 10. CRIAR ÍNDICES PARA PERFORMANCE
--- ==========================================================================
-CREATE INDEX IF NOT EXISTS idx_stock_movements_branch ON public.stock_movements(store_branch_id);
-CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON public.stock_movements(product_id);
-CREATE INDEX IF NOT EXISTS idx_system_users_branch ON public.system_users(store_branch_id);
-CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON public.sale_items(sale_id);
-
--- 11. GRANT PERMISSÕES PARA O ROLE ANON
--- ==========================================================================
-GRANT USAGE ON SCHEMA public TO anon;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon;
-
--- ==============================================================================
--- PRONTO! Agora o HD-System pode sincronizar dados em tempo real.
--- ==============================================================================
+-- ============================================
+-- VERIFICAÇÃO FINAL
+-- ============================================
+SELECT 
+  tablename,
+  rowsecurity as rls_enabled,
+  pg_size_pretty(pg_total_relation_size('public.' || tablename)) as tamanho
+FROM pg_tables 
+WHERE schemaname = 'public'
+ORDER BY tablename;
