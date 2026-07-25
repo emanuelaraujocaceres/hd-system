@@ -35,6 +35,7 @@ const KEYS = {
   CUSTOMERS: 'hd_system_customers',
   SUPPLIERS: 'hd_system_suppliers',
   SALES: 'hd_system_sales',
+  SALE_ITEMS: 'hd_system_sale_items',
   CAIXA: 'hd_system_caixa_session',
   CAIXA_HISTORY: 'hd_system_caixa_history',
   FINANCIAL: 'hd_system_financial_accounts',
@@ -565,6 +566,19 @@ class StorageService {
           syncService.fetchRows('sale_items'),
         ]);
 
+      // Save raw sale_items to separate localStorage key
+      if (saleItems && saleItems.length > 0) {
+        console.log(`[HD-Sync] 💾 Salvando ${saleItems.length} sale_items do Supabase no localStorage (chave: ${KEYS.SALE_ITEMS})`);
+        this.set(KEYS.SALE_ITEMS, saleItems);
+      } else {
+        console.log(`[HD-Sync] ⚠️ Supabase retornou 0 sale_items — mantendo dados locais existentes`);
+        // Keep existing local sale_items if Supabase returned empty
+        const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
+        if (existingItems.length === 0) {
+          console.log(`[HD-Sync] ⚠️ Nenhum sale_item local nem no Supabase — vendas ficarão sem itens`);
+        }
+      }
+
       // Only overwrite localStorage if Supabase has data
       if (products.length > 0) {
         const localProducts = this.getProducts();
@@ -628,8 +642,19 @@ class StorageService {
       if (sales.length > 0) {
         // Group sale_items by sale_id
         const itemsBySaleId: Record<string, any[]> = {};
-        if (saleItems && saleItems.length > 0) {
-          for (const item of saleItems) {
+        
+        // Use cloud sale_items if available, otherwise fall back to localStorage key
+        let effectiveItems = saleItems && saleItems.length > 0 ? saleItems : null;
+        if (!effectiveItems) {
+          const localSaleItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
+          if (localSaleItems.length > 0) {
+            console.log(`[HD-Sync] ↩️ Supabase sem sale_items — usando ${localSaleItems.length} itens do localStorage local`);
+            effectiveItems = localSaleItems;
+          }
+        }
+
+        if (effectiveItems && effectiveItems.length > 0) {
+          for (const item of effectiveItems) {
             if (!itemsBySaleId[item.sale_id]) itemsBySaleId[item.sale_id] = [];
             itemsBySaleId[item.sale_id].push({
               productId: item.product_id,
@@ -875,6 +900,10 @@ class StorageService {
         syncService.deleteRow('sale_items', `${id}-${item.productId}`);
       });
     }
+    // Also remove from separate localStorage key
+    const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
+    const filtered = existingItems.filter((i: any) => i.sale_id !== id);
+    this.set(KEYS.SALE_ITEMS, filtered);
   }
 
   updateStock(productId: string, quantityDelta: number, reason: string, operatorName: string) {
@@ -986,11 +1015,33 @@ class StorageService {
     return this.get<Sale[]>(KEYS.SALES, INITIAL_SALES);
   }
 
+  getSaleItems(): any[] {
+    return this.get<any[]>(KEYS.SALE_ITEMS, []);
+  }
+
   addSale(sale: Sale) {
     const sales = this.getSales();
     sales.unshift(sale);
     this.set(KEYS.SALES, sales);
     this.syncSale(sale);
+
+    // Save sale_items to separate localStorage key
+    if (sale.items && sale.items.length > 0) {
+      const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
+      const newItems = sale.items.map((item) => ({
+        id: `${sale.id}-${item.productId}`,
+        sale_id: sale.id,
+        product_id: item.productId,
+        product_name: item.productName || '',
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        total_price: item.total,
+      }));
+      // Remove any existing items for this sale (in case of re-add)
+      const filtered = existingItems.filter((i: any) => i.sale_id !== sale.id);
+      this.set(KEYS.SALE_ITEMS, [...newItems, ...filtered]);
+      console.log(`[HD-Sync] 💾 ${newItems.length} sale_items salvos no localStorage (chave: ${KEYS.SALE_ITEMS}) para venda ${sale.code}`);
+    }
 
     // Deduces stock automatically
     sale.items.forEach((item) => {
@@ -1382,6 +1433,7 @@ class StorageService {
     localStorage.removeItem(KEYS.CUSTOMERS);
     localStorage.removeItem(KEYS.SUPPLIERS);
     localStorage.removeItem(KEYS.SALES);
+    localStorage.removeItem(KEYS.SALE_ITEMS);
     localStorage.removeItem(KEYS.CAIXA);
     localStorage.removeItem(KEYS.CAIXA_HISTORY);
     localStorage.removeItem(KEYS.FINANCIAL);
