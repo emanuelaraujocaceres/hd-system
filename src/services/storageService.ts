@@ -118,33 +118,38 @@ class StorageService {
     });
   }
 
-  private syncSale(s: Sale) {
-    syncService.upsertRow('sales', {
-      id: s.id,
-      organization_id: '00000000-0000-0000-0000-000000000001',
-      store_branch_id: s.storeBranchId,
-      user_id: s.operatorId,
-      customer_id: s.customerId || null,
-      code: s.code,
-      subtotal: s.subtotal,
-      discount: s.discount,
-      total: s.total,
-      payment_method: s.payments[0]?.method || 'cash',
-      status: s.status,
-      notes: s.customerName || null,
-    });
-    // Also sync sale items
-    if (s.items && s.items.length > 0) {
-      const items = s.items.map((item) => ({
-        id: `${s.id}-${item.productId}`,
-        sale_id: s.id,
-        product_id: item.productId,
-        product_name: item.productName || '',
-        quantity: item.quantity,
-        unit_price: item.unitPrice,
-        total_price: item.total,
-      }));
-      syncService.upsertRows('sale_items', items);
+  private async syncSale(s: Sale) {
+    try {
+      // First upsert the parent sale — wait for it to complete
+      await syncService.upsertRow('sales', {
+        id: s.id,
+        organization_id: '00000000-0000-0000-0000-000000000001',
+        store_branch_id: s.storeBranchId,
+        user_id: s.operatorId,
+        customer_id: s.customerId || null,
+        code: s.code,
+        subtotal: s.subtotal,
+        discount: s.discount,
+        total: s.total,
+        payment_method: s.payments[0]?.method || 'cash',
+        status: s.status,
+        notes: s.customerName || null,
+      });
+      // Only upsert sale items AFTER the sale record exists (avoid FK violation)
+      if (s.items && s.items.length > 0) {
+        const items = s.items.map((item) => ({
+          id: `${s.id}-${item.productId}`,
+          sale_id: s.id,
+          product_id: item.productId,
+          product_name: item.productName || '',
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          total_price: item.total,
+        }));
+        await syncService.upsertRows('sale_items', items);
+      }
+    } catch (err) {
+      console.warn('[HD-Sync] syncSale failed (will retry via queue):', err);
     }
   }
 
