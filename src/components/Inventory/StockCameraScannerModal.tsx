@@ -221,19 +221,31 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   // ✅ FIXED: Handle barcode detection with proper dependencies
   const handleBarcodeDetected = useCallback((barcode: string) => {
     setScannedBarcode(barcode);
-    posAudio.chime();
 
+    // 🔍 DEBUG: Check what barcode was detected and what products are available
+    console.log('🔍 [BarcodeScanner] Barcode detected:', JSON.stringify(barcode));
+    const allProds = storageService.getProducts();
+    console.log('🔍 [BarcodeScanner] Total products in localStorage:', allProds.length);
+    if (allProds.length > 0) {
+      console.log('🔍 [BarcodeScanner] Product barcodes:', allProds.map(p => ({ id: p.id, name: p.name, barcode: p.barcode, active: p.active })));
+    }
+    
     // ✅ FIXED: Only consider ACTIVE products
-    const existing = storageService.getProducts()
+    // Also trim the stored barcode for comparison to handle whitespace differences
+    const existing = allProds
       .filter(p => p.active !== false) // Só produtos ativos
-      .find((p) => p.barcode === barcode);
+      .find((p) => p.barcode.trim() === barcode.trim());
+
+    console.log('🔍 [BarcodeScanner] Product found:', existing ? existing.name : '❌ NOT FOUND');
 
     if (existing) {
+      posAudio.chime(); // ✔ Produto encontrado — som de sucesso
       setScannedProduct(existing);
       setScannerStatus('found');
       setAddQty(1);
       setShowQuickForm(false);
     } else {
+      posAudio.error(); // ✘ Produto não encontrado — som de erro
       setScannedProduct(null);
       setScannerStatus('not_found');
       setShowQuickForm(false);
@@ -404,7 +416,8 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   // Manual barcode submit
   const handleManualBarcodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const input = e.currentTarget.elements.namedItem('manualBarcode') as HTMLInputElement;
+    const form = e.currentTarget as HTMLFormElement;
+    const input = form.elements.namedItem('manualBarcode') as HTMLInputElement;
     if (input?.value?.trim()) {
       handleBarcodeDetected(input.value.trim());
       input.value = '';

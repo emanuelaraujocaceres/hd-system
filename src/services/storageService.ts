@@ -27,6 +27,7 @@ import {
   INITIAL_SUBSCRIPTION,
 } from '../data/mockData';
 import { syncService } from './syncService';
+import { supabase } from '../lib/supabase';
 
 const KEYS = {
   PRODUCTS: 'hd_system_products',
@@ -138,6 +139,7 @@ class StorageService {
         id: `${s.id}-${item.productId}`,
         sale_id: s.id,
         product_id: item.productId,
+        product_name: item.productName || '',
         quantity: item.quantity,
         unit_price: item.unitPrice,
         total_price: item.total,
@@ -305,8 +307,26 @@ class StorageService {
 
   updateSaleFromRemote(row: any) {
     const sales = this.getSales();
-    // Fetch sale items
     const existing = sales.find((s) => s.id === row.id);
+
+    // Try to fetch sale items from Supabase
+    const fetchItems = async () => {
+      try {
+        const { data } = await supabase.from('sale_items').select('*').eq('sale_id', row.id);
+        if (data && data.length > 0) {
+          return data.map((item: any) => ({
+            productId: item.product_id,
+            productName: item.product_name || '',
+            unitPrice: parseFloat(item.unit_price) || 0,
+            quantity: item.quantity || 1,
+            total: parseFloat(item.total_price) || 0,
+          }));
+        }
+      } catch {}
+      return existing?.items || [];
+    };
+
+    // Use existing items as fallback while items are being fetched
     const mapped: Sale = {
       id: row.id,
       code: row.code,
@@ -323,10 +343,23 @@ class StorageService {
       payments: existing?.payments || [{ method: (row.payment_method as any) || 'cash', amount: parseFloat(row.total) || 0 }],
       status: row.status || 'completed',
     };
+
     const idx = sales.findIndex((s) => s.id === mapped.id);
     if (idx >= 0) sales[idx] = mapped;
     else sales.unshift(mapped);
     this.set(KEYS.SALES, sales);
+
+    // Fetch items async and update if we get data back
+    fetchItems().then((items) => {
+      if (items.length > 0) {
+        const updated = this.getSales();
+        const found = updated.find((s) => s.id === row.id);
+        if (found) {
+          found.items = items;
+          this.set(KEYS.SALES, updated);
+        }
+      }
+    });
   }
 
   updateCustomerFromRemote(row: any) {
@@ -494,7 +527,7 @@ class StorageService {
 
   async hydrateFromCloud(branchId?: string): Promise<boolean> {
     try {
-      const [products, categories, customers, suppliers, sales, branches, financial, settings, users, movements, caixa] =
+      const [products, categories, customers, suppliers, sales, branches, financial, settings, users, movements, caixa, saleItems] =
         await Promise.all([
           syncService.fetchRows('products', branchId),
           syncService.fetchRows('categories', branchId),
@@ -507,6 +540,7 @@ class StorageService {
           syncService.fetchRows('system_users', branchId),
           syncService.fetchRows('stock_movements', branchId),
           syncService.fetchRows('cash_sessions', branchId),
+          syncService.fetchRows('sale_items'),
         ]);
 
       // Only overwrite localStorage if Supabase has data
@@ -554,16 +588,35 @@ class StorageService {
       }
 
       if (sales.length > 0) {
-        const mapped = sales.map((r: any) => ({
-          id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
-          operatorId: r.user_id || '', operatorName: 'Sistema',
-          customerId: r.customer_id || undefined, customerName: r.notes || undefined,
-          storeBranchId: r.store_branch_id || '',
-          items: [], subtotal: parseFloat(r.subtotal) || 0, discount: parseFloat(r.discount) || 0,
-          total: parseFloat(r.total) || 0,
-          payments: [{ method: r.payment_method || 'cash', amount: parseFloat(r.total) || 0 }],
-          status: r.status || 'completed',
-        }));
+        // Group sale_items by sale_id
+        const itemsBySaleId: Record<string, any[]> = {};
+        if (saleItems && saleItems.length > 0) {
+          for (const item of saleItems) {
+            if (!itemsBySaleId[item.sale_id]) itemsBySaleId[item.sale_id] = [];
+            itemsBySaleId[item.sale_id].push({
+              productId: item.product_id,
+              productName: item.product_name || '',
+              unitPrice: parseFloat(item.unit_price) || 0,
+              quantity: item.quantity || 1,
+              total: parseFloat(item.total_price) || 0,
+            });
+          }
+        }
+
+        const mapped = sales.map((r: any) => {
+          const saleItems = itemsBySaleId[r.id] || [];
+          return {
+            id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
+            operatorId: r.user_id || '', operatorName: 'Sistema',
+            customerId: r.customer_id || undefined, customerName: r.notes || undefined,
+            storeBranchId: r.store_branch_id || '',
+            items: saleItems,
+            subtotal: parseFloat(r.subtotal) || 0, discount: parseFloat(r.discount) || 0,
+            total: parseFloat(r.total) || 0,
+            payments: [{ method: r.payment_method || 'cash', amount: parseFloat(r.total) || 0 }],
+            status: r.status || 'completed',
+          };
+        });
         this.set(KEYS.SALES, mapped);
       }
 

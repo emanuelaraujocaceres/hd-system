@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Navigation/Sidebar';
 import { Header } from './components/Navigation/Header';
 import { PDVView } from './components/PDV/PDVView';
@@ -12,8 +12,10 @@ import { FiadosView } from './components/CRM/FiadosView';
 import { SettingsView } from './components/Settings/SettingsView';
 import { CaixaModal } from './components/PDV/CaixaModal';
 import { GoogleLoginModal } from './components/Auth/GoogleLoginModal';
+import { SyncBanner } from './components/Sync/SyncBanner';
 import { storageService } from './services/storageService';
 import { syncService } from './services/syncService';
+import { syncQueue } from './services/syncQueueService';
 import { posAudio } from './services/audioService';
 import { Lock, ShieldAlert, Wifi, WifiOff, ArrowLeft } from 'lucide-react';
 import {
@@ -122,15 +124,52 @@ export const App: React.FC = () => {
     localStorage.setItem('hd_system_sound_enabled', String(soundEnabled));
   }, [soundEnabled]);
 
-  // ─── SUPABASE REALTIME SYNC ──────────────────────────────────────
+  // ─── SUPABASE REALTIME + OFFLINE-FIRST SYNC ────────────────────
   const [isSyncConnected, setIsSyncConnected] = useState<boolean>(false);
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [syncPendingCount, setSyncPendingCount] = useState<number>(0);
+  const [syncStatus, setSyncStatus] = useState<'offline' | 'connecting' | 'syncing' | 'online' | 'error'>('connecting');
+
+  // Refs to avoid stale closures in intervals
+  const isOnlineRef = useRef(isOnline);
+  const syncPendingCountRef = useRef(syncPendingCount);
+
+  // Keep refs in sync
+  useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
+  useEffect(() => { syncPendingCountRef.current = syncPendingCount; }, [syncPendingCount]);
+
+  // Listen for connection changes from syncService
+  useEffect(() => {
+    const unsub = syncService.subscribeConnection((online) => {
+      setIsOnline(online);
+      isOnlineRef.current = online;
+      if (online) {
+        setSyncStatus('connecting');
+      } else {
+        setSyncStatus('offline');
+      }
+    });
+    return unsub;
+  }, []);
+
+  // Listen for pending count changes from syncQueue
+  useEffect(() => {
+    const unsub = syncQueue.subscribe((count) => {
+      setSyncPendingCount(count);
+      syncPendingCountRef.current = count;
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     // Handler for remote changes from Supabase Realtime
     const handleRemoteChange = (table: string, payload: any) => {
       // If we're receiving remote changes, we're connected
       setIsSyncConnected(true);
+      setIsOnline(true);
+      isOnlineRef.current = true;
+      setSyncStatus('online');
       const event = payload.eventType; // INSERT, UPDATE, DELETE
       const row = payload.new || payload.old;
 
@@ -195,11 +234,33 @@ export const App: React.FC = () => {
     // Subscribe to Realtime
     syncService.subscribeRealtime(handleRemoteChange);
 
-    // Check connection health periodically
+    // Check connection health periodically (use refs to avoid stale closures)
     const checkConnection = async () => {
       const healthy = await syncService.testConnection();
-      // Consider connected if either the health check passed or the realtime channel is active
-      setIsSyncConnected(healthy || syncService.connected);
+      const nowConnected = healthy || syncService.connected;
+      setIsSyncConnected(nowConnected);
+      setIsOnline(navigator.onLine);
+
+      if (nowConnected) {
+        const pending = syncPendingCountRef.current;
+        setSyncStatus(pending > 0 ? 'syncing' : 'online');
+        // If we just came back online and there are pending operations, process them
+        if (!isOnlineRef.current && pending > 0) {
+          console.log(`[HD-Sync] 🔄 Connection restored — processing ${pending} pending operations`);
+          syncService.processPendingQueue().then((result) => {
+            setSyncStatus('online');
+            setLastSyncTime(new Date());
+            if (result.failed > 0) {
+              setSyncStatus('error');
+              console.warn(`[HD-Sync] ${result.failed} operations still pending`);
+            }
+          });
+        }
+        isOnlineRef.current = true;
+      } else {
+        setSyncStatus('offline');
+        isOnlineRef.current = false;
+      }
     };
     checkConnection();
     const healthInterval = setInterval(checkConnection, 30000);
@@ -210,6 +271,13 @@ export const App: React.FC = () => {
       if (ok) {
         console.log('[HD-Sync] Initial cloud hydration OK');
         setIsSyncConnected(true);
+        setIsOnline(true);
+        isOnlineRef.current = true;
+        setSyncStatus('online');
+      } else {
+        // Hydration failed — we might be offline on first load
+        console.log('[HD-Sync] Cloud hydration skipped — using local data');
+        setSyncStatus('offline');
       }
     });
 
@@ -218,6 +286,17 @@ export const App: React.FC = () => {
       syncService.unsubscribeRealtime(handleRemoteChange);
     };
   }, []);
+
+  // Process pending queue when coming back online
+  useEffect(() => {
+    if (isOnline && syncPendingCount > 0) {
+      setSyncStatus('syncing');
+      syncService.processPendingQueue().then((result) => {
+        setSyncStatus(result.failed > 0 ? 'error' : 'online');
+        setLastSyncTime(new Date());
+      });
+    }
+  }, [isOnline]);
 
   const handleLogout = () => {
     storageService.logout();
@@ -311,6 +390,21 @@ export const App: React.FC = () => {
           onLogout={handleLogout}
           isSyncConnected={isSyncConnected}
           lastSyncTime={lastSyncTime}
+          syncStatus={syncStatus}
+          syncPendingCount={syncPendingCount}
+        />
+
+        {/* Sync Status Banner */}
+        <SyncBanner
+          status={syncStatus}
+          pendingCount={syncPendingCount}
+          onRetry={() => {
+            setSyncStatus('syncing');
+            syncService.retryFailed();
+          }}
+          onDismiss={() => {
+            if (syncStatus === 'error') setSyncStatus('online');
+          }}
         />
 
         {/* Dynamic Main View Area */}

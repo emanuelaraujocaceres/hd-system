@@ -12,6 +12,9 @@ import {
   Lock,
   Unlock,
   LogOut,
+  Cloud,
+  CloudOff,
+  RefreshCw,
 } from 'lucide-react';
 import { Product, CashRegisterSession, UserProfile, StoreBranch } from '../../types';
 import { posAudio } from '../../services/audioService';
@@ -34,6 +37,8 @@ interface HeaderProps {
   onLogout: () => void;
   isSyncConnected?: boolean;
   lastSyncTime?: Date | null;
+  syncStatus?: 'offline' | 'connecting' | 'syncing' | 'online' | 'error';
+  syncPendingCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -54,6 +59,8 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   isSyncConnected = false,
   lastSyncTime = null,
+  syncStatus = 'connecting',
+  syncPendingCount = 0,
 }) => {
   const [isFullscreen, setIsFullscreen] = React.useState(false);
 
@@ -107,12 +114,25 @@ export const Header: React.FC<HeaderProps> = ({
           <h2 className="font-serif-italic text-sm md:text-lg lg:text-xl text-slate-900 dark:text-white leading-tight truncate">
             {currentInfo.title}
           </h2>
-          <span className={`hidden sm:inline-block px-2 py-0.5 rounded-full border text-[10px] font-bold tracking-wider uppercase shrink-0 ${
-            isSyncConnected
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
-              : 'border-amber-500/30 bg-amber-500/10 text-amber-500'
+          <span className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold tracking-wider uppercase shrink-0 ${
+            syncStatus === 'offline'
+              ? 'border-amber-500/30 bg-amber-500/10 text-amber-500'
+              : syncStatus === 'syncing'
+              ? 'border-blue-500/30 bg-blue-500/10 text-blue-500'
+              : syncStatus === 'error'
+              ? 'border-rose-500/30 bg-rose-500/10 text-rose-500'
+              : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
           }`}>
-            {isSyncConnected ? 'ONLINE' : 'OFFLINE'}
+            {syncStatus === 'syncing' && <RefreshCw className="w-2.5 h-2.5 animate-spin" />}
+            {syncStatus === 'offline' && <CloudOff className="w-2.5 h-2.5" />}
+            {syncStatus === 'online' && <Cloud className="w-2.5 h-2.5" />}
+            {syncStatus === 'error' && <AlertTriangle className="w-2.5 h-2.5" />}
+            
+            {syncStatus === 'offline' && 'OFFLINE'}
+            {syncStatus === 'connecting' && '...'}
+            {syncStatus === 'syncing' && `SYNC (${syncPendingCount})`}
+            {syncStatus === 'online' && 'ONLINE'}
+            {syncStatus === 'error' && 'ERRO'}
           </span>
         </div>
       </div>
@@ -120,13 +140,38 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Action Buttons */}
       <div className="flex items-center gap-1.5 sm:gap-3 md:gap-5 shrink-0">
         <div className="hidden lg:flex items-center gap-2 text-xs text-slate-500 dark:text-[#a1a1aa]">
-          <span className={`w-2 h-2 rounded-full ${isSyncConnected ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
-          Sync: {isSyncConnected
-            ? lastSyncTime
-              ? `Agora`
-              : 'Online'
-            : 'Offline'
-          }
+          {/* Sync icon */}
+          {syncStatus === 'offline' ? (
+            <CloudOff className="w-3.5 h-3.5 text-amber-500" />
+          ) : syncStatus === 'syncing' ? (
+            <RefreshCw className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+          ) : syncStatus === 'error' ? (
+            <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+          ) : (
+            <Cloud className="w-3.5 h-3.5 text-emerald-500" />
+          )}
+          
+          {/* Status text */}
+          <span className={`
+            ${syncStatus === 'offline' ? 'text-amber-500' : ''}
+            ${syncStatus === 'syncing' ? 'text-blue-500' : ''}
+            ${syncStatus === 'error' ? 'text-rose-500' : ''}
+            ${syncStatus === 'online' ? 'text-emerald-500' : ''}
+            ${syncStatus === 'connecting' ? 'text-slate-400' : ''}
+          `}>
+            {syncStatus === 'offline' && 'Offline'}
+            {syncStatus === 'connecting' && 'Conectando...'}
+            {syncStatus === 'syncing' && 'Sincronizando...'}
+            {syncStatus === 'online' && 'Online'}
+            {syncStatus === 'error' && 'Erro no Sync'}
+          </span>
+
+          {/* Pending count badge */}
+          {syncPendingCount > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[9px] font-bold">
+              {syncPendingCount} pendente{syncPendingCount !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
 
         {/* Quick PDV Shortcut Button */}

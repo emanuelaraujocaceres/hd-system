@@ -418,8 +418,8 @@ export const PDVView: React.FC<PDVViewProps> = ({
 
     setScannedBarcode(barcode);
 
-    // Search product by barcode
-    const found = products.find((p) => p.barcode === barcode);
+    // Search product by barcode (trim both sides for robust matching)
+    const found = products.find((p) => p.barcode.trim() === barcode.trim());
 
     if (found) {
       setScannedProduct(found);
@@ -989,7 +989,8 @@ export const PDVView: React.FC<PDVViewProps> = ({
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  const input = e.currentTarget.elements.namedItem('manualBarcode') as HTMLInputElement;
+                  const form = e.currentTarget as HTMLFormElement;
+                  const input = form.elements.namedItem('manualBarcode') as HTMLInputElement;
                   if (input?.value) {
                     handleScanManualSubmit(input.value);
                     input.value = '';
