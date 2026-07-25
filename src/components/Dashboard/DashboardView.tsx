@@ -63,10 +63,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         }),
       });
 
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+
       const data = await res.json();
       setAiInsight(data.insight || 'Análise concluída sem retorno.');
     } catch (err) {
-      setAiInsight('Erro ao conectar com o serviço de IA. Tente novamente.');
+      console.warn('[Dashboard] AI Insights não disponível:', err);
+      setAiInsight('O serviço de Análise por IA ainda não está configurado. Contate o suporte para ativar.');
     } finally {
       setLoadingAi(false);
     }
