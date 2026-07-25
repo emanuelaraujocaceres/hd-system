@@ -218,7 +218,8 @@ export const App: React.FC = () => {
           else storageService.updateBranchFromRemote(row);
           break;
         case 'stock_movements':
-          storageService.updateStockMovementFromRemote(row);
+          if (event === 'DELETE') storageService.removeStockMovementFromRemote(row.id);
+          else storageService.updateStockMovementFromRemote(row);
           break;
         case 'system_users':
           if (event === 'DELETE') storageService.removeUserFromRemote(row.id);
@@ -226,6 +227,12 @@ export const App: React.FC = () => {
           break;
         case 'system_settings':
           storageService.updateSettingsFromRemote(row);
+          break;
+        case 'sale_items':
+          // sale_items are nested inside sales — forward to updateSaleFromRemote
+          if (event !== 'DELETE') {
+            storageService.updateSaleFromRemote({ id: row.sale_id });
+          }
           break;
       }
 

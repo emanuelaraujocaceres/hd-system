@@ -515,6 +515,11 @@ class StorageService {
     this.set(KEYS.MOVEMENTS, movements);
   }
 
+  removeStockMovementFromRemote(id: string) {
+    const movements = this.getMovements().filter((m) => m.id !== id);
+    this.set(KEYS.MOVEMENTS, movements);
+  }
+
   updateUserFromRemote(row: any) {
     const users = this.getUsers();
     const mapped: UserProfile = {
