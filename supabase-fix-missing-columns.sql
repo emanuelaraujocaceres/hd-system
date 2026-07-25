@@ -27,6 +27,15 @@ ALTER TABLE system_users ADD COLUMN IF NOT EXISTS organization_id TEXT DEFAULT '
 -- Adicionar coluna product_name em sale_items para melhor qualidade de dados
 ALTER TABLE sale_items ADD COLUMN IF NOT EXISTS product_name TEXT;
 
+-- Adicionar colunas de detalhamento do caixa em cash_sessions
+ALTER TABLE cash_sessions ADD COLUMN IF NOT EXISTS operator_name TEXT;
+ALTER TABLE cash_sessions ADD COLUMN IF NOT EXISTS total_sales_cash NUMERIC DEFAULT 0;
+ALTER TABLE cash_sessions ADD COLUMN IF NOT EXISTS total_sales_pix NUMERIC DEFAULT 0;
+ALTER TABLE cash_sessions ADD COLUMN IF NOT EXISTS total_sales_card NUMERIC DEFAULT 0;
+ALTER TABLE cash_sessions ADD COLUMN IF NOT EXISTS total_sales_credit_account NUMERIC DEFAULT 0;
+ALTER TABLE cash_sessions ADD COLUMN IF NOT EXISTS suprimentos NUMERIC DEFAULT 0;
+ALTER TABLE cash_sessions ADD COLUMN IF NOT EXISTS sangrias NUMERIC DEFAULT 0;
+
 -- Adicionar colunas auxiliares que podem estar faltando
 ALTER TABLE products ADD COLUMN IF NOT EXISTS sku TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS max_stock_quantity INTEGER DEFAULT 100;
