@@ -141,14 +141,18 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
       });
       streamRef.current = stream;
-      
+
+      // ✅ Render fullscreen UI FIRST, then assign stream to video element
+      setIsScannerOpen(true);
+      setScannerStatus('scanning');
+
+      // Wait one frame for React to render the video element
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
-
-      setIsScannerOpen(true);
-      setScannerStatus('scanning');
 
       const BarcodeDetectorClass = (window as any).BarcodeDetector;
       if (BarcodeDetectorClass) {
