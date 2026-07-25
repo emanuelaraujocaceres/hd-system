@@ -669,6 +669,42 @@ class StorageService {
         this.set(KEYS.MOVEMENTS, mapped);
       }
 
+      // Caixa session — cash_sessions can have multiple rows, pick the most relevant one
+      if (caixa.length > 0) {
+        let filtered = caixa;
+        if (branchId) {
+          filtered = caixa.filter((r: any) => r.store_branch_id === branchId);
+        }
+        if (filtered.length === 0) {
+          filtered = caixa; // Fallback to any available session
+        }
+        // Sort: open sessions first, then by opened_at descending
+        const sorted = [...filtered].sort((a: any, b: any) => {
+          if (a.status === 'open' && b.status !== 'open') return -1;
+          if (a.status !== 'open' && b.status === 'open') return 1;
+          return new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime();
+        });
+        const s = sorted[0];
+        this.set(KEYS.CAIXA, {
+          id: s.id,
+          openedAt: s.opened_at,
+          closedAt: s.closed_at || undefined,
+          operatorId: s.user_id || '',
+          operatorName: s.operator_name || '',
+          initialCash: parseFloat(s.opening_balance) || 0,
+          currentCashBalance: parseFloat(s.expected_balance) || 0,
+          totalSalesCash: parseFloat(s.total_sales_cash) || 0,
+          totalSalesPix: parseFloat(s.total_sales_pix) || 0,
+          totalSalesCard: parseFloat(s.total_sales_card) || 0,
+          totalSalesCreditAccount: parseFloat(s.total_sales_credit_account) || 0,
+          suprimentos: parseFloat(s.suprimentos) || 0,
+          sangrias: parseFloat(s.sangrias) || 0,
+          status: s.status,
+          notes: s.notes || undefined,
+          storeBranchId: s.store_branch_id || undefined,
+        });
+      }
+
       // Settings is a single JSONB row
       if (settings.length > 0 && settings[0].settings) {
         this.set(KEYS.SETTINGS, settings[0].settings);
