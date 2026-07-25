@@ -390,8 +390,11 @@ export const PDVView: React.FC<PDVViewProps> = ({
       }
     } catch (err) {
       console.error('Camera error:', err);
-      stopScanner();
-      alert('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
+      setIsScannerOpen(false);
+      setScannerStatus('idle');
+      setTimeout(() => {
+        alert('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
+      }, 0);
     }
   }, []);
 

@@ -209,12 +209,17 @@ class SupabaseSyncService {
     }
   }
 
+  // Tables that have an 'updated_at' column — only these get the timestamp appended
+  private static TABLES_WITH_UPDATED_AT: TableName[] = ['products', 'system_settings'];
+
   /**
    * Upsert a single row to Supabase.
    * If browser is offline, queue the operation for later sync.
    */
   async upsertRow(table: TableName, row: Record<string, any>) {
-    const rowWithTimestamp = { ...row, updated_at: new Date().toISOString() };
+    const rowWithTimestamp = SupabaseSyncService.TABLES_WITH_UPDATED_AT.includes(table)
+      ? { ...row, updated_at: new Date().toISOString() }
+      : row;
 
     if (!navigator.onLine) {
       console.log(`[HD-Sync] 📝 Queuing ${table} upsert (offline)`);
@@ -260,7 +265,9 @@ class SupabaseSyncService {
   async upsertRows(table: TableName, rows: Record<string, any>[]) {
     if (rows.length === 0) return true;
 
-    const rowsWithTimestamp = rows.map((r) => ({ ...r, updated_at: new Date().toISOString() }));
+    const rowsWithTimestamp = SupabaseSyncService.TABLES_WITH_UPDATED_AT.includes(table)
+      ? rows.map((r) => ({ ...r, updated_at: new Date().toISOString() }))
+      : rows;
 
     if (!navigator.onLine) {
       console.log(`[HD-Sync] 📝 Queuing ${table} batch upsert (offline)`);

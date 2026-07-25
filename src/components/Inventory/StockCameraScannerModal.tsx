@@ -191,7 +191,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
         message = 'Câmera em uso por outro aplicativo.';
       }
       setCameraError(message);
-      setIsScannerOpen(true);
+      // Não abre o fullscreen — mostra erro no modal principal
     }
   }, []);
 
