@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ShoppingCart,
   AlertTriangle,
@@ -43,8 +43,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // AI Analysis State
   const [aiInsight, setAiInsight] = useState<string>('');
   const [loadingAi, setLoadingAi] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (Date.now() >= cooldownUntil) {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+      setRemainingSeconds(0);
+      return;
+    }
+
+    cooldownRef.current = setInterval(() => {
+      const rem = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+      setRemainingSeconds(rem);
+      if (rem <= 0 && cooldownRef.current) {
+        clearInterval(cooldownRef.current);
+        cooldownRef.current = null;
+      }
+    }, 1000);
+
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, [cooldownUntil]);
 
   const handleFetchAiInsights = async () => {
+    // Block if still in cooldown
+    if (Date.now() < cooldownUntil) return;
+
     setLoadingAi(true);
     setAiInsight('');
     try {
@@ -68,6 +96,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }
 
       const data = await res.json();
+
+      if (data.retryAfter) {
+        // Quota exceeded — start cooldown
+        const delay = (data.retryAfter || 60) * 1000;
+        setCooldownUntil(Date.now() + delay);
+        setRemainingSeconds(Math.ceil(delay / 1000));
+        if (data.insight) setAiInsight(data.insight);
+        return;
+      }
+
       setAiInsight(data.insight || 'Análise concluída sem retorno.');
     } catch (err) {
       console.warn('[Dashboard] AI Insights não disponível:', err);
@@ -419,11 +457,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </p>
           <button
             onClick={handleFetchAiInsights}
-            disabled={loadingAi}
+            disabled={loadingAi || remainingSeconds > 0}
             className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md transition-colors flex items-center gap-2"
           >
-            <Sparkles className="w-4 h-4" />
-            <span>{loadingAi ? 'Analisando dados...' : 'Gerar Análise IA'}</span>
+            <Sparkles className={`w-4 h-4 ${loadingAi ? 'animate-spin' : ''}`} />
+            <span>
+              {loadingAi
+                ? 'Analisando dados...'
+                : remainingSeconds > 0
+                  ? `Aguarde ${remainingSeconds}s`
+                  : 'Gerar Análise IA'}
+            </span>
           </button>
 
           {aiInsight && (

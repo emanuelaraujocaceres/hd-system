@@ -69,7 +69,7 @@ Retorne ESTRITAMENTE um objeto JSON válido sem Markdown:
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.0-flash-lite',
       contents: [
         { inlineData: { data: cleanBase64, mimeType: 'image/jpeg' } },
         { text: prompt },

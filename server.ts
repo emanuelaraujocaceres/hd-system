@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ApiError } from "@google/genai";
 import Stripe from "stripe";
 import dotenv from "dotenv";
 
@@ -124,7 +124,7 @@ async function startServer() {
       if (!ai) {
         // Fallback intelligent response if API key is not active
         return res.json({
-          insight: `[Análise Inteligente HD-System ERP]
+          insight: `📊 **Análise Inteligente HD-System ERP**
 • **Desempenho de Vendas**: Seu faturamento teve um aumento projetado no período. Destaque para produtos da categoria Bebidas e Alimentos.
 • **Recomendações de Reposição**: Existem ${stockAlerts?.length || 3} produtos abaixo do estoque mínimo. Recomendamos emitir pedido de compra para os itens com maior giro.
 • **Fluxo de Caixa**: Mantenha atenção nas contas a pagar previstas para os próximos 7 dias para garantir liquidez positiva.`,
@@ -143,7 +143,7 @@ TIPO DE SOLICITAÇÃO: ${promptType || "geral"}
 Forneça 3 a 4 tópicos práticos com dicas para aumentar lucro, evitar rupturas de estoque e melhorar a margem de vendas. Seja profissional, encorajador e objetivo.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-2.0-flash-lite",
         contents: prompt,
       });
 
@@ -152,10 +152,22 @@ Forneça 3 a 4 tópicos práticos com dicas para aumentar lucro, evitar rupturas
         isFallback: false,
       });
     } catch (error: any) {
-      console.error("Erro ao gerar insight IA:", error);
-      res.status(500).json({
-        error: "Erro ao processar análise da IA.",
-        details: error?.message,
+      console.error("Erro ao gerar insight IA:", error?.message || error);
+
+      // Detect quota exceeded (429)
+      if ((error instanceof ApiError && error.status === 429) || /quota|rate_limit|resource_exhausted/i.test(error?.message || "")) {
+        return res.json({
+          insight: "⚠️ **Cota da IA excedida temporariamente**\nA cota gratuita do Gemini foi atingida. Aguarde um minuto e tente novamente.\n\n💡 **Sugestão:** Para liberar o uso ilimitado, ative o faturamento em https://aistudio.google.com/apikey",
+          retryAfter: 60,
+          isFallback: true,
+          errorType: "quota",
+        });
+      }
+
+      return res.json({
+        insight: "⚠️ **Análise temporariamente indisponível**\nO serviço de IA está passando por instabilidade. Tente novamente em alguns instantes.\n\nEnquanto isso:\n• Verifique seus relatórios de vendas no Dashboard\n• Confira os produtos com estoque baixo na seção de Estoque\n• Acompanhe o fluxo de caixa no módulo Financeiro",
+        isFallback: true,
+        error: error?.message,
       });
     }
   });
@@ -201,7 +213,7 @@ Retorne ESTRITAMENTE um objeto JSON válido sem Markdown:
 }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-2.0-flash-lite",
         contents: [
           {
             inlineData: {
@@ -289,7 +301,7 @@ Retorne ESTRITAMENTE um objeto JSON válido sem formatação Markdown extra:
 }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-2.0-flash-lite",
         contents: [
           {
             inlineData: {
@@ -370,7 +382,7 @@ Retorne ESTRITAMENTE um objeto JSON válido sem Markdown:
 }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-2.0-flash-lite",
         contents: [
           {
             inlineData: {
