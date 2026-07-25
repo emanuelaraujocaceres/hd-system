@@ -154,108 +154,128 @@ class SupabaseSyncService {
   // ─── GENERIC CRUD OPERATIONS (OFFLINE-FIRST) ───────────────────
 
   /**
+   * Try to send data to Supabase.
+   * Uses only navigator.onLine — Realtime channel status is NOT required.
+   * Realtime is only for RECEIVING changes from other devices, not for sending.
+   * If the request fails due to network, queue for retry.
+   */
+  private async tryUpsert(table: TableName, row: Record<string, any>): Promise<boolean> {
+    try {
+      const { error } = await supabase.from(table).upsert(row, { onConflict: 'id' });
+      if (error) {
+        console.warn(`[HD-Sync] Upsert ${table} failed:`, error.message);
+        // Only queue if it's a connection-related error
+        if (this.isConnectionError(error)) {
+          return false; // Caller will queue
+        }
+        // Otherwise it's a data error — don't retry
+        return true; // Consider it "handled" (we logged it)
+      }
+      return true;
+    } catch (e) {
+      console.warn(`[HD-Sync] Upsert ${table} exception:`, e);
+      return false; // Network error — queue for retry
+    }
+  }
+
+  private async tryDelete(table: TableName, id: string): Promise<boolean> {
+    try {
+      const { error } = await supabase.from(table).delete().eq('id', id);
+      if (error) {
+        console.warn(`[HD-Sync] Delete ${table} failed:`, error.message);
+        if (this.isConnectionError(error)) return false;
+        return true;
+      }
+      return true;
+    } catch (e) {
+      console.warn(`[HD-Sync] Delete ${table} exception:`, e);
+      return false;
+    }
+  }
+
+  private async tryUpsertBatch(table: TableName, rows: Record<string, any>[]): Promise<boolean> {
+    if (rows.length === 0) return true;
+    try {
+      const { error } = await supabase.from(table).upsert(rows, { onConflict: 'id' });
+      if (error) {
+        console.warn(`[HD-Sync] Batch upsert ${table} failed:`, error.message);
+        if (this.isConnectionError(error)) return false;
+        return true;
+      }
+      return true;
+    } catch (e) {
+      console.warn(`[HD-Sync] Batch upsert ${table} exception:`, e);
+      return false;
+    }
+  }
+
+  /**
    * Upsert a single row to Supabase.
-   * If offline, queue the operation for later sync.
+   * If browser is offline, queue the operation for later sync.
    */
   async upsertRow(table: TableName, row: Record<string, any>) {
-    // Always add updated_at timestamp
     const rowWithTimestamp = { ...row, updated_at: new Date().toISOString() };
 
-    if (!this._online || !this._connected) {
-      // Offline: queue for later
+    if (!navigator.onLine) {
       console.log(`[HD-Sync] 📝 Queuing ${table} upsert (offline)`);
       syncQueue.enqueue(table, 'upsert', { data: rowWithTimestamp });
       this._pendingCount = syncQueue.getPendingCount();
       return false;
     }
 
-    try {
-      const { error } = await supabase.from(table).upsert(rowWithTimestamp, { onConflict: 'id' });
-      if (error) {
-        console.warn(`[HD-Sync] Upsert ${table} failed:`, error.message);
-        // Queue for retry if it's a connection-related error
-        if (this.isConnectionError(error)) {
-          syncQueue.enqueue(table, 'upsert', { data: rowWithTimestamp });
-          this._pendingCount = syncQueue.getPendingCount();
-        }
-        return false;
-      }
-      return true;
-    } catch (e) {
-      console.warn(`[HD-Sync] Upsert ${table} exception:`, e);
-      // Queue for retry
+    const ok = await this.tryUpsert(table, rowWithTimestamp);
+    if (!ok) {
+      console.log(`[HD-Sync] 📝 Queuing ${table} upsert (network error — will retry)`);
       syncQueue.enqueue(table, 'upsert', { data: rowWithTimestamp });
       this._pendingCount = syncQueue.getPendingCount();
-      return false;
     }
+    return ok;
   }
 
   /**
    * Delete a row from Supabase.
-   * If offline, queue the operation for later sync.
+   * If browser is offline, queue the operation for later sync.
    */
   async deleteRow(table: TableName, id: string) {
-    if (!this._online || !this._connected) {
-      // Offline: queue for later
+    if (!navigator.onLine) {
       console.log(`[HD-Sync] 📝 Queuing ${table} delete (offline)`);
       syncQueue.enqueue(table, 'delete', { rowId: id });
       this._pendingCount = syncQueue.getPendingCount();
       return false;
     }
 
-    try {
-      const { error } = await supabase.from(table).delete().eq('id', id);
-      if (error) {
-        console.warn(`[HD-Sync] Delete ${table} failed:`, error.message);
-        if (this.isConnectionError(error)) {
-          syncQueue.enqueue(table, 'delete', { rowId: id });
-          this._pendingCount = syncQueue.getPendingCount();
-        }
-        return false;
-      }
-      return true;
-    } catch (e) {
-      console.warn(`[HD-Sync] Delete ${table} exception:`, e);
+    const ok = await this.tryDelete(table, id);
+    if (!ok) {
+      console.log(`[HD-Sync] 📝 Queuing ${table} delete (network error — will retry)`);
       syncQueue.enqueue(table, 'delete', { rowId: id });
       this._pendingCount = syncQueue.getPendingCount();
-      return false;
     }
+    return ok;
   }
 
   /**
    * Batch upsert multiple rows to Supabase.
-   * If offline, queue the operation for later sync.
+   * If browser is offline, queue the operation for later sync.
    */
   async upsertRows(table: TableName, rows: Record<string, any>[]) {
     if (rows.length === 0) return true;
 
-    // Add updated_at to each row
     const rowsWithTimestamp = rows.map((r) => ({ ...r, updated_at: new Date().toISOString() }));
 
-    if (!this._online || !this._connected) {
+    if (!navigator.onLine) {
       console.log(`[HD-Sync] 📝 Queuing ${table} batch upsert (offline)`);
       syncQueue.enqueue(table, 'upsert_batch', { dataArray: rowsWithTimestamp });
       this._pendingCount = syncQueue.getPendingCount();
       return false;
     }
 
-    try {
-      const { error } = await supabase.from(table).upsert(rowsWithTimestamp, { onConflict: 'id' });
-      if (error) {
-        console.warn(`[HD-Sync] Batch upsert ${table} failed:`, error.message);
-        if (this.isConnectionError(error)) {
-          syncQueue.enqueue(table, 'upsert_batch', { dataArray: rowsWithTimestamp });
-          this._pendingCount = syncQueue.getPendingCount();
-        }
-        return false;
-      }
-      return true;
-    } catch (e) {
-      console.warn(`[HD-Sync] Batch upsert ${table} exception:`, e);
+    const ok = await this.tryUpsertBatch(table, rowsWithTimestamp);
+    if (!ok) {
+      console.log(`[HD-Sync] 📝 Queuing ${table} batch upsert (network error — will retry)`);
       syncQueue.enqueue(table, 'upsert_batch', { dataArray: rowsWithTimestamp });
       this._pendingCount = syncQueue.getPendingCount();
-      return false;
     }
+    return ok;
   }
 
   /**
@@ -359,10 +379,11 @@ class SupabaseSyncService {
 
   /**
    * Test connection to Supabase.
+   * Uses 'products' table which is guaranteed to exist.
    */
   async testConnection(): Promise<boolean> {
     try {
-      const { error } = await supabase.from('organizations').select('id').limit(1);
+      const { error } = await supabase.from('products').select('id').limit(1);
       return !error;
     } catch {
       return false;
