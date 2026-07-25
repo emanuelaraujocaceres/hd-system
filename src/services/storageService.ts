@@ -567,23 +567,39 @@ class StorageService {
 
       // Only overwrite localStorage if Supabase has data
       if (products.length > 0) {
-        const mapped = products.map((r: any) => ({
-          id: r.id,
-          sku: r.sku || '',
-          barcode: r.barcode || '',
-          name: r.name,
-          category: r.category || 'Geral',
-          unit: r.unit || 'un',
-          costPrice: parseFloat(r.cost_price) || 0,
-          salePrice: parseFloat(r.sale_price) || 0,
-          currentStock: parseInt(r.stock_quantity) || 0,
-          minStock: parseInt(r.min_stock_quantity) || 5,
-          maxStock: 100,
-          imageUrl: r.image_url || '',
-          active: r.is_active !== false,
-          updatedAt: r.updated_at || new Date().toISOString(),
-          storeBranchId: r.store_branch_id || undefined,
-        }));
+        const localProducts = this.getProducts();
+        const localByKey = new Map(localProducts.map((p: any) => [p.id, p]));
+
+        const mapped = products.map((r: any) => {
+          const cloudSalePrice = parseFloat(r.sale_price);
+          const local = localByKey.get(r.id);
+
+          // Guard: if Supabase sends sale_price = 0 but local has a valid price,
+          // keep the local price (prevents hydrateFromCloud from zeroing valid data)
+          if (local && local.salePrice > 0 && (!cloudSalePrice || cloudSalePrice <= 0)) {
+            console.warn(`[HD-Sync] ⚠️ Supabase has sale_price=0 for "${r.name}", keeping local R$ ${local.salePrice.toFixed(2)}`);
+          }
+
+          return {
+            id: r.id,
+            sku: r.sku || '',
+            barcode: r.barcode || '',
+            name: r.name,
+            category: r.category || 'Geral',
+            unit: r.unit || 'un',
+            costPrice: parseFloat(r.cost_price) || 0,
+            salePrice: (local && local.salePrice > 0 && (!cloudSalePrice || cloudSalePrice <= 0))
+              ? local.salePrice
+              : (cloudSalePrice || 0),
+            currentStock: parseInt(r.stock_quantity) || (local?.currentStock ?? 0),
+            minStock: parseInt(r.min_stock_quantity) || (local?.minStock ?? 5),
+            maxStock: 100,
+            imageUrl: r.image_url || '',
+            active: r.is_active !== false,
+            updatedAt: r.updated_at || new Date().toISOString(),
+            storeBranchId: r.store_branch_id || undefined,
+          };
+        });
         this.set(KEYS.PRODUCTS, mapped);
       }
 
@@ -625,14 +641,20 @@ class StorageService {
           }
         }
 
+        // Preserve local items when Supabase sale_items are missing (race condition fix)
+        const localSales = this.getSales();
+        const localSalesById = new Map(localSales.map((s) => [s.id, s]));
+
         const mapped = sales.map((r: any) => {
-          const saleItems = itemsBySaleId[r.id] || [];
+          const cloudItems = itemsBySaleId[r.id] || [];
+          // If cloud has no items for this sale, keep local items (may not have synced yet)
+          const items = cloudItems.length > 0 ? cloudItems : (localSalesById.get(r.id)?.items || []);
           return {
             id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
             operatorId: r.user_id || '', operatorName: 'Sistema',
             customerId: r.customer_id || undefined, customerName: r.notes || undefined,
             storeBranchId: r.store_branch_id || '',
-            items: saleItems,
+            items,
             subtotal: parseFloat(r.subtotal) || 0, discount: parseFloat(r.discount) || 0,
             total: parseFloat(r.total) || 0,
             payments: [{ method: r.payment_method || 'cash', amount: parseFloat(r.total) || 0 }],
@@ -842,9 +864,17 @@ class StorageService {
   }
 
   deleteSale(id: string) {
-    const sales = this.getSales().filter((s) => s.id !== id);
+    const allSales = this.getSales();
+    const saleToDelete = allSales.find((s) => s.id === id);
+    const sales = allSales.filter((s) => s.id !== id);
     this.set(KEYS.SALES, sales);
     syncService.deleteRow('sales', id);
+    // Also delete sale_items from Supabase to prevent orphaned records
+    if (saleToDelete && saleToDelete.items) {
+      saleToDelete.items.forEach((item) => {
+        syncService.deleteRow('sale_items', `${id}-${item.productId}`);
+      });
+    }
   }
 
   updateStock(productId: string, quantityDelta: number, reason: string, operatorName: string) {
