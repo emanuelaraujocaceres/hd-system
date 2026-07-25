@@ -104,7 +104,8 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     }
   }, [isScannerOpen]);
 
-  if (!isOpen) return null;
+  // ⚠️ All hooks MUST be declared BEFORE the early return
+  // to keep hook count consistent across renders (React error #310 fix)
 
   // Flash toggle
   const toggleFlash = useCallback(async () => {
@@ -266,6 +267,8 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
       scannerIntervalRef.current = null;
     }
   }, []);
+
+  if (!isOpen) return null;
 
   // Add stock to existing product
   const handleAddStockToExisting = () => {
