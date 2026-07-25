@@ -70,18 +70,21 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authentic
 GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
 
 -- Garantir que as tabelas estão na publicação Realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS products;
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS categories;
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS customers;
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS suppliers;
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS sales;
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS sale_items;
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS financial_transactions;
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS cash_sessions;
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS stock_movements;
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS store_branches;
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS system_users;
-ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS system_settings;
+DO $$
+BEGIN
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE products; EXCEPTION WHEN duplicate_object THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE categories; EXCEPTION WHEN duplicate_object THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE customers; EXCEPTION WHEN duplicate_object THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE suppliers; EXCEPTION WHEN duplicate_object THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE sales; EXCEPTION WHEN duplicate_object THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE sale_items; EXCEPTION WHEN duplicate_object THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE financial_transactions; EXCEPTION WHEN duplicate_object THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE cash_sessions; EXCEPTION WHEN duplicate_object THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE stock_movements; EXCEPTION WHEN duplicate_object THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE store_branches; EXCEPTION WHEN duplicate_object THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE system_users; EXCEPTION WHEN duplicate_object THEN END;
+    BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE system_settings; EXCEPTION WHEN duplicate_object THEN END;
+END $$;
 
 -- ============================================
 -- VERIFICAÇÃO
