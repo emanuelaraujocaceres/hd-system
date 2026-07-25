@@ -483,6 +483,11 @@ class StorageService {
     this.set(KEYS.BRANCHES, branches);
   }
 
+  removeBranchFromRemote(id: string) {
+    const branches = this.getBranches().filter((b) => b.id !== id);
+    this.set(KEYS.BRANCHES, branches);
+  }
+
   updateSettingsFromRemote(row: any) {
     if (row.settings) {
       this.set(KEYS.SETTINGS, row.settings);
@@ -768,6 +773,13 @@ class StorageService {
           console.log(`[HD-Sync] ☁️→☁️ Syncing active cash session to cloud...`);
           this.syncCaixaSession(localCaixa);
         }
+      }
+
+      // Settings: sync local settings if cloud table is empty
+      if (settings.length === 0) {
+        const localSettings = this.getSettings();
+        console.log(`[HD-Sync] ☁️→☁️ Syncing local settings to cloud...`);
+        this.syncSettings(localSettings);
       }
 
       return true;

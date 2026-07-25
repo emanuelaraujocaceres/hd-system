@@ -214,7 +214,8 @@ export const App: React.FC = () => {
           else storageService.updateCaixaFromRemote(row);
           break;
         case 'store_branches':
-          storageService.updateBranchFromRemote(row);
+          if (event === 'DELETE') storageService.removeBranchFromRemote(row.id);
+          else storageService.updateBranchFromRemote(row);
           break;
         case 'stock_movements':
           storageService.updateStockMovementFromRemote(row);
