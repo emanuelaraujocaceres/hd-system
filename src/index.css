@@ -37,10 +37,9 @@
   }
 }
 
-/* Prevent horizontal overflow globally */
-html, body, #root {
+/* Prevent horizontal overflow on body only (not #root — it blocks vertical scroll) */
+body {
   overflow-x: hidden;
-  overscroll-behavior: none;
 }
 
 /* Hide scrollbar utility */
