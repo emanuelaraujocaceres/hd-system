@@ -732,7 +732,19 @@ class StorageService {
           permissions: r.permissions || { pdv: true, inventory: true, crm: true, finance: true, dashboard: true, settings: true },
           active: r.active !== false, avatarUrl: r.avatar_url || undefined,
         }));
-        this.set(KEYS.USERS_LIST, mapped);
+        // Merge with existing users (preserve passwords from local)
+        const existing = this.getUsers();
+        const merged = mapped.map((m: any) => {
+          const local = existing.find((u) => u.id === m.id || u.email.toLowerCase() === m.email.toLowerCase());
+          return { ...m, password: local?.password || m.password };
+        });
+        // Also keep any local users not in cloud (like the admin)
+        for (const e of existing) {
+          if (!merged.find((m: any) => m.id === e.id || m.email.toLowerCase() === e.email.toLowerCase())) {
+            merged.push(e);
+          }
+        }
+        this.set(KEYS.USERS_LIST, merged);
       }
 
       if (movements.length > 0) {
@@ -1233,7 +1245,18 @@ class StorageService {
 
   // --- USERS & GOOGLE COLLABORATORS ---
   getUsers(): UserProfile[] {
-    return this.get<UserProfile[]>(KEYS.USERS_LIST, INITIAL_USERS);
+    const stored = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
+    // Ensure initial users always exist (merge by id)
+    const merged = [...INITIAL_USERS];
+    for (const s of stored) {
+      const idx = merged.findIndex((u) => u.id === s.id);
+      if (idx >= 0) {
+        merged[idx] = { ...merged[idx], ...s, password: merged[idx].password || s.password };
+      } else {
+        merged.push(s);
+      }
+    }
+    return merged;
   }
 
   saveUser(user: UserProfile) {
