@@ -85,13 +85,13 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     };
   }, []);
 
-  // Back button closes scanner on mobile
+  // Back button closes the scanner view but keeps the modal open
   useEffect(() => {
     if (isScannerOpen) {
       window.history.pushState({ scannerOpen: true }, '');
       const handleBack = () => {
         stopScanner();
-        onClose();
+        // Do NOT call onClose() — only stop the scanner and return to idle/menu view
       };
       window.addEventListener('popstate', handleBack);
       return () => {

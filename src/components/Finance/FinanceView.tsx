@@ -294,6 +294,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
           {/* Desktop accounts table */}
           <div className="hidden md:block bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 dark:bg-[#09090b]/80 border-b border-slate-200 dark:border-[#27272a] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider">
@@ -373,6 +374,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 })}
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* Mobile accounts cards */}
@@ -472,6 +474,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
             {/* Desktop sales table */}
             <div className="hidden md:block bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-[#09090b]/80 border-b border-slate-200 dark:border-[#27272a] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider">
@@ -531,8 +534,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                       </td>
                     </tr>
                   )}
-                </tbody>
+                  </tbody>
               </table>
+              </div>
             </div>
 
             {/* Mobile sales cards */}
