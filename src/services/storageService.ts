@@ -46,6 +46,7 @@ const KEYS = {
   LOGGED_IN_EMAIL: 'hd_system_logged_in_email',
   SETTINGS: 'hd_system_settings',
   SUBSCRIPTION: 'hd_system_subscription',
+  CREDIT_PAYMENTS: 'hd_system_credit_payments',
 };
 
 class StorageService {
@@ -922,7 +923,7 @@ class StorageService {
             if (branchId) {
               filtered = caixa.filter((r: any) => r.store_branch_id === branchId);
             }
-            if (filtered.length === 0) filtered = caixa;
+            if (filtered.length === 0 && !branchId) filtered = caixa;
             const sorted = [...filtered].sort((a: any, b: any) => {
               if (a.status === 'open' && b.status !== 'open') return -1;
               if (a.status !== 'open' && b.status === 'open') return 1;
@@ -947,7 +948,7 @@ class StorageService {
             // Normal: prefer local open session over cloud
             let filtered = caixa;
             if (branchId) filtered = caixa.filter((r: any) => r.store_branch_id === branchId);
-            if (filtered.length === 0) filtered = caixa;
+            if (filtered.length === 0 && !branchId) filtered = caixa;
             const sorted = [...filtered].sort((a: any, b: any) => {
               if (a.status === 'open' && b.status !== 'open') return -1;
               if (a.status !== 'open' && b.status === 'open') return 1;
@@ -1179,6 +1180,14 @@ class StorageService {
 
   getSaleItems(): any[] {
     return this.get<any[]>(KEYS.SALE_ITEMS, []);
+  }
+
+  getCreditPayments(): any[] {
+    return this.get<any[]>(KEYS.CREDIT_PAYMENTS, []);
+  }
+
+  saveCreditPayments(payments: any[]) {
+    this.set(KEYS.CREDIT_PAYMENTS, payments);
   }
 
   addSale(sale: Sale) {
@@ -1461,12 +1470,12 @@ class StorageService {
     this.notify();
   }
 
-  loginWithGoogle(email: string): { success: boolean; user?: UserProfile; message?: string } {
+  loginWithGoogle(email: string, password?: string): { success: boolean; user?: UserProfile; message?: string } {
     const user = this.getUserByEmail(email);
     if (!user) {
       return {
         success: false,
-        message: `A conta do Google (${email}) não está cadastrada no sistema. Peça a um Administrador para adicionar este e-mail no painel de Usuários & Permissões.`,
+        message: `A conta de e-mail (${email}) não está cadastrada no sistema. Peça a um Administrador para adicionar este e-mail no painel de Usuários & Permissões.`,
       };
     }
 
@@ -1474,6 +1483,14 @@ class StorageService {
       return {
         success: false,
         message: `A conta (${email}) está inativa no momento. Entre em contato com o Administrador.`,
+      };
+    }
+
+    // Validate password if user has one set locally
+    if (user.password && password !== user.password) {
+      return {
+        success: false,
+        message: 'Senha incorreta. Tente novamente.',
       };
     }
 

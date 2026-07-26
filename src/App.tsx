@@ -12,7 +12,7 @@ import { FiadosView } from './components/CRM/FiadosView';
 import { SettingsView } from './components/Settings/SettingsView';
 import { TVShowcaseView } from './components/TV/TVShowcaseView';
 import { CaixaModal } from './components/PDV/CaixaModal';
-import { GoogleLoginModal } from './components/Auth/GoogleLoginModal';
+import { LoginModal } from './components/Auth/LoginModal';
 import { UserProfileModal } from './components/Auth/UserProfileModal';
 import { SyncBanner } from './components/Sync/SyncBanner';
 import { storageService } from './services/storageService';
@@ -66,7 +66,12 @@ export const App: React.FC = () => {
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     if (navHistory[navHistory.length - 1] !== tab) {
-      setNavHistory(prev => [...prev, tab]);
+      setNavHistory(prev => {
+        const next = [...prev, tab];
+        // Keep max 50 entries to prevent unbounded memory growth
+        if (next.length > 50) next.splice(0, next.length - 50);
+        return next;
+      });
       window.history.pushState({ tab }, '', window.location.pathname);
     }
     setIsMobileOpen(false);
@@ -326,17 +331,29 @@ export const App: React.FC = () => {
 
   const handleLoginSuccess = (loggedUser: UserProfile) => {
     setUser(loggedUser);
-    // If collaborator doesn't have permission for current activeTab, reset to pdv
+    // Redirect to the first permitted tab
     if (loggedUser.role !== 'admin') {
+      const allowedTabs = ['pdv', 'inventory', 'finance', 'crm', 'dashboard', 'settings'] as const;
       const perms = loggedUser.permissions;
-      if (activeTab === 'settings' && !perms?.settings) setActiveTab('pdv');
-      if (activeTab === 'pdv' && !perms?.pdv) setActiveTab('inventory');
+      const hasAccess = (tab: string): boolean => {
+        if (tab === 'pdv') return !!perms?.pdv;
+        if (tab === 'inventory') return !!perms?.inventory;
+        if (tab === 'finance') return !!perms?.finance;
+        if (tab === 'crm') return !!perms?.crm;
+        if (tab === 'dashboard') return !!perms?.dashboard;
+        if (tab === 'settings') return !!perms?.settings;
+        return false;
+      };
+      const firstAllowed = allowedTabs.find(t => hasAccess(t));
+      if (firstAllowed) {
+        setActiveTab(firstAllowed);
+      }
     }
   };
 
   // If no user is logged in, show Google Auth Modal
   if (!user) {
-    return <GoogleLoginModal onLoginSuccess={handleLoginSuccess} />;
+    return <LoginModal onLoginSuccess={handleLoginSuccess} />;
   }
 
   // Check current user permissions
@@ -448,12 +465,18 @@ export const App: React.FC = () => {
               <p className="text-xs text-slate-500 dark:text-[#a1a1aa]">
                 Você está conectado como <strong className="text-indigo-500">{user.name}</strong> (Colaborador). Seu perfil não possui permissão para acessar o módulo <span className="uppercase font-bold">{activeTab}</span>.
               </p>
-              <button
-                onClick={() => setActiveTab('pdv')}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all"
-              >
-                Voltar para o PDV
-              </button>
+              {(() => {
+                const fallbackTab = (['pdv', 'inventory', 'finance', 'crm', 'dashboard', 'settings'] as const)
+                  .find(t => hasAccessToTab(t)) || 'pdv';
+                return (
+                  <button
+                    onClick={() => setActiveTab(fallbackTab)}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all"
+                  >
+                    Voltar para o {fallbackTab === 'pdv' ? 'PDV' : fallbackTab === 'inventory' ? 'Estoque' : fallbackTab === 'finance' ? 'Financeiro' : fallbackTab === 'crm' ? 'CRM' : fallbackTab === 'dashboard' ? 'Dashboard' : 'Configurações'}
+                  </button>
+                );
+              })()}
             </div>
           ) : (
             <>

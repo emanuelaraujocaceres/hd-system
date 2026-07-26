@@ -54,27 +54,11 @@ interface FiadosViewProps {
   user: UserProfile;
 }
 
-// ─── Storage helpers ────────────────────────────────────────────
-const CREDIT_PAYMENTS_KEY = 'hd_system_credit_payments';
-
-function getStoredCreditPayments(): CreditPayment[] {
-  try {
-    const raw = localStorage.getItem(CREDIT_PAYMENTS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function storeCreditPayments(payments: CreditPayment[]) {
-  localStorage.setItem(CREDIT_PAYMENTS_KEY, JSON.stringify(payments));
-}
-
 // ─── Component ──────────────────────────────────────────────────
 export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }) => {
   const isAdmin = user.role === 'admin';
   const [searchTerm, setSearchTerm] = useState('');
-  const [creditPayments, setCreditPayments] = useState<CreditPayment[]>(getStoredCreditPayments);
+  const [creditPayments, setCreditPayments] = useState<CreditPayment[]>(storageService.getCreditPayments());
   const [paymentModalSaleId, setPaymentModalSaleId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
@@ -98,10 +82,26 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
     const result: CustomerDebt[] = [];
 
     grouped.forEach((custSales, customerId) => {
-      if (customerId === '__no_customer__') return; // skip sales without assigned customer
+      let customer = customers.find((c) => c.id === customerId);
 
-      const customer = customers.find((c) => c.id === customerId);
-      if (!customer) return;
+      if (customerId === '__no_customer__' || !customer) {
+        // Create a virtual customer entry for unassigned credit sales
+        customer = {
+          id: '__no_customer__',
+          name: '🧾 Cliente Não Identificado',
+          cpfCnpj: '—',
+          email: '—',
+          phone: '—',
+          address: '—',
+          creditLimit: Infinity,
+          currentBalance: 0,
+          active: true,
+          createdAt: '',
+          updatedAt: '',
+          storeBranchId: '',
+          type: 'customer',
+        } as Customer;
+      }
 
       // Sort sales oldest first (FIFO)
       custSales.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -115,8 +115,9 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
       let totalDebt = 0;
 
       for (const sale of custSales) {
+        const saleTotal = sale.total > 0 ? sale.total : (sale.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0);
         const creditAmount =
-          sale.payments.find((p) => p.method === 'credit_account')?.amount || sale.total;
+          sale.payments.find((p) => p.method === 'credit_account')?.amount || saleTotal;
 
         // Distribute the sale's credit amount across its items proportionally
         const saleSubtotal = (sale.items || []).reduce((acc, item) => acc + item.total, 0);
@@ -233,8 +234,9 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
         if (!sale) continue;
 
         const saleSubtotal = (sale.items || []).reduce((acc, item) => acc + item.total, 0);
+        const saleTotal = sale.total > 0 ? sale.total : (sale.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0);
         const creditAmount =
-          sale.payments.find((p) => p.method === 'credit_account')?.amount || sale.total;
+          sale.payments.find((p) => p.method === 'credit_account')?.amount || saleTotal;
         const ratio = saleSubtotal > 0 ? creditAmount / saleSubtotal : 1;
         const totalSaleDebt = Math.round(saleSubtotal * ratio * 100) / 100;
         const remainingOnSale = Math.max(
@@ -259,7 +261,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
       if (newPayments.length > 0) {
         const updated = [...creditPayments, ...newPayments];
         setCreditPayments(updated);
-        storeCreditPayments(updated);
+        storageService.saveCreditPayments(updated);
         posAudio.chime();
       } else {
         posAudio.error();
@@ -277,7 +279,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
       if (!confirm('Tem certeza que deseja excluir este registro de pagamento?')) return;
       const updated = creditPayments.filter((cp) => cp.id !== paymentId);
       setCreditPayments(updated);
-      storeCreditPayments(updated);
+      storageService.saveCreditPayments(updated);
       posAudio.chime();
     },
     [creditPayments]

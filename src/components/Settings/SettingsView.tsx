@@ -11,6 +11,7 @@ import {
   Users,
   Check,
   CheckCircle,
+  AlertCircle,
   X,
   Lock,
   Mail,
@@ -47,6 +48,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [isProcessingStripe, setIsProcessingStripe] = useState(false);
   const [selectedInvoiceForReceipt, setSelectedInvoiceForReceipt] = useState<SubscriptionInvoice | null>(null);
   const [paymentSuccessAlert, setPaymentSuccessAlert] = useState(false);
+
+  // Inline message state (replaces browser alert())
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (successMessage) {
+      const t = setTimeout(() => setSuccessMessage(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [successMessage]);
+
+  useEffect(() => {
+    if (errorMessage) {
+      const t = setTimeout(() => setErrorMessage(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [errorMessage]);
 
   // Fiscal & General Settings State
   const [tradeName, setTradeName] = useState(settings.tradeName);
@@ -114,7 +133,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
     storageService.saveSettings(updated);
     posAudio.chime();
-    alert('Configurações salvas com sucesso!');
+    setSuccessMessage('Configurações salvas com sucesso!');
   };
 
   // Branch Handlers
@@ -165,7 +184,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   const handleDeleteBranch = (id: string) => {
     if (branches.length <= 1) {
-      alert('O sistema precisa de pelo menos 1 filial cadastrada.');
+      setErrorMessage('O sistema precisa de pelo menos 1 filial cadastrada.');
       return;
     }
     if (confirm('Tem certeza que deseja excluir esta filial?')) {
@@ -212,7 +231,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userEmail.includes('@')) {
-      alert('Por favor, informe um e-mail do Google válido.');
+      setErrorMessage('Por favor, informe um e-mail de usuário válido.');
       return;
     }
 
@@ -245,7 +264,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   const handleDeleteUser = (id: string) => {
     if (id === user.id) {
-      alert('Você não pode excluir sua própria conta atualmente logada.');
+      setErrorMessage('Você não pode excluir sua própria conta atualmente logada.');
       return;
     }
     if (confirm('Tem certeza que deseja excluir este colaborador da empresa?')) {
@@ -382,6 +401,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           </button>
         </div>
       </div>
+
+      {/* Inline Success / Error Messages */}
+      {successMessage && (
+        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2 mb-4">
+          <CheckCircle className="w-4 h-4 shrink-0" />
+          <span>{successMessage}</span>
+        </div>
+      )}
+      {errorMessage && (
+        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2 mb-4">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
 
       {/* --- TAB 1: FISCAL & GENERAL --- */}
       {activeSubTab === 'fiscal' && (
@@ -1769,7 +1802,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 };
                 storageService.saveSettings(updated);
                 posAudio.chime();
-                alert('Configurações da TV salvas!');
+                setSuccessMessage('Configurações da TV salvas!');
               }}
               className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shadow-md transition-colors flex items-center gap-2"
             >

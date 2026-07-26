@@ -240,10 +240,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     }, 500);
   };
 
-  const openNewProductModal = () => {
+  const resetProductForm = (barcode?: string) => {
     setEditingProduct(null);
     setFormName('');
-    setFormBarcode(`789${Math.floor(1000000000 + Math.random() * 9000000000)}`);
+    setFormBarcode(barcode || '');
     setFormCategory(categories[0]?.name || 'Geral');
     setFormUnit('un');
     setFormCostPrice('');
@@ -255,6 +255,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormShowOnTV(false);
     setFormTvPromoPrice('');
     setFormTvHighlightTag('');
+    setImageSuggestions([]);
+    setIsSearchingImages(false);
+  };
+
+  const openNewProductModal = () => {
+    resetProductForm();
     setIsProductModalOpen(true);
   };
 
@@ -294,8 +300,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       updatedAt: new Date().toISOString(),
       storeBranchId: user.storeBranchId,
       showOnTV: formShowOnTV,
-      tvPromoPrice: formShowOnTV && formTvPromoPrice ? parseFloat(formTvPromoPrice) || undefined : undefined,
-      tvHighlightTag: formShowOnTV && formTvHighlightTag ? formTvHighlightTag : undefined,
+      // Preserve TV field values even when showOnTV is off, so they aren't lost if re-enabled
+      tvPromoPrice: formTvPromoPrice ? parseFloat(formTvPromoPrice) || undefined : undefined,
+      tvHighlightTag: formTvHighlightTag || undefined,
     };
 
     storageService.saveProduct(newProd);
@@ -1192,19 +1199,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         }}
         onNavigateToNewProduct={(barcode) => {
           setIsStockCameraModalOpen(false);
-          setEditingProduct(null);
-          setFormName('');
-          setFormBarcode(barcode);
-          setFormCategory(categories[0]?.name || 'Geral');
-          setFormUnit('un');
-          setFormCostPrice('');
-          setFormSalePrice('');
-          setFormCurrentStock('');
-          setFormMinStock('');
-          setFormMaxStock('');
-          setFormImageUrl('');
-          setImageSuggestions([]);
-          setIsSearchingImages(false);
+          resetProductForm(barcode);
           setIsProductModalOpen(true);
         }}
       />

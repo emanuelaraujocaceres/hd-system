@@ -117,6 +117,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   ]);
 
   const [loading, setLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   // QR Code data URL for PIX (generated async)
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
@@ -164,15 +165,22 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     });
   }, [totalAmount]);
 
+  // Reset payment error when modal opens or method changes
+  useEffect(() => {
+    setPaymentError(null);
+  }, [isOpen, method]);
+
   // Simulate auto PIX payment confirmation after 3.5 seconds
   useEffect(() => {
     if (method === 'pix' && !pixPaid) {
       const timer = setTimeout(() => {
         setPixPaid(true);
-      }, 3500);
+      }, 15000);
       return () => clearTimeout(timer);
     }
   }, [method, pixPaid]);
+
+  const isPixUnconfirmed = method === 'pix' && !pixPaid;
 
   // Split helpers
   const splitPartsTotal = splitParts.reduce((sum, p) => sum + p.amount, 0);
@@ -218,6 +226,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     setLoading(true);
 
     try {
+      // Validate credit_account limit
+      if (selectedCustomer && (method === 'credit_account' || splitParts.some(p => p.method === 'credit_account'))) {
+        const availableCredit = (selectedCustomer.creditLimit || 0) - (selectedCustomer.currentBalance || 0);
+        if (totalAmount > availableCredit) {
+          setPaymentError(`Cliente não tem crédito suficiente. Disponível: R$ ${availableCredit.toFixed(2)}`);
+          setLoading(false);
+          return;
+        }
+      }
+
       let payments: PaymentDetails[] = [];
 
       if (!isSplit) {
@@ -253,10 +271,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             amount: totalAmount,
           });
         }
-      } else {
-        // Split payment
-        payments = splitParts.map((p) => ({ method: p.method, amount: p.amount }));
-      }
+        } else {
+          // Split payment
+          payments = splitParts.map((p) => {
+            if (p.method === 'cash') {
+              return { method: p.method, amount: p.amount, cashGiven: p.amount, changeDue: 0 };
+            }
+            return { method: p.method, amount: p.amount };
+          });
+        }
 
       const saleCode = `VEN-${Math.floor(1000 + Math.random() * 9000)}`;
       const newSale: Sale = {
@@ -628,6 +651,24 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                           Apresente o QR Code na tela para o cliente escanear no aplicativo do banco ou copie a chave Pix Copia e Cola.
                         </p>
 
+                        {!pixPaid && (
+                          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-semibold flex items-center gap-2 animate-pulse">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <span>Aguardando confirmação do pagamento...</span>
+                          </div>
+                        )}
+
+                        {!pixPaid && (
+                          <button
+                            type="button"
+                            onClick={() => setPixPaid(true)}
+                            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Simular Confirmação de Pagamento</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={handleCopyPix}
@@ -713,6 +754,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </div>
         </div>
 
+        {paymentError && (
+          <div className="mx-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{paymentError}</span>
+          </div>
+        )}
+
         {/* Footer Buttons */}
         <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
           <button
@@ -726,7 +774,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           <button
             type="button"
             onClick={handleFinalize}
-            disabled={loading || (method === 'credit_account' && !selectedCustomer) || (isSplit && !isSplitValid)}
+            disabled={loading || isPixUnconfirmed || (method === 'credit_account' && !selectedCustomer) || (isSplit && !isSplitValid)}
             className="flex-1 py-3 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
           >
             {loading ? (

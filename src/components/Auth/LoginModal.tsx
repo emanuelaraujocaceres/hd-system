@@ -3,11 +3,11 @@ import { ShieldCheck, Lock, AlertCircle, LogIn } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 
-interface GoogleLoginModalProps {
+interface LoginModalProps {
   onLoginSuccess: (user: UserProfile) => void;
 }
 
-export const GoogleLoginModal: React.FC<GoogleLoginModalProps> = ({ onLoginSuccess }) => {
+export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -38,7 +38,9 @@ export const GoogleLoginModal: React.FC<GoogleLoginModalProps> = ({ onLoginSucce
         setErrorMessage('Usuário não encontrado.');
         return;
       }
-      if (!user.password || user.password !== passwordInput) {
+      // Fix 1: Cloud-only users (from Supabase) don't have a local password,
+      // so only validate password when user has one set locally
+      if (user.password && user.password !== passwordInput) {
         setIsLoading(false);
         setErrorMessage('Senha incorreta. Tente novamente.');
         return;

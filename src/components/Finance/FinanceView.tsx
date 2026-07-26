@@ -144,11 +144,17 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const grossProfit = netSalesRevenue - totalCMV;
   const grossMargin = totalSalesRevenue > 0 ? (grossProfit / totalSalesRevenue) * 100 : 0;
 
-  const totalOperatingExpenses = financialAccounts
+  // Two DRE bases: accrual (regime de competência) and cash (regime de caixa)
+  const totalExpensesAccrual = financialAccounts
     .filter((a) => a.type === 'payable')
     .reduce((acc, a) => acc + a.amount, 0);
 
-  const netOperatingProfit = grossProfit - totalOperatingExpenses;
+  const totalExpensesCash = financialAccounts
+    .filter((a) => a.type === 'payable' && a.status === 'paid')
+    .reduce((acc, a) => acc + a.amount, 0);
+
+  const netOperatingProfitAccrual = grossProfit - totalExpensesAccrual;
+  const netOperatingProfitCash = grossProfit - totalExpensesCash;
 
   const paymentMethodLabel = (method: string) => {
     const labels: Record<string, string> = {
@@ -244,8 +250,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
         <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm">
           <span className="text-xs font-semibold text-slate-500 dark:text-[#71717a]">Lucro Operacional Estimado</span>
-          <p className={`text-2xl font-black mt-1 ${netOperatingProfit >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-rose-600'}`}>
-            R$ {netOperatingProfit.toFixed(2)}
+          <p className={`text-2xl font-black mt-1 ${netOperatingProfitAccrual >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-rose-600'}`}>
+            R$ {netOperatingProfitAccrual.toFixed(2)}
           </p>
         </div>
       </div>
@@ -770,25 +776,55 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               onClick={() => onNavigateTab('finance')}
             >
               <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-[#09090b]/50 pl-6 text-rose-600 dark:text-rose-400">
-                <span>(-) Despesas Operacionais / Instalações / Fornecedores</span>
-                <span>- R$ {totalOperatingExpenses.toFixed(2)}</span>
+                <span>(-) Despesas Operacionais (Competência)</span>
+                <span>- R$ {totalExpensesAccrual.toFixed(2)}</span>
+              </div>
+            </div>
+            <div
+              className="rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => onNavigateTab('finance')}
+            >
+              <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-[#09090b]/50 pl-6 text-rose-600 dark:text-rose-400">
+                <span>(-) Despesas Operacionais (Caixa)</span>
+                <span>- R$ {totalExpensesCash.toFixed(2)}</span>
               </div>
             </div>
 
-            {/* (=) LUCRO LÍQUIDO */}
+            {/* (=) LUCRO LÍQUIDO (Competência) */}
             <div
               className="rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
-              onClick={() => setExpandedDreRow(expandedDreRow === 'netProfit' ? null : 'netProfit')}
+              onClick={() => setExpandedDreRow(expandedDreRow === 'netProfitAccrual' ? null : 'netProfitAccrual')}
+            >
+              <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-[#09090b] pl-6 text-indigo-700 dark:text-indigo-300 font-bold">
+                <span>(=) LUCRO LÍQUIDO (Competência)</span>
+                <span className={netOperatingProfitAccrual >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+                  R$ {netOperatingProfitAccrual.toFixed(2)}
+                </span>
+              </div>
+              {expandedDreRow === 'netProfitAccrual' && (
+                <div className="mx-6 mt-1 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/40 text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
+                  <p className="font-bold text-indigo-600 dark:text-indigo-400">Como é calculado?</p>
+                  <p>Lucro Bruto - Despesas Operacionais (Competência) = Lucro Líquido</p>
+                  <p>R$ {grossProfit.toFixed(2)} - R$ {totalExpensesAccrual.toFixed(2)} = <strong className={netOperatingProfitAccrual >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}>R$ {netOperatingProfitAccrual.toFixed(2)}</strong></p>
+                </div>
+              )}
+            </div>
+            {/* (=) LUCRO LÍQUIDO (Caixa) */}
+            <div
+              className="rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => setExpandedDreRow(expandedDreRow === 'netProfitCash' ? null : 'netProfitCash')}
             >
               <div className="flex justify-between p-3.5 rounded-xl bg-slate-900 dark:bg-[#09090b] text-white font-black text-sm tracking-wide border dark:border-[#27272a]">
-                <span>(=) LUCRO LÍQUIDO OPERACIONAL DO EXERCÍCIO</span>
-                <span className="text-emerald-400">R$ {netOperatingProfit.toFixed(2)}</span>
+                <span>(=) LUCRO LÍQUIDO (Caixa)</span>
+                <span className={netOperatingProfitCash >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                  R$ {netOperatingProfitCash.toFixed(2)}
+                </span>
               </div>
-              {expandedDreRow === 'netProfit' && (
+              {expandedDreRow === 'netProfitCash' && (
                 <div className="mx-6 mt-1 p-3 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 space-y-1">
                   <p className="font-bold text-slate-900 dark:text-white">Como é calculado?</p>
-                  <p>Lucro Bruto - Despesas Operacionais = Lucro Líquido</p>
-                  <p>R$ {grossProfit.toFixed(2)} - R$ {totalOperatingExpenses.toFixed(2)} = <strong className={netOperatingProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}>R$ {netOperatingProfit.toFixed(2)}</strong></p>
+                  <p>Lucro Bruto - Despesas Operacionais (Caixa) = Lucro Líquido</p>
+                  <p>R$ {grossProfit.toFixed(2)} - R$ {totalExpensesCash.toFixed(2)} = <strong className={netOperatingProfitCash >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}>R$ {netOperatingProfitCash.toFixed(2)}</strong></p>
                 </div>
               )}
             </div>

@@ -84,6 +84,11 @@ export const PDVView: React.FC<PDVViewProps> = ({
   const scannerIntervalRef = useRef<number | null>(null);
   const lastScannedRef = useRef<string>('');
   const scanCooldownRef = useRef(false);
+  const alertDismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const productsRef = useRef(products);
+  useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
   const [flashOn, setFlashOn] = useState(false);
   const [scanFlash, setScanFlash] = useState(false);
   const [scanSuccessProduct, setScanSuccessProduct] = useState<Product | null>(null);
@@ -96,8 +101,12 @@ export const PDVView: React.FC<PDVViewProps> = ({
     const capabilities = track.getCapabilities() as any;
     if (capabilities.torch) {
       const next = !flashOn;
-      await track.applyConstraints({ advanced: [{ torch: next }] as any });
-      setFlashOn(next);
+      try {
+        await track.applyConstraints({ advanced: [{ torch: next }] as any });
+        setFlashOn(next);
+      } catch (e) {
+        console.warn('[HD] Flash/torch not supported on this device', e);
+      }
     }
   }, [flashOn]);
 
@@ -162,47 +171,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
     const currentQtyInCart = existingItem ? existingItem.quantity : 0;
     if (currentQtyInCart >= product.currentStock) {
       posAudio.error();
-      // Improved visual alert for insufficient stock
-      const alertHtml = `
-        <div style="font-family: inherit; padding: 16px; max-width: 320px;">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-            <div style="width: 48px; height: 48px; border-radius: 50%; background: #fef2f2; border: 2px solid #fecaca; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-            </div>
-            <div>
-              <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #991b1b;">Estoque Insuficiente</h3>
-              <p style="margin: 4px 0 0; font-size: 13px; color: #7f1d1d;">Não é possível adicionar mais itens</p>
-            </div>
-          </div>
-          <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 12px; margin-bottom: 12px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-              <span style="font-size: 13px; color: #7f1d1d;">Produto</span>
-              <span style="font-size: 13px; font-weight: 600; color: #991b1b;">${product.name}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-              <span style="font-size: 13px; color: #7f1d1d;">Disponível em estoque</span>
-              <span style="font-size: 13px; font-weight: 700; color: #ef4444;">${product.currentStock} ${product.unit}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-              <span style="font-size: 13px; color: #7f1d1d;">Já no carrinho</span>
-              <span style="font-size: 13px; font-weight: 700; color: #f59e0b;">${currentQtyInCart} ${product.unit}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px solid #fecaca;">
-              <span style="font-size: 13px; color: #7f1d1d;">Máximo permitido</span>
-              <span style="font-size: 13px; font-weight: 700; color: #991b1b;">${product.currentStock} ${product.unit}</span>
-            </div>
-          </div>
-          <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 12px;">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
-              <span style="font-size: 12px; font-weight: 600; color: #92400e;">Dica:</span>
-            </div>
-            <p style="margin: 0; font-size: 12px; color: #92400e;">Remova itens do carrinho ou finalize a venda atual antes de adicionar mais.</p>
-          </div>
-        </div>
-      `;
-      
-      // Create a custom modal-like alert
+      // Create a custom modal-like alert using safe DOM manipulation
       const alertContainer = document.createElement('div');
       alertContainer.style.cssText = `
         position: fixed; inset: 0; z-index: 9999;
@@ -210,33 +179,131 @@ export const PDVView: React.FC<PDVViewProps> = ({
         display: flex; align-items: center; justify-content: center; padding: 16px;
         animation: fadeIn 0.2s ease-out;
       `;
-      alertContainer.innerHTML = `
-        <div style="
-          background: white; border-radius: 20px; max-width: 360px; width: 100%;
-          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
-          overflow: hidden; animation: slideUp 0.3s ease-out;
-        ">
-          ${alertHtml}
-          <button onclick="this.closest('[data-alert]').remove()" style="
-            width: 100%; padding: 14px; margin-top: 16px;
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            color: white; border: none; border-radius: 12px;
-            font-size: 14px; font-weight: 700; cursor: pointer;
-            transition: transform 0.1s, box-shadow 0.1s;
-          " onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform='scale(1)'">
-            Entendido
-          </button>
-        </div>
-        <style>
-          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-          @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        </style>
-      `;
       alertContainer.setAttribute('data-alert', 'true');
+
+      // Inner modal wrapper
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background: white; border-radius: 20px; max-width: 360px; width: 100%;
+        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+        overflow: hidden; animation: slideUp 0.3s ease-out;
+      `;
+
+      // Content wrapper
+      const contentWrapper = document.createElement('div');
+      contentWrapper.style.cssText = 'font-family: inherit; padding: 16px; max-width: 320px;';
+
+      // --- Header: icon + title ---
+      const headerRow = document.createElement('div');
+      headerRow.style.cssText = 'display: flex; align-items: center; gap: 12px; margin-bottom: 12px;';
+
+      const iconCircle = document.createElement('div');
+      iconCircle.style.cssText = 'width: 48px; height: 48px; border-radius: 50%; background: #fef2f2; border: 2px solid #fecaca; display: flex; align-items: center; justify-content: center; flex-shrink: 0;';
+      iconCircle.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
+
+      const headerText = document.createElement('div');
+      const title = document.createElement('h3');
+      title.style.cssText = 'margin: 0; font-size: 16px; font-weight: 700; color: #991b1b;';
+      title.textContent = 'Estoque Insuficiente';
+      const subtitle = document.createElement('p');
+      subtitle.style.cssText = 'margin: 4px 0 0; font-size: 13px; color: #7f1d1d;';
+      subtitle.textContent = 'Não é possível adicionar mais itens';
+      headerText.appendChild(title);
+      headerText.appendChild(subtitle);
+
+      headerRow.appendChild(iconCircle);
+      headerRow.appendChild(headerText);
+      contentWrapper.appendChild(headerRow);
+
+      // --- Details box ---
+      const detailsBox = document.createElement('div');
+      detailsBox.style.cssText = 'background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 12px; margin-bottom: 12px;';
+
+      // Helper to create a styled row
+      const addDetailRow = (label: string, value: string, labelColor: string, valueColor: string, valueWeight: string) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display: flex; justify-content: space-between; margin-bottom: 8px;';
+        const labelSpan = document.createElement('span');
+        labelSpan.style.cssText = `font-size: 13px; color: ${labelColor};`;
+        labelSpan.textContent = label;
+        const valueSpan = document.createElement('span');
+        valueSpan.style.cssText = `font-size: 13px; font-weight: ${valueWeight}; color: ${valueColor};`;
+        valueSpan.textContent = value;
+        row.appendChild(labelSpan);
+        row.appendChild(valueSpan);
+        detailsBox.appendChild(row);
+      };
+
+      addDetailRow('Produto', product.name, '#7f1d1d', '#991b1b', '600');
+      addDetailRow('Disponível em estoque', `${product.currentStock} ${product.unit}`, '#7f1d1d', '#ef4444', '700');
+      addDetailRow('Já no carrinho', `${currentQtyInCart} ${product.unit}`, '#7f1d1d', '#f59e0b', '700');
+
+      // Divider row for max allowed
+      const divider = document.createElement('div');
+      divider.style.cssText = 'padding-top: 8px; border-top: 1px solid #fecaca;';
+      const maxRow = document.createElement('div');
+      maxRow.style.cssText = 'display: flex; justify-content: space-between;';
+      const maxLabel = document.createElement('span');
+      maxLabel.style.cssText = 'font-size: 13px; color: #7f1d1d;';
+      maxLabel.textContent = 'Máximo permitido';
+      const maxValue = document.createElement('span');
+      maxValue.style.cssText = 'font-size: 13px; font-weight: 700; color: #991b1b;';
+      maxValue.textContent = `${product.currentStock} ${product.unit}`;
+      maxRow.appendChild(maxLabel);
+      maxRow.appendChild(maxValue);
+      divider.appendChild(maxRow);
+      detailsBox.appendChild(divider);
+
+      contentWrapper.appendChild(detailsBox);
+
+      // --- Tip box ---
+      const tipBox = document.createElement('div');
+      tipBox.style.cssText = 'background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 12px;';
+      const tipHeader = document.createElement('div');
+      tipHeader.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px;';
+      tipHeader.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>';
+      const tipLabel = document.createElement('span');
+      tipLabel.style.cssText = 'font-size: 12px; font-weight: 600; color: #92400e;';
+      tipLabel.textContent = 'Dica:';
+      tipHeader.appendChild(tipLabel);
+      tipBox.appendChild(tipHeader);
+      const tipText = document.createElement('p');
+      tipText.style.cssText = 'margin: 0; font-size: 12px; color: #92400e;';
+      tipText.textContent = 'Remova itens do carrinho ou finalize a venda atual antes de adicionar mais.';
+      tipBox.appendChild(tipText);
+      contentWrapper.appendChild(tipBox);
+
+      modal.appendChild(contentWrapper);
+
+      // --- "Entendido" button ---
+      const button = document.createElement('button');
+      button.style.cssText = `
+        width: 100%; padding: 14px; margin-top: 16px;
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        color: white; border: none; border-radius: 12px;
+        font-size: 14px; font-weight: 700; cursor: pointer;
+        transition: transform 0.1s, box-shadow 0.1s;
+      `;
+      button.textContent = 'Entendido';
+      button.addEventListener('click', () => alertContainer.remove());
+      button.addEventListener('mousedown', () => { button.style.transform = 'scale(0.98)'; });
+      button.addEventListener('mouseup', () => { button.style.transform = 'scale(1)'; });
+      modal.appendChild(button);
+
+      // --- Animation styles ---
+      const styleEl = document.createElement('style');
+      styleEl.textContent = `
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+      `;
+
+      alertContainer.appendChild(modal);
+      alertContainer.appendChild(styleEl);
       document.body.appendChild(alertContainer);
       
       // Auto-remove after 8 seconds
-      setTimeout(() => alertContainer.remove(), 8000);
+      if (alertDismissTimeoutRef.current) clearTimeout(alertDismissTimeoutRef.current);
+      alertDismissTimeoutRef.current = setTimeout(() => alertContainer.remove(), 8000);
       return;
     }
 
@@ -427,7 +494,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
     setScannedBarcode(barcode);
 
     // Search product by barcode (trim both sides for robust matching)
-    const found = products.find((p) => p.barcode.trim() === barcode.trim());
+    const found = productsRef.current.find((p) => p.barcode.trim() === barcode.trim());
 
     if (found) {
       setScannedProduct(found);
@@ -504,6 +571,13 @@ export const PDVView: React.FC<PDVViewProps> = ({
     return () => {
       if (scannerIntervalRef.current) clearInterval(scannerIntervalRef.current);
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  // Cleanup alert dismiss timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (alertDismissTimeoutRef.current) clearTimeout(alertDismissTimeoutRef.current);
     };
   }, []);
 

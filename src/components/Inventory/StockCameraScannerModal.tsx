@@ -68,6 +68,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   const scannerIntervalRef = useRef<number | null>(null);
   const lastScannedRef = useRef<string>('');
   const scanCooldownRef = useRef(false);
+  const addStockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cleanup on unmount / close
   useEffect(() => {
@@ -80,6 +81,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
+      if (addStockTimeoutRef.current) clearTimeout(addStockTimeoutRef.current);
     };
   }, []);
 
@@ -270,7 +272,8 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     setShowSuccessOverlay(true);
 
     // Auto-resume after 1.5s
-    setTimeout(() => {
+    if (addStockTimeoutRef.current) clearTimeout(addStockTimeoutRef.current);
+    addStockTimeoutRef.current = setTimeout(() => {
       setShowSuccessOverlay(false);
       setSuccessData(null);
       handleScanNext();
@@ -320,7 +323,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   // Invoice: confirm import
   const handleConfirmInvoice = () => {
     const name = invProductName.trim() || 'Produto NF';
-    const barcode = invBarcode.trim() || `${Math.floor(7890000000000 + Math.random() * 999999999)}`;
+    const barcode = invBarcode.trim() || '';
 
     const newProd: Product = {
       id: `prod-inv-${Date.now()}`,

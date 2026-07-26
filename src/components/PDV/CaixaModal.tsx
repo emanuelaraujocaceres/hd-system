@@ -68,6 +68,10 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
     e.preventDefault();
     const val = parseFloat(sangriaAmount);
     if (!isNaN(val) && val > 0) {
+      if (val > caixaSession.currentCashBalance) {
+        alert(`Saldo insuficiente para sangria. Saldo disponível: R$ ${caixaSession.currentCashBalance.toFixed(2)}`);
+        return;
+      }
       storageService.addSangria(val, sangriaReason || 'Sangria de Caixa');
       posAudio.beep();
       setSangriaAmount('');
@@ -78,6 +82,9 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
   const handleCloseCaixa = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!confirm('Tem certeza que deseja fechar o caixa? Esta ação não pode ser desfeita.')) {
+      return;
+    }
     storageService.closeCaixaSession(closeNotes || 'Caixa encerrado no horário.');
     posAudio.chime();
     onClose();

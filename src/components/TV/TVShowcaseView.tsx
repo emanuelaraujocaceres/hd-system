@@ -68,6 +68,15 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
     return () => clearInterval(interval);
   }, [isPlaying, slideSpeed, displayList.length]);
 
+  // Sync fullscreen state when user presses ESC
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
+
   const handleNext = () => {
     setCurrentIndex((prev) => (prev + 1) % displayList.length);
     posAudio.beep();

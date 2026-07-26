@@ -74,6 +74,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       };
 
       storageService.saveUser(updatedUser);
+      storageService.saveUserProfile(updatedUser);
       onUserUpdated(updatedUser);
       posAudio.chime();
       setMessage({ type: 'success', text: 'Perfil atualizado com sucesso!' });
@@ -108,7 +109,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     }
 
     // Verify current password
-    if (user.password && user.password !== currentPassword) {
+    if (currentPassword !== (user.password || '')) {
       setMessage({ type: 'error', text: 'Senha atual incorreta.' });
       posAudio.error();
       return;
@@ -122,6 +123,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       };
 
       storageService.saveUser(updatedUser);
+      storageService.saveUserProfile(updatedUser);
       onUserUpdated(updatedUser);
       posAudio.chime();
       setMessage({ type: 'success', text: 'Senha alterada com sucesso!' });

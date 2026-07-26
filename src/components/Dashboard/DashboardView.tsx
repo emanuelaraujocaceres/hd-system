@@ -165,8 +165,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             R$ {todayRevenue.toFixed(2)}
           </p>
           <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
-            <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>↑ 12%</span> <span className="text-slate-400 dark:text-[#71717a]">vs ontem</span>
+            {todayRevenue > 0 ? <span className="text-emerald-500">✓ </span> : <span className="text-slate-400">—</span>}
+            <span className="text-slate-400 dark:text-[#71717a]">vendas hoje</span>
           </div>
         </button>
 
@@ -177,7 +177,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {totalSalesCount}
           </p>
           <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
-            <span>↑ 5%</span> <span className="text-slate-400 dark:text-[#71717a]">ticket médio R$ {ticketMedio.toFixed(2)}</span>
+            <span className="text-slate-400 dark:text-[#71717a]">ticket médio R$ {ticketMedio.toFixed(2)}</span>
           </div>
         </button>
 
@@ -305,26 +305,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 );
               })}
               {sales.length === 0 && (
-                <>
-                  <tr className="hover:bg-slate-50 dark:hover:bg-[#27272a]/30 transition-colors">
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-[#a1a1aa]">#9281</td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4">Lucas Cavalcanti</td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4"><span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold">CONCLUÍDO</span></td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ 450,00</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50 dark:hover:bg-[#27272a]/30 transition-colors">
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-[#a1a1aa]">#9280</td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4">Maria Julia Neves</td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4"><span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] font-bold">PENDENTE</span></td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ 1.290,00</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50 dark:hover:bg-[#27272a]/30 transition-colors">
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 font-mono text-[#a1a1aa]">#9279</td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 font-medium">João Pedro Alves</td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4"><span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[9px] font-bold">CONCLUÍDO</span></td>
-                    <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ 89,90</td>
-                  </tr>
-                </>
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-slate-400 dark:text-[#52525b] text-xs">
+                    Nenhuma venda registrada.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
