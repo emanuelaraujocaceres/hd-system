@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   X,
   CreditCard,
@@ -25,6 +25,8 @@ import {
 } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
+import { LoadingButton } from '../shared/LoadingButton';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -118,6 +120,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const firstInputRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    if (isOpen && firstInputRef.current) {
+      firstInputRef.current.focus();
+    }
+  }, [isOpen]);
+
+  useEscapeKey(onClose, isOpen);
 
   // QR Code data URL for PIX (generated async)
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
@@ -339,7 +349,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
           >
             <X className="w-5 h-5" />
           </button>
@@ -366,6 +376,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <UserCheck className="w-3.5 h-3.5 text-indigo-400" />
               </div>
               <select
+                ref={firstInputRef}
                 value={selectedCustomer?.id || ''}
                 onChange={(e) => {
                   const cust = customers.find((c) => c.id === e.target.value);
@@ -392,7 +403,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <button
                 type="button"
                 onClick={() => setIsSplit(!isSplit)}
-                className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 ${
+                className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 min-h-[44px] ${
                   isSplit
                     ? 'bg-indigo-600 text-white border-indigo-500'
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'
@@ -422,7 +433,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         setMethod(item.id as PaymentMethod);
                         posAudio.click();
                       }}
-                      className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 relative ${
+                      className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 relative min-h-[44px] min-w-[44px] ${
                         isSelected
                           ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg shadow-indigo-600/20 font-bold ring-2 ring-indigo-400/50'
                           : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -457,7 +468,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       type="button"
                       onClick={() => splitCount > 2 && redistributeSplit(splitCount - 1)}
                       disabled={splitCount <= 2}
-                      className="p-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 transition-colors"
+                      className="p-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                     >
                       <Minus className="w-3.5 h-3.5" />
                     </button>
@@ -468,7 +479,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       type="button"
                       onClick={() => splitCount < 6 && redistributeSplit(splitCount + 1)}
                       disabled={splitCount >= 6}
-                      className="p-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 transition-colors"
+                      className="p-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
@@ -485,6 +496,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       <input
                         type="number"
                         step="0.01"
+                        inputMode="decimal"
                         value={part.amount}
                         onChange={(e) => updateSplitPart(idx, 'amount', parseFloat(e.target.value) || 0)}
                         className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
@@ -528,7 +540,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     type="button"
                     onClick={() => splitCount < 6 && redistributeSplit(splitCount + 1)}
                     disabled={splitCount >= 6}
-                    className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-40 transition-colors"
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-40 transition-colors min-h-[44px]"
                   >
                     + Adicionar Parte
                   </button>
@@ -536,7 +548,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     type="button"
                     onClick={() => splitCount > 2 && redistributeSplit(splitCount - 1)}
                     disabled={splitCount <= 2}
-                    className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 disabled:opacity-40 transition-colors"
+                    className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 disabled:opacity-40 transition-colors min-h-[44px]"
                   >
                     Remover Última
                   </button>
@@ -563,6 +575,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       <input
                         type="number"
                         step="0.01"
+                        inputMode="decimal"
+                        data-currency="true"
                         value={cashGiven}
                         onChange={(e) => setCashGiven(parseFloat(e.target.value) || 0)}
                         className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-lg font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
@@ -570,7 +584,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setCashGiven(totalAmount)}
-                        className="px-3 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl hover:bg-slate-300 transition-colors whitespace-nowrap"
+                        className="px-3 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs rounded-xl hover:bg-slate-300 transition-colors whitespace-nowrap min-h-[44px]"
                       >
                         Exato
                       </button>
@@ -583,7 +597,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                           key={add}
                           type="button"
                           onClick={() => setCashGiven(totalAmount + add)}
-                          className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300 hover:border-emerald-500 transition-colors"
+                          className="px-2.5 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-300 hover:border-emerald-500 transition-colors min-h-[44px]"
                         >
                           + R$ {add}
                         </button>
@@ -662,7 +676,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                           <button
                             type="button"
                             onClick={() => setPixPaid(true)}
-                            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
+                            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm min-h-[44px]"
                           >
                             <CheckCircle2 className="w-4 h-4" />
                             <span>Simular Confirmação de Pagamento</span>
@@ -672,7 +686,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         <button
                           type="button"
                           onClick={handleCopyPix}
-                          className="w-full sm:w-auto px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
+                          className="w-full sm:w-auto px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm min-h-[44px]"
                         >
                           {pixCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                           <span>{pixCopied ? 'Chave Copiada!' : 'Copiar Pix Copia e Cola'}</span>
@@ -766,26 +780,22 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors min-h-[44px]"
           >
             Voltar ao Carrinho
           </button>
 
-          <button
+          <LoadingButton
             type="button"
             onClick={handleFinalize}
             disabled={loading || isPixUnconfirmed || (method === 'credit_account' && !selectedCustomer) || (isSplit && !isSplitValid)}
-            className="flex-1 py-3 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
+            loading={loading}
+            loadingText="Processando..."
+            className="flex-1 py-3 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 min-h-[44px]"
           >
-            {loading ? (
-              <span>Processando Venda...</span>
-            ) : (
-              <>
-                <CheckCircle2 className="w-5 h-5" />
-                <span>Confirmar e Concluir Venda (F8)</span>
-              </>
-            )}
-          </button>
+            <CheckCircle2 className="w-5 h-5" />
+            <span>Confirmar e Concluir Venda (F8)</span>
+          </LoadingButton>
         </div>
       </div>
     </div>

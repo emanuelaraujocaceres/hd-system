@@ -191,7 +191,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
             <button
               onClick={() => setActiveSubTab('contas')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3 py-1.5 rounded-lg transition-all min-h-[44px] ${
                 activeSubTab === 'contas'
                   ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
                   : 'text-slate-600 dark:text-slate-400'
@@ -201,7 +201,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </button>
             <button
               onClick={() => setActiveSubTab('dre')}
-              className={`px-3 py-1.5 rounded-lg transition-all ${
+              className={`px-3 py-1.5 rounded-lg transition-all min-h-[44px] ${
                 activeSubTab === 'dre'
                   ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
                   : 'text-slate-600 dark:text-slate-400'
@@ -214,7 +214,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsBoletoModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-emerald-600/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold text-xs hover:bg-emerald-600/20 transition-all flex items-center gap-1.5 shadow-sm"
+            className="px-3.5 py-2 rounded-xl bg-emerald-600/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold text-xs hover:bg-emerald-600/20 transition-all flex items-center gap-1.5 shadow-sm min-h-[44px]"
             title="Escanear Boleto Bancário via Câmera"
           >
             <Camera className="w-4 h-4" />
@@ -223,7 +223,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
           <button
             onClick={handleOpenNewAccount}
-            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 min-h-[44px]"
           >
             <Plus className="w-4 h-4" />
             <span>Lançar Conta</span>
@@ -262,7 +262,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setFilterType('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border min-h-[44px] ${
                 filterType === 'all'
                   ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
                   : 'bg-white dark:bg-[#18181b] border-slate-200 dark:border-[#27272a] text-slate-600 dark:text-[#a1a1aa]'
@@ -272,7 +272,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </button>
             <button
               onClick={() => setFilterType('payable')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border min-h-[44px] ${
                 filterType === 'payable'
                   ? 'bg-rose-600 text-white border-rose-600'
                   : 'bg-white dark:bg-[#18181b] border-slate-200 dark:border-[#27272a] text-slate-600 dark:text-[#a1a1aa]'
@@ -282,7 +282,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             </button>
             <button
               onClick={() => setFilterType('receivable')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border min-h-[44px] ${
                 filterType === 'receivable'
                   ? 'bg-emerald-600 text-white border-emerald-600'
                   : 'bg-white dark:bg-[#18181b] border-slate-200 dark:border-[#27272a] text-slate-600 dark:text-[#a1a1aa]'
@@ -353,7 +353,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           {!isPaid && (
                             <button
                               onClick={() => handleMarkPaid(acc)}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors"
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors min-h-[44px]"
                             >
                               Dar Baixa
                             </button>
@@ -361,7 +361,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           {user.role === 'admin' && (
                             <button
                               onClick={() => handleDeleteAccount(acc.id)}
-                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                               title="Excluir Conta"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -439,7 +439,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                       {!isPaid && (
                         <button
                           onClick={() => handleMarkPaid(acc)}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors"
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors min-h-[44px]"
                         >
                           Dar Baixa
                         </button>
@@ -447,7 +447,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                       {user.role === 'admin' && (
                         <button
                           onClick={() => handleDeleteAccount(acc.id)}
-                          className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                          className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                           title="Excluir Conta"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -510,7 +510,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           {sale.status === 'completed' ? 'Concluída' : sale.status === 'cancelled' ? 'Cancelada' : 'Pendente'}
                         </span>
                       </td>
-                      {user.role === 'admin' && (
+                        {user.role === 'admin' && (
                         <td className="py-3 px-4 text-right">
                           <button
                             onClick={() => {
@@ -518,13 +518,13 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                                 storageService.deleteSale(sale.id);
                               }
                             }}
-                            className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                            className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                             title="Excluir venda"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </td>
-                      )}
+                        )}
                     </tr>
                   ))}
                   {sales.length === 0 && (
@@ -590,7 +590,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                                   storageService.deleteSale(sale.id);
                                 }
                               }}
-                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                               title="Excluir venda"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -875,6 +875,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   <input
                     type="number"
                     step="0.01"
+                    inputMode="decimal"
                     required
                     value={formAmount}
                     onChange={(e) => setFormAmount(parseFloat(e.target.value) || 0)}
@@ -910,13 +911,13 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <button
                   type="button"
                   onClick={() => { setIsModalOpen(false); setEditingAccount(null); }}
-                  className="px-4 py-2 rounded-xl border font-bold"
+                  className="px-4 py-2 rounded-xl border font-bold min-h-[44px]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold min-h-[44px]"
                 >
                   Salvar Conta
                 </button>

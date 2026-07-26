@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Sidebar } from './components/Navigation/Sidebar';
 import { Header } from './components/Navigation/Header';
 import { PDVView } from './components/PDV/PDVView';
@@ -19,7 +19,7 @@ import { storageService } from './services/storageService';
 import { syncService } from './services/syncService';
 import { syncQueue } from './services/syncQueueService';
 import { posAudio } from './services/audioService';
-import { Lock, ShieldAlert, Wifi, WifiOff, ArrowLeft } from 'lucide-react';
+import { Lock, ShieldAlert, Wifi, WifiOff, ArrowLeft, Loader2 } from 'lucide-react';
 import {
   Product,
   Category,
@@ -32,6 +32,8 @@ import {
   StoreBranch,
   UserProfile,
 } from './types';
+import { ToastProvider } from './components/shared/Toast';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('pdv');
@@ -169,6 +171,18 @@ export const App: React.FC = () => {
       }
     });
     return unsub;
+  }, []);
+
+  // Listen for browser online/offline events
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
   }, []);
 
   // Listen for pending count changes from syncQueue
@@ -351,6 +365,42 @@ export const App: React.FC = () => {
     }
   };
 
+  // Keyboard shortcuts
+  const shortcuts = useMemo(() => [
+    {
+      key: 'n',
+      ctrl: true,
+      handler: () => {
+        if (activeTab === 'inventory') {
+          window.dispatchEvent(new CustomEvent('hd:new-product'));
+        }
+      },
+    },
+    {
+      key: 'f',
+      ctrl: true,
+      handler: () => {
+        const input = document.querySelector<HTMLInputElement>('[data-search-input]');
+        if (input) { input.focus(); input.select(); }
+      },
+    },
+    {
+      key: 'F11',
+      handler: () => {
+        if (activeTab === 'tv-showcase') {
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          } else {
+            document.exitFullscreen().catch(() => {});
+          }
+        }
+      },
+      global: true,
+    },
+  ], [activeTab]);
+
+  useKeyboardShortcuts(shortcuts, [activeTab]);
+
   // If no user is logged in, show Google Auth Modal
   if (!user) {
     return <LoginModal onLoginSuccess={handleLoginSuccess} />;
@@ -383,6 +433,14 @@ export const App: React.FC = () => {
   };
 
   return (
+    <ToastProvider>
+      {/* Connection indicator */}
+      {!isOnline && (
+        <div className="fixed top-2 right-2 z-[9998] px-3 py-1.5 rounded-xl bg-rose-600 text-white text-[10px] font-bold shadow-lg flex items-center gap-1.5 animate-fadeIn">
+          <WifiOff className="w-3 h-3" />
+          <span>Sem conexão</span>
+        </div>
+      )}
     <div className={`min-h-screen font-sans bg-slate-100 dark:bg-[#09090b] text-slate-900 dark:text-[#fafafa] flex flex-col md:flex-row transition-colors duration-200`}>
       {/* Sidebar Navigation */}
       <Sidebar
@@ -593,6 +651,7 @@ export const App: React.FC = () => {
         }}
       />
     </div>
+    </ToastProvider>
   );
 };
 

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useDebounce } from '../../hooks/useDebounce';
 import {
   Package,
   Plus,
@@ -50,6 +51,29 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
+
+  const debouncedSearch = useDebounce(searchTerm, 300);
+  const [sortField, setSortField] = useState<string>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
+  const firstInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isProductModalOpen && firstInputRef.current) {
+      firstInputRef.current.focus();
+    }
+  }, [isProductModalOpen]);
+
+  useEffect(() => {
+    const handler = () => openNewProductModal();
+    window.addEventListener('hd:new-product', handler);
+    return () => window.removeEventListener('hd:new-product', handler);
+  }, []);
+
+  const handleSort = (field: string) => {
+    setSortDir((prev) => (sortField === field ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'));
+    setSortField(field);
+  };
 
   // Modals state
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -307,6 +331,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
     storageService.saveProduct(newProd);
     posAudio.chime();
+    setHighlightedProductId(newProd.id);
+    setTimeout(() => setHighlightedProductId(null), 2000);
     setIsProductModalOpen(false);
   };
 
@@ -329,7 +355,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   // Filtered list
   const filteredProducts = products.filter((p) => {
     const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
-    const term = searchTerm.toLowerCase().trim();
+    const term = debouncedSearch.toLowerCase().trim();
     const matchesSearch =
       !term ||
       p.name.toLowerCase().includes(term) ||
@@ -340,6 +366,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     if (stockFilter === 'out') matchesStock = p.currentStock === 0;
 
     return matchesCategory && matchesSearch && matchesStock;
+  });
+
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    let aVal: any = a[sortField as keyof Product];
+    let bVal: any = b[sortField as keyof Product];
+    if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+    if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+    if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+    return 0;
   });
 
   return (
@@ -391,6 +427,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             <Search className="w-4 h-4 text-slate-400 dark:text-[#71717a] absolute left-3.5 top-3 pointer-events-none" />
             <input
               type="text"
+              data-search-input="true"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar por nome ou código de barras..."
@@ -431,25 +468,57 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 dark:bg-[#09090b]/80 border-b border-slate-200 dark:border-[#27272a] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider">
-                <th className="py-3.5 px-4">Produto</th>
-                <th className="py-3.5 px-4 hidden md:table-cell">Código / EAN</th>
-                <th className="py-3.5 px-4 hidden sm:table-cell">Categoria</th>
-                <th className="py-3.5 px-4 hidden lg:table-cell">Preço Custo</th>
-                <th className="py-3.5 px-4">Preço Venda</th>
+                <th className="py-3.5 px-4 cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" onClick={() => handleSort('name')}>
+                  <div className="flex items-center gap-1">
+                    Produto
+                    {sortField === 'name' && <span className="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                  </div>
+                </th>
+                <th className="py-3.5 px-4 hidden md:table-cell cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" onClick={() => handleSort('barcode')}>
+                  <div className="flex items-center gap-1">
+                    Código / EAN
+                    {sortField === 'barcode' && <span className="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                  </div>
+                </th>
+                <th className="py-3.5 px-4 hidden sm:table-cell cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" onClick={() => handleSort('category')}>
+                  <div className="flex items-center gap-1">
+                    Categoria
+                    {sortField === 'category' && <span className="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                  </div>
+                </th>
+                <th className="py-3.5 px-4 hidden lg:table-cell cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" onClick={() => handleSort('costPrice')}>
+                  <div className="flex items-center gap-1">
+                    Preço Custo
+                    {sortField === 'costPrice' && <span className="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                  </div>
+                </th>
+                <th className="py-3.5 px-4 cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" onClick={() => handleSort('salePrice')}>
+                  <div className="flex items-center gap-1">
+                    Preço Venda
+                    {sortField === 'salePrice' && <span className="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                  </div>
+                </th>
                 <th className="py-3.5 px-4 hidden md:table-cell">Margem %</th>
-                <th className="py-3.5 px-4">Estoque</th>
+                <th className="py-3.5 px-4 cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" onClick={() => handleSort('currentStock')}>
+                  <div className="flex items-center gap-1">
+                    Estoque
+                    {sortField === 'currentStock' && <span className="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                  </div>
+                </th>
                 <th className="py-3.5 px-4 hidden lg:table-cell">TV</th>
                 <th className="py-3.5 px-4 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
-              {filteredProducts.map((p) => {
+              {sortedProducts.map((p) => {
                 const margin = p.salePrice > 0 ? ((p.salePrice - p.costPrice) / p.salePrice) * 100 : 0;
                 const isLow = p.currentStock <= p.minStock;
                 const isOut = p.currentStock === 0;
 
                 return (
-                  <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors">
+                  <tr key={p.id} className={`hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors ${
+                    highlightedProductId === p.id ? 'animate-pulse bg-indigo-500/5 dark:bg-indigo-500/10' : ''
+                  }`}>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">
                         <img
@@ -517,7 +586,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                             setStockTargetProduct(p);
                             setIsStockModalOpen(true);
                           }}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors min-h-[44px] min-w-[44px]"
                           title="Ajustar / Registrar Entrada no Estoque"
                         >
                           <Boxes className="w-4 h-4" />
@@ -527,21 +596,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                             setBarcodeTargetProduct(p);
                             setIsBarcodeModalOpen(true);
                           }}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors min-h-[44px] min-w-[44px]"
                           title="Gerar Folha de Etiquetas"
                         >
                           <Barcode className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => openEditProductModal(p)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors min-h-[44px] min-w-[44px]"
                           title="Editar Cadastro"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteProduct(p.id)}
-                          className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors"
+                          className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors min-h-[44px] min-w-[44px]"
                           title="Excluir Produto"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -558,14 +627,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
       {/* Products Cards — Mobile (below md) */}
       <div className="block md:hidden space-y-3">
-        {filteredProducts.map((p) => {
+        {sortedProducts.map((p) => {
           const isLow = p.currentStock <= p.minStock;
           const isOut = p.currentStock === 0;
 
           return (
             <div
               key={p.id}
-              className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm p-3.5 space-y-3"
+              className={`bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm p-3.5 space-y-3 ${
+                highlightedProductId === p.id ? 'ring-2 ring-indigo-500/50 animate-pulse' : ''
+              }`}
             >
               {/* Top row: image + product info */}
               <div className="flex items-start gap-3">
@@ -635,7 +706,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </button>
                 <button
                   onClick={() => handleDeleteProduct(p.id)}
-                  className="py-2 px-3 rounded-xl text-rose-500 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 transition-colors flex items-center justify-center"
+                  className="py-2 px-3 rounded-xl text-rose-500 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 transition-colors flex items-center justify-center min-h-[44px] min-w-[44px]"
                   title="Excluir Produto"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -645,7 +716,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           );
         })}
 
-        {filteredProducts.length === 0 && (
+        {sortedProducts.length === 0 && (
           <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm p-8 text-center">
             <p className="text-sm text-slate-400 dark:text-[#71717a] font-semibold">Nenhum produto encontrado</p>
           </div>
@@ -673,6 +744,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 <input
                   type="text"
                   required
+                  ref={firstInputRef}
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="Ex: Coca-Cola 2L Zero Sugar"

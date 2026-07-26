@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   Lock,
@@ -13,6 +13,7 @@ import {
 import { CashRegisterSession, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
 
 interface CaixaModalProps {
   isOpen: boolean;
@@ -42,6 +43,26 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
   const [closeNotes, setCloseNotes] = useState<string>('');
 
   const [activeTab, setActiveTab] = useState<'resumo' | 'suprimento' | 'sangria' | 'fechar'>('resumo');
+
+  const firstInputRef = useRef<HTMLInputElement>(null);
+  const suprimentoRef = useRef<HTMLInputElement>(null);
+  const sangriaRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen && firstInputRef.current) {
+      firstInputRef.current.focus();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (activeTab === 'suprimento' && suprimentoRef.current) {
+      suprimentoRef.current.focus();
+    } else if (activeTab === 'sangria' && sangriaRef.current) {
+      sangriaRef.current.focus();
+    }
+  }, [activeTab]);
+
+  useEscapeKey(onClose, isOpen);
 
   if (!isOpen) return null;
 
@@ -142,6 +163,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                 <div className="relative">
                   <span className="absolute left-3 top-2.5 text-sm font-bold text-slate-400">R$</span>
                   <input
+                    ref={firstInputRef}
                     type="number"
                     step="0.01"
                     required
@@ -167,7 +189,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
+                className="w-full min-h-[44px] py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
               >
                 <Unlock className="w-4 h-4" />
                 <span>Confirmar Abertura do Caixa</span>
@@ -181,7 +203,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveTab('resumo')}
-                  className={`py-2 rounded-lg transition-all ${
+                  className={`min-h-[44px] min-w-[44px] py-2 rounded-lg transition-all ${
                     activeTab === 'resumo'
                       ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -192,7 +214,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveTab('suprimento')}
-                  className={`py-2 rounded-lg transition-all ${
+                  className={`min-h-[44px] min-w-[44px] py-2 rounded-lg transition-all ${
                     activeTab === 'suprimento'
                       ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -203,7 +225,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveTab('sangria')}
-                  className={`py-2 rounded-lg transition-all ${
+                  className={`min-h-[44px] min-w-[44px] py-2 rounded-lg transition-all ${
                     activeTab === 'sangria'
                       ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -214,7 +236,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveTab('fechar')}
-                  className={`py-2 rounded-lg transition-all ${
+                  className={`min-h-[44px] min-w-[44px] py-2 rounded-lg transition-all ${
                     activeTab === 'fechar'
                       ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
@@ -290,6 +312,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                       Valor do Suprimento (R$)
                     </label>
                     <input
+                      ref={suprimentoRef}
                       type="number"
                       step="0.01"
                       required
@@ -316,7 +339,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+                    className="w-full min-h-[44px] py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
                   >
                     <PlusCircle className="w-4 h-4" />
                     <span>Registrar Suprimento</span>
@@ -336,6 +359,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                       Valor da Sangria (R$)
                     </label>
                     <input
+                      ref={sangriaRef}
                       type="number"
                       step="0.01"
                       required
@@ -362,7 +386,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+                    className="w-full min-h-[44px] py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
                   >
                     <MinusCircle className="w-4 h-4" />
                     <span>Registrar Sangria</span>
@@ -399,7 +423,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-lg shadow-rose-600/20 transition-all flex items-center justify-center gap-2"
+                    className="w-full min-h-[44px] py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-lg shadow-rose-600/20 transition-all flex items-center justify-center gap-2"
                   >
                     <Lock className="w-4 h-4" />
                     <span>Encerrar e Fechar Caixa</span>

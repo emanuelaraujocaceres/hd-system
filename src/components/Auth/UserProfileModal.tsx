@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   User,
@@ -15,6 +15,7 @@ import {
 import { UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -39,6 +40,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const firstInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen && firstInputRef.current) {
+      firstInputRef.current.focus();
+    }
+  }, [isOpen]);
+
+  useEscapeKey(onClose, isOpen);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -236,6 +247,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <div className="relative">
                 <User className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
+                  ref={firstInputRef}
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -285,7 +297,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <button
               onClick={handleSaveProfile}
               disabled={loading}
-              className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2"
+              className="w-full min-h-[44px] py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2"
             >
               <Save className="w-4 h-4" />
               {loading ? 'Salvando...' : 'Salvar Perfil'}
@@ -369,7 +381,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <button
               onClick={handleChangePassword}
               disabled={loading || !currentPassword || !newPassword || !confirmPassword}
-              className="w-full py-2.5 rounded-xl bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+              className="w-full min-h-[44px] py-2.5 rounded-xl bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
             >
               <ShieldCheck className="w-4 h-4" />
               Alterar Senha
@@ -397,7 +409,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800">
           <button
             onClick={onClose}
-            className="w-full py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="w-full min-h-[44px] py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             Fechar
           </button>

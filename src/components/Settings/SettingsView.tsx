@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Settings,
   Building2,
@@ -111,6 +111,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     settings: false,
   });
   const [userPassword, setUserPassword] = useState('');
+
+  const branchFirstInputRef = useRef<HTMLInputElement>(null);
+  const userFirstInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isBranchModalOpen && branchFirstInputRef.current) {
+      branchFirstInputRef.current.focus();
+    }
+  }, [isBranchModalOpen]);
+
+  useEffect(() => {
+    if (isUserModalOpen && userFirstInputRef.current) {
+      userFirstInputRef.current.focus();
+    }
+  }, [isUserModalOpen]);
 
   const refreshUsersList = () => {
     setUsersList(storageService.getUsers());
@@ -339,7 +354,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         <div className="flex flex-wrap items-center gap-1.5 bg-slate-200/80 dark:bg-[#18181b] p-1 rounded-2xl border border-slate-300 dark:border-[#27272a] text-xs font-bold shrink-0">
           <button
             onClick={() => setActiveSubTab('fiscal')}
-            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
               activeSubTab === 'fiscal'
                 ? 'bg-white dark:bg-[#27272a] text-indigo-600 dark:text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -351,7 +366,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
           <button
             onClick={() => setActiveSubTab('branches')}
-            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
               activeSubTab === 'branches'
                 ? 'bg-white dark:bg-[#27272a] text-indigo-600 dark:text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -363,7 +378,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
           <button
             onClick={() => setActiveSubTab('collaborators')}
-            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
               activeSubTab === 'collaborators'
                 ? 'bg-white dark:bg-[#27272a] text-indigo-600 dark:text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -375,7 +390,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
           <button
             onClick={() => setActiveSubTab('subscription')}
-            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
               activeSubTab === 'subscription'
                 ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md font-bold'
                 : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'
@@ -390,7 +405,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
           <button
             onClick={() => setActiveSubTab('tv')}
-            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
               activeSubTab === 'tv'
                 ? 'bg-white dark:bg-[#27272a] text-amber-600 dark:text-amber-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -560,7 +575,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           <div className="flex justify-end">
             <button
               type="submit"
-              className="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2"
+              className="min-h-[44px] px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2"
             >
               <Save className="w-4 h-4" />
               <span>Salvar Parâmetros do Sistema</span>
@@ -585,7 +600,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
             <button
               onClick={() => handleOpenBranchModal()}
-              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center gap-2 shrink-0"
+              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center gap-2 shrink-0"
             >
               <Plus className="w-4 h-4" />
               <span>Nova Filial</span>
@@ -637,7 +652,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                   <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => handleOpenBranchModal(b)}
-                      className="p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
+                      className="min-h-[44px] min-w-[44px] p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
                       title="Editar Filial"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
@@ -645,7 +660,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                     {isAdmin && (
                       <button
                         onClick={() => handleDeleteBranch(b.id)}
-                        className="p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors"
+                        className="min-h-[44px] min-w-[44px] p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors"
                         title="Excluir Filial"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -675,7 +690,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
             <button
               onClick={() => handleOpenUserModal()}
-              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 shrink-0"
+              className="min-h-[44px] px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 shrink-0"
             >
               <UserPlus className="w-4 h-4" />
               <span>Adicionar Colaborador Google</span>
@@ -780,7 +795,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => handleOpenUserModal(u)}
-                              className="p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
+                              className="min-h-[44px] min-w-[44px] p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
                               title="Editar Permissões"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -788,7 +803,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                             {isAdmin && (
                               <button
                                 onClick={() => handleDeleteUser(u.id)}
-                                className="p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors"
+                                className="min-h-[44px] min-w-[44px] p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors"
                                 title="Excluir Colaborador"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -878,7 +893,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                   <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-[#27272a]" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => handleOpenUserModal(u)}
-                      className="flex-1 flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors text-[11px] font-bold"
+                      className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors text-[11px] font-bold"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                       <span>Editar</span>
@@ -886,7 +901,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                     {isAdmin && (
                       <button
                         onClick={() => handleDeleteUser(u.id)}
-                        className="flex-1 flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors text-[11px] font-bold"
+                        className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors text-[11px] font-bold"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>Excluir</span>
@@ -1023,7 +1038,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               <button
                 onClick={handleInitiateStripeCheckout}
                 disabled={isProcessingStripe}
-                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full min-h-[44px] py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isProcessingStripe ? (
                   <>
@@ -1094,7 +1109,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                         <td className="px-4 py-3.5 text-right">
                           <button
                             onClick={() => setSelectedInvoiceForReceipt(inv)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-300 hover:text-indigo-600 text-xs font-bold transition-all flex items-center gap-1.5 ml-auto cursor-pointer"
+                            className="min-h-[44px] px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-300 hover:text-indigo-600 text-xs font-bold transition-all flex items-center gap-1.5 ml-auto cursor-pointer"
                           >
                             <Download className="w-3.5 h-3.5" />
                             <span>Ver Recibo</span>
@@ -1207,7 +1222,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 <button
                   type="button"
                   onClick={() => setStripePaymentMethod('card')}
-                  className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  className={`min-h-[44px] p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     stripePaymentMethod === 'card'
                       ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-white ring-2 ring-indigo-500/20'
                       : 'border-slate-200 dark:border-[#27272a] text-slate-600 dark:text-slate-400 hover:bg-slate-50'
@@ -1220,7 +1235,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 <button
                   type="button"
                   onClick={() => setStripePaymentMethod('pix')}
-                  className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  className={`min-h-[44px] p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     stripePaymentMethod === 'pix'
                       ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-white ring-2 ring-emerald-500/20'
                       : 'border-slate-200 dark:border-[#27272a] text-slate-600 dark:text-slate-400 hover:bg-slate-50'
@@ -1290,7 +1305,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               <button
                 type="button"
                 onClick={() => setIsStripeModalOpen(false)}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#27272a] cursor-pointer"
+                className="min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#27272a] cursor-pointer"
               >
                 Cancelar
               </button>
@@ -1298,7 +1313,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 type="button"
                 onClick={handleConfirmStripeRenewal}
                 disabled={isProcessingStripe}
-                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md shadow-emerald-600/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                className="min-h-[44px] px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md shadow-emerald-600/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isProcessingStripe ? (
                   <>
@@ -1374,7 +1389,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => window.print()}
-                className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-black font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-black font-bold text-xs flex items-center gap-1.5 cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>Imprimir Recibo</span>
@@ -1408,6 +1423,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                     Nome da Filial / Loja:
                   </label>
                   <input
+                    ref={branchFirstInputRef}
                     type="text"
                     required
                     placeholder="ex: HD-System Filial 02 - Campinas Centro"
@@ -1517,13 +1533,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 <button
                   type="button"
                   onClick={() => setIsBranchModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-[#27272a]"
+                  className="min-h-[44px] px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-[#27272a]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
+                  className="min-h-[44px] px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
                 >
                   Salvar Filial
                 </button>
@@ -1556,6 +1572,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                   Nome Completo do Colaborador:
                 </label>
                 <input
+                  ref={userFirstInputRef}
                   type="text"
                   required
                   placeholder="ex: João Silva Santos"
@@ -1704,13 +1721,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 <button
                   type="button"
                   onClick={() => setIsUserModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-[#27272a]"
+                  className="min-h-[44px] px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-[#27272a]"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                  className="min-h-[44px] px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
                 >
                   Salvar Colaborador
                 </button>
@@ -1767,7 +1784,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => setTvDisplayMode('single')}
-                    className={`p-3 rounded-xl border text-xs font-bold text-center transition-all ${
+                    className={`min-h-[44px] p-3 rounded-xl border text-xs font-bold text-center transition-all ${
                       tvDisplayMode === 'single'
                         ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
                         : 'bg-white dark:bg-[#18181b] border-slate-200 dark:border-[#27272a] text-slate-600 dark:text-slate-400 hover:border-slate-300'
@@ -1779,7 +1796,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                   </button>
                   <button
                     onClick={() => setTvDisplayMode('grid')}
-                    className={`p-3 rounded-xl border text-xs font-bold text-center transition-all ${
+                    className={`min-h-[44px] p-3 rounded-xl border text-xs font-bold text-center transition-all ${
                       tvDisplayMode === 'grid'
                         ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
                         : 'bg-white dark:bg-[#18181b] border-slate-200 dark:border-[#27272a] text-slate-600 dark:text-slate-400 hover:border-slate-300'
@@ -1804,7 +1821,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 posAudio.chime();
                 setSuccessMessage('Configurações da TV salvas!');
               }}
-              className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shadow-md transition-colors flex items-center gap-2"
+              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shadow-md transition-colors flex items-center gap-2"
             >
               <CheckCircle className="w-4 h-4" />
               Salvar Configurações da TV
