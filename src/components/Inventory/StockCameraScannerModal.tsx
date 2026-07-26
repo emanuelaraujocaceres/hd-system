@@ -6,10 +6,7 @@ import {
   FileText,
   Check,
   Plus,
-  Zap,
-  ZapOff,
   CheckCircle2,
-  AlertTriangle,
   Building2,
 } from 'lucide-react';
 import { Product, StoreBranch } from '../../types';
@@ -32,7 +29,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   onNavigateToNewProduct,
 }) => {
   // Scanner state
-  const [scannerStatus, setScannerStatus] = useState<'idle' | 'scanning' | 'found' | 'not_found'>('idle');
+  const [scannerStatus, setScannerStatus] = useState<'idle' | 'scanning' | 'found'>('idle');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scanPaused, setScanPaused] = useState(false);
   const [scanFlash, setScanFlash] = useState(false);
@@ -41,13 +38,6 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   // Scanned barcode & product lookup
   const [scannedBarcode, setScannedBarcode] = useState('');
   const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
-
-  // Not found quick-register form state
-  const [showQuickForm, setShowQuickForm] = useState(false);
-  const [quickName, setQuickName] = useState('');
-  const [quickSalePrice, setQuickSalePrice] = useState<number>(0);
-  const [quickCostPrice, setQuickCostPrice] = useState<number>(0);
-  const [quickQty, setQuickQty] = useState<number>(1);
 
   // Quantity to add (for existing products)
   const [addQty, setAddQty] = useState<number>(1);
@@ -133,7 +123,6 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     setCameraError(null);
     setScannedBarcode('');
     setScannedProduct(null);
-    setShowQuickForm(false);
     setShowSuccessOverlay(false);
     setSuccessData(null);
     lastScannedRef.current = '';
@@ -212,17 +201,12 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     setScannerStatus('idle');
     setScannedBarcode('');
     setScannedProduct(null);
-    setShowQuickForm(false);
     setShowSuccessOverlay(false);
     setSuccessData(null);
     setFlashOn(false);
     setScanFlash(false);
     setScanPaused(false);
     setAddQty(1);
-    setQuickName('');
-    setQuickSalePrice(0);
-    setQuickCostPrice(0);
-    setQuickQty(1);
   };
 
   // ✅ FIXED: Handle barcode detection with proper dependencies
@@ -250,23 +234,21 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
       setScannedProduct(existing);
       setScannerStatus('found');
       setAddQty(1);
-      setShowQuickForm(false);
-    } else {
-      posAudio.error(); // ✘ Produto não encontrado — som de erro
-      setScannedProduct(null);
-      setScannerStatus('not_found');
-      setShowQuickForm(false);
-      setQuickName('');
-      setQuickSalePrice(0);
-      setQuickCostPrice(0);
-      setQuickQty(1);
-    }
 
-    // PAUSE scanning - wait for user action
-    setScanPaused(true);
-    if (scannerIntervalRef.current) {
-      clearInterval(scannerIntervalRef.current);
-      scannerIntervalRef.current = null;
+      // PAUSE scanning - wait for user action
+      setScanPaused(true);
+      if (scannerIntervalRef.current) {
+        clearInterval(scannerIntervalRef.current);
+        scannerIntervalRef.current = null;
+      }
+    } else {
+      // Produto não encontrado — fecha câmera e direciona para cadastro completo
+      posAudio.beep();
+      stopScanner();
+      if (onNavigateToNewProduct) {
+        onNavigateToNewProduct(barcode);
+      }
+      onClose();
     }
   }, []);
 
@@ -293,60 +275,15 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     }, 1500);
   };
 
-  // Quick register new product & add to stock
-  const handleQuickRegister = () => {
-    if (!quickName.trim()) return;
-
-    const newProd: Product = {
-      id: `prod-${Date.now()}`,
-      name: quickName.trim(),
-      barcode: scannedBarcode || `${Math.floor(7890000000000 + Math.random() * 999999999)}`,
-      sku: `SKU-${Math.floor(1000 + Math.random() * 9000)}`,
-      category: 'Geral',
-      unit: 'un',
-      costPrice: quickCostPrice || 0,
-      salePrice: quickSalePrice || 0,
-      currentStock: quickQty,
-      minStock: 5,
-      maxStock: 100,
-      imageUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&q=80',
-      active: true,
-      updatedAt: new Date().toISOString(),
-      storeBranchId: currentBranch?.id,
-    };
-
-    storageService.saveProduct(newProd);
-
-    const reasonText = `Entrada C\u00e2mera (Cadastro R\u00e1pido): ${quickQty}un - Filial ${currentBranch?.name || 'Matriz'}`;
-    storageService.updateStock(newProd.id, quickQty, reasonText, 'C\u00e2mera HD-System');
-
-    posAudio.chime();
-    if (onProductsImported) onProductsImported();
-
-    setSuccessData({ name: newProd.name, quantity: quickQty });
-    setShowSuccessOverlay(true);
-
-    setTimeout(() => {
-      setShowSuccessOverlay(false);
-      setSuccessData(null);
-      handleScanNext();
-    }, 1500);
-  };
-
   // Resume scanning
   const handleScanNext = () => {
     setScanPaused(false);
     setScannerStatus('scanning');
     setScannedBarcode('');
     setScannedProduct(null);
-    setShowQuickForm(false);
     setShowSuccessOverlay(false);
     setSuccessData(null);
     setAddQty(1);
-    setQuickName('');
-    setQuickSalePrice(0);
-    setQuickCostPrice(0);
-    setQuickQty(1);
     lastScannedRef.current = '';
 
     // Restart barcode polling
@@ -387,7 +324,6 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
       id: `prod-inv-${Date.now()}`,
       name,
       barcode,
-      sku: `NF-${barcode.slice(-4)}`,
       category: 'Geral',
       unit: 'un',
       costPrice: invUnitPrice || 10.0,
@@ -554,7 +490,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                   Aponta a c\u00e2mera para o c\u00f3digo de barras
                 </h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
-                  Escaneie v\u00e1rios produtos em sequ\u00eancia. Produtos cadastrados s\u00e3o adicionados direto ao estoque; n\u00e3o cadastrados podem ser criados r\u00e1pido.
+                  Escaneie v\u00e1rios produtos em sequ\u00eancia. Produtos cadastrados recebem entrada direto ao estoque. Produtos novos s\u00e3o cadastrados automaticamente.
                 </p>
               </div>
               {cameraError && (
@@ -618,101 +554,6 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                       Pular
                     </button>
                   </div>
-                </div>
-              )}
-
-              {/* Not Found */}
-              {scannerStatus === 'not_found' && !showSuccessOverlay && (
-                <div className="space-y-3">
-                  <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-500/30 rounded-xl">
-                    <div className="flex items-center gap-2 mb-1">
-                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-                      <p className="text-xs font-bold text-amber-800 dark:text-amber-300">Produto n\u00e3o encontrado</p>
-                    </div>
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                      C\u00f3digo: <span className="font-mono font-bold">{scannedBarcode}</span>
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        if (onNavigateToNewProduct) {
-                          onClose();
-                          onNavigateToNewProduct(scannedBarcode);
-                        } else {
-                          setShowQuickForm(true);
-                        }
-                      }}
-                      className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Cadastrar Produto
-                    </button>
-                    <button
-                      onClick={handleScanNext}
-                      className="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors"
-                    >
-                      Escanear Novamente
-                    </button>
-                  </div>
-                  {showQuickForm && (
-                    <div className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 space-y-3 animate-[slideDown_0.2s_ease-out]">
-                      <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                        Cadastro R\u00e1pido
-                      </span>
-                      <input
-                        value={quickName}
-                        onChange={(e) => setQuickName(e.target.value)}
-                        placeholder="Nome do Produto *"
-                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        autoFocus
-                      />
-                      <div className="grid grid-cols-3 gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={quickSalePrice || ''}
-                          onChange={(e) => setQuickSalePrice(Number(e.target.value))}
-                          placeholder="R$ Venda"
-                          className="px-2 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-[11px] font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={quickCostPrice || ''}
-                          onChange={(e) => setQuickCostPrice(Number(e.target.value))}
-                          placeholder="R$ Custo"
-                          className="px-2 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-[11px] font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                        <input
-                          type="number"
-                          min="1"
-                          value={quickQty}
-                          onChange={(e) => setQuickQty(Math.max(1, Number(e.target.value) || 1))}
-                          placeholder="Qtd"
-                          className="px-2 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-[11px] font-bold text-slate-900 dark:text-white text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleQuickRegister}
-                          disabled={!quickName.trim()}
-                          className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-colors flex items-center justify-center gap-2"
-                        >
-                          <Check className="w-4 h-4" />
-                          Cadastrar e Adicionar
-                        </button>
-                        <button
-                          onClick={() => setShowQuickForm(false)}
-                          className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-600 dark:text-slate-300 font-bold text-xs transition-colors"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -965,94 +806,6 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                     Pular
                   </button>
                 </div>
-              </div>
-            )}
-
-            {/* Not Found (bottom sheet) */}
-            {scannerStatus === 'not_found' && !showSuccessOverlay && (
-              <div className="space-y-3">
-                <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-500/30 rounded-xl">
-                  <div className="flex items-center gap-2 mb-1">
-                    <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
-                    <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Produto n\u00e3o encontrado</p>
-                  </div>
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                    C\u00f3digo: <span className="font-mono font-bold">{scannedBarcode}</span>
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowQuickForm(true)}
-                    className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Cadastrar R\u00e1pido
-                  </button>
-                  <button
-                    onClick={handleScanNext}
-                    className="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors"
-                  >
-                    Escanear Novamente
-                  </button>
-                </div>
-                {showQuickForm && (
-                  <div className="p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/20 space-y-2 animate-[slideDown_0.2s_ease-out]">
-                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase">
-                      Cadastro R\u00e1pido
-                    </span>
-                    <input
-                      value={quickName}
-                      onChange={(e) => setQuickName(e.target.value)}
-                      placeholder="Nome *"
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      autoFocus
-                    />
-                    <div className="grid grid-cols-3 gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={quickSalePrice || ''}
-                        onChange={(e) => setQuickSalePrice(Number(e.target.value))}
-                        placeholder="R$ Venda"
-                        className="px-2 py-2 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-[11px] font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={quickCostPrice || ''}
-                        onChange={(e) => setQuickCostPrice(Number(e.target.value))}
-                        placeholder="R$ Custo"
-                        className="px-2 py-2 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-[11px] font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                      <input
-                        type="number"
-                        min="1"
-                        value={quickQty}
-                        onChange={(e) => setQuickQty(Math.max(1, Number(e.target.value) || 1))}
-                        placeholder="Qtd"
-                        className="px-2 py-2 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-[11px] font-bold text-slate-900 dark:text-white text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleQuickRegister}
-                        disabled={!quickName.trim()}
-                        className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-colors flex items-center justify-center gap-2"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        Cadastrar e Adicionar
-                      </button>
-                      <button
-                        onClick={() => setShowQuickForm(false)}
-                        className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-600 dark:text-slate-300 font-bold text-xs transition-colors"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 

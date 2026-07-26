@@ -140,8 +140,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
     const matchesSearch =
       !term ||
       p.name.toLowerCase().includes(term) ||
-      p.barcode.includes(term) ||
-      p.sku.toLowerCase().includes(term);
+      p.barcode.includes(term);
     return matchesCategory && matchesSearch && p.active;
   });
 
@@ -277,7 +276,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
 
     // Try exact barcode match first
     const exactMatch = products.find(
-      (p) => p.barcode === searchTerm.trim() || p.sku.toLowerCase() === searchTerm.trim().toLowerCase()
+      (p) => p.barcode === searchTerm.trim()
     );
 
     if (exactMatch) {
@@ -556,7 +555,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Digite o nome, código de barras (EAN-13) ou SKU... (F4)"
+              placeholder="Digite o nome ou código de barras... (F4)"
               className="w-full pl-10 pr-10 py-2.5 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl text-xs sm:text-sm text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
             />
             <button

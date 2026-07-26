@@ -71,7 +71,6 @@ class StorageService {
       store_branch_id: p.storeBranchId || null,
       name: p.name,
       barcode: p.barcode,
-      sku: p.sku,
       category: p.category,
       cost_price: p.costPrice,
       sale_price: p.salePrice,
@@ -260,7 +259,6 @@ class StorageService {
     const products = this.getProducts();
     const mapped: Product = {
       id: row.id,
-      sku: row.sku || '',
       barcode: row.barcode || '',
       name: row.name,
       category: row.category || 'Geral',
@@ -603,7 +601,6 @@ class StorageService {
 
           return {
             id: r.id,
-            sku: r.sku || '',
             barcode: r.barcode || '',
             name: r.name,
             category: r.category || 'Geral',

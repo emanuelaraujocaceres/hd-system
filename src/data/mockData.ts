@@ -125,7 +125,6 @@ export const INITIAL_CATEGORIES: Category[] = [
 export const INITIAL_PRODUCTS: Product[] = [
   {
     id: 'prod-01',
-    sku: 'BEB-001',
     barcode: '7891000100103',
     name: 'Refrigerante Coca-Cola 2L Zero',
     category: 'Bebidas',
@@ -145,7 +144,6 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'prod-02',
-    sku: 'BEB-002',
     barcode: '7891991000854',
     name: 'Cerveja Heineken Long Neck 330ml (Pack 6un)',
     category: 'Bebidas',
@@ -165,7 +163,6 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'prod-03',
-    sku: 'ALI-001',
     barcode: '7891000300015',
     name: 'Café Torrado e Moído Pilão 500g',
     category: 'Alimentos',
@@ -185,7 +182,6 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'prod-04',
-    sku: 'ALI-002',
     barcode: '7891000001011',
     name: 'Azeite de Oliva Extra Virgem 500ml',
     category: 'Alimentos',
@@ -202,7 +198,6 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'prod-05',
-    sku: 'ELE-001',
     barcode: '7898558000123',
     name: 'Fone de Ouvido Bluetooth TWS Pro',
     category: 'Eletrônicos',
@@ -219,7 +214,6 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'prod-06',
-    sku: 'ELE-002',
     barcode: '7898558000451',
     name: 'Carregador Rápido USB-C 30W Power',
     category: 'Eletrônicos',
@@ -236,7 +230,6 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'prod-07',
-    sku: 'LIM-001',
     barcode: '7891150000010',
     name: 'Sabão em Pó Omo Lavagem Perfeita 1kg',
     category: 'Limpeza & Higiene',
@@ -253,7 +246,6 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'prod-08',
-    sku: 'HOR-001',
     barcode: '7891000999011',
     name: 'Maçã Fuji Selecionada (kg)',
     category: 'Hortifruti',

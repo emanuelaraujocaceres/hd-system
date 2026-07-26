@@ -81,18 +81,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   // Product Form state
   const [formName, setFormName] = useState('');
-  const [formSku, setFormSku] = useState('');
   const [formBarcode, setFormBarcode] = useState('');
   const [formCategory, setFormCategory] = useState('Geral');
   const [formUnit, setFormUnit] = useState<'un' | 'kg' | 'cx' | 'lit' | 'm'>('un');
-  const [formCostPrice, setFormCostPrice] = useState<number>(0);
-  const [formSalePrice, setFormSalePrice] = useState<number>(0);
-  const [formCurrentStock, setFormCurrentStock] = useState<number>(0);
-  const [formMinStock, setFormMinStock] = useState<number>(5);
-  const [formMaxStock, setFormMaxStock] = useState<number>(50);
+  const [formCostPrice, setFormCostPrice] = useState('');
+  const [formSalePrice, setFormSalePrice] = useState('');
+  const [formCurrentStock, setFormCurrentStock] = useState('');
+  const [formMinStock, setFormMinStock] = useState('');
+  const [formMaxStock, setFormMaxStock] = useState('');
   const [formImageUrl, setFormImageUrl] = useState('');
   const [formShowOnTV, setFormShowOnTV] = useState(false);
-  const [formTvPromoPrice, setFormTvPromoPrice] = useState<number>(0);
+  const [formTvPromoPrice, setFormTvPromoPrice] = useState('');
   const [formTvHighlightTag, setFormTvHighlightTag] = useState('');
 
   // Auto-open product modal when navigating from scanner with a barcode
@@ -100,18 +99,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     if (initialBarcode) {
       setEditingProduct(null);
       setFormName('');
-      setFormSku(`SKU-${Math.floor(1000 + Math.random() * 9000)}`);
       setFormBarcode(initialBarcode);
       setFormCategory(categories[0]?.name || 'Geral');
       setFormUnit('un');
-      setFormCostPrice(10);
-      setFormSalePrice(19.9);
-      setFormCurrentStock(20);
-      setFormMinStock(5);
-      setFormMaxStock(100);
+      setFormCostPrice('');
+      setFormSalePrice('');
+      setFormCurrentStock('');
+      setFormMinStock('');
+      setFormMaxStock('');
       setFormImageUrl('');
       setFormShowOnTV(false);
-      setFormTvPromoPrice(0);
+      setFormTvPromoPrice('');
       setFormTvHighlightTag('');
       setImageSuggestions([]);
       setIsSearchingImages(false);
@@ -245,18 +243,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const openNewProductModal = () => {
     setEditingProduct(null);
     setFormName('');
-    setFormSku(`SKU-${Math.floor(1000 + Math.random() * 9000)}`);
     setFormBarcode(`789${Math.floor(1000000000 + Math.random() * 9000000000)}`);
     setFormCategory(categories[0]?.name || 'Geral');
     setFormUnit('un');
-    setFormCostPrice(10);
-    setFormSalePrice(19.9);
-    setFormCurrentStock(20);
-    setFormMinStock(5);
-    setFormMaxStock(100);
-    setFormImageUrl('https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80');
+    setFormCostPrice('');
+    setFormSalePrice('');
+    setFormCurrentStock('');
+    setFormMinStock('');
+    setFormMaxStock('');
+    setFormImageUrl('');
     setFormShowOnTV(false);
-    setFormTvPromoPrice(0);
+    setFormTvPromoPrice('');
     setFormTvHighlightTag('');
     setIsProductModalOpen(true);
   };
@@ -264,18 +261,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const openEditProductModal = (product: Product) => {
     setEditingProduct(product);
     setFormName(product.name);
-    setFormSku(product.sku);
     setFormBarcode(product.barcode);
     setFormCategory(product.category);
     setFormUnit(product.unit);
-    setFormCostPrice(product.costPrice);
-    setFormSalePrice(product.salePrice);
-    setFormCurrentStock(product.currentStock);
-    setFormMinStock(product.minStock);
-    setFormMaxStock(product.maxStock);
+    setFormCostPrice(String(product.costPrice));
+    setFormSalePrice(String(product.salePrice));
+    setFormCurrentStock(String(product.currentStock));
+    setFormMinStock(String(product.minStock));
+    setFormMaxStock(String(product.maxStock));
     setFormImageUrl(product.imageUrl);
     setFormShowOnTV(product.showOnTV || false);
-    setFormTvPromoPrice(product.tvPromoPrice || 0);
+    setFormTvPromoPrice(String(product.tvPromoPrice || ''));
     setFormTvHighlightTag(product.tvHighlightTag || '');
     setIsProductModalOpen(true);
   };
@@ -284,22 +280,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     e.preventDefault();
     const newProd: Product = {
       id: editingProduct ? editingProduct.id : `prod-${Date.now()}`,
-      sku: formSku,
       barcode: formBarcode,
       name: formName,
       category: formCategory,
       unit: formUnit,
-      costPrice: formCostPrice,
-      salePrice: formSalePrice,
-      currentStock: formCurrentStock,
-      minStock: formMinStock,
-      maxStock: formMaxStock,
+      costPrice: parseFloat(formCostPrice) || 0,
+      salePrice: parseFloat(formSalePrice) || 0,
+      currentStock: parseInt(formCurrentStock) || 0,
+      minStock: parseInt(formMinStock) || 0,
+      maxStock: parseInt(formMaxStock) || 100,
       imageUrl: formImageUrl || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80',
       active: true,
       updatedAt: new Date().toISOString(),
       storeBranchId: user.storeBranchId,
       showOnTV: formShowOnTV,
-      tvPromoPrice: formShowOnTV ? formTvPromoPrice : undefined,
+      tvPromoPrice: formShowOnTV && formTvPromoPrice ? parseFloat(formTvPromoPrice) || undefined : undefined,
       tvHighlightTag: formShowOnTV && formTvHighlightTag ? formTvHighlightTag : undefined,
     };
 
@@ -331,8 +326,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     const matchesSearch =
       !term ||
       p.name.toLowerCase().includes(term) ||
-      p.barcode.includes(term) ||
-      p.sku.toLowerCase().includes(term);
+      p.barcode.includes(term);
 
     let matchesStock = true;
     if (stockFilter === 'low') matchesStock = p.currentStock <= p.minStock && p.currentStock > 0;
@@ -392,7 +386,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por nome, EAN-13 ou SKU..."
+              placeholder="Buscar por nome ou código de barras..."
               className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-xl text-xs sm:text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
@@ -458,7 +452,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         />
                         <div>
                           <p className="font-bold text-slate-900 dark:text-white">{p.name}</p>
-                          <p className="text-[10px] text-slate-400 dark:text-[#71717a] font-mono">SKU: {p.sku}</p>
                         </div>
                       </div>
                     </td>
@@ -576,7 +569,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 />
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm text-slate-900 dark:text-white truncate">{p.name}</p>
-                  <p className="text-[10px] text-slate-400 dark:text-[#71717a] font-mono">SKU: {p.sku}</p>
                   <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#09090b] font-semibold text-slate-700 dark:text-[#a1a1aa] text-[10px] border border-transparent dark:border-[#27272a]">
                     {p.category}
                   </span>
@@ -694,18 +686,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-mono text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                    Código SKU Interno
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formSku}
-                    onChange={(e) => setFormSku(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-mono text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -753,8 +733,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     step="0.01"
                     required
                     value={formCostPrice}
-                    onChange={(e) => setFormCostPrice(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
+                    onChange={(e) => setFormCostPrice(e.target.value)}
+                    placeholder="Ex: 5.90"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none placeholder:text-slate-300 dark:placeholder:text-[#3f3f46]"
                   />
                 </div>
 
@@ -767,8 +748,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     step="0.01"
                     required
                     value={formSalePrice}
-                    onChange={(e) => setFormSalePrice(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-emerald-600 dark:text-emerald-400 outline-none"
+                    onChange={(e) => setFormSalePrice(e.target.value)}
+                    placeholder="Ex: 9.90"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-emerald-600 dark:text-emerald-400 outline-none placeholder:text-slate-300 dark:placeholder:text-[#3f3f46]"
                   />
                 </div>
               </div>
@@ -782,8 +764,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     type="number"
                     required
                     value={formCurrentStock}
-                    onChange={(e) => setFormCurrentStock(parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none"
+                    onChange={(e) => setFormCurrentStock(e.target.value)}
+                    placeholder="0"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none placeholder:text-slate-300 dark:placeholder:text-[#3f3f46]"
                   />
                 </div>
                 <div>
@@ -794,8 +777,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     type="number"
                     required
                     value={formMinStock}
-                    onChange={(e) => setFormMinStock(parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none"
+                    onChange={(e) => setFormMinStock(e.target.value)}
+                    placeholder="0"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none placeholder:text-slate-300 dark:placeholder:text-[#3f3f46]"
                   />
                 </div>
                 <div>
@@ -806,8 +790,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     type="number"
                     required
                     value={formMaxStock}
-                    onChange={(e) => setFormMaxStock(parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none"
+                    onChange={(e) => setFormMaxStock(e.target.value)}
+                    placeholder="100"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none placeholder:text-slate-300 dark:placeholder:text-[#3f3f46]"
                   />
                 </div>
               </div>
@@ -970,7 +955,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                           type="number"
                           step="0.01"
                           value={formTvPromoPrice}
-                          onChange={(e) => setFormTvPromoPrice(parseFloat(e.target.value) || 0)}
+                          onChange={(e) => setFormTvPromoPrice(e.target.value)}
                           className="w-full pl-10 pr-3 py-2 bg-white dark:bg-[#18181b] border border-amber-500/30 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
                           placeholder="0.00"
                         />
@@ -1209,15 +1194,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           setIsStockCameraModalOpen(false);
           setEditingProduct(null);
           setFormName('');
-          setFormSku(`SKU-${Math.floor(1000 + Math.random() * 9000)}`);
           setFormBarcode(barcode);
           setFormCategory(categories[0]?.name || 'Geral');
           setFormUnit('un');
-          setFormCostPrice(10);
-          setFormSalePrice(19.9);
-          setFormCurrentStock(20);
-          setFormMinStock(5);
-          setFormMaxStock(100);
+          setFormCostPrice('');
+          setFormSalePrice('');
+          setFormCurrentStock('');
+          setFormMinStock('');
+          setFormMaxStock('');
           setFormImageUrl('');
           setImageSuggestions([]);
           setIsSearchingImages(false);

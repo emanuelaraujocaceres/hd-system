@@ -6,16 +6,11 @@ import {
   Maximize2,
   Minimize2,
   Sparkles,
-  ShoppingBag,
   Building2,
   QrCode,
-  Tag,
   ChevronLeft,
   ChevronRight,
   Clock,
-  Zap,
-  Volume2,
-  VolumeX,
   X,
   CheckCircle2,
 } from 'lucide-react';
@@ -35,20 +30,21 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
   settings,
   onCloseTVMode,
 }) => {
-  // Get products marked for TV display (or fallback to top 6 if none selected)
+  // Get products marked for TV display (or fallback to top 8 if none selected)
   const tvProducts = products.filter((p) => p.active && p.showOnTV);
   const displayList = tvProducts.length > 0 ? tvProducts : products.slice(0, 8);
 
+  // Read speed & mode from settings (configured in Settings page)
+  const slideSpeed = settings.tvSlideSpeed || 6;
+  const displayMode = settings.tvDisplayMode || 'single';
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [slideSpeed, setSlideSpeed] = useState<number>(6); // seconds
-  const [displayMode, setDisplayMode] = useState<'single' | 'grid'>('single');
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [timeString, setTimeString] = useState('');
 
-  // Clock ticker for TV
+  // Clock ticker for TV — larger display
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -61,31 +57,24 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Filter list by category if selected
-  const categories = Array.from(new Set(displayList.map((p) => p.category)));
-  const filteredList =
-    selectedCategory === 'all'
-      ? displayList
-      : displayList.filter((p) => p.category === selectedCategory);
-
   // Auto slide loop
   useEffect(() => {
-    if (!isPlaying || filteredList.length <= 1) return;
+    if (!isPlaying || displayList.length <= 1) return;
 
     const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % filteredList.length);
+      setCurrentIndex((prev) => (prev + 1) % displayList.length);
     }, slideSpeed * 1000);
 
     return () => clearInterval(interval);
-  }, [isPlaying, slideSpeed, filteredList.length]);
+  }, [isPlaying, slideSpeed, displayList.length]);
 
   const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % filteredList.length);
+    setCurrentIndex((prev) => (prev + 1) % displayList.length);
     posAudio.beep();
   };
 
   const handlePrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + filteredList.length) % filteredList.length);
+    setCurrentIndex((prev) => (prev - 1 + displayList.length) % displayList.length);
     posAudio.beep();
   };
 
@@ -101,7 +90,7 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
     }
   };
 
-  const activeProduct = filteredList[currentIndex] || filteredList[0];
+  const activeProduct = displayList[currentIndex] || displayList[0];
 
   return (
     <div className="min-h-screen bg-[#09090b] text-white flex flex-col justify-between overflow-hidden relative font-sans select-none animate-fadeIn">
@@ -111,7 +100,7 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
       <div className="absolute bottom-1/4 -right-48 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Slide Countdown Progress Bar */}
-      {isPlaying && filteredList.length > 1 && (
+      {isPlaying && displayList.length > 1 && (
         <div className="w-full h-1.5 bg-zinc-900 relative overflow-hidden z-20">
           <div
             key={`${currentIndex}-${slideSpeed}`}
@@ -121,7 +110,7 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
         </div>
       )}
 
-      {/* TOP TV HEADER */}
+      {/* TOP TV HEADER — Logo HD-System + Relógio */}
       <header className="px-6 md:px-12 py-5 bg-black/60 backdrop-blur-xl border-b border-zinc-800/80 flex items-center justify-between z-10 shrink-0">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-indigo-600 p-0.5 shadow-lg shadow-indigo-500/20 flex items-center justify-center">
@@ -130,11 +119,8 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
             </div>
           </div>
           <div>
-            <h1 className="text-xl md:text-2xl font-black tracking-tight flex items-center gap-3">
+            <h1 className="text-xl md:text-2xl font-black tracking-tight">
               <span>{settings.companyName || 'HD-System ERP'}</span>
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-extrabold tracking-wider uppercase">
-                OFERTAS TV
-              </span>
             </h1>
             <p className="text-xs text-zinc-400 flex items-center gap-2 mt-0.5 font-medium">
               <Building2 className="w-3.5 h-3.5 text-indigo-400" />
@@ -143,10 +129,10 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
           </div>
         </div>
 
-        {/* Header Controls & Live Clock */}
+        {/* Header Controls & Live Clock — Relogio maior */}
         <div className="flex items-center gap-4">
-          <div className="hidden lg:flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-900/90 border border-zinc-800 font-mono text-sm font-bold text-zinc-200">
-            <Clock className="w-4 h-4 text-amber-400" />
+          <div className="hidden lg:flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-zinc-900/90 border border-zinc-800 font-mono text-xl font-bold text-zinc-200">
+            <Clock className="w-5 h-5 text-amber-400" />
             <span>{timeString}</span>
           </div>
 
@@ -155,7 +141,23 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
             className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2"
           >
             <QrCode className="w-4 h-4" />
-            <span className="hidden sm:inline">Pagar / Pedir via QR Code</span>
+            <span className="hidden sm:inline">QR Code</span>
+          </button>
+
+          <button
+            onClick={() => setIsPlaying(!isPlaying)}
+            className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-white"
+            title={isPlaying ? 'Pausar Rotação' : 'Iniciar Rotação'}
+          >
+            {isPlaying ? <Pause className="w-4 h-4 text-amber-400" /> : <Play className="w-4 h-4 text-emerald-400" />}
+          </button>
+
+          <button
+            onClick={toggleFullscreen}
+            className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 hover:text-white"
+            title="Tela Cheia (TV)"
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
 
           {onCloseTVMode && (
@@ -172,7 +174,7 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
 
       {/* MAIN SHOWCASE CONTENT AREA */}
       <main className="flex-1 p-6 md:p-12 flex flex-col justify-center relative z-10 overflow-y-auto">
-        {filteredList.length === 0 ? (
+        {displayList.length === 0 ? (
           <div className="text-center py-16 space-y-4 max-w-md mx-auto">
             <div className="w-20 h-20 rounded-3xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center mx-auto">
               <Tv className="w-10 h-10" />
@@ -215,9 +217,6 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
             {/* Right Product Info & Giant Pricing */}
             <div className="lg:col-span-7 space-y-6">
               <div>
-                <span className="px-3.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold uppercase tracking-widest inline-block mb-3">
-                  {activeProduct.category} • {activeProduct.unit.toUpperCase()}
-                </span>
                 <h2 className="text-3xl md:text-5xl font-black text-white leading-tight">
                   {activeProduct.name}
                 </h2>
@@ -246,11 +245,10 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400 font-semibold">
+                <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-start text-xs text-zinc-400 font-semibold">
                   <span className="flex items-center gap-1 text-emerald-400 font-bold">
                     <CheckCircle2 className="w-4 h-4" /> Estoque Disponível na Loja
                   </span>
-                  <span>Cod: {activeProduct.barcode}</span>
                 </div>
               </div>
 
@@ -274,7 +272,7 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  {filteredList.map((_, idx) => (
+                  {displayList.map((_, idx) => (
                     <button
                       key={idx}
                       onClick={() => setCurrentIndex(idx)}
@@ -298,12 +296,12 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
                 <span>Ofertas & Combos em Destaque</span>
               </h2>
               <span className="text-xs text-zinc-400 font-bold">
-                Exibindo {filteredList.length} itens no catálogo
+                Exibindo {displayList.length} itens no catálogo
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {filteredList.map((prod) => (
+              {displayList.map((prod) => (
                 <div
                   key={prod.id}
                   className="p-5 rounded-3xl bg-zinc-900/90 border border-zinc-800 hover:border-amber-500/50 transition-all shadow-xl flex flex-col justify-between group"
@@ -322,9 +320,6 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
                   </div>
 
                   <div className="space-y-2">
-                    <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">
-                      {prod.category}
-                    </span>
                     <h3 className="text-sm font-bold text-white line-clamp-2">{prod.name}</h3>
 
                     <div className="pt-2 flex items-baseline justify-between border-t border-zinc-800">
@@ -344,81 +339,6 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
           </div>
         )}
       </main>
-
-      {/* FLOATING / BOTTOM CONTROL BAR FOR OPERATOR / TV */}
-      <div className="px-6 py-3 bg-black/80 backdrop-blur-2xl border-t border-zinc-800/80 z-20 flex flex-wrap items-center justify-between gap-4">
-        {/* Category Filters */}
-        <div className="flex items-center gap-2 overflow-x-auto py-1">
-          <button
-            onClick={() => {
-              setSelectedCategory('all');
-              setCurrentIndex(0);
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-              selectedCategory === 'all'
-                ? 'bg-amber-500 text-black shadow-md'
-                : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
-            }`}
-          >
-            Todos ({displayList.length})
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => {
-                setSelectedCategory(cat);
-                setCurrentIndex(0);
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                selectedCategory === cat
-                  ? 'bg-amber-500 text-black shadow-md'
-                  : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        {/* Rotation & Mode Settings */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setDisplayMode(displayMode === 'single' ? 'grid' : 'single')}
-            className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-xs font-bold text-zinc-300 flex items-center gap-1.5"
-          >
-            <Tv className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{displayMode === 'single' ? 'Modo Destaque 1x' : 'Modo Grade 4x'}</span>
-          </button>
-
-          <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-white"
-            title={isPlaying ? 'Pausar Rotação' : 'Iniciar Rotação'}
-          >
-            {isPlaying ? <Pause className="w-4 h-4 text-amber-400" /> : <Play className="w-4 h-4 text-emerald-400" />}
-          </button>
-
-          {/* Speed Selector */}
-          <select
-            value={slideSpeed}
-            onChange={(e) => setSlideSpeed(Number(e.target.value))}
-            className="bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 font-bold rounded-xl px-2.5 py-1.5 focus:outline-none"
-          >
-            <option value={4}>4 seg</option>
-            <option value={6}>6 seg</option>
-            <option value={10}>10 seg</option>
-            <option value={15}>15 seg</option>
-          </select>
-
-          <button
-            onClick={toggleFullscreen}
-            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 hover:text-white"
-            title="Tela Cheia (TV)"
-          >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
 
       {/* SCROLLING MARQUEE BANNER AT BOTTOM */}
       <div className="bg-gradient-to-r from-amber-500 via-indigo-600 to-amber-500 text-black font-extrabold text-xs py-2 px-4 uppercase tracking-wider overflow-hidden whitespace-nowrap border-t border-amber-400 z-20">

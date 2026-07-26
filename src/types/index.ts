@@ -39,7 +39,6 @@ export interface StoreBranch {
 
 export interface Product {
   id: string;
-  sku: string;
   barcode: string; // EAN-13
   name: string;
   category: string;
@@ -224,4 +223,7 @@ export interface SystemSettings {
   soundEffectsEnabled: boolean;
   receiptHeaderMsg: string;
   receiptFooterMsg: string;
+  // TV Showcase Settings
+  tvSlideSpeed?: number;
+  tvDisplayMode?: 'single' | 'grid';
 }
