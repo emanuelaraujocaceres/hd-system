@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, UserCheck, Lock, AlertCircle, ArrowRight, Building2, CheckCircle, Sparkles, LogIn, KeyRound } from 'lucide-react';
+import { ShieldCheck, Lock, AlertCircle, LogIn } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 
@@ -10,11 +10,8 @@ interface GoogleLoginModalProps {
 export const GoogleLoginModal: React.FC<GoogleLoginModalProps> = ({ onLoginSuccess }) => {
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
-  const [quickPasswords, setQuickPasswords] = useState<Record<string, string>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
-  const registeredUsers = storageService.getUsers();
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,27 +47,6 @@ export const GoogleLoginModal: React.FC<GoogleLoginModalProps> = ({ onLoginSucce
     }, 400);
   };
 
-  const handleQuickLogin = (user: UserProfile) => {
-    setErrorMessage(null);
-    const pwd = quickPasswords[user.id] || '';
-    if (!pwd.trim()) {
-      setErrorMessage(`Digite a senha para acessar como ${user.name}.`);
-      return;
-    }
-    if (!user.password || user.password !== pwd) {
-      setErrorMessage('Senha incorreta. Tente novamente.');
-      return;
-    }
-    setIsLoading(true);
-    setTimeout(() => {
-      const res = storageService.loginWithGoogle(user.email);
-      setIsLoading(false);
-      if (res.success && res.user) {
-        onLoginSuccess(res.user);
-      }
-    }, 300);
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
       <div className="w-full max-w-md bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -91,7 +67,7 @@ export const GoogleLoginModal: React.FC<GoogleLoginModalProps> = ({ onLoginSucce
           </p>
         </div>
 
-          {/* Form Body */}
+        {/* Form Body */}
         <div className="p-6 space-y-5">
           {errorMessage && (
             <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs flex gap-2.5 items-start">
@@ -100,7 +76,7 @@ export const GoogleLoginModal: React.FC<GoogleLoginModalProps> = ({ onLoginSucce
             </div>
           )}
 
-          {/* Primary: Email + Password Login Form */}
+          {/* Email + Password Login Form */}
           <form onSubmit={handleLoginSubmit} className="space-y-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
@@ -144,79 +120,6 @@ export const GoogleLoginModal: React.FC<GoogleLoginModalProps> = ({ onLoginSucce
               <span>{isLoading ? 'Verificando Conta...' : 'Entrar'}</span>
             </button>
           </form>
-
-          {/* Quick Demo Switcher */}
-          <div className="pt-2 border-t border-slate-200 dark:border-[#27272a] space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-500 dark:text-[#a1a1aa] uppercase tracking-wider">
-                Contas Cadastradas para Teste Rápido:
-              </span>
-            </div>
-
-            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-              {registeredUsers.map((u) => {
-                const isAdmin = u.role === 'admin';
-                return (
-                  <div
-                    key={u.id}
-                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] transition-all"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <img
-                        src={u.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                        alt={u.name}
-                        className="w-8 h-8 rounded-full object-cover ring-1 ring-slate-300 dark:ring-slate-700"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                          {u.name}
-                        </p>
-                        <p className="text-[10px] text-slate-500 dark:text-[#71717a] truncate font-mono">
-                          {u.email}
-                        </p>
-                      </div>
-                      <span
-                        className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${
-                          isAdmin
-                            ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
-                            : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
-                        }`}
-                      >
-                        {isAdmin ? 'ADMIN' : 'COLABORADOR'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="relative flex-1">
-                        <KeyRound className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" />
-                        <input
-                          type="password"
-                          placeholder="Senha"
-                          value={quickPasswords[u.id] || ''}
-                          onChange={(e) => setQuickPasswords(prev => ({ ...prev, [u.id]: e.target.value }))}
-                          onKeyDown={(e) => { if (e.key === 'Enter') handleQuickLogin(u); }}
-                          className="w-full pl-8 pr-2 py-1.5 text-[11px] rounded-lg border border-slate-200 dark:border-[#27272a] bg-white dark:bg-[#18181b] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickLogin(u)}
-                        disabled={isLoading}
-                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold transition-all flex items-center gap-1 shrink-0"
-                      >
-                        <ArrowRight className="w-3.5 h-3.5" />
-                        Entrar
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="text-[10px] text-center text-slate-400 dark:text-[#71717a] pt-1">
-            Administradores podem adicionar novos colaboradores e definir permissões de acesso em <strong className="text-slate-600 dark:text-slate-300">Configurações &gt; Equipe</strong>.
-          </div>
         </div>
       </div>
     </div>
