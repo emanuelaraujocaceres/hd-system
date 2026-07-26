@@ -734,8 +734,21 @@ class StorageService {
         }));
         // Merge with existing users (preserve passwords from local)
         const existing = this.getUsers();
+        const initialIds = new Set(INITIAL_USERS.map((u) => u.id));
         const merged = mapped.map((m: any) => {
           const local = existing.find((u) => u.id === m.id || u.email.toLowerCase() === m.email.toLowerCase());
+          if (initialIds.has(m.id)) {
+            // Initial user — NEVER let cloud overwrite email or password
+            const initialUser = INITIAL_USERS.find((u) => u.id === m.id);
+            return {
+              ...(initialUser || m),
+              name: m.name || initialUser?.name || m.name,
+              avatarUrl: m.avatarUrl || initialUser?.avatarUrl,
+              permissions: m.permissions || initialUser?.permissions,
+              active: m.active !== undefined ? m.active : (initialUser?.active ?? true),
+              // email: ALWAYS from INITIAL_USERS, password: ALWAYS from INITIAL_USERS
+            };
+          }
           return { ...m, password: local?.password || m.password };
         });
         // Also keep any local users not in cloud (like the admin)
@@ -1247,12 +1260,26 @@ class StorageService {
   getUsers(): UserProfile[] {
     const stored = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
     // Ensure initial users always exist (merge by id)
+    // CRITICAL: For INITIAL_USERS entries, NEVER let stored data overwrite email or password.
+    // The stored/Supabase data may have stale emails from previous syncs.
     const merged = [...INITIAL_USERS];
+    const initialIds = new Set(INITIAL_USERS.map((u) => u.id));
     for (const s of stored) {
-      const idx = merged.findIndex((u) => u.id === s.id);
-      if (idx >= 0) {
-        merged[idx] = { ...merged[idx], ...s, password: merged[idx].password || s.password };
+      if (initialIds.has(s.id)) {
+        // Initial user — only merge non-auth fields (name, avatar, permissions, etc.)
+        const idx = merged.findIndex((u) => u.id === s.id);
+        if (idx >= 0) {
+          merged[idx] = {
+            ...merged[idx],
+            name: s.name || merged[idx].name,
+            avatarUrl: s.avatarUrl || merged[idx].avatarUrl,
+            permissions: s.permissions || merged[idx].permissions,
+            active: s.active !== undefined ? s.active : merged[idx].active,
+            // email and password: ALWAYS keep from INITIAL_USERS
+          };
+        }
       } else {
+        // Non-initial user — add as-is
         merged.push(s);
       }
     }

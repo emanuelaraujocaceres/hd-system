@@ -8,6 +8,8 @@ import {
   Plus,
   CheckCircle2,
   Building2,
+  Zap,
+  ZapOff,
 } from 'lucide-react';
 import { Product, StoreBranch } from '../../types';
 import { storageService } from '../../services/storageService';

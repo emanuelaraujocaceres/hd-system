@@ -960,10 +960,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                           placeholder="0.00"
                         />
                       </div>
-                      {formTvPromoPrice > 0 && formSalePrice > 0 && formTvPromoPrice < formSalePrice && (
+                      {parseFloat(formTvPromoPrice) > 0 && parseFloat(formSalePrice) > 0 && parseFloat(formTvPromoPrice) < parseFloat(formSalePrice) && (
                         <p className="mt-1 text-[10px] font-bold text-emerald-500 flex items-center gap-1">
                           <Sparkles className="w-3 h-3" />
-                          Economia de R$ {(formSalePrice - formTvPromoPrice).toFixed(2)} ({Math.round(((formSalePrice - formTvPromoPrice) / formSalePrice) * 100)}% OFF)
+                          Economia de R$ {(parseFloat(formSalePrice) - parseFloat(formTvPromoPrice)).toFixed(2)} ({Math.round(((parseFloat(formSalePrice) - parseFloat(formTvPromoPrice)) / parseFloat(formSalePrice)) * 100)}% OFF)
                         </p>
                       )}
                     </div>
