@@ -31,6 +31,7 @@ interface SidebarProps {
   onOpenProfile: () => void;
   isMobileOpen?: boolean;
   setIsMobileOpen?: (open: boolean) => void;
+  isTvMode?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -47,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenProfile,
   isMobileOpen,
   setIsMobileOpen,
+  isTvMode,
 }) => {
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
   const isAdmin = user.role === 'admin';
@@ -86,8 +88,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 dark:bg-[#09090b] text-slate-100 dark:text-[#fafafa] flex flex-col border-r border-slate-800 dark:border-[#27272a] transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
-        isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+      className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 dark:bg-[#09090b] text-slate-100 dark:text-[#fafafa] flex flex-col border-r border-slate-800 dark:border-[#27272a] transition-all duration-300 ease-in-out lg:static ${
+        isTvMode
+          ? 'lg:hidden -translate-x-full'
+          : isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       }`}
     >
       {/* Brand & Store Selector */}

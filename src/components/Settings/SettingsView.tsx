@@ -24,6 +24,7 @@ import {
   Receipt,
   QrCode,
   RefreshCw,
+  Tv,
 } from 'lucide-react';
 import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, SubscriptionInfo, SubscriptionInvoice } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -37,7 +38,7 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, user }) => {
   const isAdmin = user.role === 'admin';
-  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'subscription'>('fiscal');
+  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'subscription' | 'tv'>('fiscal');
 
   // Subscription & Stripe State
   const [subscription, setSubscription] = useState<SubscriptionInfo>(() => storageService.getSubscription());
@@ -57,6 +58,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [pixKey, setPixKey] = useState(settings.pixKey);
   const [printerPaperSize, setPrinterPaperSize] = useState<'80mm' | '58mm'>(settings.printerPaperSize || '80mm');
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(settings.autoPrintReceipt);
+
+  // TV Showcase Settings State
+  const [tvSlideSpeed, setTvSlideSpeed] = useState(settings.tvSlideSpeed || 6);
+  const [tvDisplayMode, setTvDisplayMode] = useState<'single' | 'grid'>(settings.tvDisplayMode || 'single');
 
   // Branch Modal / Edit State
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
@@ -362,6 +367,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500 text-white animate-pulse">
               {subscription.daysRemaining}d
             </span>
+          </button>
+
+          <button
+            onClick={() => setActiveSubTab('tv')}
+            className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+              activeSubTab === 'tv'
+                ? 'bg-white dark:bg-[#27272a] text-amber-600 dark:text-amber-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Tv className="w-4 h-4" />
+            <span>TV / Vitrine</span>
           </button>
         </div>
       </div>
@@ -1666,6 +1683,99 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- TAB 5: TV / VITRINE --- */}
+      {activeSubTab === 'tv' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <Tv className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Configurações da TV / Vitrine</h3>
+                <p className="text-xs text-slate-500 dark:text-[#71717a]">Controle a velocidade de rotação e o formato de exibição dos produtos na TV</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] block">
+                  Velocidade de Rotação
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+                  Tempo que cada produto fica na tela antes de mudar
+                </p>
+                <select
+                  value={tvSlideSpeed}
+                  onChange={(e) => setTvSlideSpeed(Number(e.target.value))}
+                  className="w-full px-3 py-2.5 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  <option value={3}>3 segundos (Rápido)</option>
+                  <option value={4}>4 segundos</option>
+                  <option value={6}>6 segundos (Padrão)</option>
+                  <option value={8}>8 segundos</option>
+                  <option value={10}>10 segundos</option>
+                  <option value={15}>15 segundos (Lento)</option>
+                  <option value={20}>20 segundos</option>
+                </select>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] block">
+                  Formato de Exibição
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+                  Como os produtos aparecem na tela da TV
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setTvDisplayMode('single')}
+                    className={`p-3 rounded-xl border text-xs font-bold text-center transition-all ${
+                      tvDisplayMode === 'single'
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
+                        : 'bg-white dark:bg-[#18181b] border-slate-200 dark:border-[#27272a] text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="text-lg mb-1">🎯</div>
+                    Destaque 1x
+                    <p className="text-[10px] font-normal mt-0.5 opacity-70">Um produto por vez</p>
+                  </button>
+                  <button
+                    onClick={() => setTvDisplayMode('grid')}
+                    className={`p-3 rounded-xl border text-xs font-bold text-center transition-all ${
+                      tvDisplayMode === 'grid'
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
+                        : 'bg-white dark:bg-[#18181b] border-slate-200 dark:border-[#27272a] text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="text-lg mb-1">📦</div>
+                    Grade 4x
+                    <p className="text-[10px] font-normal mt-0.5 opacity-70">Vários produtos juntos</p>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                const updated: SystemSettings = {
+                  ...settings,
+                  tvSlideSpeed,
+                  tvDisplayMode,
+                };
+                storageService.saveSettings(updated);
+                posAudio.chime();
+                alert('Configurações da TV salvas!');
+              }}
+              className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shadow-md transition-colors flex items-center gap-2"
+            >
+              <CheckCircle className="w-4 h-4" />
+              Salvar Configurações da TV
+            </button>
           </div>
         </div>
       )}

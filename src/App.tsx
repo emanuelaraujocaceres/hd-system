@@ -382,6 +382,7 @@ export const App: React.FC = () => {
         onOpenProfile={() => setIsProfileModalOpen(true)}
         isMobileOpen={isMobileOpen}
         setIsMobileOpen={setIsMobileOpen}
+        isTvMode={activeTab === 'tv-showcase'}
       />
 
       {/* Mobile backdrop overlay when sidebar is open */}
@@ -394,41 +395,45 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-dynamic overflow-hidden bg-slate-50 dark:bg-[#09090b]">
-        {/* Header Bar */}
-        <Header
-          onToggleMobileMenu={() => setIsMobileOpen((prev) => !prev)}
-          currentTab={activeTab}
-          setCurrentTab={handleTabChange}
-          products={products}
-          caixaSession={caixaSession}
-          onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
-          soundEnabled={soundEnabled}
-          setSoundEnabled={setSoundEnabled}
-          darkMode={darkMode}
-          setDarkMode={setDarkMode}
-          user={user}
-          branches={branches}
-          currentBranch={currentBranch}
-          onSelectBranch={handleSelectBranch}
-          onLogout={handleLogout}
-          isSyncConnected={isSyncConnected}
-          lastSyncTime={lastSyncTime}
-          syncStatus={syncStatus}
-          syncPendingCount={syncPendingCount}
-        />
+        {/* Header Bar — hidden on TV mode */}
+        {activeTab !== 'tv-showcase' && (
+          <Header
+            onToggleMobileMenu={() => setIsMobileOpen((prev) => !prev)}
+            currentTab={activeTab}
+            setCurrentTab={handleTabChange}
+            products={products}
+            caixaSession={caixaSession}
+            onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
+            soundEnabled={soundEnabled}
+            setSoundEnabled={setSoundEnabled}
+            darkMode={darkMode}
+            setDarkMode={setDarkMode}
+            user={user}
+            branches={branches}
+            currentBranch={currentBranch}
+            onSelectBranch={handleSelectBranch}
+            onLogout={handleLogout}
+            isSyncConnected={isSyncConnected}
+            lastSyncTime={lastSyncTime}
+            syncStatus={syncStatus}
+            syncPendingCount={syncPendingCount}
+          />
+        )}
 
-        {/* Sync Status Banner */}
-        <SyncBanner
-          status={syncStatus}
-          pendingCount={syncPendingCount}
-          onRetry={() => {
-            setSyncStatus('syncing');
-            syncService.retryFailed();
-          }}
-          onDismiss={() => {
-            if (syncStatus === 'error') setSyncStatus('online');
-          }}
-        />
+        {/* Sync Status Banner — hidden on TV mode */}
+        {activeTab !== 'tv-showcase' && (
+          <SyncBanner
+            status={syncStatus}
+            pendingCount={syncPendingCount}
+            onRetry={() => {
+              setSyncStatus('syncing');
+              syncService.retryFailed();
+            }}
+            onDismiss={() => {
+              if (syncStatus === 'error') setSyncStatus('online');
+            }}
+          />
+        )}
 
         {/* Dynamic Main View Area */}
         <main className="flex-1 overflow-y-auto">
@@ -529,20 +534,22 @@ export const App: React.FC = () => {
           )}
         </main>
 
-        {/* Footer Info Bar */}
-        <footer className="h-8 md:h-9 safe-area-bottom bg-white dark:bg-[#09090b] border-t border-slate-200 dark:border-[#27272a] px-3 sm:px-6 flex items-center justify-between text-[9px] md:text-[10px] text-slate-500 dark:text-[#52525b] uppercase tracking-widest font-bold select-none shrink-0">
-          <div className="flex items-center gap-3 sm:gap-6">
-            <span className="flex items-center gap-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${isSyncConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-              <span className="hidden sm:inline">Sync:</span> {isSyncConnected ? 'Online' : 'Offline'}
-            </span>
-            <span className="hidden sm:inline">Conectado ({user.email})</span>
-            <span className="hidden md:inline">Perfil: {user.role === 'admin' ? 'Administrador' : 'Colaborador Restrito'}</span>
-          </div>
-          <div className="hidden sm:block">
-            &copy; 2026 HD-System ERP PDV
-          </div>
-        </footer>
+        {/* Footer Info Bar — hidden on TV mode */}
+        {activeTab !== 'tv-showcase' && (
+          <footer className="h-8 md:h-9 safe-area-bottom bg-white dark:bg-[#09090b] border-t border-slate-200 dark:border-[#27272a] px-3 sm:px-6 flex items-center justify-between text-[9px] md:text-[10px] text-slate-500 dark:text-[#52525b] uppercase tracking-widest font-bold select-none shrink-0">
+            <div className="flex items-center gap-3 sm:gap-6">
+              <span className="flex items-center gap-1.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${isSyncConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
+                <span className="hidden sm:inline">Sync:</span> {isSyncConnected ? 'Online' : 'Offline'}
+              </span>
+              <span className="hidden sm:inline">Conectado ({user.email})</span>
+              <span className="hidden md:inline">Perfil: {user.role === 'admin' ? 'Administrador' : 'Colaborador Restrito'}</span>
+            </div>
+            <div className="hidden sm:block">
+              &copy; 2026 HD-System ERP PDV
+            </div>
+          </footer>
+        )}
       </div>
 
       {/* Cash Register (Caixa) Modal */}
