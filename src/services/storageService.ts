@@ -277,8 +277,20 @@ class StorageService {
       tvHighlightTag: row.tv_highlight_tag || undefined,
     };
     const idx = products.findIndex((p) => p.id === mapped.id);
-    if (idx >= 0) products[idx] = mapped;
-    else products.unshift(mapped);
+    if (idx >= 0) {
+      // Preserve critical local fields if cloud data is stale (0 or empty)
+      const local = products[idx];
+      if (local.salePrice > 0 && mapped.salePrice <= 0) {
+        mapped.salePrice = local.salePrice;
+      }
+      if (local.currentStock > 0 && mapped.currentStock <= 0) {
+        mapped.currentStock = local.currentStock;
+      }
+      mapped.updatedAt = new Date().toISOString();
+      products[idx] = mapped;
+    } else {
+      products.unshift(mapped);
+    }
     this.set(KEYS.PRODUCTS, products);
   }
 
@@ -454,6 +466,13 @@ class StorageService {
   }
 
   updateCaixaFromRemote(row: any) {
+    // Don't overwrite an open local session with stale cloud data
+    const localSession = this.getActiveCaixaSession();
+    if (localSession && localSession.id === row.id && localSession.status === 'open') {
+      console.log(`[HD-Sync] 🔄 Caixa remote update ignored — local session is open and current`);
+      return;
+    }
+
     const session: CashRegisterSession = {
       id: row.id,
       openedAt: row.opened_at,
@@ -469,6 +488,7 @@ class StorageService {
       suprimentos: parseFloat(row.suprimentos) || 0,
       sangrias: parseFloat(row.sangrias) || 0,
       status: row.status || 'open',
+      notes: row.notes || undefined,
       storeBranchId: row.store_branch_id || undefined,
     };
     this.set(KEYS.CAIXA, session);
@@ -580,34 +600,63 @@ class StorageService {
           syncService.fetchRows('sale_items'),
         ]);
 
-      // Save raw sale_items to separate localStorage key
-      if (saleItems && saleItems.length > 0) {
-        console.log(`[HD-Sync] 💾 Salvando ${saleItems.length} sale_items do Supabase no localStorage (chave: ${KEYS.SALE_ITEMS})`);
-        this.set(KEYS.SALE_ITEMS, saleItems);
-      } else {
-        console.log(`[HD-Sync] ⚠️ Supabase retornou 0 sale_items — mantendo dados locais existentes`);
-        // Keep existing local sale_items if Supabase returned empty
-        const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
-        if (existingItems.length === 0) {
-          console.log(`[HD-Sync] ⚠️ Nenhum sale_item local nem no Supabase — vendas ficarão sem itens`);
+      // ── HELPER: merge cloud rows into local data by ID ──────────
+      // Keeps ALL local records. Cloud records override matching by ID.
+      // Also syncs local-only records to Supabase so they aren't lost on future hydrations.
+      // Returns null when neither local nor cloud has real data (prevents INITIAL_* from being written).
+      const mergeBy = <T>(
+        key: string,
+        local: T[],
+        cloud: any[],
+        mapCloud: (r: any) => T,
+        syncLocal: (item: T) => void,
+        getId: (item: T) => string = (item: any) => item.id,
+        extraMerge?: (local: T, cloudMapped: T) => T,
+      ): T[] | null => {
+        const hasLocalData = localStorage.getItem(key) !== null;
+
+        // First-time init: localStorage was never written (using INITIAL_* defaults).
+        // If cloud has data, replace local with it (discard mock data).
+        // If cloud is empty too, skip entirely (keep INITIAL_* defaults).
+        if (!hasLocalData) {
+          if (cloud.length === 0) return null;
+          return cloud.map(mapCloud);
         }
-      }
 
-      // Only overwrite localStorage if Supabase has data
-      if (products.length > 0) {
-        const localProducts = this.getProducts();
-        const localByKey = new Map(localProducts.map((p: any) => [p.id, p]));
+        // Normal merge: local data is real (user-created)
+        const cloudMapped = cloud.map(mapCloud);
+        const cloudIds = new Set(cloudMapped.map(getId));
 
-        const mapped = products.map((r: any) => {
-          const cloudSalePrice = parseFloat(r.sale_price);
-          const local = localByKey.get(r.id);
-
-          // Guard: if Supabase sends sale_price = 0 but local has a valid price,
-          // keep the local price (prevents hydrateFromCloud from zeroing valid data)
-          if (local && local.salePrice > 0 && (!cloudSalePrice || cloudSalePrice <= 0)) {
-            console.warn(`[HD-Sync] ⚠️ Supabase has sale_price=0 for "${r.name}", keeping local R$ ${local.salePrice.toFixed(2)}`);
+        // Sync local-only records that cloud doesn't have yet
+        for (const item of local) {
+          if (!cloudIds.has(getId(item))) {
+            syncLocal(item);
           }
+        }
 
+        // Merge: cloud overrides matching local, local-only records stay
+        const localById = new Map(local.map((l) => [getId(l), l]));
+        const merged = cloudMapped.map((cm) => {
+          const loc = localById.get(getId(cm));
+          if (!loc) return cm;
+          return extraMerge ? extraMerge(loc, cm) : cm;
+        });
+
+        // Add local-only records not in cloud
+        for (const item of local) {
+          if (!cloudIds.has(getId(item))) {
+            merged.push(item);
+          }
+        }
+
+        return merged;
+      };
+
+      // ── PRODUCTS ──────────────────────────────────────────────────
+      {
+        const local = this.getProducts();
+        const merged = mergeBy(KEYS.PRODUCTS, local, products, (r: any) => {
+          const cloudSalePrice = parseFloat(r.sale_price) || 0;
           return {
             id: r.id,
             barcode: r.barcode || '',
@@ -615,11 +664,9 @@ class StorageService {
             category: r.category || 'Geral',
             unit: r.unit || 'un',
             costPrice: parseFloat(r.cost_price) || 0,
-            salePrice: (local && local.salePrice > 0 && (!cloudSalePrice || cloudSalePrice <= 0))
-              ? local.salePrice
-              : (cloudSalePrice || 0),
-            currentStock: parseInt(r.stock_quantity) || (local?.currentStock ?? 0),
-            minStock: parseInt(r.min_stock_quantity) || (local?.minStock ?? 5),
+            salePrice: cloudSalePrice,
+            currentStock: parseInt(r.stock_quantity) || 0,
+            minStock: parseInt(r.min_stock_quantity) || 5,
             maxStock: 100,
             imageUrl: r.image_url || '',
             active: r.is_active !== false,
@@ -629,46 +676,76 @@ class StorageService {
             tvPromoPrice: parseFloat(r.tv_promo_price) || undefined,
             tvHighlightTag: r.tv_highlight_tag || undefined,
           };
+        }, (p) => this.syncProduct(p), (p) => p.id, (localItem, cloudItem) => {
+          // Preserve local salePrice if cloud sent 0
+          if (localItem.salePrice > 0 && cloudItem.salePrice <= 0) {
+            cloudItem.salePrice = localItem.salePrice;
+          }
+          // Preserve local stock if cloud sent 0
+          if (localItem.currentStock > 0 && cloudItem.currentStock <= 0) {
+            cloudItem.currentStock = localItem.currentStock;
+          }
+          return { ...cloudItem, updatedAt: new Date().toISOString() };
         });
-        this.set(KEYS.PRODUCTS, mapped);
+        if (merged !== null) this.set(KEYS.PRODUCTS, merged);
       }
 
-      if (categories.length > 0) {
-        const mapped = categories.map((r: any) => ({ id: r.id, name: r.name, color: r.color || '#6366f1' }));
-        this.set(KEYS.CATEGORIES, mapped);
+      // ── CATEGORIES ────────────────────────────────────────────────
+      {
+        const local = this.getCategories();
+        const merged = mergeBy(KEYS.CATEGORIES, local, categories,
+          (r: any) => ({ id: r.id, name: r.name, color: r.color || '#6366f1' }),
+          (c) => this.syncCategory(c),
+        );
+        if (merged !== null) this.set(KEYS.CATEGORIES, merged);
       }
 
-      if (customers.length > 0) {
-        const mapped = customers.map((r: any) => ({
-          id: r.id, name: r.name, cpfCnpj: r.cpf_cnpj || '', email: r.email || '', phone: r.phone || '',
-          creditLimit: parseFloat(r.credit_limit) || 0, currentBalance: 0, loyaltyPoints: 0,
-          city: '', state: '', createdAt: r.created_at || new Date().toISOString(),
-        }));
-        this.set(KEYS.CUSTOMERS, mapped);
+      // ── CUSTOMERS ─────────────────────────────────────────────────
+      {
+        const local = this.getCustomers();
+        const merged = mergeBy(KEYS.CUSTOMERS, local, customers,
+          (r: any) => ({
+            id: r.id, name: r.name, cpfCnpj: r.cpf_cnpj || '', email: r.email || '', phone: r.phone || '',
+            creditLimit: parseFloat(r.credit_limit) || 0, currentBalance: 0, loyaltyPoints: 0,
+            city: '', state: '', createdAt: r.created_at || new Date().toISOString(),
+          }),
+          (c) => this.syncCustomer(c),
+        );
+        if (merged !== null) this.set(KEYS.CUSTOMERS, merged);
       }
 
-      if (suppliers.length > 0) {
-        const mapped = suppliers.map((r: any) => ({
-          id: r.id, companyName: r.corporate_name || '', tradeName: r.trade_name || '',
-          cnpj: r.cnpj || '', contactName: r.contact_person || '', email: r.email || '', phone: r.phone || '',
-        }));
-        this.set(KEYS.SUPPLIERS, mapped);
+      // ── SUPPLIERS ─────────────────────────────────────────────────
+      {
+        const local = this.getSuppliers();
+        const merged = mergeBy(KEYS.SUPPLIERS, local, suppliers,
+          (r: any) => ({
+            id: r.id, companyName: r.corporate_name || '', tradeName: r.trade_name || '',
+            cnpj: r.cnpj || '', contactName: r.contact_person || '', email: r.email || '', phone: r.phone || '',
+          }),
+          (s) => this.syncSupplier(s),
+        );
+        if (merged !== null) this.set(KEYS.SUPPLIERS, merged);
       }
 
-      if (sales.length > 0) {
+      // ── SALES + SALE_ITEMS ────────────────────────────────────────
+      {
+        const salesKey = KEYS.SALES;
+        const hasLocalSales = localStorage.getItem(salesKey) !== null;
+
+        // Handle sale_items first (they're needed for sales merge)
+        if (saleItems && saleItems.length > 0) {
+          this.set(KEYS.SALE_ITEMS, saleItems);
+        }
+
         // Group sale_items by sale_id
         const itemsBySaleId: Record<string, any[]> = {};
-        
-        // Use cloud sale_items if available, otherwise fall back to localStorage key
         let effectiveItems = saleItems && saleItems.length > 0 ? saleItems : null;
         if (!effectiveItems) {
           const localSaleItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
           if (localSaleItems.length > 0) {
-            console.log(`[HD-Sync] ↩️ Supabase sem sale_items — usando ${localSaleItems.length} itens do localStorage local`);
             effectiveItems = localSaleItems;
           }
         }
-
         if (effectiveItems && effectiveItems.length > 0) {
           for (const item of effectiveItems) {
             if (!itemsBySaleId[item.sale_id]) itemsBySaleId[item.sale_id] = [];
@@ -682,58 +759,111 @@ class StorageService {
           }
         }
 
-        // Preserve local items when Supabase sale_items are missing (race condition fix)
-        const localSales = this.getSales();
-        const localSalesById = new Map(localSales.map((s) => [s.id, s]));
+        if (!hasLocalSales && sales.length === 0) {
+          // Neither real local data nor cloud — skip (keep INITIAL_SALES)
+        } else if (!hasLocalSales && sales.length > 0) {
+          // First time: replace INITIAL_SALES with cloud data
+          const cloudMapped = sales.map((r: any) => {
+            const cloudItems = itemsBySaleId[r.id] || [];
+            const storedTotal = parseFloat(r.total) || 0;
+            const computedItemsTotal = cloudItems.reduce((sum: number, item: any) => sum + (item.total || 0), 0);
+            const fixedTotal = (storedTotal === 0 && computedItemsTotal > 0) ? computedItemsTotal : storedTotal;
+            return {
+              id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
+              operatorId: r.user_id || '', operatorName: 'Sistema',
+              customerId: r.customer_id || undefined, customerName: r.notes || undefined,
+              storeBranchId: r.store_branch_id || '',
+              items: cloudItems,
+              subtotal: parseFloat(r.subtotal) || fixedTotal, discount: parseFloat(r.discount) || 0,
+              total: fixedTotal,
+              payments: [{ method: r.payment_method || 'cash', amount: fixedTotal }],
+              status: r.status || 'completed',
+            };
+          });
+          this.set(KEYS.SALES, cloudMapped);
+        } else {
+          // Normal merge: has real local data
+          const localSales = this.getSales();
+          const localSalesById = new Map(localSales.map((s) => [s.id, s]));
+          const cloudSaleIds = new Set(sales.map((r: any) => r.id));
 
-        const mapped = sales.map((r: any) => {
-          const cloudItems = itemsBySaleId[r.id] || [];
-          // If cloud has no items for this sale, keep local items (may not have synced yet)
-          const items = cloudItems.length > 0 ? cloudItems : (localSalesById.get(r.id)?.items || []);
+          // Sync local-only sales to cloud
+          for (const s of localSales) {
+            if (!cloudSaleIds.has(s.id)) {
+              this.syncSale(s);
+            }
+          }
 
-          // Fix R$0.00 bug: recalculate total from items when stored total is 0 but items exist
-          const storedTotal = parseFloat(r.total) || 0;
-          const computedItemsTotal = items.reduce((sum: number, item: any) => sum + (item.total || 0), 0);
-          const fixedTotal = (storedTotal === 0 && computedItemsTotal > 0) ? computedItemsTotal : storedTotal;
-          const fixedSubtotal = parseFloat(r.subtotal) || fixedTotal;
-          const fixedPaymentsAmount = fixedTotal;
-
-          return {
-            id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
-            operatorId: r.user_id || '', operatorName: 'Sistema',
-            customerId: r.customer_id || undefined, customerName: r.notes || undefined,
-            storeBranchId: r.store_branch_id || '',
-            items,
-            subtotal: fixedSubtotal, discount: parseFloat(r.discount) || 0,
-            total: fixedTotal,
-            payments: [{ method: r.payment_method || 'cash', amount: fixedPaymentsAmount }],
-            status: r.status || 'completed',
-          };
-        });
-        this.set(KEYS.SALES, mapped);
+          // Merge: map cloud sales preserving local items when cloud has none
+          const cloudMapped = sales.map((r: any) => {
+            const cloudItems = itemsBySaleId[r.id] || [];
+            const items = cloudItems.length > 0 ? cloudItems : (localSalesById.get(r.id)?.items || []);
+            const storedTotal = parseFloat(r.total) || 0;
+            const computedItemsTotal = items.reduce((sum: number, item: any) => sum + (item.total || 0), 0);
+            const fixedTotal = (storedTotal === 0 && computedItemsTotal > 0) ? computedItemsTotal : storedTotal;
+            const fixedSubtotal = parseFloat(r.subtotal) || fixedTotal;
+            return {
+              id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
+              operatorId: r.user_id || '', operatorName: 'Sistema',
+              customerId: r.customer_id || undefined, customerName: r.notes || undefined,
+              storeBranchId: r.store_branch_id || '',
+              items,
+              subtotal: fixedSubtotal, discount: parseFloat(r.discount) || 0,
+              total: fixedTotal,
+              payments: [{ method: r.payment_method || 'cash', amount: fixedTotal }],
+              status: r.status || 'completed',
+            };
+          });
+          const mergedSales = [
+            ...cloudMapped,
+            ...localSales.filter((s) => !cloudSaleIds.has(s.id)),
+          ];
+          this.set(KEYS.SALES, mergedSales);
+        }
       }
 
-      if (branches.length > 0) {
-        const mapped = branches.map((r: any) => ({
-          id: r.id, name: r.name, code: r.code, cnpj: r.cnpj || '',
-          city: r.city || '', state: r.state || '', address: r.address || '',
-          phone: r.phone || '', isHeadquarters: r.is_headquarters || false,
-          active: r.active !== false,
-        }));
-        this.set(KEYS.BRANCHES, mapped);
+      // ── BRANCHES ──────────────────────────────────────────────────
+      {
+        const local = this.getBranches();
+        const merged = mergeBy(KEYS.BRANCHES, local, branches,
+          (r: any) => ({
+            id: r.id, name: r.name, code: r.code, cnpj: r.cnpj || '',
+            city: r.city || '', state: r.state || '', address: r.address || '',
+            phone: r.phone || '', isHeadquarters: r.is_headquarters || false,
+            active: r.active !== false,
+          }),
+          (b) => this.syncBranch(b),
+        );
+        if (merged !== null) this.set(KEYS.BRANCHES, merged);
       }
 
-      if (financial.length > 0) {
-        const mapped = financial.map((r: any) => ({
-          id: r.id, title: r.description, type: r.type, category: r.category,
-          amount: parseFloat(r.amount) || 0, dueDate: r.due_date,
-          paidDate: r.payment_date || undefined, status: r.status,
-          recipientOrPayer: r.notes || '', storeBranchId: r.store_branch_id || undefined,
-        }));
-        this.set(KEYS.FINANCIAL, mapped);
+      // ── FINANCIAL ACCOUNTS ────────────────────────────────────────
+      {
+        const local = this.getFinancialAccounts();
+        const merged = mergeBy(KEYS.FINANCIAL, local, financial,
+          (r: any) => ({
+            id: r.id, title: r.description, type: r.type, category: r.category,
+            amount: parseFloat(r.amount) || 0, dueDate: r.due_date,
+            paidDate: r.payment_date || undefined, status: r.status,
+            recipientOrPayer: r.notes || '', storeBranchId: r.store_branch_id || undefined,
+          }),
+          (a) => this.syncFinancialAccount(a),
+        );
+        if (merged !== null) this.set(KEYS.FINANCIAL, merged);
       }
 
-      if (users.length > 0) {
+      // ── USERS ─────────────────────────────────────────────────────
+      {
+        const existing = this.getUsers();
+        const cloudIds = new Set(users.map((r: any) => r.id));
+
+        // Sync local-only users
+        for (const e of existing) {
+          if (!cloudIds.has(e.id)) {
+            this.syncSystemUser(e);
+          }
+        }
+
         const mapped = users.map((r: any) => ({
           id: r.id, name: r.name, email: r.email, role: r.role || 'collaborator',
           organizationId: '00000000-0000-0000-0000-000000000001',
@@ -741,13 +871,10 @@ class StorageService {
           permissions: r.permissions || { pdv: true, inventory: true, crm: true, finance: true, dashboard: true, settings: true },
           active: r.active !== false, avatarUrl: r.avatar_url || undefined,
         }));
-        // Merge with existing users (preserve passwords from local)
-        const existing = this.getUsers();
         const initialIds = new Set(INITIAL_USERS.map((u) => u.id));
         const merged = mapped.map((m: any) => {
           const local = existing.find((u) => u.id === m.id || u.email.toLowerCase() === m.email.toLowerCase());
           if (initialIds.has(m.id)) {
-            // Initial user — NEVER let cloud overwrite email or password
             const initialUser = INITIAL_USERS.find((u) => u.id === m.id);
             return {
               ...(initialUser || m),
@@ -755,12 +882,11 @@ class StorageService {
               avatarUrl: m.avatarUrl || initialUser?.avatarUrl,
               permissions: m.permissions || initialUser?.permissions,
               active: m.active !== undefined ? m.active : (initialUser?.active ?? true),
-              // email: ALWAYS from INITIAL_USERS, password: ALWAYS from INITIAL_USERS
             };
           }
           return { ...m, password: local?.password || m.password };
         });
-        // Also keep any local users not in cloud (like the admin)
+        // Keep local users not in cloud
         for (const e of existing) {
           if (!merged.find((m: any) => m.id === e.id || m.email.toLowerCase() === e.email.toLowerCase())) {
             merged.push(e);
@@ -769,125 +895,112 @@ class StorageService {
         this.set(KEYS.USERS_LIST, merged);
       }
 
-      if (movements.length > 0) {
-        const mapped = movements.map((r: any) => ({
-          id: r.id, productId: r.product_id, productName: r.product_name || '',
-          type: r.type, quantity: r.quantity, previousStock: r.previous_stock || 0,
-          newStock: r.new_stock || 0, reason: r.reason || '',
-          date: r.created_at || new Date().toISOString(),
-          operatorName: r.operator_name || '', storeBranchId: r.store_branch_id || undefined,
-        }));
-        this.set(KEYS.MOVEMENTS, mapped);
+      // ── STOCK MOVEMENTS ───────────────────────────────────────────
+      {
+        const local = this.getMovements();
+        const merged = mergeBy(KEYS.MOVEMENTS, local, movements,
+          (r: any) => ({
+            id: r.id, productId: r.product_id, productName: r.product_name || '',
+            type: r.type, quantity: r.quantity, previousStock: r.previous_stock || 0,
+            newStock: r.new_stock || 0, reason: r.reason || '',
+            date: r.created_at || new Date().toISOString(),
+            operatorName: r.operator_name || '', storeBranchId: r.store_branch_id || undefined,
+          }),
+          (m) => this.syncStockMovement(m),
+        );
+        if (merged !== null) this.set(KEYS.MOVEMENTS, merged);
       }
 
-      // Caixa session — cash_sessions can have multiple rows, pick the most relevant one
-      if (caixa.length > 0) {
-        let filtered = caixa;
-        if (branchId) {
-          filtered = caixa.filter((r: any) => r.store_branch_id === branchId);
+      // ── CAIXA SESSION ─────────────────────────────────────────────
+      {
+        const hasLocalCaixa = localStorage.getItem(KEYS.CAIXA) !== null;
+
+        if (caixa.length > 0) {
+          if (!hasLocalCaixa) {
+            // First time: replace INITIAL_CAIXA with cloud data
+            let filtered = caixa;
+            if (branchId) {
+              filtered = caixa.filter((r: any) => r.store_branch_id === branchId);
+            }
+            if (filtered.length === 0) filtered = caixa;
+            const sorted = [...filtered].sort((a: any, b: any) => {
+              if (a.status === 'open' && b.status !== 'open') return -1;
+              if (a.status !== 'open' && b.status === 'open') return 1;
+              return new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime();
+            });
+            const s = sorted[0];
+            this.set(KEYS.CAIXA, {
+              id: s.id, openedAt: s.opened_at, closedAt: s.closed_at || undefined,
+              operatorId: s.user_id || '', operatorName: s.operator_name || '',
+              initialCash: parseFloat(s.opening_balance) || 0,
+              currentCashBalance: parseFloat(s.expected_balance) || 0,
+              totalSalesCash: parseFloat(s.total_sales_cash) || 0,
+              totalSalesPix: parseFloat(s.total_sales_pix) || 0,
+              totalSalesCard: parseFloat(s.total_sales_card) || 0,
+              totalSalesCreditAccount: parseFloat(s.total_sales_credit_account) || 0,
+              suprimentos: parseFloat(s.suprimentos) || 0,
+              sangrias: parseFloat(s.sangrias) || 0,
+              status: s.status, notes: s.notes || undefined,
+              storeBranchId: s.store_branch_id || undefined,
+            });
+          } else {
+            // Normal: prefer local open session over cloud
+            let filtered = caixa;
+            if (branchId) filtered = caixa.filter((r: any) => r.store_branch_id === branchId);
+            if (filtered.length === 0) filtered = caixa;
+            const sorted = [...filtered].sort((a: any, b: any) => {
+              if (a.status === 'open' && b.status !== 'open') return -1;
+              if (a.status !== 'open' && b.status === 'open') return 1;
+              return new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime();
+            });
+            const s = sorted[0];
+            const localSession = this.getActiveCaixaSession();
+            if (localSession && localSession.id === s.id && localSession.status === 'open') {
+              console.log(`[HD-Sync] 🔄 Caixa session "${s.id}" já existe localmente — mantendo dados locais`);
+            } else {
+              this.set(KEYS.CAIXA, {
+                id: s.id, openedAt: s.opened_at, closedAt: s.closed_at || undefined,
+                operatorId: s.user_id || '', operatorName: s.operator_name || '',
+                initialCash: parseFloat(s.opening_balance) || 0,
+                currentCashBalance: parseFloat(s.expected_balance) || 0,
+                totalSalesCash: parseFloat(s.total_sales_cash) || 0,
+                totalSalesPix: parseFloat(s.total_sales_pix) || 0,
+                totalSalesCard: parseFloat(s.total_sales_card) || 0,
+                totalSalesCreditAccount: parseFloat(s.total_sales_credit_account) || 0,
+                suprimentos: parseFloat(s.suprimentos) || 0,
+                sangrias: parseFloat(s.sangrias) || 0,
+                status: s.status, notes: s.notes || undefined,
+                storeBranchId: s.store_branch_id || undefined,
+              });
+            }
+          }
+        } else if (hasLocalCaixa) {
+          // No caixa in cloud but we have local data — sync local open session
+          const localSession = this.getActiveCaixaSession();
+          if (localSession && localSession.status === 'open') {
+            console.log(`[HD-Sync] ☁️→☁️ Syncing active cash session to cloud...`);
+            this.syncCaixaSession(localSession);
+          }
         }
-        if (filtered.length === 0) {
-          filtered = caixa; // Fallback to any available session
-        }
-        // Sort: open sessions first, then by opened_at descending
-        const sorted = [...filtered].sort((a: any, b: any) => {
-          if (a.status === 'open' && b.status !== 'open') return -1;
-          if (a.status !== 'open' && b.status === 'open') return 1;
-          return new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime();
-        });
-        const s = sorted[0];
-        this.set(KEYS.CAIXA, {
-          id: s.id,
-          openedAt: s.opened_at,
-          closedAt: s.closed_at || undefined,
-          operatorId: s.user_id || '',
-          operatorName: s.operator_name || '',
-          initialCash: parseFloat(s.opening_balance) || 0,
-          currentCashBalance: parseFloat(s.expected_balance) || 0,
-          totalSalesCash: parseFloat(s.total_sales_cash) || 0,
-          totalSalesPix: parseFloat(s.total_sales_pix) || 0,
-          totalSalesCard: parseFloat(s.total_sales_card) || 0,
-          totalSalesCreditAccount: parseFloat(s.total_sales_credit_account) || 0,
-          suprimentos: parseFloat(s.suprimentos) || 0,
-          sangrias: parseFloat(s.sangrias) || 0,
-          status: s.status,
-          notes: s.notes || undefined,
-          storeBranchId: s.store_branch_id || undefined,
-        });
+        // If neither cloud nor local has real data, keep INITIAL_CAIXA_SESSION
       }
 
-      // Settings is a single JSONB row
-      if (settings.length > 0 && settings[0].settings) {
-        this.set(KEYS.SETTINGS, settings[0].settings);
-      }
-
-      console.log('[HD-Sync] Cloud hydration complete');
-
-      // ─── SYNC LOCAL DATA TO CLOUD IF CLOUD WAS EMPTY ──────────
-      // If Supabase returned no data for a table but we have local data,
-      // push it up so the cloud is populated.
-      const localProducts = this.getProducts();
-      if (products.length === 0 && localProducts.length > 0) {
-        console.log(`[HD-Sync] ☁️→☁️ Syncing ${localProducts.length} local products to cloud...`);
-        localProducts.forEach((p) => this.syncProduct(p));
-      }
-
-      if (categories.length === 0 && this.getCategories().length > 0) {
-        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getCategories().length} local categories to cloud...`);
-        this.getCategories().forEach((c) => this.syncCategory(c));
-      }
-
-      if (customers.length === 0 && this.getCustomers().length > 0) {
-        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getCustomers().length} local customers to cloud...`);
-        this.getCustomers().forEach((c) => this.syncCustomer(c));
-      }
-
-      if (suppliers.length === 0 && this.getSuppliers().length > 0) {
-        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getSuppliers().length} local suppliers to cloud...`);
-        this.getSuppliers().forEach((s) => this.syncSupplier(s));
-      }
-
-      if (sales.length === 0 && this.getSales().length > 0) {
-        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getSales().length} local sales to cloud...`);
-        this.getSales().forEach((s) => this.syncSale(s));
-      }
-
-      if (branches.length === 0 && this.getBranches().length > 0) {
-        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getBranches().length} local branches to cloud...`);
-        this.getBranches().forEach((b) => this.syncBranch(b));
-      }
-
-      if (financial.length === 0 && this.getFinancialAccounts().length > 0) {
-        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getFinancialAccounts().length} local financial accounts to cloud...`);
-        this.getFinancialAccounts().forEach((a) => this.syncFinancialAccount(a));
-      }
-
-      if (users.length === 0 && this.getUsers().length > 0) {
-        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getUsers().length} local users to cloud...`);
-        this.getUsers().forEach((u) => this.syncSystemUser(u));
-      }
-
-      if (movements.length === 0 && this.getMovements().length > 0) {
-        console.log(`[HD-Sync] ☁️→☁️ Syncing ${this.getMovements().length} local stock movements to cloud...`);
-        this.getMovements().forEach((m) => this.syncStockMovement(m));
-      }
-
-      // Caixa session: only sync if we have an open session locally but none in cloud
-      if (caixa.length === 0) {
-        const localCaixa = this.getActiveCaixaSession();
-        if (localCaixa && localCaixa.status === 'open') {
-          console.log(`[HD-Sync] ☁️→☁️ Syncing active cash session to cloud...`);
-          this.syncCaixaSession(localCaixa);
+      // ── SETTINGS ──────────────────────────────────────────────────
+      {
+        if (settings.length > 0 && settings[0].settings) {
+          // Merge: cloud settings override, but keep any local-only keys
+          const localSettings = this.getSettings();
+          const merged = { ...localSettings, ...settings[0].settings };
+          this.set(KEYS.SETTINGS, merged);
+        } else {
+          // No settings in cloud — push local
+          const localSettings = this.getSettings();
+          console.log(`[HD-Sync] ☁️→☁️ Syncing local settings to cloud...`);
+          this.syncSettings(localSettings);
         }
       }
 
-      // Settings: sync local settings if cloud table is empty
-      if (settings.length === 0) {
-        const localSettings = this.getSettings();
-        console.log(`[HD-Sync] ☁️→☁️ Syncing local settings to cloud...`);
-        this.syncSettings(localSettings);
-      }
-
+      console.log('[HD-Sync] Cloud hydration complete — merge strategy preserves all local data not yet in cloud');
       return true;
     } catch (e) {
       console.warn('[HD-Sync] Cloud hydration failed, using localStorage', e);
@@ -1093,7 +1206,7 @@ class StorageService {
     }
 
     // Deduces stock automatically
-    sale.items.forEach((item) => {
+    (sale.items || []).forEach((item) => {
       this.updateStock(item.productId, -item.quantity, `Venda PDV #${sale.code}`, sale.operatorName);
     });
 
