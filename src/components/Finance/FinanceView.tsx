@@ -121,13 +121,20 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     .reduce((acc, a) => acc + a.amount, 0);
 
   // DRE CALCULATIONS
-  const totalSalesRevenue = sales.reduce((acc, s) => acc + s.total, 0);
+  // Defensive: compute total from items when sale.total is 0
+  const getSaleTotal = (s: Sale) => {
+    if (s.total > 0) return s.total;
+    const itemsTotal = s.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
+    return itemsTotal;
+  };
+
+  const totalSalesRevenue = sales.reduce((acc, s) => acc + getSaleTotal(s), 0);
   const estimatedTaxes = totalSalesRevenue * 0.06; // 6% Simples Nacional
   const netSalesRevenue = totalSalesRevenue - estimatedTaxes;
 
   // Estimated CMV (Custo de Mercadorias Vendidas)
   const totalCMV = sales.reduce((acc, s) => {
-    const itemsCmv = s.items.reduce((sum, item) => {
+    const itemsCmv = (s.items || []).reduce((sum, item) => {
       const prod = products.find((p) => p.id === item.productId);
       return sum + (prod ? prod.costPrice * item.quantity : item.unitPrice * 0.6 * item.quantity);
     }, 0);
@@ -479,7 +486,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                       </td>
                       <td className="py-3 px-4 text-slate-700 dark:text-[#a1a1aa]">{sale.customerName || 'Consumidor Final'}</td>
                       <td className="py-3 px-4 font-extrabold text-emerald-600 dark:text-emerald-400">
-                        R$ {sale.total.toFixed(2)}
+                        R$ {getSaleTotal(sale).toFixed(2)}
                       </td>
                       <td className="py-3 px-4">
                         <span
@@ -557,7 +564,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           {sale.customerName || 'Consumidor Final'}
                         </span>
                         <span className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
-                          R$ {sale.total.toFixed(2)}
+                          R$ {getSaleTotal(sale).toFixed(2)}
                         </span>
                       </div>
 
@@ -590,7 +597,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                         <div>
                           <h5 className="text-[10px] font-bold text-slate-400 dark:text-[#52525b] uppercase tracking-wider mb-1.5">Itens da Venda</h5>
                           <div className="space-y-1.5">
-                            {sale.items.map((item, idx) => (
+                            {(sale.items || []).map((item, idx) => (
                               <div key={idx} className="flex items-center justify-between text-xs">
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   <span className="w-5 h-5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center text-[10px] font-bold shrink-0">

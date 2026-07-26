@@ -128,7 +128,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
                 <span className="col-span-6">ITEM / QTD x UNIT</span>
                 <span className="col-span-6 text-right">TOTAL (R$)</span>
               </div>
-              {sale.items.map((it, idx) => (
+              {(sale.items || []).map((it, idx) => (
                 <div key={idx} className="mb-1 text-[10px]">
                   <p className="font-bold truncate">{idx + 1}. {it.productName}</p>
                   <div className="flex justify-between text-gray-700">

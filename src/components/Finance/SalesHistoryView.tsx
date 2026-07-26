@@ -152,7 +152,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
           <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
             {filteredSales.map((sale) => {
               const isExpanded = expandedSaleId === sale.id;
-              const itemsCount = sale.items.reduce((sum, item) => sum + item.quantity, 0);
+              const itemsCount = (sale.items || []).reduce((sum, item) => sum + item.quantity, 0);
 
               return (
                 <React.Fragment key={sale.id}>
@@ -228,7 +228,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
                                 Itens da Venda
                               </h4>
                               <div className="space-y-2">
-                                {sale.items.map((item, idx) => (
+                                {(sale.items || []).map((item, idx) => (
                                   <div
                                     key={idx}
                                     className="flex items-center justify-between p-2.5 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a]"

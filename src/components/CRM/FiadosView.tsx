@@ -119,7 +119,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
           sale.payments.find((p) => p.method === 'credit_account')?.amount || sale.total;
 
         // Distribute the sale's credit amount across its items proportionally
-        const saleSubtotal = sale.items.reduce((acc, item) => acc + item.total, 0);
+        const saleSubtotal = (sale.items || []).reduce((acc, item) => acc + item.total, 0);
         const ratio = saleSubtotal > 0 ? creditAmount / saleSubtotal : 1;
 
         for (const item of sale.items) {
@@ -232,7 +232,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
         const sale = sales.find((s) => s.id === saleId);
         if (!sale) continue;
 
-        const saleSubtotal = sale.items.reduce((acc, item) => acc + item.total, 0);
+        const saleSubtotal = (sale.items || []).reduce((acc, item) => acc + item.total, 0);
         const creditAmount =
           sale.payments.find((p) => p.method === 'credit_account')?.amount || sale.total;
         const ratio = saleSubtotal > 0 ? creditAmount / saleSubtotal : 1;

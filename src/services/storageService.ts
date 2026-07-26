@@ -545,8 +545,17 @@ class StorageService {
       avatarUrl: row.avatar_url || undefined,
     };
     const idx = users.findIndex((u) => u.id === mapped.id);
-    if (idx >= 0) users[idx] = mapped;
-    else users.unshift(mapped);
+    if (idx >= 0) {
+      // CRITICAL: preserve the local password — Supabase never stores passwords,
+      // so the cloud row always has no password. Without this merge, the password
+      // would be stripped on every Realtime update, breaking login.
+      mapped.password = users[idx].password;
+      users[idx] = mapped;
+    } else {
+      // New user from cloud — no local password exists (can't login without one)
+      // Still add them so they appear in the user list, but they'll need a password set locally
+      users.unshift(mapped);
+    }
     this.set(KEYS.USERS_LIST, users);
   }
 
@@ -1290,7 +1299,12 @@ class StorageService {
     const users = this.getUsers();
     const idx = users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
     if (idx >= 0) {
-      users[idx] = { ...users[idx], ...user };
+      // Preserve existing password if new one isn't provided
+      const merged = { ...users[idx], ...user };
+      if (!merged.password && users[idx].password) {
+        merged.password = users[idx].password;
+      }
+      users[idx] = merged;
     } else {
       users.unshift(user);
     }
