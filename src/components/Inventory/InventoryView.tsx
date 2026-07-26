@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Package,
   Plus,
@@ -33,6 +33,8 @@ interface InventoryViewProps {
   suppliers: Supplier[];
   settings: SystemSettings;
   user: UserProfile;
+  initialBarcode?: string | null;
+  onClearInitialBarcode?: () => void;
 }
 
 export const InventoryView: React.FC<InventoryViewProps> = ({
@@ -41,6 +43,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   suppliers,
   settings,
   user,
+  initialBarcode,
+  onClearInitialBarcode,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -86,6 +90,28 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formMinStock, setFormMinStock] = useState<number>(5);
   const [formMaxStock, setFormMaxStock] = useState<number>(50);
   const [formImageUrl, setFormImageUrl] = useState('');
+
+  // Auto-open product modal when navigating from scanner with a barcode
+  useEffect(() => {
+    if (initialBarcode) {
+      setEditingProduct(null);
+      setFormName('');
+      setFormSku(`SKU-${Math.floor(1000 + Math.random() * 9000)}`);
+      setFormBarcode(initialBarcode);
+      setFormCategory(categories[0]?.name || 'Geral');
+      setFormUnit('un');
+      setFormCostPrice(10);
+      setFormSalePrice(19.9);
+      setFormCurrentStock(20);
+      setFormMinStock(5);
+      setFormMaxStock(100);
+      setFormImageUrl('');
+      setImageSuggestions([]);
+      setIsSearchingImages(false);
+      setIsProductModalOpen(true);
+      if (onClearInitialBarcode) onClearInitialBarcode();
+    }
+  }, [initialBarcode]);
 
   // Camera handlers
   const handleStartLiveCamera = async () => {
@@ -1065,6 +1091,24 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         onClose={() => setIsStockCameraModalOpen(false)}
         onProductsImported={() => {
           // Trigger reactive updates
+        }}
+        onNavigateToNewProduct={(barcode) => {
+          setIsStockCameraModalOpen(false);
+          setEditingProduct(null);
+          setFormName('');
+          setFormSku(`SKU-${Math.floor(1000 + Math.random() * 9000)}`);
+          setFormBarcode(barcode);
+          setFormCategory(categories[0]?.name || 'Geral');
+          setFormUnit('un');
+          setFormCostPrice(10);
+          setFormSalePrice(19.9);
+          setFormCurrentStock(20);
+          setFormMinStock(5);
+          setFormMaxStock(100);
+          setFormImageUrl('');
+          setImageSuggestions([]);
+          setIsSearchingImages(false);
+          setIsProductModalOpen(true);
         }}
       />
     </div>

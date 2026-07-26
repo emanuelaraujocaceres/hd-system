@@ -45,6 +45,7 @@ interface PDVViewProps {
   caixaSession: CashRegisterSession;
   onOpenCaixaModal: () => void;
   onNavigateTab: (tab: string) => void;
+  onNavigateToNewProduct: (barcode: string) => void;
   settings: SystemSettings;
   user: UserProfile;
 }
@@ -56,6 +57,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
   caixaSession,
   onOpenCaixaModal,
   onNavigateTab,
+  onNavigateToNewProduct,
   settings,
   user,
 }) => {
@@ -969,7 +971,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
                   <button
                     onClick={() => {
                       stopScanner();
-                      onNavigateTab('inventory');
+                      onNavigateToNewProduct(scannedBarcode);
                     }}
                     className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
                   >

@@ -44,6 +44,7 @@ export const App: React.FC = () => {
   const [isCaixaModalOpen, setIsCaixaModalOpen] = useState<boolean>(false);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
   const [navHistory, setNavHistory] = useState<string[]>(['pdv']);
+  const [initialBarcodeForNewProduct, setInitialBarcodeForNewProduct] = useState<string | null>(null);
 
   // Handle mobile back button - navigate to previous page instead of closing app
   useEffect(() => {
@@ -66,6 +67,15 @@ export const App: React.FC = () => {
       window.history.pushState({ tab }, '', window.location.pathname);
     }
     setIsMobileOpen(false);
+  };
+
+  const handleNavigateToNewProduct = (barcode: string) => {
+    setInitialBarcodeForNewProduct(barcode);
+    handleTabChange('inventory');
+  };
+
+  const handleClearInitialBarcode = () => {
+    setInitialBarcodeForNewProduct(null);
   };
 
   // App State loaded from storageService
@@ -445,6 +455,7 @@ export const App: React.FC = () => {
                   caixaSession={caixaSession}
                   onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
                   onNavigateTab={handleTabChange}
+                  onNavigateToNewProduct={handleNavigateToNewProduct}
                   settings={settings}
                   user={user}
                 />
@@ -467,6 +478,8 @@ export const App: React.FC = () => {
                   suppliers={suppliers}
                   settings={settings}
                   user={user}
+                  initialBarcode={initialBarcodeForNewProduct}
+                  onClearInitialBarcode={handleClearInitialBarcode}
                 />
               )}
 
@@ -510,7 +523,7 @@ export const App: React.FC = () => {
               <span className={`w-1.5 h-1.5 rounded-full ${isSyncConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
               <span className="hidden sm:inline">Sync:</span> {isSyncConnected ? 'Online' : 'Offline'}
             </span>
-            <span className="hidden sm:inline">Google Auth: Conectado ({user.email})</span>
+            <span className="hidden sm:inline">Conectado ({user.email})</span>
             <span className="hidden md:inline">Perfil: {user.role === 'admin' ? 'Administrador' : 'Colaborador Restrito'}</span>
           </div>
           <div className="hidden sm:block">

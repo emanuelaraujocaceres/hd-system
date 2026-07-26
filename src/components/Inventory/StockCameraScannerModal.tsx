@@ -21,6 +21,7 @@ interface StockCameraScannerModalProps {
   onClose: () => void;
   currentBranch?: StoreBranch;
   onProductsImported?: () => void;
+  onNavigateToNewProduct?: (barcode: string) => void;
 }
 
 export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = ({
@@ -28,6 +29,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   onClose,
   currentBranch,
   onProductsImported,
+  onNavigateToNewProduct,
 }) => {
   // Scanner state
   const [scannerStatus, setScannerStatus] = useState<'idle' | 'scanning' | 'found' | 'not_found'>('idle');
@@ -633,11 +635,18 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setShowQuickForm(true)}
+                      onClick={() => {
+                        if (onNavigateToNewProduct) {
+                          onClose();
+                          onNavigateToNewProduct(scannedBarcode);
+                        } else {
+                          setShowQuickForm(true);
+                        }
+                      }}
                       className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      Cadastrar R\u00e1pido
+                      Cadastrar Produto
                     </button>
                     <button
                       onClick={handleScanNext}
