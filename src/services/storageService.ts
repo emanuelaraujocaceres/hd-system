@@ -1277,8 +1277,8 @@ class StorageService {
       if (found) return found;
     }
     
-    // Default to initial user (Admin)
-    return this.get<UserProfile>(KEYS.USER, INITIAL_USER);
+    // No logged-in user — force login screen
+    return null;
   }
 
   saveUserProfile(user: UserProfile) {
