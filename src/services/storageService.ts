@@ -71,6 +71,7 @@ class StorageService {
       store_branch_id: p.storeBranchId || null,
       name: p.name,
       barcode: p.barcode,
+      sku: p.sku,
       category: p.category,
       cost_price: p.costPrice,
       sale_price: p.salePrice,
@@ -79,6 +80,9 @@ class StorageService {
       unit: p.unit,
       image_url: p.imageUrl,
       is_active: p.active,
+      show_on_tv: p.showOnTV || false,
+      tv_promo_price: p.tvPromoPrice || null,
+      tv_highlight_tag: p.tvHighlightTag || null,
     });
   }
 
@@ -270,6 +274,9 @@ class StorageService {
       active: row.is_active !== false,
       updatedAt: row.updated_at || new Date().toISOString(),
       storeBranchId: row.store_branch_id || undefined,
+      showOnTV: row.show_on_tv || false,
+      tvPromoPrice: parseFloat(row.tv_promo_price) || undefined,
+      tvHighlightTag: row.tv_highlight_tag || undefined,
     };
     const idx = products.findIndex((p) => p.id === mapped.id);
     if (idx >= 0) products[idx] = mapped;
@@ -612,6 +619,9 @@ class StorageService {
             active: r.is_active !== false,
             updatedAt: r.updated_at || new Date().toISOString(),
             storeBranchId: r.store_branch_id || undefined,
+            showOnTV: r.show_on_tv || false,
+            tvPromoPrice: parseFloat(r.tv_promo_price) || undefined,
+            tvHighlightTag: r.tv_highlight_tag || undefined,
           };
         });
         this.set(KEYS.PRODUCTS, mapped);
@@ -674,15 +684,23 @@ class StorageService {
           const cloudItems = itemsBySaleId[r.id] || [];
           // If cloud has no items for this sale, keep local items (may not have synced yet)
           const items = cloudItems.length > 0 ? cloudItems : (localSalesById.get(r.id)?.items || []);
+
+          // Fix R$0.00 bug: recalculate total from items when stored total is 0 but items exist
+          const storedTotal = parseFloat(r.total) || 0;
+          const computedItemsTotal = items.reduce((sum: number, item: any) => sum + (item.total || 0), 0);
+          const fixedTotal = (storedTotal === 0 && computedItemsTotal > 0) ? computedItemsTotal : storedTotal;
+          const fixedSubtotal = parseFloat(r.subtotal) || fixedTotal;
+          const fixedPaymentsAmount = fixedTotal;
+
           return {
             id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
             operatorId: r.user_id || '', operatorName: 'Sistema',
             customerId: r.customer_id || undefined, customerName: r.notes || undefined,
             storeBranchId: r.store_branch_id || '',
             items,
-            subtotal: parseFloat(r.subtotal) || 0, discount: parseFloat(r.discount) || 0,
-            total: parseFloat(r.total) || 0,
-            payments: [{ method: r.payment_method || 'cash', amount: parseFloat(r.total) || 0 }],
+            subtotal: fixedSubtotal, discount: parseFloat(r.discount) || 0,
+            total: fixedTotal,
+            payments: [{ method: r.payment_method || 'cash', amount: fixedPaymentsAmount }],
             status: r.status || 'completed',
           };
         });

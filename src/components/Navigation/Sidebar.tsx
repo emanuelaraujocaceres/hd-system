@@ -13,6 +13,7 @@ import {
   LogOut,
   Receipt,
   FileText,
+  Tv,
 } from 'lucide-react';
 import { StoreBranch, UserProfile, CashRegisterSession } from '../../types';
 
@@ -27,6 +28,7 @@ interface SidebarProps {
   onOpenCaixaModal: () => void;
   onResetDemo: () => void;
   onLogout: () => void;
+  onOpenProfile: () => void;
   isMobileOpen?: boolean;
   setIsMobileOpen?: (open: boolean) => void;
 }
@@ -42,6 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenCaixaModal,
   onResetDemo,
   onLogout,
+  onOpenProfile,
   isMobileOpen,
   setIsMobileOpen,
 }) => {
@@ -54,6 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     finance: true,
     dashboard: true,
     settings: true,
+    tvShowcase: true,
   };
 
   const allMenuItems = [
@@ -61,6 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permKey: 'dashboard' as const },
     { id: 'inventory', label: 'Estoque', icon: Package, permKey: 'inventory' as const },
     { id: 'nf-history', label: 'Nota Fiscal', icon: FileText, permKey: 'inventory' as const },
+    { id: 'tv-showcase', label: 'Ofertas / TV', icon: Tv, permKey: 'tvShowcase' as const, badge: 'AO VIVO', badgeColor: 'bg-amber-500/10 text-amber-500 border-amber-500/20' },
     { id: 'finance', label: 'Financeiro', icon: DollarSign, permKey: 'finance' as const },
     { id: 'crm', label: 'Clientes/Fornecedores', icon: Users, permKey: 'crm' as const },
     { id: 'fiados', label: 'Fiados', icon: Receipt, permKey: 'crm' as const },
@@ -70,6 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const menuItems = allMenuItems.filter((item) => {
     if (isAdmin) return true;
     if (item.id === 'settings') return perms.settings;
+    if (item.id === 'tv-showcase') return perms.tvShowcase !== false;
     return perms[item.permKey];
   });
 
@@ -178,7 +184,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-3 border-t border-slate-800 dark:border-[#27272a] space-y-2">
         <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/40 dark:bg-[#18181b] border border-slate-800 dark:border-[#27272a]">
           <button
-            onClick={() => handleNavClick('settings')}
+            onClick={onOpenProfile}
             className="flex items-center gap-2.5 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
           >
             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 ring-1 ring-indigo-500/30 shrink-0 overflow-hidden">

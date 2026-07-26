@@ -34,7 +34,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const todayStr = new Date().toISOString().slice(0, 10);
   const todaySales = sales.filter((s) => s.date.slice(0, 10) === todayStr);
 
-  const todayRevenue = todaySales.reduce((acc, s) => acc + s.total, 0);
+  // Defensive: compute total from items when sale.total is 0 (R$0.00 bug fallback)
+  const getSaleTotal = (s: Sale) => {
+    if (s.total > 0) return s.total;
+    const itemsTotal = s.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
+    return itemsTotal;
+  };
+
+  const todayRevenue = todaySales.reduce((acc, s) => acc + getSaleTotal(s), 0);
   const totalSalesCount = todaySales.length;
   const ticketMedio = totalSalesCount > 0 ? todayRevenue / totalSalesCount : 0;
 
@@ -241,7 +248,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           CONCLUÍDO
                         </span>
                       </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ {sale.total.toFixed(2)}</td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-right font-semibold">R$ {getSaleTotal(sale).toFixed(2)}</td>
                     </tr>
                     {isExpanded && (
                       <tr>
@@ -346,7 +353,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[9px] font-bold uppercase tracking-wider">
                       CONCLUÍDO
                     </span>
-                    <span className="text-sm font-bold text-slate-900 dark:text-white">R$ {sale.total.toFixed(2)}</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white">R$ {getSaleTotal(sale).toFixed(2)}</span>
                   </div>
 
                   {isExpanded && (

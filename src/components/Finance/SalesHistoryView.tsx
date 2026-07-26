@@ -37,6 +37,13 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
   const [dateTo, setDateTo] = useState('');
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
 
+  // Defensive: compute total from items when sale.total is 0 (R$0.00 bug fallback)
+  const getSaleTotal = (s: Sale) => {
+    if (s.total > 0) return s.total;
+    const itemsTotal = s.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
+    return itemsTotal;
+  };
+
   const filteredSales = useMemo(() => {
     return sales.filter((sale) => {
       // Text search
@@ -166,7 +173,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
                       {itemsCount}
                     </td>
                     <td className="py-3 px-4 font-extrabold text-emerald-600 dark:text-emerald-400">
-                      R$ {sale.total.toFixed(2)}
+                      R$ {getSaleTotal(sale).toFixed(2)}
                     </td>
                     <td className="py-3 px-4">
                       <span
@@ -255,7 +262,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
                                 )}
                                 <div className="flex justify-between text-xs font-bold text-slate-900 dark:text-white pt-1.5 border-t border-slate-200 dark:border-[#27272a]">
                                   <span>TOTAL</span>
-                                  <span>R$ {sale.total.toFixed(2)}</span>
+                                  <span>R$ {getSaleTotal(sale).toFixed(2)}</span>
                                 </div>
                               </div>
                             </div>

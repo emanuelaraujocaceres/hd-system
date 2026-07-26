@@ -10,8 +10,10 @@ import { SalesHistoryView } from './components/Finance/SalesHistoryView';
 import { CRMView } from './components/CRM/CRMView';
 import { FiadosView } from './components/CRM/FiadosView';
 import { SettingsView } from './components/Settings/SettingsView';
+import { TVShowcaseView } from './components/TV/TVShowcaseView';
 import { CaixaModal } from './components/PDV/CaixaModal';
 import { GoogleLoginModal } from './components/Auth/GoogleLoginModal';
+import { UserProfileModal } from './components/Auth/UserProfileModal';
 import { SyncBanner } from './components/Sync/SyncBanner';
 import { storageService } from './services/storageService';
 import { syncService } from './services/syncService';
@@ -42,6 +44,7 @@ export const App: React.FC = () => {
     return saved !== null ? saved === 'true' : true;
   });
   const [isCaixaModalOpen, setIsCaixaModalOpen] = useState<boolean>(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
   const [navHistory, setNavHistory] = useState<string[]>(['pdv']);
   const [initialBarcodeForNewProduct, setInitialBarcodeForNewProduct] = useState<string | null>(null);
@@ -357,6 +360,7 @@ export const App: React.FC = () => {
     if (tab === 'sales-history') return !!perms.finance;
     if (tab === 'crm') return !!perms.crm;
     if (tab === 'fiados') return !!perms.crm;
+    if (tab === 'tv-showcase') return perms.tvShowcase !== false;
     if (tab === 'settings') return !!perms.settings;
     return false;
   };
@@ -375,6 +379,7 @@ export const App: React.FC = () => {
         onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
         onResetDemo={() => storageService.resetDemoData()}
         onLogout={handleLogout}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
         isMobileOpen={isMobileOpen}
         setIsMobileOpen={setIsMobileOpen}
       />
@@ -512,6 +517,14 @@ export const App: React.FC = () => {
               {activeTab === 'settings' && (
                 <SettingsView settings={settings} branches={branches} user={user} />
               )}
+
+              {activeTab === 'tv-showcase' && (
+                <TVShowcaseView
+                  products={products}
+                  currentBranch={currentBranch}
+                  settings={settings}
+                />
+              )}
             </>
           )}
         </main>
@@ -538,6 +551,16 @@ export const App: React.FC = () => {
         onClose={() => setIsCaixaModalOpen(false)}
         caixaSession={caixaSession}
         user={user}
+      />
+
+      {/* User Profile Modal */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        user={user}
+        onUserUpdated={(updatedUser) => {
+          setUser(updatedUser);
+        }}
       />
     </div>
   );

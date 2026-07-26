@@ -19,6 +19,7 @@ import {
   Image as ImageIcon,
   Sparkles,
   RefreshCw,
+  Tv,
 } from 'lucide-react';
 import { Product, Category, Supplier, StockMovement, UserProfile, SystemSettings } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -90,6 +91,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formMinStock, setFormMinStock] = useState<number>(5);
   const [formMaxStock, setFormMaxStock] = useState<number>(50);
   const [formImageUrl, setFormImageUrl] = useState('');
+  const [formShowOnTV, setFormShowOnTV] = useState(false);
+  const [formTvPromoPrice, setFormTvPromoPrice] = useState<number>(0);
+  const [formTvHighlightTag, setFormTvHighlightTag] = useState('');
 
   // Auto-open product modal when navigating from scanner with a barcode
   useEffect(() => {
@@ -106,6 +110,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setFormMinStock(5);
       setFormMaxStock(100);
       setFormImageUrl('');
+      setFormShowOnTV(false);
+      setFormTvPromoPrice(0);
+      setFormTvHighlightTag('');
       setImageSuggestions([]);
       setIsSearchingImages(false);
       setIsProductModalOpen(true);
@@ -248,6 +255,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormMinStock(5);
     setFormMaxStock(100);
     setFormImageUrl('https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80');
+    setFormShowOnTV(false);
+    setFormTvPromoPrice(0);
+    setFormTvHighlightTag('');
     setIsProductModalOpen(true);
   };
 
@@ -264,6 +274,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormMinStock(product.minStock);
     setFormMaxStock(product.maxStock);
     setFormImageUrl(product.imageUrl);
+    setFormShowOnTV(product.showOnTV || false);
+    setFormTvPromoPrice(product.tvPromoPrice || 0);
+    setFormTvHighlightTag(product.tvHighlightTag || '');
     setIsProductModalOpen(true);
   };
 
@@ -285,6 +298,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       active: true,
       updatedAt: new Date().toISOString(),
       storeBranchId: user.storeBranchId,
+      showOnTV: formShowOnTV,
+      tvPromoPrice: formShowOnTV ? formTvPromoPrice : undefined,
+      tvHighlightTag: formShowOnTV && formTvHighlightTag ? formTvHighlightTag : undefined,
     };
 
     storageService.saveProduct(newProd);
@@ -421,6 +437,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 <th className="py-3.5 px-4">Preço Venda</th>
                 <th className="py-3.5 px-4 hidden md:table-cell">Margem %</th>
                 <th className="py-3.5 px-4">Estoque</th>
+                <th className="py-3.5 px-4 hidden lg:table-cell">TV</th>
                 <th className="py-3.5 px-4 text-right">Ações</th>
               </tr>
             </thead>
@@ -475,6 +492,23 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         {isLow && <AlertTriangle className="w-3 h-3" />}
                         {p.currentStock} {p.unit}
                       </span>
+                    </td>
+                    <td className="py-3 px-4 hidden lg:table-cell">
+                      {p.showOnTV ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-[10px] border border-amber-500/20 flex items-center gap-1">
+                            <Tv className="w-3 h-3" />
+                            OFERTA
+                          </span>
+                          {p.tvPromoPrice && p.tvPromoPrice > 0 && (
+                            <span className="text-[10px] font-bold text-emerald-500">
+                              R$ {p.tvPromoPrice.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 dark:text-[#52525b]">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
@@ -887,6 +921,85 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     placeholder="https://images.unsplash.com/..."
                     className="w-full px-3 py-1.5 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none"
                   />
+                )}
+              </div>
+
+              {/* ─── OFERTAS / TV ─── */}
+              <div className="pt-3 border-t border-slate-200 dark:border-[#27272a] space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded bg-amber-500/20 flex items-center justify-center">
+                    <Tv className="w-3 h-3 text-amber-500" />
+                  </div>
+                  <h4 className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a]">
+                    Ofertas / TV
+                  </h4>
+                </div>
+
+                {/* Exibir na TV checkbox */}
+                <label className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 cursor-pointer hover:bg-amber-500/10 transition-colors">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={formShowOnTV}
+                      onChange={(e) => {
+                        setFormShowOnTV(e.target.checked);
+                        posAudio.click();
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 rounded-full bg-slate-300 dark:bg-[#27272a] peer-checked:bg-amber-500 transition-colors" />
+                    <div className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-transform peer-checked:translate-x-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">Exibir nas Ofertas / TV</p>
+                    <p className="text-[10px] text-slate-500 dark:text-[#71717a]">Produto aparecerá na página de ofertas (TV)</p>
+                  </div>
+                </label>
+
+                {/* Conditional TV fields */}
+                {formShowOnTV && (
+                  <div className="space-y-3 pl-1 animate-in slide-in-from-top-2 duration-200">
+                    {/* Promo Price */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                        Preço de Oferta (R$)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500">R$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={formTvPromoPrice}
+                          onChange={(e) => setFormTvPromoPrice(parseFloat(e.target.value) || 0)}
+                          className="w-full pl-10 pr-3 py-2 bg-white dark:bg-[#18181b] border border-amber-500/30 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      {formTvPromoPrice > 0 && formSalePrice > 0 && formTvPromoPrice < formSalePrice && (
+                        <p className="mt-1 text-[10px] font-bold text-emerald-500 flex items-center gap-1">
+                          <Sparkles className="w-3 h-3" />
+                          Economia de R$ {(formSalePrice - formTvPromoPrice).toFixed(2)} ({Math.round(((formSalePrice - formTvPromoPrice) / formSalePrice) * 100)}% OFF)
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Highlight Tag */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                        Tag de Destaque (opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={formTvHighlightTag}
+                        onChange={(e) => setFormTvHighlightTag(e.target.value)}
+                        className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+                        placeholder="Ex: OFERTA IMPERDÍVEL, COMBO, LEVE 3 PAGUE 2"
+                      />
+                      <p className="mt-1 text-[10px] text-slate-400 dark:text-[#52525b]">
+                        Badge animado que aparece no canto do produto na TV
+                      </p>
+                    </div>
+                  </div>
                 )}
               </div>
 
