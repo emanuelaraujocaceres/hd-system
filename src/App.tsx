@@ -20,6 +20,7 @@ import { syncService } from './services/syncService';
 import { syncQueue } from './services/syncQueueService';
 import { posAudio } from './services/audioService';
 import { Lock, ShieldAlert, Wifi, WifiOff, ArrowLeft, Loader2 } from 'lucide-react';
+import { GlobalSearch } from './components/shared/GlobalSearch';
 import {
   Product,
   Category,
@@ -39,7 +40,8 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('pdv');
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('hd_system_dark_mode');
-    return saved !== null ? saved === 'true' : true;
+    if (saved !== null) return saved === 'true';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
     const saved = localStorage.getItem('hd_system_sound_enabled');
@@ -50,6 +52,7 @@ export const App: React.FC = () => {
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
   const [navHistory, setNavHistory] = useState<string[]>(['pdv']);
   const [initialBarcodeForNewProduct, setInitialBarcodeForNewProduct] = useState<string | null>(null);
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
 
   // Handle mobile back button - navigate to previous page instead of closing app
   useEffect(() => {
@@ -138,6 +141,14 @@ export const App: React.FC = () => {
     localStorage.setItem('hd_system_dark_mode', String(darkMode));
   }, [darkMode]);
 
+  // Listen for system preference changes
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setDarkMode(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   // Persist sound state to localStorage and sync with audioService
   useEffect(() => {
     posAudio.enabled = soundEnabled;
@@ -147,7 +158,7 @@ export const App: React.FC = () => {
   // ─── SUPABASE REALTIME + OFFLINE-FIRST SYNC ────────────────────
   const [isSyncConnected, setIsSyncConnected] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
-  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
   const [syncPendingCount, setSyncPendingCount] = useState<number>(0);
   const [syncStatus, setSyncStatus] = useState<'offline' | 'connecting' | 'syncing' | 'online' | 'error'>('connecting');
 
@@ -338,6 +349,12 @@ export const App: React.FC = () => {
     }
   }, [isOnline]);
 
+  // Update lastSyncTime every 30s for UI display
+  useEffect(() => {
+    const interval = setInterval(() => setLastSyncTime(new Date()), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleLogout = () => {
     storageService.logout();
     setUser(null);
@@ -397,6 +414,12 @@ export const App: React.FC = () => {
       },
       global: true,
     },
+    {
+      key: 'k',
+      ctrl: true,
+      handler: () => setIsGlobalSearchOpen(prev => !prev),
+      global: true,
+    },
   ], [activeTab]);
 
   useKeyboardShortcuts(shortcuts, [activeTab]);
@@ -439,6 +462,12 @@ export const App: React.FC = () => {
         <div className="fixed top-2 right-2 z-[9998] px-3 py-1.5 rounded-xl bg-rose-600 text-white text-[10px] font-bold shadow-lg flex items-center gap-1.5 animate-fadeIn">
           <WifiOff className="w-3 h-3" />
           <span>Sem conexão</span>
+        </div>
+      )}
+      {isOnline && (
+        <div className="fixed top-2 right-2 z-[9998] px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-medium shadow-sm no-print flex items-center gap-1">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Sync {Math.floor((Date.now() - lastSyncTime.getTime()) / 60000)}min</span>
         </div>
       )}
     <div className={`min-h-screen font-sans bg-slate-100 dark:bg-[#09090b] text-slate-900 dark:text-[#fafafa] flex flex-col md:flex-row transition-colors duration-200`}>

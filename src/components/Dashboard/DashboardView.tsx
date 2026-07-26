@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Skeleton, TableSkeleton } from '../shared/Skeleton';
 import {
   ShoppingCart,
   AlertTriangle,
@@ -29,12 +30,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const isAdmin = user.role === 'admin';
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Today's total sales calculations
+  // Calculate today vs yesterday sales for Day Summary
   const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStart = new Date(todayStr);
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
   const todaySales = sales.filter((s) => s.date.slice(0, 10) === todayStr);
 
-  // Defensive: compute total from items when sale.total is 0 (R$0.00 bug fallback)
   const getSaleTotal = (s: Sale) => {
     if (s.total > 0) return s.total;
     const itemsTotal = s.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
@@ -46,6 +51,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const ticketMedio = totalSalesCount > 0 ? todayRevenue / totalSalesCount : 0;
 
   const lowStockCount = products.filter((p) => p.currentStock <= p.minStock).length;
+
+  // Day Summary calculations
+  const yesterdaySales = sales.filter((s) => {
+    const d = new Date(s.date);
+    return d >= yesterdayStart && d < todayStart;
+  });
+
+  const yesterdayRevenue = yesterdaySales.reduce((acc, s) => acc + getSaleTotal(s), 0);
+  const revenueChange = yesterdayRevenue > 0 ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100 : 0;
 
   // AI Analysis State
   const [aiInsight, setAiInsight] = useState<string>('');
@@ -75,6 +89,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       if (cooldownRef.current) clearInterval(cooldownRef.current);
     };
   }, [cooldownUntil]);
+
+  // Initial loading simulation
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 600);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleFetchAiInsights = async () => {
     // Block if still in cooldown

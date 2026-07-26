@@ -28,6 +28,7 @@ import {
 } from '../data/mockData';
 import { syncService } from './syncService';
 import { supabase } from '../lib/supabase';
+import { undoManager } from '../lib/undoManager';
 
 const KEYS = {
   PRODUCTS: 'hd_system_products',
@@ -1046,9 +1047,21 @@ class StorageService {
   }
 
   deleteProduct(id: string) {
-    const products = this.getProducts().filter((p) => p.id !== id);
+    const allProducts = this.getProducts();
+    const product = allProducts.find((p) => p.id === id);
+    const products = allProducts.filter((p) => p.id !== id);
     this.set(KEYS.PRODUCTS, products);
     syncService.deleteRow('products', id);
+    if (product) {
+      undoManager.push({
+        type: 'delete-product',
+        description: `Excluir produto "${product.name}"`,
+        undo: () => {
+          this.saveProduct(product);
+        },
+        timestamp: Date.now(),
+      });
+    }
   }
 
   deleteSale(id: string) {
@@ -1262,6 +1275,23 @@ class StorageService {
   closeCaixaSession(notes?: string) {
     const session = this.getActiveCaixaSession();
     if (session) {
+      // Register undo before closing
+      const sessionSnapshot = { ...session };
+      undoManager.push({
+        type: 'close-caixa',
+        description: `Fechar caixa de ${session.operatorName}`,
+        undo: () => {
+          sessionSnapshot.status = 'open';
+          sessionSnapshot.closedAt = undefined;
+          this.saveActiveCaixaSession(sessionSnapshot);
+          // Remove from history archive
+          const history = this.get<CashRegisterSession[]>(KEYS.CAIXA_HISTORY, []);
+          const filtered = history.filter((s) => s.id !== sessionSnapshot.id);
+          this.set(KEYS.CAIXA_HISTORY, filtered);
+        },
+        timestamp: Date.now(),
+      });
+
       session.status = 'closed';
       session.closedAt = new Date().toISOString();
       if (notes) session.notes = notes;
