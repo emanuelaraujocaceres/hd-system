@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { Sidebar } from './components/Navigation/Sidebar';
 import { Header } from './components/Navigation/Header';
 import { PDVView } from './components/PDV/PDVView';
 import { DashboardView } from './components/Dashboard/DashboardView';
-import { InventoryView } from './components/Inventory/InventoryView';
 import { NFHistoryView } from './components/Inventory/NFHistoryView';
 import { FinanceView } from './components/Finance/FinanceView';
 import { SalesHistoryView } from './components/Finance/SalesHistoryView';
@@ -35,6 +34,9 @@ import {
 } from './types';
 import { ToastProvider } from './components/shared/Toast';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+
+// Lazy-loaded views for code splitting (reduces TDZ risk from scope-hoisting)
+const InventoryView = lazy(() => import('./components/Inventory/InventoryView'));
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('pdv');
@@ -91,18 +93,18 @@ export const App: React.FC = () => {
     setInitialBarcodeForNewProduct(null);
   };
 
-  // App State loaded from storageService
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [caixaSession, setCaixaSession] = useState<CashRegisterSession>(storageService.getActiveCaixaSession());
-  const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>([]);
-  const [settings, setSettings] = useState<SystemSettings>(storageService.getSettings());
-  const [branches, setBranches] = useState<StoreBranch[]>([]);
-  const [currentBranch, setCurrentBranch] = useState<StoreBranch>(storageService.getSelectedBranch());
-  const [user, setUser] = useState<UserProfile | null>(storageService.getUserProfile());
+  // App State loaded synchronously from localStorage to survive F5 refresh
+  const [products, setProducts] = useState<Product[]>(() => storageService.getProducts());
+  const [categories, setCategories] = useState<Category[]>(() => storageService.getCategories());
+  const [customers, setCustomers] = useState<Customer[]>(() => storageService.getCustomers());
+  const [suppliers, setSuppliers] = useState<Supplier[]>(() => storageService.getSuppliers());
+  const [sales, setSales] = useState<Sale[]>(() => storageService.getSales());
+  const [caixaSession, setCaixaSession] = useState<CashRegisterSession>(() => storageService.getActiveCaixaSession());
+  const [financialAccounts, setFinancialAccounts] = useState<FinancialAccount[]>(() => storageService.getFinancialAccounts());
+  const [settings, setSettings] = useState<SystemSettings>(() => storageService.getSettings());
+  const [branches, setBranches] = useState<StoreBranch[]>(() => storageService.getBranches());
+  const [currentBranch, setCurrentBranch] = useState<StoreBranch>(() => storageService.getSelectedBranch());
+  const [user, setUser] = useState<UserProfile | null>(() => storageService.getUserProfile());
 
   // Load initial state and subscribe to reactive storage updates
   useEffect(() => {
@@ -592,15 +594,27 @@ export const App: React.FC = () => {
               )}
 
               {activeTab === 'inventory' && (
-                <InventoryView
-                  products={products}
-                  categories={categories}
-                  suppliers={suppliers}
-                  settings={settings}
-                  user={user}
-                  initialBarcode={initialBarcodeForNewProduct}
-                  onClearInitialBarcode={handleClearInitialBarcode}
-                />
+                <Suspense fallback={
+                  <div className="p-6 space-y-4 animate-pulse">
+                    <div className="h-8 bg-slate-200 dark:bg-[#27272a] rounded-xl w-48" />
+                    <div className="h-12 bg-slate-200 dark:bg-[#27272a] rounded-xl w-full" />
+                    <div className="space-y-3">
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="h-16 bg-slate-200 dark:bg-[#27272a] rounded-xl w-full" />
+                      ))}
+                    </div>
+                  </div>
+                }>
+                  <InventoryView
+                    products={products}
+                    categories={categories}
+                    suppliers={suppliers}
+                    settings={settings}
+                    user={user}
+                    initialBarcode={initialBarcodeForNewProduct}
+                    onClearInitialBarcode={handleClearInitialBarcode}
+                  />
+                </Suspense>
               )}
 
               {activeTab === 'nf-history' && (

@@ -1,0 +1,59 @@
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  GitHub Actions — Supabase Keep-Alive Ping                  ║
+# ║  Roda todo dia às 03:00 UTC (meia-noite horário de BRT)     ║
+# ║  Mantém o projeto Supabase Free ativo (previne pausa 7 dias) ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+name: Supabase Keep-Alive Ping
+
+on:
+  schedule:
+    # Todo dia às 03:00 UTC
+    - cron: '0 3 * * *'
+  
+  # Botão manual para testar
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Ping Supabase Health + Database
+        run: |
+          echo "🏓 Fazendo ping no Supabase..."
+          echo "🕐 Hora: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          
+          # Ping 1: REST API health check
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+          
+          echo "📡 REST API: HTTP $RESPONSE"
+          
+          if [ "$RESPONSE" = "200" ] || [ "$RESPONSE" = "404" ]; then
+            echo "✅ Supabase ativo!"
+          else
+            echo "⚠️ Resposta inesperada: HTTP $RESPONSE"
+          fi
+          
+          # Ping 2: Query simples no database (mantém DB ativo)
+          RESPONSE2=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/system_settings?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+          
+          echo "🗄️ Database query: HTTP $RESPONSE2"
+          
+          # Ping 3: Auth endpoint (mantém Auth ativo)
+          RESPONSE3=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.SUPABASE_URL }}/auth/v1/health" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}")
+          
+          echo "🔐 Auth: HTTP $RESPONSE3"
+          
+          echo ""
+          echo "✅ Ping completo! Projeto Supabase mantido ativo."
