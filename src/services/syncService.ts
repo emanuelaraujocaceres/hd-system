@@ -163,13 +163,20 @@ class SupabaseSyncService {
     try {
       const { error } = await supabase.from(table).upsert(row, { onConflict: 'id' });
       if (error) {
-        console.warn(`[HD-Sync] Upsert ${table} failed:`, error.message);
-        // Only queue if it's a connection-related error
-        if (this.isConnectionError(error)) {
-          return false; // Caller will queue
-        }
-        // Otherwise it's a data error — don't retry
-        return true; // Consider it "handled" (we logged it)
+        console.warn(`[HD-Sync] ❌ Upsert ${table} failed:`, error.message, `(row id: ${row.id})`);
+        // Log to DLQ
+        try {
+          await supabase.rpc('fn_insserir_dlq', {
+            p_operation_type: 'upsert',
+            p_table_name: table,
+            p_record_id: row.id || 'unknown',
+            p_payload: JSON.stringify(row).slice(0, 1000),
+            p_error_message: error.message,
+            p_source: 'tryUpsert',
+            p_browser_id: navigator.userAgent.slice(0, 50),
+          });
+        } catch {}
+        return false;
       }
       return true;
     } catch (e) {
@@ -182,9 +189,8 @@ class SupabaseSyncService {
     try {
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) {
-        console.warn(`[HD-Sync] Delete ${table} failed:`, error.message);
-        if (this.isConnectionError(error)) return false;
-        return true;
+        console.warn(`[HD-Sync] ❌ Delete ${table} failed:`, error.message, `(id: ${id})`);
+        return false;
       }
       return true;
     } catch (e) {
@@ -198,9 +204,8 @@ class SupabaseSyncService {
     try {
       const { error } = await supabase.from(table).upsert(rows, { onConflict: 'id' });
       if (error) {
-        console.warn(`[HD-Sync] Batch upsert ${table} failed:`, error.message);
-        if (this.isConnectionError(error)) return false;
-        return true;
+        console.warn(`[HD-Sync] ❌ Batch upsert ${table} failed:`, error.message);
+        return false;
       }
       return true;
     } catch (e) {

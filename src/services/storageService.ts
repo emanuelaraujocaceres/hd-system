@@ -885,6 +885,13 @@ class StorageService {
           ];
           console.log(`[HD-Sync] 📊 Merged ${mergedSales.length} sales (cloud: ${cloudMapped.length}, local-only: ${mergedSales.length - cloudMapped.length})`);
           if (cloudMapped.length > 0) console.log(`[HD-Sync] 📊 Cloud sale IDs:`, cloudMapped.map(s => `${s.id} (customer: ${s.customerName || 'N/A'})`));
+          // Defensive: warn if any local sale with unique ID went missing
+          const mergedIds = new Set(mergedSales.map(s => s.id));
+          for (const ls of localSales) {
+            if (!mergedIds.has(ls.id)) {
+              console.warn(`[HD-Sync] ⚠️ Local sale ${ls.id} (${ls.customerName || 'no name'}) LOST during merge!`);
+            }
+          }
           this.set(KEYS.SALES, mergedSales);
         }
       }
