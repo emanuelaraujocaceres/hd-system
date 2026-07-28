@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Printer, Download, Share2, CheckCircle2, ArrowRight, Phone, MessageSquare } from 'lucide-react';
+import React from 'react';
+import { X, Printer, Share2, CheckCircle2, ArrowRight } from 'lucide-react';
 import { Sale, SystemSettings, Customer } from '../../types';
 
 interface ThermalReceiptModalProps {
@@ -19,15 +19,6 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
   customers = [],
   onNewSale,
 }) => {
-  const [whatsappPhone, setWhatsappPhone] = useState<string>('');
-
-  useEffect(() => {
-    if (sale) {
-      const foundCust = customers.find((c) => c.id === sale.customerId || (c.name && c.name === sale.customerName));
-      setWhatsappPhone(foundCust?.phone || '');
-    }
-  }, [sale, customers]);
-
   if (!isOpen || !sale) return null;
 
   const handlePrint = () => {
@@ -35,44 +26,9 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
   };
 
   const handleWhatsAppShare = () => {
-    let cleanPhone = whatsappPhone.replace(/\D/g, '');
-    if (cleanPhone.length >= 10 && cleanPhone.length <= 11 && !cleanPhone.startsWith('55')) {
-      cleanPhone = '55' + cleanPhone;
-    }
-
-    const itemsList = sale.items
-      .map((it) => `• ${it.quantity}x ${it.productName} - R$ ${it.total.toFixed(2)}`)
-      .join('\n');
-
-    const paymentList = sale.payments
-      .map((p) => {
-        const labelMap: Record<string, string> = {
-          cash: 'Dinheiro',
-          pix: 'PIX',
-          credit_card: 'Cartão de Crédito',
-          debit_card: 'Cartão de Débito',
-          credit_account: 'Fiado',
-        };
-        return `${labelMap[p.method] || p.method}: R$ ${p.amount.toFixed(2)}`;
-      })
-      .join(', ');
-
-    const text = `*COMPROVANTE DE COMPRA - ${settings.tradeName.toUpperCase()}*\n\n` +
-      `*Venda:* #${sale.code}\n` +
-      `*Data:* ${new Date(sale.date).toLocaleString('pt-BR')}\n` +
-      `*Cliente:* ${sale.customerName || 'Consumidor'}\n\n` +
-      `*ITENS:*\n${itemsList}\n\n` +
-      `*Subtotal:* R$ ${sale.subtotal.toFixed(2)}\n` +
-      (sale.discount > 0 ? `*Desconto:* -R$ ${sale.discount.toFixed(2)}\n` : '') +
-      `*TOTAL:* R$ ${sale.total.toFixed(2)}\n` +
-      `*Forma de Pagamento:* ${paymentList}\n\n` +
-      `Agradecemos a preferência!`;
-
-    const baseUrl = cleanPhone
-      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`
-      : `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-
-    window.open(baseUrl, '_blank');
+    const text = `Olá! Aqui está o comprovante da sua compra na ${settings.tradeName}.\nCódigo: ${sale.code}\nTotal: R$ ${sale.total.toFixed(2)}`;
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
   };
 
   return (
@@ -128,7 +84,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
                 <span className="col-span-6">ITEM / QTD x UNIT</span>
                 <span className="col-span-6 text-right">TOTAL (R$)</span>
               </div>
-              {(sale.items || []).map((it, idx) => (
+              {sale.items.map((it, idx) => (
                 <div key={idx} className="mb-1 text-[10px]">
                   <p className="font-bold truncate">{idx + 1}. {it.productName}</p>
                   <div className="flex justify-between text-gray-700">
@@ -198,44 +154,21 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 space-y-3">
-          {/* WhatsApp input section */}
-          <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1.5 shadow-sm">
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />
-                WhatsApp do Cliente:
-              </span>
-              <span className="text-[10px] text-slate-400 font-normal">(Digitar se não cadastrado)</span>
-            </label>
-            <div className="flex gap-1.5">
-              <div className="relative flex-1">
-                <Phone className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
-                <input
-                  type="tel"
-                  placeholder="DDD + Número (ex: 11999998888)"
-                  value={whatsappPhone}
-                  onChange={(e) => setWhatsappPhone(e.target.value)}
-                  className="w-full pl-8 pr-2.5 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-              <button
-                onClick={handleWhatsAppShare}
-                className="py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap shadow-sm"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-                <span>Enviar Whats</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2">
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
             <button
               onClick={handlePrint}
               className="py-2.5 px-3 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs hover:bg-slate-800 dark:hover:bg-white transition-colors flex items-center justify-center gap-1.5"
             >
               <Printer className="w-4 h-4" />
-              <span>Imprimir Recibo Térmico</span>
+              <span>Imprimir Recibo</span>
+            </button>
+            <button
+              onClick={handleWhatsAppShare}
+              className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
+            >
+              <Share2 className="w-4 h-4" />
+              <span>Enviar WhatsApp</span>
             </button>
           </div>
 
