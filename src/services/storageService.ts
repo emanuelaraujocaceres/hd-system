@@ -374,6 +374,7 @@ class StorageService {
   updateSaleFromRemote(row: any) {
     const sales = this.getSales();
     const existing = sales.find((s) => s.id === row.id);
+    console.log(`[HD-Sync] 🔄 updateSaleFromRemote: id=${row.id}, exists=${!!existing}, row.customer_name=${row.customer_name}, row.notes=${row.notes}`);
 
     // Try to fetch sale items from Supabase
     const fetchItems = async () => {
@@ -789,6 +790,11 @@ class StorageService {
       {
         const salesKey = KEYS.SALES;
         const hasLocalSales = localStorage.getItem(salesKey) !== null;
+        const localSalesBefore = this.getSales();
+        console.log(`[HD-Sync] 📊 Sales hydration: hasLocalSales=${hasLocalSales}, localCount=${localSalesBefore.length}, cloudCount=${sales.length}`);
+        if (localSalesBefore.length > 0) {
+          console.log(`[HD-Sync] 📊 Local sale IDs:`, localSalesBefore.map(s => `${s.id} (customer: ${s.customerName || 'N/A'})`));
+        }
 
         // Handle sale_items first (they're needed for sales merge)
         if (saleItems && saleItems.length > 0) {
@@ -877,6 +883,8 @@ class StorageService {
             ...cloudMapped,
             ...localSales.filter((s) => !cloudSaleIds.has(s.id)),
           ];
+          console.log(`[HD-Sync] 📊 Merged ${mergedSales.length} sales (cloud: ${cloudMapped.length}, local-only: ${mergedSales.length - cloudMapped.length})`);
+          if (cloudMapped.length > 0) console.log(`[HD-Sync] 📊 Cloud sale IDs:`, cloudMapped.map(s => `${s.id} (customer: ${s.customerName || 'N/A'})`));
           this.set(KEYS.SALES, mergedSales);
         }
       }
