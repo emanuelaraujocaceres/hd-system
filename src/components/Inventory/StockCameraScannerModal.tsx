@@ -259,11 +259,11 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   if (!isOpen) return null;
 
   // Add stock to existing product
-  const handleAddStockToExisting = () => {
+  const handleAddStockToExisting = async () => {
     if (!scannedProduct || addQty <= 0) return;
 
     const reasonText = `Entrada C\u00e2mera: ${addQty}un - Filial ${currentBranch?.name || 'Matriz'}`;
-    storageService.updateStock(scannedProduct.id, addQty, reasonText, 'C\u00e2mera HD-System');
+    await storageService.updateStock(scannedProduct.id, addQty, reasonText, 'C\u00e2mera HD-System');
 
     posAudio.chime();
     if (onProductsImported) onProductsImported();
@@ -321,7 +321,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   };
 
   // Invoice: confirm import
-  const handleConfirmInvoice = () => {
+  const handleConfirmInvoice = async () => {
     const name = invProductName.trim() || 'Produto NF';
     const barcode = invBarcode.trim() || '';
 
@@ -345,7 +345,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     storageService.saveProduct(newProd);
 
     const reasonText = `Importa\u00e7\u00e3o NF ${invInvoiceNumber || 'S/N'} - Fornecedor ${invSupplierName || 'N\u00e3o informado'}`;
-    storageService.updateStock(newProd.id, newProd.currentStock, reasonText, 'Leitor NF C\u00e2mera');
+    await storageService.updateStock(newProd.id, newProd.currentStock, reasonText, 'Leitor NF C\u00e2mera');
 
     posAudio.chime();
     if (onProductsImported) onProductsImported();

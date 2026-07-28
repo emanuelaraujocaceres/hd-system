@@ -315,8 +315,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         status: 'completed',
       };
 
-      // Save to storage
-      storageService.addSale(newSale);
+      // Save to storage (async — calls process_sale_transaction RPC)
+      await storageService.addSale(newSale);
       posAudio.chime();
 
       onSaleSuccess(newSale);

@@ -353,10 +353,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     }
   };
 
-  const handleApplyStockAdjustment = (e: React.FormEvent) => {
+  const handleApplyStockAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (stockTargetProduct) {
-      storageService.updateStock(stockTargetProduct.id, stockDelta, stockReason, user.name);
+      await storageService.updateStock(stockTargetProduct.id, stockDelta, stockReason, user.name);
       posAudio.chime();
       setIsStockModalOpen(false);
     }

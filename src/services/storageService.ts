@@ -62,6 +62,32 @@ class StorageService {
     this.listeners.forEach((fn) => fn());
   }
 
+  // ─── DLQ: Dead Letter Queue para operacoes RPC que falharam ──────
+  private async insertDLQ(
+    operationType: string,
+    tableName: string,
+    recordId: string,
+    payload: any,
+    errorMessage: string,
+  ) {
+    try {
+      const { error } = await supabase.rpc('fn_insserir_dlq', {
+        p_operation_type: operationType,
+        p_table_name: tableName,
+        p_record_id: recordId,
+        p_payload: payload,
+        p_error_message: errorMessage,
+        p_source: 'frontend',
+        p_browser_id: navigator.userAgent.slice(0, 50),
+      });
+      if (error) {
+        console.warn('[HD-Sync] DLQ insert failed:', error.message);
+      }
+    } catch (e) {
+      console.warn('[HD-Sync] DLQ insert exception:', e);
+    }
+  }
+
   // ─── SUPABASE SYNC HELPERS ────────────────────────────────────────
   // Fire-and-forget sync to Supabase. localStorage is always the source of truth locally.
   // When Supabase Realtime delivers remote changes, they update localStorage via syncRemoteToLocal().
@@ -1082,33 +1108,54 @@ class StorageService {
     this.set(KEYS.SALE_ITEMS, filtered);
   }
 
-  updateStock(productId: string, quantityDelta: number, reason: string, operatorName: string) {
+  async updateStock(productId: string, quantityDelta: number, reason: string, operatorName: string) {
     const products = this.getProducts();
     const prod = products.find((p) => p.id === productId);
-    if (prod) {
-      const prevStock = prod.currentStock;
-      prod.currentStock = Math.max(0, prod.currentStock + quantityDelta);
-      prod.updatedAt = new Date().toISOString();
-      this.set(KEYS.PRODUCTS, products);
+    if (!prod) return;
 
-      // Log stock movement
-      const movements = this.getMovements();
-      const newMov: StockMovement = {
-        id: `mov-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        productId,
-        productName: prod.name,
-        type: quantityDelta > 0 ? 'in' : 'out',
-        quantity: Math.abs(quantityDelta),
-        previousStock: prevStock,
-        newStock: prod.currentStock,
-        reason,
-        date: new Date().toISOString(),
-        operatorName,
-      };
-      movements.unshift(newMov);
-      this.set(KEYS.MOVEMENTS, movements);
-      this.syncProduct(prod);
-      this.syncStockMovement(newMov);
+    const prevStock = prod.currentStock;
+    prod.currentStock = Math.max(0, prod.currentStock + quantityDelta);
+    prod.updatedAt = new Date().toISOString();
+    this.set(KEYS.PRODUCTS, products);
+
+    // Log stock movement locally
+    const movements = this.getMovements();
+    const newMov: StockMovement = {
+      id: `mov-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      productId,
+      productName: prod.name,
+      type: quantityDelta > 0 ? 'in' : 'out',
+      quantity: Math.abs(quantityDelta),
+      previousStock: prevStock,
+      newStock: prod.currentStock,
+      reason,
+      date: new Date().toISOString(),
+      operatorName,
+    };
+    movements.unshift(newMov);
+    this.set(KEYS.MOVEMENTS, movements);
+    this.syncProduct(prod);
+    this.syncStockMovement(newMov);
+
+    // ─── RPC: ajustar_estoque (server-side atomic) ─────────────
+    // Fire-and-forget: localStorage already updated for instant UI.
+    // If RPC fails, DLQ records it for later retry.
+    try {
+      const type = quantityDelta > 0 ? 'in' : 'out';
+      const { data, error } = await supabase.rpc('ajustar_estoque', {
+        p_product_id: productId,
+        p_quantity: Math.abs(quantityDelta),
+        p_type: type,
+        p_reason: reason,
+        p_operator_name: operatorName,
+      });
+      if (error) {
+        console.warn('[HD-Sync] ajustar_estoque RPC failed:', error.message);
+        await this.insertDLQ('UPDATE', 'products', productId, { quantityDelta, reason }, error.message);
+      }
+    } catch (e: any) {
+      console.warn('[HD-Sync] ajustar_estoque RPC exception:', e?.message);
+      await this.insertDLQ('UPDATE', 'products', productId, { quantityDelta, reason }, e?.message);
     }
   }
 
@@ -1203,7 +1250,7 @@ class StorageService {
     this.set(KEYS.CREDIT_PAYMENTS, payments);
   }
 
-  addSale(sale: Sale) {
+  async addSale(sale: Sale) {
     const sales = this.getSales();
     sales.unshift(sale);
     this.set(KEYS.SALES, sales);
@@ -1221,16 +1268,47 @@ class StorageService {
         unit_price: item.unitPrice,
         total_price: item.total,
       }));
-      // Remove any existing items for this sale (in case of re-add)
       const filtered = existingItems.filter((i: any) => i.sale_id !== sale.id);
       this.set(KEYS.SALE_ITEMS, [...newItems, ...filtered]);
-      console.log(`[HD-Sync] 💾 ${newItems.length} sale_items salvos no localStorage (chave: ${KEYS.SALE_ITEMS}) para venda ${sale.code}`);
     }
 
-    // Deduces stock automatically
-    (sale.items || []).forEach((item) => {
-      this.updateStock(item.productId, -item.quantity, `Venda PDV #${sale.code}`, sale.operatorName);
-    });
+    // ─── Deduce stock locally (instant UI) ────────────────────
+    for (const item of sale.items || []) {
+      await this.updateStock(item.productId, -item.quantity, `Venda PDV #${sale.code}`, sale.operatorName);
+    }
+
+    // ─── RPC: process_sale_transaction (server-side atomic) ───
+    // Calls the DB function with SELECT ... FOR UPDATE + SERIALIZABLE
+    try {
+      const saleItemsJson = (sale.items || []).map((item) => ({
+        product_id: item.productId,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        total: item.total,
+        discount: 0,
+      }));
+
+      const { data, error } = await supabase.rpc('process_sale_transaction', {
+        p_sale_id: sale.id,
+        p_product_id: sale.items?.[0]?.productId || '',
+        p_quantity: sale.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
+        p_unit_price: sale.total,
+        p_discount: sale.discount || 0,
+        p_total: sale.total,
+        p_reason: `Venda PDV #${sale.code}`,
+        p_operator_name: sale.operatorName,
+        p_organization_id: '00000000-0000-0000-0000-000000000001',
+        p_store_branch_id: sale.storeBranchId || null,
+      });
+
+      if (error) {
+        console.warn('[HD-Sync] process_sale_transaction RPC failed:', error.message);
+        await this.insertDLQ('INSERT', 'sales', sale.id, { sale, saleItemsJson }, error.message);
+      }
+    } catch (e: any) {
+      console.warn('[HD-Sync] process_sale_transaction RPC exception:', e?.message);
+      await this.insertDLQ('INSERT', 'sales', sale.id, { sale }, e?.message);
+    }
 
     // Updates active cash register balance
     const session = this.getActiveCaixaSession();
@@ -1242,7 +1320,6 @@ class StorageService {
         else if (p.method === 'credit_account') session.totalSalesCreditAccount += p.amount;
       });
 
-      // Recalculate cash in drawer
       session.currentCashBalance = session.initialCash + session.totalSalesCash + session.suprimentos - session.sangrias;
       this.saveActiveCaixaSession(session);
     }
