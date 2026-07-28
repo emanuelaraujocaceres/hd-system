@@ -173,6 +173,7 @@ class StorageService {
         payment_method: s.payments[0]?.method || 'cash',
         status: s.status,
         notes: s.customerName || null,
+        customer_name: s.customerName || null,
       });
       // Only upsert sale items AFTER the sale record exists (avoid FK violation)
       if (s.items && s.items.length > 0) {
@@ -399,7 +400,7 @@ class StorageService {
       operatorId: row.user_id || '',
       operatorName: existing?.operatorName || 'Sistema',
       customerId: row.customer_id || existing?.customerId || undefined,
-      customerName: row.notes !== undefined && row.notes !== null ? row.notes : existing?.customerName || undefined,
+      customerName: (row.customer_name ?? row.notes) || existing?.customerName || undefined,
       storeBranchId: row.store_branch_id || '',
       items: existing?.items || [],
       subtotal: parseFloat(row.subtotal) || 0,
@@ -501,10 +502,32 @@ class StorageService {
   }
 
   updateCaixaFromRemote(row: any) {
-    // Don't overwrite an open local session with stale cloud data
     const localSession = this.getActiveCaixaSession();
+
+    // Same session, both open → MERGE counters (don't ignore remote)
+    // Remote may have sales from other devices that local doesn't know about yet.
+    // We take the MAX of each counter to avoid losing data from either device.
     if (localSession && localSession.id === row.id && localSession.status === 'open') {
-      console.log(`[HD-Sync] 🔄 Caixa remote update ignored — local session is open and current`);
+      const remoteCash = parseFloat(row.total_sales_cash) || 0;
+      const remotePix = parseFloat(row.total_sales_pix) || 0;
+      const remoteCard = parseFloat(row.total_sales_card) || 0;
+      const remoteCredit = parseFloat(row.total_sales_credit_account) || 0;
+      const remoteSuprimentos = parseFloat(row.suprimentos) || 0;
+      const remoteSangrias = parseFloat(row.sangrias) || 0;
+
+      const merged = {
+        ...localSession,
+        totalSalesCash: Math.max(localSession.totalSalesCash, remoteCash),
+        totalSalesPix: Math.max(localSession.totalSalesPix, remotePix),
+        totalSalesCard: Math.max(localSession.totalSalesCard, remoteCard),
+        totalSalesCreditAccount: Math.max(localSession.totalSalesCreditAccount, remoteCredit),
+        suprimentos: Math.max(localSession.suprimentos, remoteSuprimentos),
+        sangrias: Math.max(localSession.sangrias, remoteSangrias),
+      };
+      // Recalculate balance with merged values
+      merged.currentCashBalance = merged.initialCash + merged.totalSalesCash + merged.suprimentos - merged.sangrias;
+      this.set(KEYS.CAIXA, merged);
+      console.log(`[HD-Sync] 🔄 Caixa merged: cash=R$${merged.totalSalesCash.toFixed(2)} pix=R$${merged.totalSalesPix.toFixed(2)} card=R$${merged.totalSalesCard.toFixed(2)}`);
       return;
     }
 
@@ -806,7 +829,7 @@ class StorageService {
             return {
               id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
               operatorId: r.user_id || '', operatorName: 'Sistema',
-              customerId: r.customer_id || undefined, customerName: r.notes || undefined,
+              customerId: r.customer_id || undefined, customerName: r.customer_name || r.notes || undefined,
               storeBranchId: r.store_branch_id || '',
               items: cloudItems,
               subtotal: parseFloat(r.subtotal) || fixedTotal, discount: parseFloat(r.discount) || 0,
@@ -841,7 +864,7 @@ class StorageService {
               id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
               operatorId: r.user_id || '', operatorName: 'Sistema',
               customerId: r.customer_id || localSalesById.get(r.id)?.customerId || undefined,
-              customerName: r.notes !== undefined && r.notes !== null ? r.notes : localSalesById.get(r.id)?.customerName || undefined,
+              customerName: (r.customer_name ?? r.notes) || localSalesById.get(r.id)?.customerName || undefined,
               storeBranchId: r.store_branch_id || '',
               items,
               subtotal: fixedSubtotal, discount: parseFloat(r.discount) || 0,
