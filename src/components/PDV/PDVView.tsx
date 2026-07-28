@@ -690,7 +690,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
               <button
                 key={p.id}
                 onClick={() => handleAddToCart(p)}
-                className="group p-3.5 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-all duration-200 text-left flex flex-col justify-between shadow-sm hover:shadow-md relative overflow-hidden"
+                className="group p-3.5 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-all duration-200 text-left flex flex-col justify-between shadow-sm hover:shadow-md"
               >
                 <div>
                   {/* Thumbnail Image */}
