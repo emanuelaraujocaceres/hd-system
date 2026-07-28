@@ -39,7 +39,10 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 const InventoryView = lazy(() => import('./components/Inventory/InventoryView'));
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<string>('pdv');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const saved = localStorage.getItem('hd_system_active_tab');
+    return saved || 'pdv';
+  });
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('hd_system_dark_mode');
     if (saved !== null) return saved === 'true';
@@ -72,6 +75,7 @@ export const App: React.FC = () => {
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
+    localStorage.setItem('hd_system_active_tab', tab);
     if (navHistory[navHistory.length - 1] !== tab) {
       setNavHistory(prev => {
         const next = [...prev, tab];
@@ -652,6 +656,7 @@ export const App: React.FC = () => {
                   products={products}
                   currentBranch={currentBranch}
                   settings={settings}
+                  onCloseTVMode={() => handleTabChange('pdv')}
                 />
               )}
             </>
