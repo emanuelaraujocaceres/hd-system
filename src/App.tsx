@@ -36,7 +36,11 @@ import { ToastProvider } from './components/shared/Toast';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 // Lazy-loaded views for code splitting (reduces TDZ risk from scope-hoisting)
-const InventoryView = lazy(() => import('./components/Inventory/InventoryView'));
+const InventoryView = lazy(() =>
+  import('./components/Inventory/InventoryView').then((m) => ({
+    default: m.InventoryView,
+  }))
+);
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('pdv');

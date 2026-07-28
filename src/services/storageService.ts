@@ -52,6 +52,7 @@ const KEYS = {
 
 class StorageService {
   private listeners: Set<() => void> = new Set();
+  private notifyTimer: ReturnType<typeof setTimeout> | null = null;
 
   public subscribe(listener: () => void) {
     this.listeners.add(listener);
@@ -59,18 +60,14 @@ class StorageService {
   }
 
   private notify() {
-    // Batch notifications in a microtask to prevent cascading
-    // synchronous setState calls across components during render.
-    // This fixes React 19 error #306 (state update during render).
-    if (this._notifyPending) return;
-    this._notifyPending = true;
-    queueMicrotask(() => {
-      this._notifyPending = false;
-      const listeners = Array.from(this.listeners);
-      listeners.forEach((fn) => fn());
-    });
+    // Debounce: batch rapid storage changes into a single notification
+    // and defer past React's render cycle to prevent error #306
+    if (this.notifyTimer) return;
+    this.notifyTimer = setTimeout(() => {
+      this.notifyTimer = null;
+      this.listeners.forEach((fn) => fn());
+    }, 0);
   }
-  private _notifyPending = false;
 
   // ─── DLQ: Dead Letter Queue para operacoes RPC que falharam ──────
   private async insertDLQ(
