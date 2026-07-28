@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Package, Users, DollarSign, X, ArrowRight } from 'lucide-react';
-import { storageService } from '../services/storageService';
-import { useDebounce } from '../hooks/useDebounce';
+import { storageService } from '../../services/storageService';
+import { useDebounce } from '../../hooks/useDebounce';
 
 interface SearchResult {
   type: 'product' | 'customer' | 'sale';

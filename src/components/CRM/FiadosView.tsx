@@ -92,15 +92,13 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
           cpfCnpj: '—',
           email: '—',
           phone: '—',
-          address: '—',
           creditLimit: Infinity,
           currentBalance: 0,
-          active: true,
+          loyaltyPoints: 0,
+          city: '',
+          state: '',
           createdAt: '',
-          updatedAt: '',
-          storeBranchId: '',
-          type: 'customer',
-        } as Customer;
+        } as unknown as Customer;
       }
 
       // Sort sales oldest first (FIFO)

@@ -70,11 +70,14 @@ async function testProductSync(): Promise<TestResult> {
     barcode: `789${Date.now()}`,
     category: 'Teste Sync',
     costPrice: 10,
-    price: 25,
+    salePrice: 25,
     currentStock: 100,
     minStock: 10,
-    unit: 'un',
-    organizationId: '00000000-0000-0000-0000-000000000001',
+    maxStock: 200,
+    unit: 'un' as const,
+    imageUrl: '',
+    active: true,
+    updatedAt: new Date().toISOString(),
     storeBranchId: '',
   };
 
@@ -92,7 +95,8 @@ async function testProductSync(): Promise<TestResult> {
     // 3. Cleanup
     storageService.deleteProduct(testId);
     if (inCloud) {
-      await supabase.from('products').delete().eq('id', testId);
+      const { error: delError } = await supabase.from('products').delete().eq('id', testId);
+      if (delError) console.warn('Cleanup delete product failed:', delError.message);
     }
 
     return {
@@ -105,7 +109,10 @@ async function testProductSync(): Promise<TestResult> {
   } catch (e: any) {
     // Cleanup
     storageService.deleteProduct(testId);
-    await supabase.from('products').delete().eq('id', testId).catch(() => {});
+    try {
+      const { error: delError } = await supabase.from('products').delete().eq('id', testId);
+      if (delError) console.warn('Cleanup delete product failed:', delError.message);
+    } catch {}
     return { name: 'Product Sync', passed: false, detail: e.message };
   }
 }
@@ -115,14 +122,15 @@ async function testCustomerSync(): Promise<TestResult> {
   const testCustomer = {
     id: testId,
     name: `[TESTE] Cliente Sync ${testId}`,
-    phone: '(11) 99999-8888',
+    cpfCnpj: '000.000.000-00',
     email: `teste-${testId}@sync.com`,
-    address: 'Rua Teste, 123',
+    phone: '(11) 99999-8888',
     creditLimit: 500,
-    currentCredit: 0,
-    notes: 'Criado por teste de sync automático',
-    organizationId: '00000000-0000-0000-0000-000000000001',
-    storeBranchId: '',
+    currentBalance: 0,
+    loyaltyPoints: 0,
+    city: 'São Paulo',
+    state: 'SP',
+    createdAt: new Date().toISOString(),
   };
 
   try {
@@ -136,7 +144,8 @@ async function testCustomerSync(): Promise<TestResult> {
 
     storageService.deleteCustomer(testId);
     if (inCloud) {
-      await supabase.from('customers').delete().eq('id', testId);
+      const { error: delError } = await supabase.from('customers').delete().eq('id', testId);
+      if (delError) console.warn('Cleanup delete customer failed:', delError.message);
     }
 
     return {
@@ -148,7 +157,10 @@ async function testCustomerSync(): Promise<TestResult> {
     };
   } catch (e: any) {
     storageService.deleteCustomer(testId);
-    await supabase.from('customers').delete().eq('id', testId).catch(() => {});
+    try {
+      const { error: delError } = await supabase.from('customers').delete().eq('id', testId);
+      if (delError) console.warn('Cleanup delete customer failed:', delError.message);
+    } catch {}
     return { name: 'Customer Sync', passed: false, detail: e.message };
   }
 }
@@ -198,7 +210,8 @@ async function testCaixaSync(): Promise<TestResult> {
       .filter((s: any) => s.id !== testId);
     localStorage.setItem('hd_system_caixa_history', JSON.stringify(updatedHistory));
     if (inCloud) {
-      await supabase.from('cash_sessions').delete().eq('id', testId);
+      const { error: delError } = await supabase.from('cash_sessions').delete().eq('id', testId);
+      if (delError) console.warn('Cleanup delete cash_session failed:', delError.message);
     }
 
     return {
@@ -212,7 +225,10 @@ async function testCaixaSync(): Promise<TestResult> {
     const updatedHistory = JSON.parse(localStorage.getItem('hd_system_caixa_history') || '[]')
       .filter((s: any) => s.id !== testId);
     localStorage.setItem('hd_system_caixa_history', JSON.stringify(updatedHistory));
-    await supabase.from('cash_sessions').delete().eq('id', testId).catch(() => {});
+    try {
+      const { error: delError } = await supabase.from('cash_sessions').delete().eq('id', testId);
+      if (delError) console.warn('Cleanup delete cash_session failed:', delError.message);
+    } catch {}
     return { name: 'Cash Session Sync', passed: false, detail: e.message };
   }
 }
