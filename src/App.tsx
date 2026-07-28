@@ -128,6 +128,10 @@ export const App: React.FC = () => {
 
     refreshState();
     const unsubscribe = storageService.subscribe(refreshState);
+
+    // Dynamic import to make syncTest.ts available from console as window.__syncTest
+    import('./services/syncTest').catch(() => {});
+
     return () => { unsubscribe(); };
   }, []);
 

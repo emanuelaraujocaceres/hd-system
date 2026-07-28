@@ -408,3 +408,8 @@ export const syncTest = {
   testRealtime: testRealtimeConnectivity,
   testQueue: testQueueProcessing,
 };
+
+// ─── GLOBAL EXPORT ──────────────────────────────────────────────
+// Makes syncTest available from the browser console as window.__syncTest
+// Usage in console: window.__syncTest.run()
+(window as any).__syncTest = syncTest;
