@@ -50,18 +50,70 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   initialBarcode,
   onClearInitialBarcode,
 }) => {
+  // ============================================================
+  // 1. TODOS OS useState PRIMEIRO
+  // ============================================================
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
   const [isSearching, setIsSearching] = useState(false);
   const [showFilterSheet, setShowFilterSheet] = useState(false);
-
-  const debouncedSearch = useDebounce(searchTerm, 300);
   const [sortField, setSortField] = useState<string>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
-  const firstInputRef = useRef<HTMLInputElement>(null);
 
+  // Modals state
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  const [stockTargetProduct, setStockTargetProduct] = useState<Product | null>(null);
+  const [stockDelta, setStockDelta] = useState<number>(10);
+  const [stockReason, setStockReason] = useState<string>('Entrada de Nota de Fornecedor');
+  const [stockBarcodeSearch, setStockBarcodeSearch] = useState('');
+  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+  const [barcodeTargetProduct, setBarcodeTargetProduct] = useState<Product | null>(null);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isStockCameraModalOpen, setIsStockCameraModalOpen] = useState(false);
+
+  // Camera & Image Search state
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [isSearchingImages, setIsSearchingImages] = useState(false);
+  const [imageSuggestions, setImageSuggestions] = useState<string[]>([]);
+  const [showManualUrlInput, setShowManualUrlInput] = useState(false);
+
+  // Product Form state
+  const [formName, setFormName] = useState('');
+  const [formBarcode, setFormBarcode] = useState('');
+  const [formCategory, setFormCategory] = useState('Geral');
+  const [formUnit, setFormUnit] = useState<'un' | 'kg' | 'cx' | 'lit' | 'm'>('un');
+  const [formCostPrice, setFormCostPrice] = useState('');
+  const [formSalePrice, setFormSalePrice] = useState('');
+  const [formCurrentStock, setFormCurrentStock] = useState('');
+  const [formMinStock, setFormMinStock] = useState('');
+  const [formMaxStock, setFormMaxStock] = useState('');
+  const [formImageUrl, setFormImageUrl] = useState('');
+  const [formShowOnTV, setFormShowOnTV] = useState(false);
+  const [formTvPromoPrice, setFormTvPromoPrice] = useState('');
+  const [formTvHighlightTag, setFormTvHighlightTag] = useState('');
+
+  // ============================================================
+  // 2. TODOS OS useRef
+  // ============================================================
+  const firstInputRef = useRef<HTMLInputElement>(null);
+  const stockBarcodeFileRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // ============================================================
+  // 3. useDebounce (custom hook)
+  // ============================================================
+  const debouncedSearch = useDebounce(searchTerm, 300);
+
+  // ============================================================
+  // 4. TODOS OS useEffect
+  // ============================================================
   useEffect(() => {
     if (isProductModalOpen && firstInputRef.current) {
       firstInputRef.current.focus();
@@ -79,54 +131,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     const t = setTimeout(() => setIsSearching(false), 200);
     return () => clearTimeout(t);
   }, [debouncedSearch]);
-
-  const handleSort = (field: string) => {
-    setSortDir((prev) => (sortField === field ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'));
-    setSortField(field);
-  };
-
-  // Modals state
-  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-
-  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
-  const [stockTargetProduct, setStockTargetProduct] = useState<Product | null>(null);
-  const [stockDelta, setStockDelta] = useState<number>(10);
-  const [stockReason, setStockReason] = useState<string>('Entrada de Nota de Fornecedor');
-  const [stockBarcodeSearch, setStockBarcodeSearch] = useState('');
-  const stockBarcodeFileRef = useRef<HTMLInputElement | null>(null);
-
-  const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
-  const [barcodeTargetProduct, setBarcodeTargetProduct] = useState<Product | null>(null);
-
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [isStockCameraModalOpen, setIsStockCameraModalOpen] = useState(false);
-
-  // Camera & Image Search state
-  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [isSearchingImages, setIsSearchingImages] = useState(false);
-  const [imageSuggestions, setImageSuggestions] = useState<string[]>([]);
-  const [showManualUrlInput, setShowManualUrlInput] = useState(false);
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  // Product Form state
-  const [formName, setFormName] = useState('');
-  const [formBarcode, setFormBarcode] = useState('');
-  const [formCategory, setFormCategory] = useState('Geral');
-  const [formUnit, setFormUnit] = useState<'un' | 'kg' | 'cx' | 'lit' | 'm'>('un');
-  const [formCostPrice, setFormCostPrice] = useState('');
-  const [formSalePrice, setFormSalePrice] = useState('');
-  const [formCurrentStock, setFormCurrentStock] = useState('');
-  const [formMinStock, setFormMinStock] = useState('');
-  const [formMaxStock, setFormMaxStock] = useState('');
-  const [formImageUrl, setFormImageUrl] = useState('');
-  const [formShowOnTV, setFormShowOnTV] = useState(false);
-  const [formTvPromoPrice, setFormTvPromoPrice] = useState('');
-  const [formTvHighlightTag, setFormTvHighlightTag] = useState('');
 
   // Auto-open product modal when navigating from scanner with a barcode
   useEffect(() => {
@@ -151,6 +155,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       if (onClearInitialBarcode) onClearInitialBarcode();
     }
   }, [initialBarcode]);
+
+  // ============================================================
+  // 5. FUNÇÕES E HANDLERS
+  // ============================================================
+
+  // ✅ FUNÇÃO DE ORDENAÇÃO
+  const handleSort = (field: string) => {
+    setSortDir((prev) => (sortField === field ? (prev === 'asc' ? 'desc' : 'asc') : 'asc'));
+    setSortField(field);
+  };
 
   // Camera handlers
   const handleStartLiveCamera = async () => {
@@ -334,7 +348,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       updatedAt: new Date().toISOString(),
       storeBranchId: user.storeBranchId,
       showOnTV: formShowOnTV,
-      // Preserve TV field values even when showOnTV is off, so they aren't lost if re-enabled
       tvPromoPrice: formTvPromoPrice ? parseFloat(formTvPromoPrice) || undefined : undefined,
       tvHighlightTag: formTvHighlightTag || undefined,
     };
@@ -912,7 +925,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </label>
 
                 <div className="flex flex-col sm:flex-row items-center gap-3">
-                  {/* Current Selected Image Preview */}
                   <div className="w-20 h-20 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] overflow-hidden shrink-0 shadow-sm flex items-center justify-center relative group">
                     {formImageUrl ? (
                       <img
@@ -925,10 +937,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     )}
                   </div>
 
-                  {/* Camera & Search Action Buttons */}
                   <div className="flex-1 space-y-2 w-full">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {/* Camera Button */}
                       <button
                         type="button"
                         onClick={handleStartLiveCamera}
@@ -938,7 +948,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         <span>Tirar Foto (Câmera)</span>
                       </button>
 
-                      {/* Google / Web Auto-Search Button */}
                       <button
                         type="button"
                         onClick={handleAutoSearchImage}
@@ -954,7 +963,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       </button>
                     </div>
 
-                    {/* Hidden Native File Input for Mobile Browser Capture */}
                     <input
                       type="file"
                       ref={fileInputRef}
@@ -976,7 +984,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   </div>
                 </div>
 
-                {/* Auto Search Gallery Suggestions */}
                 {imageSuggestions.length > 0 && (
                   <div className="space-y-1.5 pt-1 border-t border-slate-200 dark:border-[#27272a]">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
@@ -1005,7 +1012,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   </div>
                 )}
 
-                {/* Manual URL Input Field (Collapsible) */}
                 {showManualUrlInput && (
                   <input
                     type="url"
@@ -1028,7 +1034,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   </h4>
                 </div>
 
-                {/* Exibir na TV checkbox */}
                 <label className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 cursor-pointer hover:bg-amber-500/10 transition-colors">
                   <div className="relative">
                     <input
@@ -1049,10 +1054,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   </div>
                 </label>
 
-                {/* Conditional TV fields */}
                 {formShowOnTV && (
                   <div className="space-y-3 pl-1 animate-in slide-in-from-top-2 duration-200">
-                    {/* Promo Price */}
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
                         Preço de Oferta (R$)
@@ -1076,7 +1079,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       )}
                     </div>
 
-                    {/* Highlight Tag */}
                     <div>
                       <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
                         Tag de Destaque (opcional)
@@ -1124,7 +1126,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               Ajuste / Entrada de Estoque: {stockTargetProduct.name}
             </h3>
 
-            {/* Barcode Search for Quick Stock Entry */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa]">
                 Buscar Produto por Código de Barras:
@@ -1162,9 +1163,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   ref={stockBarcodeFileRef}
                   accept="image/*"
                   capture="environment"
-                  onChange={(e) => {
-                    // Camera file input - user scans barcode from captured image
-                  }}
+                  onChange={(e) => {}}
                   className="hidden"
                 />
               </div>
@@ -1255,7 +1254,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               </button>
             </div>
 
-            {/* Video Viewfinder */}
             <div className="w-full aspect-square bg-black rounded-2xl overflow-hidden border border-slate-800 relative flex items-center justify-center">
               <video
                 ref={videoRef}
@@ -1291,13 +1289,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </div>
         </div>
       )}
+
       {/* STOCK CAMERA SCANNER MODAL */}
       <StockCameraScannerModal
         isOpen={isStockCameraModalOpen}
         onClose={() => setIsStockCameraModalOpen(false)}
-        onProductsImported={() => {
-          // Trigger reactive updates
-        }}
+        onProductsImported={() => {}}
         onNavigateToNewProduct={(barcode) => {
           setIsStockCameraModalOpen(false);
           resetProductForm(barcode);
@@ -1338,3 +1335,5 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     </div>
   );
 };
+
+export default InventoryView;
