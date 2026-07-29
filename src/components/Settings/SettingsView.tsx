@@ -256,7 +256,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       email: userEmail.trim().toLowerCase(),
       role: userRole,
       avatarUrl: editingUser?.avatarUrl || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`,
-      organizationId: 'org-nexus-01',
+      organizationId: user.organizationId,
       storeBranchId: userBranchId,
       permissions: userRole === 'admin' ? {
         pdv: true,
