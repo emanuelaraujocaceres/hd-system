@@ -312,6 +312,8 @@ class StorageService {
         user_id: s.operatorId,
         customer_id: s.customerId || null,
         code: s.code,
+        created_at: s.date,                    // timestamp do momento da finalização
+        operator_name: s.operatorName,         // nome real do usuário logado
         subtotal: s.subtotal,
         discount: s.discount,
         total: s.total,
@@ -544,7 +546,7 @@ class StorageService {
       code: row.code,
       date: row.created_at || new Date().toISOString(),
       operatorId: row.user_id || '',
-      operatorName: existing?.operatorName || 'Sistema',
+      operatorName: row.operator_name || existing?.operatorName || 'Sistema',
       customerId: row.customer_id || existing?.customerId || undefined,
       customerName: (row.customer_name ?? row.notes) || existing?.customerName || undefined,
       storeBranchId: row.store_branch_id || '',
@@ -979,7 +981,7 @@ class StorageService {
             const fixedTotal = (storedTotal === 0 && computedItemsTotal > 0) ? computedItemsTotal : storedTotal;
             return {
               id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
-              operatorId: r.user_id || '', operatorName: 'Sistema',
+              operatorId: r.user_id || '', operatorName: r.operator_name || 'Sistema',
               customerId: r.customer_id || undefined, customerName: r.customer_name || r.notes || undefined,
               storeBranchId: r.store_branch_id || '',
               items: cloudItems,
@@ -1014,7 +1016,7 @@ class StorageService {
             const fixedSubtotal = parseFloat(r.subtotal) || fixedTotal;
             return {
               id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
-              operatorId: r.user_id || '', operatorName: 'Sistema',
+              operatorId: r.user_id || '', operatorName: r.operator_name || 'Sistema',
               customerId: r.customer_id || localSalesById.get(r.id)?.customerId || undefined,
               customerName: (r.customer_name ?? r.notes) || localSalesById.get(r.id)?.customerName || undefined,
               storeBranchId: r.store_branch_id || '',
