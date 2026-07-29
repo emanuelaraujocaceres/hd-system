@@ -457,9 +457,9 @@ export const OrganizationsView: React.FC<OrganizationsViewProps> = ({ user }) =>
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-400">
-                    ⚠️ O admin precisa estar logado no Supabase Auth para que o RLS funcione.
-                    Envie as credenciais acima ao administrador da nova empresa.
+                  <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-400 space-y-1">
+                    <p>⚠️ Esta senha <strong>não foi salva no banco de dados</strong> — é a única vez que você a verá.</p>
+                    <p>O admin precisa ser criado manualmente no <strong>Supabase Auth</strong> (Authentication → Users → Invite) com este e-mail e senha para que o login funcione.</p>
                   </div>
 
                   <button

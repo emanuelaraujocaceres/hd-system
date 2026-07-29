@@ -5,16 +5,24 @@
 -- sem se preocupar com RLS. Os RPCs usam SECURITY DEFINER para bypassar RLS.
 -- ==============================================================================
 
+-- 0. Garantir extensão pgcrypto (para gen_random_uuid)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- 1. Adicionar coluna superadmin às tabelas profiles e system_users
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS superadmin BOOLEAN DEFAULT FALSE;
 ALTER TABLE system_users ADD COLUMN IF NOT EXISTS superadmin BOOLEAN DEFAULT FALSE;
 
 -- 2. Função para verificar se o usuário atual é superadmin
+--    Verifica tanto profiles (criado pelo Supabase Auth) quanto system_users (app)
 CREATE OR REPLACE FUNCTION public.get_is_superadmin()
 RETURNS BOOLEAN
 LANGUAGE sql STABLE SECURITY DEFINER
 AS $$
-  SELECT COALESCE(superadmin, FALSE) FROM profiles WHERE id = auth.uid();
+  SELECT COALESCE(
+    (SELECT superadmin FROM profiles WHERE id = auth.uid()),
+    (SELECT superadmin FROM system_users WHERE id = auth.uid()),
+    FALSE
+  );
 $$;
 
 -- 3. RPC: Listar todas as organizações (apenas superadmin)
@@ -46,6 +54,10 @@ END;
 $$;
 
 -- 4. RPC: Criar nova organização (apenas superadmin)
+--    ATENÇÃO: a senha NÃO é salva no banco por segurança. Ela é gerada e
+--    retornada APENAS para o frontend mostrar ao admin uma única vez.
+--    O admin deve criar o usuário no Supabase Auth (auth.users) manualmente
+--    ou por um endpoint de admin da API do Supabase.
 CREATE OR REPLACE FUNCTION public.admin_create_organization(
   p_name TEXT,
   p_admin_email TEXT,
@@ -75,7 +87,7 @@ BEGIN
   v_org_id := gen_random_uuid();
   v_admin_id := gen_random_uuid();
   v_branch_id := gen_random_uuid();
-  v_password := upper(substr(md5(random()::text), 1, 8)); -- senha de 8 chars
+  v_password := upper(substr(md5(random()::text), 1, 8)); -- senha de 8 chars (só para exibição)
 
   -- Criar organização
   INSERT INTO organizations (id, name) VALUES (v_org_id, p_name);
@@ -84,12 +96,9 @@ BEGIN
   INSERT INTO store_branches (id, organization_id, name, code, active, is_headquarters)
   VALUES (v_branch_id, v_org_id, p_name || ' - Matriz', 'MTZ-01', TRUE, TRUE);
 
-  -- Criar admin na system_users
-  INSERT INTO system_users (id, organization_id, name, email, role, active, password, store_branch_id)
-  VALUES (v_admin_id, v_org_id, p_admin_name, p_admin_email, 'admin', TRUE, v_password, v_branch_id);
-
-  -- Criar auto-fiscal (nota não fiscal padrão)
-  -- (opcional: sistema já tem fallback)
+  -- Criar admin na system_users (SEM senha — a senha fica no auth.users, não aqui)
+  INSERT INTO system_users (id, organization_id, name, email, role, active, store_branch_id)
+  VALUES (v_admin_id, v_org_id, p_admin_name, p_admin_email, 'admin', TRUE, v_branch_id);
 
   RETURN QUERY SELECT TRUE, 'Organização criada com sucesso', v_org_id, v_admin_id::TEXT, v_password;
 END;
@@ -175,7 +184,16 @@ END;
 $$;
 
 -- 8. Marcar o usuário emanuel@gmail.com como superadmin
--- (ajuste o email conforme o seu auth.user)
-UPDATE profiles
-SET superadmin = TRUE
-WHERE email = 'emanuel@gmail.com';
+--    Usa INSERT ... ON CONFLICT em vez de UPDATE puro para garantir que
+--    funciona mesmo se a linha em profiles ainda não existir.
+INSERT INTO profiles (id, email, superadmin)
+SELECT id, email, TRUE FROM auth.users WHERE email = 'emanuel@gmail.com'
+ON CONFLICT (id) DO UPDATE SET superadmin = TRUE;
+
+-- 9. Garantir que as funções estejam acessíveis para usuários autenticados
+GRANT EXECUTE ON FUNCTION public.get_is_superadmin TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_list_organizations TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_create_organization TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_get_organization TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_list_branches TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_list_users TO authenticated;
