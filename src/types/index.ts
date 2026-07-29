@@ -36,6 +36,7 @@ export interface StoreBranch {
   phone: string;
   isHeadquarters: boolean;
   active: boolean;
+  organizationId?: string; // multi-tenant: qual organização esta filial pertence
 }
 
 export interface Product {

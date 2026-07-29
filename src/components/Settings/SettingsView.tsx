@@ -190,6 +190,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       phone: branchPhone,
       isHeadquarters: branchIsHQ,
       active: true,
+      organizationId: editingBranch?.organizationId || user.organizationId,
     };
 
     storageService.saveBranch(newBranch);

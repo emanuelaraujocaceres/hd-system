@@ -112,6 +112,14 @@ export const App: React.FC = () => {
   const [currentBranch, setCurrentBranch] = useState<StoreBranch>(() => storageService.getSelectedBranch());
   const [user, setUser] = useState<UserProfile | null>(() => storageService.getUserProfile());
 
+  // Filtra filiais: superadmin vê todas, cada usuário vê só as da sua organização
+  const userBranches = React.useMemo(() => {
+    if (!user) return branches;
+    if (user.superadmin) return branches;
+    const orgId = user.organizationId;
+    return branches.filter(b => !b.organizationId || b.organizationId === orgId);
+  }, [branches, user]);
+
   // Load initial state and subscribe to reactive storage updates
   useEffect(() => {
     const refreshState = () => {
@@ -138,6 +146,11 @@ export const App: React.FC = () => {
   }, []);
 
   const handleSelectBranch = (branch: StoreBranch) => {
+    // Segurança: não deixa selecionar filial de outra organização
+    if (!user?.superadmin && branch.organizationId && user?.organizationId && branch.organizationId !== user.organizationId) {
+      console.warn('[Branch] Tentativa de acessar filial de outra organização:', branch.id);
+      return;
+    }
     storageService.setSelectedBranchId(branch.id);
     setCurrentBranch(branch);
     posAudio.click();
@@ -228,6 +241,7 @@ export const App: React.FC = () => {
       const event = payload.eventType; // INSERT, UPDATE, DELETE
       const row = payload.new || payload.old;
 
+      // Organization isolation: RLS já filtra no servidor, ignora no cliente
       // Branch isolation: only accept changes that belong to current branch (or have no branch)
       const currentBranchId = storageService.getSelectedBranchId();
       if (currentBranchId && row?.store_branch_id) {
@@ -541,7 +555,7 @@ export const App: React.FC = () => {
       <Sidebar
         currentTab={activeTab}
         setCurrentTab={handleTabChange}
-        branches={branches}
+        branches={userBranches}
         currentBranch={currentBranch}
         onSelectBranch={handleSelectBranch}
         user={user}
@@ -579,7 +593,7 @@ export const App: React.FC = () => {
             darkMode={darkMode}
             setDarkMode={setDarkMode}
             user={user}
-            branches={branches}
+            branches={userBranches}
             currentBranch={currentBranch}
             onSelectBranch={handleSelectBranch}
             onLogout={handleLogout}
@@ -708,7 +722,7 @@ export const App: React.FC = () => {
               )}
 
               {activeTab === 'settings' && (
-                <SettingsView settings={settings} branches={branches} user={user} />
+                <SettingsView settings={settings} branches={userBranches} user={user} />
               )}
 
               {activeTab === 'tv-showcase' && (

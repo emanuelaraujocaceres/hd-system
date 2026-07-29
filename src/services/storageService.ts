@@ -83,7 +83,7 @@ class StorageService {
   }
 
   // Retorna o organization_id do usuário logado, ou o DEFAULT_ORG_ID
-  private getCurrentOrgId(): string {
+  getCurrentOrgId(): string {
     try {
       const raw = localStorage.getItem('hd_system_user_profile');
       if (raw) {
@@ -343,7 +343,7 @@ class StorageService {
   private syncBranch(b: StoreBranch) {
     syncService.upsertRow('store_branches', {
       id: b.id,
-      organization_id: this.getCurrentOrgId(),
+      organization_id: b.organizationId || this.getCurrentOrgId(),
       name: b.name,
       code: b.code,
       cnpj: b.cnpj,
@@ -1054,6 +1054,7 @@ class StorageService {
             city: r.city || '', state: r.state || '', address: r.address || '',
             phone: r.phone || '', isHeadquarters: r.is_headquarters || false,
             active: r.active !== false,
+            organizationId: r.organization_id || undefined,
           }),
           (b) => this.syncBranch(b),
         );
@@ -1691,7 +1692,7 @@ class StorageService {
       const found = branches.find((b) => b.id === savedId);
       if (found) return found;
     }
-    return branches[0] || { id: BRANCH_UUIDS['br-01'], name: 'HD-System Matriz São Paulo', code: 'SP-01', cnpj: '12.345.678/0001-90', city: 'São Paulo', state: 'SP', address: 'Av. Paulista, 1000', phone: '(11) 3000-0000', isHeadquarters: true, active: true };
+    return branches[0] || { id: BRANCH_UUIDS['br-01'], name: 'HD-System Matriz São Paulo', code: 'SP-01', cnpj: '12.345.678/0001-90', city: 'São Paulo', state: 'SP', address: 'Av. Paulista, 1000', phone: '(11) 3000-0000', isHeadquarters: true, active: true, organizationId: DEFAULT_ORG_ID };
   }
 
   getSelectedBranchId(): string {

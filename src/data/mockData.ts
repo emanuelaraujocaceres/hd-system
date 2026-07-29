@@ -91,6 +91,7 @@ export const INITIAL_BRANCHES: StoreBranch[] = [
     phone: '(11) 3456-7890',
     isHeadquarters: true,
     active: true,
+    organizationId: DEFAULT_ORG_ID,
   },
   {
     id: BRANCH_UUIDS['br-02'],
@@ -103,6 +104,7 @@ export const INITIAL_BRANCHES: StoreBranch[] = [
     phone: '(19) 3211-9988',
     isHeadquarters: false,
     active: true,
+    organizationId: DEFAULT_ORG_ID,
   },
   {
     id: BRANCH_UUIDS['br-03'],
@@ -115,6 +117,7 @@ export const INITIAL_BRANCHES: StoreBranch[] = [
     phone: '(21) 2500-1122',
     isHeadquarters: false,
     active: true,
+    organizationId: DEFAULT_ORG_ID,
   },
 ];
 
