@@ -137,6 +137,7 @@ export const INITIAL_USERS: UserProfile[] = [
       settings: true,
     },
     active: true,
+    superadmin: true,
     createdAt: '2026-01-01',
   },
 ];

@@ -81,6 +81,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
               avatarUrl: profileData.avatar_url || undefined,
               organizationId: profileData.organization_id,
               storeBranchId: profileData.store_branch_id,
+              superadmin: profileData.superadmin || false,
               permissions: profileData.permissions || {
                 pdv: true, inventory: true, crm: true,
                 finance: false, dashboard: false, settings: false,

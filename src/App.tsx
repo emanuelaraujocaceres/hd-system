@@ -10,6 +10,7 @@ import { CRMView } from './components/CRM/CRMView';
 import { FiadosView } from './components/CRM/FiadosView';
 import { SettingsView } from './components/Settings/SettingsView';
 import { TVShowcaseView } from './components/TV/TVShowcaseView';
+import { OrganizationsView } from './components/Organizations/OrganizationsView';
 import { CaixaModal } from './components/PDV/CaixaModal';
 import { LoginModal } from './components/Auth/LoginModal';
 import { UserProfileModal } from './components/Auth/UserProfileModal';
@@ -516,6 +517,7 @@ export const App: React.FC = () => {
     if (tab === 'fiados') return !!perms.crm;
     if (tab === 'tv-showcase') return perms.tvShowcase !== false;
     if (tab === 'settings') return !!perms.settings;
+    if (tab === 'organizations') return !!user.superadmin;
     return false;
   };
 
@@ -716,6 +718,10 @@ export const App: React.FC = () => {
                   settings={settings}
                   onCloseTVMode={() => handleTabChange('pdv')}
                 />
+              )}
+
+              {activeTab === 'organizations' && (
+                <OrganizationsView user={user} />
               )}
             </>
           )}

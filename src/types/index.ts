@@ -22,6 +22,7 @@ export interface UserProfile {
   active: boolean;
   createdAt?: string;
   password?: string;
+  superadmin?: boolean;
 }
 
 export interface StoreBranch {

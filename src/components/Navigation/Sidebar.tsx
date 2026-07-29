@@ -72,9 +72,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'crm', label: 'Clientes/Fornecedores', icon: Users, permKey: 'crm' as const },
     { id: 'fiados', label: 'Fiados', icon: Receipt, permKey: 'crm' as const },
     { id: 'settings', label: 'Configurações', icon: Settings, permKey: 'settings' as const },
+    { id: 'organizations', label: 'Organizações', icon: Building2, permKey: 'settings' as const },
   ];
 
   const menuItems = allMenuItems.filter((item) => {
+    if (item.id === 'organizations') return !!user.superadmin;
     if (isAdmin) return true;
     if (item.id === 'settings') return perms.settings;
     if (item.id === 'tv-showcase') return perms.tvShowcase !== false;
@@ -197,7 +199,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="overflow-hidden min-w-0">
               <p className="text-sm lg:text-xs font-bold truncate text-slate-200 dark:text-white">{user.name}</p>
               <p className="text-xs lg:text-[10px] text-indigo-400 font-mono truncate">
-                {isAdmin ? 'ADMINISTRADOR' : 'COLABORADOR'}
+                {user.superadmin ? 'SUPER ADMIN' : isAdmin ? 'ADMINISTRADOR' : 'COLABORADOR'}
               </p>
             </div>
           </button>
