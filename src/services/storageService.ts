@@ -834,7 +834,7 @@ class StorageService {
     // Superadmin é nível de sistema — não sincronizar como membro de org
     if (INITIAL_USERS.some((u) => u.id === row.id && u.superadmin)) return;
 
-    const users = this.getUsers();
+    const users = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
     const mapped: UserProfile = {
       id: row.id,
       name: row.name,
@@ -934,9 +934,9 @@ class StorageService {
         return merged;
       };
 
-      // ── PRODUCTS ──────────────────────────────────────────────────
-      {
-        const local = this.getProducts();
+       // ── PRODUCTS ──────────────────────────────────────────────────
+       {
+         const local = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
         const merged = mergeBy(KEYS.PRODUCTS, local, products, (r: any) => {
           const cloudSalePrice = parseFloat(r.sale_price) || 0;
           return {
@@ -975,8 +975,8 @@ class StorageService {
 
       // ── CATEGORIES ────────────────────────────────────────────────
       {
-        const local = this.getCategories();
-        const merged = mergeBy(KEYS.CATEGORIES, local, categories,
+         const local = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []);
+         const merged = mergeBy(KEYS.CATEGORIES, local, categories,
           (r: any) => ({
             id: r.id, name: r.name, color: r.color || '#6366f1',
             organizationId: r.organization_id || this.getCurrentOrgId(),
@@ -988,8 +988,8 @@ class StorageService {
 
       // ── CUSTOMERS ─────────────────────────────────────────────────
       {
-        const local = this.getCustomers();
-        const merged = mergeBy(KEYS.CUSTOMERS, local, customers,
+         const local = this.get<Customer[]>(KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : []);
+         const merged = mergeBy(KEYS.CUSTOMERS, local, customers,
           (r: any) => ({
             id: r.id, name: r.name, cpfCnpj: r.cpf_cnpj || '', email: r.email || '', phone: r.phone || '',
             creditLimit: parseFloat(r.credit_limit) || 0, currentBalance: 0, loyaltyPoints: 0,
@@ -1003,8 +1003,8 @@ class StorageService {
 
       // ── SUPPLIERS ─────────────────────────────────────────────────
       {
-        const local = this.getSuppliers();
-        const merged = mergeBy(KEYS.SUPPLIERS, local, suppliers,
+         const local = this.get<Supplier[]>(KEYS.SUPPLIERS, this.isDefaultOrg() ? INITIAL_SUPPLIERS : []);
+         const merged = mergeBy(KEYS.SUPPLIERS, local, suppliers,
           (r: any) => ({
             id: r.id, companyName: r.corporate_name || '', tradeName: r.trade_name || '',
             cnpj: r.cnpj || '', contactName: r.contact_person || '', email: r.email || '', phone: r.phone || '',
@@ -1129,8 +1129,8 @@ class StorageService {
 
       // ── BRANCHES ──────────────────────────────────────────────────
       {
-        const local = this.getBranches();
-        const merged = mergeBy(KEYS.BRANCHES, local, branches,
+         const local = this.get<StoreBranch[]>(KEYS.BRANCHES, this.isDefaultOrg() ? INITIAL_BRANCHES : []);
+         const merged = mergeBy(KEYS.BRANCHES, local, branches,
           (r: any) => ({
             id: r.id, name: r.name, code: r.code, cnpj: r.cnpj || '',
             city: r.city || '', state: r.state || '', address: r.address || '',
@@ -1145,8 +1145,8 @@ class StorageService {
 
       // ── FINANCIAL ACCOUNTS ────────────────────────────────────────
       {
-        const local = this.getFinancialAccounts();
-        const merged = mergeBy(KEYS.FINANCIAL, local, financial,
+         const local = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
+         const merged = mergeBy(KEYS.FINANCIAL, local, financial,
           (r: any) => ({
             id: r.id, title: r.description, type: r.type, category: r.category,
             amount: parseFloat(r.amount) || 0, dueDate: r.due_date,
