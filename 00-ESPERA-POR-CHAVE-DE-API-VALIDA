@@ -1,0 +1,108 @@
+"""
+LISTA DE EXECUÇÃO CRÍTICA: Executar AddUserPermissions.sql + RLS + Fila SyncQueue
+
+STATUS ATUAL (2025-08-24):
+=========================================================
+
+❌ BLOQUEIO: Sem chave de API válida para executar SQL em Supabase
+
+✅ PREPARADO: Todos os scripts necessários criados e documentados
+
+⚠️ --- STATUS ATUAL -----------------------------------------------------
+
+✅ 1/3 FASES PRINCIPAIS:
+   ✅ Script AddUserPermissions.sql preparado (176 linhas)
+   ✅ Checklist de implementação documentada
+   ✅ Listas de rastreamento de falhas criado
+   ✅ Executável criado (execute_user_permissions.cjs)
+
+❌ 0/3 FASES PRINCIPAIS:
+   ❌ Executar AddUserPermissions.sql (bloqueado por autenticação)
+   ❌ Corrigir políticas RLS (bloqueado sem SQL)
+   ❌ Drenar SyncQueue (bloqueado sem RLS corrigido)
+
+⚠️ --- OBSTÁCULOS ------------------------------------------------------
+
+(BLOQUEADO)
+--- Problema de autenticação ---
+╒══════════════════════════════════════════════╕
+║  As chaves em .env.local retornam 401 Unauthorized ║
+║     SUPABASE_SERVICE_ROLE_KEY: ✗ 401     ║
+║     VITE_SUPABASE_ANON_KEY: ✗ 401        ║
+║                                               ║
+║                                             ❌ Endpoint /rest/v1/rpc/run_sql ║
+║                                             ❌ Não sabemos como executar SQL ║
+╘══════════════════════════════════════════════╛
+
+(PELO MENOS DOCUMENTADO)
+--- O que é necessário para prosseguir ---
+╒══════════════════════════════════════════════╕
+║                                                           ║
+║  🔑 Obter UMA CHAVE DE API VÁLIDA para o projeto    ║
+║  🎯 Executar AddUserPermissions.sql                    ║
+║  📊 Confirmar criação da tabela user_permissions       ║
+║  🔄 Aplicar todas as políticas RLS                     ║
+║  👤 Garantir admin `emanuel@gmail.com` tem permissões   ║
+║                                                         ║
+║  📋 Chaves disponíveis atualmente (válidas? não sabemos) ║
+║    • VITE_SUPABASE_ANON_KEY   ( ? )                  ║
+║    • SUPABASE_SERVICE_ROLE_KEY ( ? )                  ║
+║                                                       ║
+╘══════════════════════════════════════════════╛
+
+⚠️ --- DEPENDENDO DE FONTES EXTERNAS ---
+
+(Esta é uma AUSÊNCIA CRÍTICA PARA AVANÇAR)
+█───────────────────█ █───────────────────█ █─────────────█
+█ MÉDIO -----------█ █ EXTERNO --------█ █ MANUAL ------█
+█───────────────────█ █───────────────────█ █─────────────█
+█ Problemas de auth   █ █ Supabase Project   █ █ Executar SQL  █
+█ 🔑 Gerar chaves    █ █ Dashboard (SQL)   █ █ manualmente  █
+█ 🔑 Inserir chaves   █ █ Executar script    █ █ no editor   █
+█ 🔑 Testar chaves   █ █ do dashboard      █ █           █
+█ ─────────────────█ █ ─────────────────█ █ ─────────────█
+
+⚠️ --- PAINEL DE STATUS ------------------------------------------------
+
+Se tivesse chave:
+=========================================================
+1. ✅ Script SQL executado (tabelas + políticas)
+2. ✅ `user_permissions` criada
+3. ✅ Todas as políticas RLS implementadas
+4. ✅ Admin tem todas as permissões
+5. ✅ Fila SyncQueue se resolve naturalmente
+6. ✅ Sem limpeza forçada (conforme solicitado)
+7. ✅ Status da fila confirmado (Dashboard)
+8. ✅ Rollback do navegador
+9. ✅ Acesso admin verificado
+10. ✅ 🧨 GIT COMMIT + PUSH (final)
+
+Sem chave:
+===========
+❌ Executar AddUserPermissions.sql (bloqueado)
+❌ Corrigir RLS (bloqueado)
+❌ Drenar fila (bloqueado)
+❌ Rollback (bloqueado)
+❌ Decisão (bloqueado)
+❌ Confirmar diagnóstico (bloqueado)
+
+⚠️ --- CONCLUSÃO ------------------------------------------------------
+
+🚨 BARRADA sem chave API válida para Supabase
+🚨 A fila SyncQueue permanece bloqueada indefinidamente
+🚨 Toda a laboriosa preparação (checklists, scripts, execuções) bloqueada
+
+▶️ AÇÃO OBRIGATÓRIA:
+   🔑 Obter chave API **válida** para `tixwhmgzibvazkqbqoev.supabase.co`
+   ..ou usar acesso manual ao Dashboard Supabase via UI
+
+🔄 UPDATE SÍTUAÇÃO:
+   Esta tarefa crítica ESTÁ BLOQUEADA até que uma chave válida seja obtida
+   através de meios externos (Dashboard Supabase, arquivo .env com chave válida,
+   ou script externo que pode executar SQL).
+
+📋 STATUS:
+   🔧 🛠️ Script e checklists prontos
+   ⏳ 🔑 Pendente> Chave de API válida e execução
+   ⏳ 🔄 Resto das fases dependentes
+"""
