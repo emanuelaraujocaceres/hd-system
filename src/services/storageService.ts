@@ -512,7 +512,7 @@ class StorageService {
   // These convert Supabase row format back to our app types and update localStorage.
 
   updateProductFromRemote(row: any) {
-    const products = this.getProducts();
+    const products = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
     const mapped: Product = {
       id: row.id,
       barcode: row.barcode || '',
@@ -551,12 +551,12 @@ class StorageService {
   }
 
   removeProductFromRemote(id: string) {
-    const products = this.getProducts().filter((p) => p.id !== id);
+    const products = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []).filter((p) => p.id !== id);
     this.set(KEYS.PRODUCTS, products);
   }
 
   removeSaleFromRemote(id: string) {
-    const sales = this.getSales().filter((s) => s.id !== id);
+    const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []).filter((s) => s.id !== id);
     this.set(KEYS.SALES, sales);
   }
 
@@ -569,12 +569,12 @@ class StorageService {
   }
 
   removeUserFromRemote(id: string) {
-    const users = this.getUsers().filter((u) => u.id !== id);
+    const users = this.get<UserProfile[]>(KEYS.USERS_LIST, []).filter((u) => u.id !== id);
     this.set(KEYS.USERS_LIST, users);
   }
 
   updateCategoryFromRemote(row: any) {
-    const categories = this.getCategories();
+    const categories = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []);
     const mapped: Category = {
       id: row.id,
       name: row.name,
@@ -587,12 +587,12 @@ class StorageService {
   }
 
   removeCategoryFromRemote(id: string) {
-    const categories = this.getCategories().filter((c) => c.id !== id);
+    const categories = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []).filter((c) => c.id !== id);
     this.set(KEYS.CATEGORIES, categories);
   }
 
   updateSaleFromRemote(row: any) {
-    const sales = this.getSales();
+    const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
     const existing = sales.find((s) => s.id === row.id);
     console.log(`[HD-Sync] 🔄 updateSaleFromRemote: id=${row.id}, exists=${!!existing}, row.customer_name=${row.customer_name}, row.notes=${row.notes}`);
 
@@ -639,7 +639,7 @@ class StorageService {
     // Fetch items async and update if we get data back
     fetchItems().then((items) => {
       if (items.length > 0) {
-        const updated = this.getSales();
+        const updated = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
         const found = updated.find((s) => s.id === row.id);
         if (found) {
           found.items = items;
@@ -650,7 +650,7 @@ class StorageService {
   }
 
   updateCustomerFromRemote(row: any) {
-    const customers = this.getCustomers();
+    const customers = this.get<Customer[]>(KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : []);
     const mapped: Customer = {
       id: row.id,
       name: row.name,
@@ -671,12 +671,12 @@ class StorageService {
   }
 
   removeCustomerFromRemote(id: string) {
-    const customers = this.getCustomers().filter((c) => c.id !== id);
+    const customers = this.get<Customer[]>(KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : []).filter((c) => c.id !== id);
     this.set(KEYS.CUSTOMERS, customers);
   }
 
   updateSupplierFromRemote(row: any) {
-    const suppliers = this.getSuppliers();
+    const suppliers = this.get<Supplier[]>(KEYS.SUPPLIERS, this.isDefaultOrg() ? INITIAL_SUPPLIERS : []);
     const mapped: Supplier = {
       id: row.id,
       companyName: row.corporate_name || '',
@@ -693,12 +693,12 @@ class StorageService {
   }
 
   removeSupplierFromRemote(id: string) {
-    const suppliers = this.getSuppliers().filter((s) => s.id !== id);
+    const suppliers = this.get<Supplier[]>(KEYS.SUPPLIERS, this.isDefaultOrg() ? INITIAL_SUPPLIERS : []).filter((s) => s.id !== id);
     this.set(KEYS.SUPPLIERS, suppliers);
   }
 
   updateFinancialFromRemote(row: any) {
-    const accounts = this.getFinancialAccounts();
+    const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
     const mapped: FinancialAccount = {
       id: row.id,
       title: row.description,
@@ -718,7 +718,7 @@ class StorageService {
   }
 
   removeFinancialFromRemote(id: string) {
-    const accounts = this.getFinancialAccounts().filter((a) => a.id !== id);
+    const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []).filter((a) => a.id !== id);
     this.set(KEYS.FINANCIAL, accounts);
   }
 
@@ -774,7 +774,7 @@ class StorageService {
   }
 
   updateBranchFromRemote(row: any) {
-    const branches = this.getBranches();
+    const branches = this.get<StoreBranch[]>(KEYS.BRANCHES, this.isDefaultOrg() ? INITIAL_BRANCHES : []);
     const mapped: StoreBranch = {
       id: row.id,
       name: row.name,
@@ -794,7 +794,7 @@ class StorageService {
   }
 
   removeBranchFromRemote(id: string) {
-    const branches = this.getBranches().filter((b) => b.id !== id);
+    const branches = this.get<StoreBranch[]>(KEYS.BRANCHES, this.isDefaultOrg() ? INITIAL_BRANCHES : []).filter((b) => b.id !== id);
     this.set(KEYS.BRANCHES, branches);
   }
 
@@ -1019,7 +1019,7 @@ class StorageService {
       {
         const salesKey = KEYS.SALES;
         const hasLocalSales = localStorage.getItem(salesKey) !== null;
-        const localSalesBefore = this.getSales();
+        const localSalesBefore = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
         console.log(`[HD-Sync] 📊 Sales hydration: hasLocalSales=${hasLocalSales}, localCount=${localSalesBefore.length}, cloudCount=${sales.length}`);
         if (localSalesBefore.length > 0) {
           console.log(`[HD-Sync] 📊 Local sale IDs:`, localSalesBefore.map(s => `${s.id} (customer: ${s.customerName || 'N/A'})`));
@@ -1077,7 +1077,7 @@ class StorageService {
           this.set(KEYS.SALES, cloudMapped);
         } else {
           // Normal merge: has real local data
-          const localSales = this.getSales();
+          const localSales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
           const localSalesById = new Map(localSales.map((s) => [s.id, s]));
           const cloudSaleIds = new Set(sales.map((r: any) => r.id));
 
@@ -1160,7 +1160,7 @@ class StorageService {
 
       // ── USERS ─────────────────────────────────────────────────────
       {
-        const existing = this.getUsers();
+        const existing = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
         const cloudIds = new Set(users.map((r: any) => r.id));
         const orgId = this.getCurrentOrgId();
 
@@ -1356,7 +1356,7 @@ class StorageService {
   saveProduct(product: Product): Product {
     product.id = StorageService.ensureUuid(product.id);
     product.organizationId = this.getCurrentOrgId();
-    const products = this.getProducts();
+    const products = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
     const index = products.findIndex((p) => p.id === product.id);
     if (index >= 0) {
       products[index] = { ...product, updatedAt: new Date().toISOString() };
@@ -1369,7 +1369,7 @@ class StorageService {
   }
 
   deleteProduct(id: string) {
-    const allProducts = this.getProducts();
+    const allProducts = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
     const product = allProducts.find((p) => p.id === id);
     const products = allProducts.filter((p) => p.id !== id);
     this.set(KEYS.PRODUCTS, products);
@@ -1387,7 +1387,7 @@ class StorageService {
   }
 
   deleteSale(id: string) {
-    const allSales = this.getSales();
+    const allSales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
     const saleToDelete = allSales.find((s) => s.id === id);
     const sales = allSales.filter((s) => s.id !== id);
     this.set(KEYS.SALES, sales);
@@ -1404,7 +1404,7 @@ class StorageService {
   }
 
   async updateStock(productId: string, quantityDelta: number, reason: string, operatorName: string) {
-    const products = this.getProducts();
+    const products = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
     const prod = products.find((p) => p.id === productId);
     if (!prod) return;
 
@@ -1469,7 +1469,7 @@ class StorageService {
   saveCategory(category: Category) {
     category.id = StorageService.ensureUuid(category.id);
     category.organizationId = this.getCurrentOrgId();
-    const categories = this.getCategories();
+    const categories = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []);
     const idx = categories.findIndex((c) => c.id === category.id);
     if (idx >= 0) {
       categories[idx] = category;
@@ -1481,7 +1481,7 @@ class StorageService {
   }
 
   deleteCategory(id: string) {
-    const categories = this.getCategories().filter((c) => c.id !== id);
+    const categories = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []).filter((c) => c.id !== id);
     this.set(KEYS.CATEGORIES, categories);
     syncService.deleteRow('categories', id);
   }
@@ -1496,7 +1496,7 @@ class StorageService {
   saveCustomer(customer: Customer) {
     customer.id = StorageService.ensureUuid(customer.id);
     customer.organizationId = this.getCurrentOrgId();
-    const customers = this.getCustomers();
+    const customers = this.get<Customer[]>(KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : []);
     const idx = customers.findIndex((c) => c.id === customer.id);
     if (idx >= 0) {
       customers[idx] = customer;
@@ -1508,7 +1508,7 @@ class StorageService {
   }
 
   deleteCustomer(id: string) {
-    const customers = this.getCustomers().filter((c) => c.id !== id);
+    const customers = this.get<Customer[]>(KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : []).filter((c) => c.id !== id);
     this.set(KEYS.CUSTOMERS, customers);
     syncService.deleteRow('customers', id);
   }
@@ -1523,7 +1523,7 @@ class StorageService {
   saveSupplier(supplier: Supplier) {
     supplier.id = StorageService.ensureUuid(supplier.id);
     supplier.organizationId = this.getCurrentOrgId();
-    const suppliers = this.getSuppliers();
+    const suppliers = this.get<Supplier[]>(KEYS.SUPPLIERS, this.isDefaultOrg() ? INITIAL_SUPPLIERS : []);
     const idx = suppliers.findIndex((s) => s.id === supplier.id);
     if (idx >= 0) {
       suppliers[idx] = supplier;
@@ -1535,7 +1535,7 @@ class StorageService {
   }
 
   deleteSupplier(id: string) {
-    const suppliers = this.getSuppliers().filter((s) => s.id !== id);
+    const suppliers = this.get<Supplier[]>(KEYS.SUPPLIERS, this.isDefaultOrg() ? INITIAL_SUPPLIERS : []).filter((s) => s.id !== id);
     this.set(KEYS.SUPPLIERS, suppliers);
     syncService.deleteRow('suppliers', id);
   }
@@ -1574,7 +1574,7 @@ class StorageService {
 
   async addSale(sale: Sale) {
     sale.id = StorageService.ensureUuid(sale.id);
-    const sales = this.getSales();
+    const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
     sales.unshift(sale);
     this.set(KEYS.SALES, sales);
     this.syncSale(sale);
@@ -1764,7 +1764,7 @@ class StorageService {
 
   saveFinancialAccount(acc: FinancialAccount) {
     acc.id = StorageService.ensureUuid(acc.id);
-    const accounts = this.getFinancialAccounts();
+    const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
     const idx = accounts.findIndex((a) => a.id === acc.id);
     if (idx >= 0) {
       accounts[idx] = acc;
@@ -1776,7 +1776,7 @@ class StorageService {
   }
 
   deleteFinancialAccount(id: string) {
-    const accounts = this.getFinancialAccounts().filter((a) => a.id !== id);
+    const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []).filter((a) => a.id !== id);
     this.set(KEYS.FINANCIAL, accounts);
     syncService.deleteRow('financial_transactions', id);
   }
@@ -1791,7 +1791,7 @@ class StorageService {
   saveBranch(branch: StoreBranch) {
     branch.id = StorageService.ensureUuid(branch.id);
     branch.organizationId = this.getCurrentOrgId();
-    const branches = this.getBranches();
+    const branches = this.get<StoreBranch[]>(KEYS.BRANCHES, this.isDefaultOrg() ? INITIAL_BRANCHES : []);
     const idx = branches.findIndex((b) => b.id === branch.id);
     if (idx >= 0) {
       branches[idx] = branch;
@@ -1811,7 +1811,7 @@ class StorageService {
   }
 
   deleteBranch(id: string) {
-    const branches = this.getBranches().filter((b) => b.id !== id);
+    const branches = this.get<StoreBranch[]>(KEYS.BRANCHES, this.isDefaultOrg() ? INITIAL_BRANCHES : []).filter((b) => b.id !== id);
     this.set(KEYS.BRANCHES, branches);
     syncService.deleteRow('store_branches', id);
   }
@@ -1884,7 +1884,7 @@ class StorageService {
   saveUser(user: UserProfile) {
     user.id = StorageService.ensureUuid(user.id);
     user.organizationId = this.getCurrentOrgId();
-    const users = this.getUsers();
+    const users = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
     const idx = users.findIndex((u) => u.id === user.id || (u.email || '').toLowerCase() === (user.email || '').toLowerCase());
     if (idx >= 0) {
       // Preserve existing password if new one isn't provided
@@ -1907,7 +1907,7 @@ class StorageService {
   }
 
   deleteUser(id: string) {
-    const users = this.getUsers().filter((u) => u.id !== id);
+    const users = this.get<UserProfile[]>(KEYS.USERS_LIST, []).filter((u) => u.id !== id);
     this.set(KEYS.USERS_LIST, users);
     syncService.deleteRow('system_users', id);
   }
