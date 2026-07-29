@@ -8,6 +8,44 @@ import { supabase } from '../../lib/supabase';
 import { UserProfile } from '../../types';
 
 /* ------------------------------------------------------------------ */
+/*  Helpers de API                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Pega o access token da sessão atual para autenticar chamadas ao servidor */
+async function getAuthToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
+/** Chama uma rota da API do servidor Express */
+async function callServerApi<T>(path: string, body: Record<string, any>): Promise<{ data: T | null; error: string | null }> {
+  try {
+    const token = await getAuthToken();
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (!res.ok) return { data: null, error: json.message || `HTTP ${res.status}` };
+    return { data: json as T, error: null };
+  } catch (e: any) {
+    return { data: null, error: e.message || 'Erro de conexão com o servidor' };
+  }
+}
+
+interface CreateUserResult {
+  success: boolean; message: string; user_id?: string; password?: string;
+}
+
+interface CreateOrgResult {
+  success: boolean; message: string; org_id?: string; admin_id?: string; password?: string;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -149,11 +187,21 @@ const OrganizationsManager: React.FC = () => {
     if (!newOrgName.trim() || !newAdminName.trim() || !newAdminEmail.trim()) return;
     setCreating(true); setCreatedResult(null);
     try {
-      const { data, error: err } = await supabase.rpc('admin_create_organization', {
+      // Tenta servidor primeiro (cria Auth + system_users)
+      const { data, error } = await callServerApi<CreateOrgResult>('/api/admin/create-organization', {
+        org_name: newOrgName.trim(), admin_name: newAdminName.trim(), admin_email: newAdminEmail.trim().toLowerCase(),
+      });
+      if (data?.success) {
+        setCreatedResult({ name: newOrgName.trim(), adminEmail: newAdminEmail.trim().toLowerCase(), adminPassword: data.password!, orgId: data.org_id! });
+        fetchOrgs(); return;
+      }
+      // Fallback: RPC (offline/sem servidor)
+      if (error) console.warn('[create-org] Server failed, fallback RPC:', error);
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_create_organization', {
         p_name: newOrgName.trim(), p_admin_email: newAdminEmail.trim().toLowerCase(), p_admin_name: newAdminName.trim(),
       });
-      if (err) throw new Error(err.message);
-      const r = data?.[0];
+      if (rpcErr) throw new Error(rpcErr.message);
+      const r = rpcData?.[0];
       if (!r?.success) throw new Error(r?.message || 'Erro ao criar');
       setCreatedResult({ name: newOrgName.trim(), adminEmail: newAdminEmail.trim().toLowerCase(), adminPassword: r.password, orgId: r.org_id });
       fetchOrgs();
@@ -173,15 +221,27 @@ const OrganizationsManager: React.FC = () => {
     if (!addUserName.trim() || !addUserEmail.trim()) return;
     setAddingUser(true); setAddUserResult(null);
     try {
-      const { data, error: err } = await supabase.rpc('admin_add_user', {
+      // Tenta servidor primeiro (cria Auth + system_users)
+      const { data, error } = await callServerApi<CreateUserResult>('/api/admin/create-user', {
+        name: addUserName.trim(), email: addUserEmail.trim().toLowerCase(),
+        role: 'admin', organization_id: addUserOrgId, store_branch_id: addUserBranchId,
+      });
+      if (data?.success) {
+        setAddUserResult({ success: true, message: `Usuário criado! Senha: ${data.password}. Ele pode logar em qualquer dispositivo.` });
+        const { data: users } = await supabase.rpc('admin_fetch_users', { p_org_id: addUserOrgId });
+        setUsersMap((prev) => ({ ...prev, [addUserOrgId]: parseJsonResponse<UserRow>(users) }));
+        return;
+      }
+      // Fallback: RPC (offline/sem servidor)
+      if (error) console.warn('[add-user] Server failed, fallback RPC:', error);
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_add_user', {
         p_org_id: addUserOrgId, p_branch_id: addUserBranchId,
         p_name: addUserName.trim(), p_email: addUserEmail.trim().toLowerCase(), p_role: 'admin',
       });
-      if (err) throw new Error(err.message);
-      const r = data?.[0];
+      if (rpcErr) throw new Error(rpcErr.message);
+      const r = rpcData?.[0];
       setAddUserResult({ success: r?.success ?? false, message: r?.message || 'Erro' });
       if (r?.success) {
-        // refresh users for this org
         const { data: users } = await supabase.rpc('admin_fetch_users', { p_org_id: addUserOrgId });
         setUsersMap((prev) => ({ ...prev, [addUserOrgId]: parseJsonResponse<UserRow>(users) }));
       }
@@ -480,9 +540,10 @@ const OrganizationsManager: React.FC = () => {
                     <p className={`text-sm font-bold ${addUserResult.success ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                       {addUserResult.success ? '✅ Admin adicionado!' : '❌ Erro'}
                     </p>
-                    <p className="text-xs text-slate-500 dark:text-[#a1a1aa] mt-1">{addUserResult.message}</p>
+                    <p className="text-xs text-slate-500 dark:text-[#a1a1aa] mt-1 whitespace-pre-wrap">{addUserResult.message}</p>
                   </div>
-                  {addUserResult.success && (
+                  {/* Aviso sobre Auth: só aparece se veio do RPC fallback (sem senha) */}
+                  {addUserResult.success && !addUserResult.message.includes('Senha:') && (
                     <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-400 space-y-1">
                       <p>⚠️ O admin foi criado no sistema, mas para ele conseguir logar, você precisa criar a conta dele no <strong>Supabase Dashboard → Authentication → Users → Invite User</strong>.</p>
                     </div>

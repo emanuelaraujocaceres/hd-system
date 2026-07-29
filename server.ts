@@ -3,9 +3,21 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, ApiError } from "@google/genai";
 import Stripe from "stripe";
+import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 
+// Carrega .env.local (desenvolvimento local) + .env (produção)
 dotenv.config();
+dotenv.config({ path: ".env.local", override: true });
+
+// Cliente Supabase com service_role (backdoor administrativo)
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://tixwhmgzibvazkqbqoev.supabase.co";
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const supabaseAdmin = SUPABASE_SERVICE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+  : null;
 
 // Lazy Stripe client initialization function
 let stripeClient: Stripe | null = null;
@@ -113,7 +125,184 @@ async function startServer() {
       status: "ok",
       appName: "HD-System ERP",
       stripeConfigured: !!process.env.STRIPE_SECRET_KEY,
+      supabaseAdminConfigured: !!supabaseAdmin,
     });
+  });
+
+  // ==================================================================
+  // ADMIN: Criar usuário (Auth + system_users)
+  // ==================================================================
+  app.post("/api/admin/create-user", async (req, res) => {
+    try {
+      if (!supabaseAdmin) {
+        return res.status(500).json({ success: false, message: "SUPABASE_SERVICE_ROLE_KEY não configurada no servidor." });
+      }
+      const { name, email, role, organization_id, store_branch_id } = req.body;
+      if (!name || !email || !organization_id) {
+        return res.status(400).json({ success: false, message: "name, email e organization_id são obrigatórios." });
+      }
+
+      // Verificar se já existe em system_users
+      const { data: existing } = await supabaseAdmin
+        .from("system_users")
+        .select("id")
+        .eq("email", email.toLowerCase())
+        .eq("organization_id", organization_id)
+        .maybeSingle();
+      if (existing) {
+        return res.json({ success: false, message: "Já existe um usuário com este e-mail nesta organização." });
+      }
+
+      // Gerar senha temporária segura
+      const tempPassword =
+        Math.random().toString(36).slice(2, 6).toUpperCase() +
+        Math.random().toString(36).slice(2, 6) +
+        Math.random().toString(10).slice(2, 5) +
+        "@";
+
+      // 1. Criar no Supabase Auth
+      const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: email.toLowerCase(),
+        password: tempPassword,
+        email_confirm: true,
+        user_metadata: { name, role: role || "admin" },
+      });
+      if (authErr) {
+        // Erro específico: e-mail já cadastrado no Auth
+        if (authErr.message?.includes("already registered") || authErr.message?.includes("already exists")) {
+          return res.json({ success: false, message: "Este e-mail já possui uma conta no sistema. Use outro e-mail." });
+        }
+        return res.status(500).json({ success: false, message: `Erro Auth: ${authErr.message}` });
+      }
+
+      // 2. Inserir em system_users com o mesmo UUID do Auth
+      const { error: dbErr } = await supabaseAdmin.from("system_users").insert({
+        id: authUser.user.id,
+        organization_id,
+        name,
+        email: email.toLowerCase(),
+        role: role || "admin",
+        active: true,
+        store_branch_id: store_branch_id || null,
+        superadmin: false,
+      });
+      if (dbErr) {
+        // Se falhou o insert, tenta deletar o auth user pra não ficar órfão
+        await supabaseAdmin.auth.admin.deleteUser(authUser.user.id).catch(() => {});
+        return res.status(500).json({ success: false, message: `Erro ao salvar: ${dbErr.message}` });
+      }
+
+      return res.json({
+        success: true,
+        message: "Usuário criado com sucesso!",
+        user_id: authUser.user.id,
+        password: tempPassword,
+      });
+    } catch (e: any) {
+      console.error("[create-user] Erro:", e);
+      return res.status(500).json({ success: false, message: e.message || "Erro interno" });
+    }
+  });
+
+  // ==================================================================
+  // ADMIN: Criar organização (org + branch + auth user + system_users)
+  // ==================================================================
+  app.post("/api/admin/create-organization", async (req, res) => {
+    try {
+      if (!supabaseAdmin) {
+        return res.status(500).json({ success: false, message: "SUPABASE_SERVICE_ROLE_KEY não configurada no servidor." });
+      }
+      const { org_name, admin_name, admin_email } = req.body;
+      if (!org_name || !admin_name || !admin_email) {
+        return res.status(400).json({ success: false, message: "org_name, admin_name e admin_email são obrigatórios." });
+      }
+
+      // Verificar se admin_email já está em system_users
+      const { data: existing } = await supabaseAdmin
+        .from("system_users")
+        .select("id")
+        .eq("email", admin_email.toLowerCase())
+        .maybeSingle();
+      if (existing) {
+        return res.json({ success: false, message: "Este e-mail já está cadastrado no sistema." });
+      }
+
+      // Gerar senha temporária
+      const tempPassword =
+        Math.random().toString(36).slice(2, 6).toUpperCase() +
+        Math.random().toString(36).slice(2, 6) +
+        Math.random().toString(10).slice(2, 5) +
+        "@";
+
+      // 1. Criar no Supabase Auth
+      const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+        email: admin_email.toLowerCase(),
+        password: tempPassword,
+        email_confirm: true,
+        user_metadata: { name: admin_name, role: "admin" },
+      });
+      if (authErr) {
+        if (authErr.message?.includes("already registered") || authErr.message?.includes("already exists")) {
+          return res.json({ success: false, message: "Este e-mail já possui uma conta no sistema. Use outro e-mail." });
+        }
+        return res.status(500).json({ success: false, message: `Erro Auth: ${authErr.message}` });
+      }
+
+      const authUserId = authUser.user.id;
+      const orgId = crypto.randomUUID();
+      const branchId = crypto.randomUUID();
+
+      // 2. Inserir organização
+      const { error: orgErr } = await supabaseAdmin.from("organizations").insert({ id: orgId, name: org_name });
+      if (orgErr) {
+        await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
+        return res.status(500).json({ success: false, message: `Erro ao criar organização: ${orgErr.message}` });
+      }
+
+      // 3. Inserir filial Matriz
+      const { error: branchErr } = await supabaseAdmin.from("store_branches").insert({
+        id: branchId,
+        organization_id: orgId,
+        name: `${org_name} - Matriz`,
+        code: "MTZ-01",
+        active: true,
+        is_headquarters: true,
+      });
+      if (branchErr) {
+        await supabaseAdmin.from("organizations").delete().eq("id", orgId).catch(() => {});
+        await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
+        return res.status(500).json({ success: false, message: `Erro ao criar filial: ${branchErr.message}` });
+      }
+
+      // 4. Inserir admin em system_users
+      const { error: userErr } = await supabaseAdmin.from("system_users").insert({
+        id: authUserId,
+        organization_id: orgId,
+        name: admin_name,
+        email: admin_email.toLowerCase(),
+        role: "admin",
+        active: true,
+        store_branch_id: branchId,
+        superadmin: false,
+      });
+      if (userErr) {
+        await supabaseAdmin.from("store_branches").delete().eq("id", branchId).catch(() => {});
+        await supabaseAdmin.from("organizations").delete().eq("id", orgId).catch(() => {});
+        await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
+        return res.status(500).json({ success: false, message: `Erro ao salvar admin: ${userErr.message}` });
+      }
+
+      return res.json({
+        success: true,
+        message: "Organização criada com sucesso!",
+        org_id: orgId,
+        admin_id: authUserId,
+        password: tempPassword,
+      });
+    } catch (e: any) {
+      console.error("[create-organization] Erro:", e);
+      return res.status(500).json({ success: false, message: e.message || "Erro interno" });
+    }
   });
 
   // API Route: Gemini AI Copilot Insights for ERP
