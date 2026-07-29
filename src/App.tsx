@@ -17,6 +17,7 @@ import { SyncBanner } from './components/Sync/SyncBanner';
 import { storageService } from './services/storageService';
 import { syncService } from './services/syncService';
 import { syncQueue } from './services/syncQueueService';
+import { supabase } from './lib/supabase';
 import { posAudio } from './services/audioService';
 import { Lock, ShieldAlert, Wifi, WifiOff, ArrowLeft, Loader2 } from 'lucide-react';
 import { GlobalSearch } from './components/shared/GlobalSearch';
@@ -365,7 +366,60 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleLogout = () => {
+  // ─── SUPABASE AUTH SESSION ──────────────────────────────────────────
+  // On mount, check for existing Supabase Auth session.
+  // Listen for auth state changes (sign out, token refresh, etc.).
+  useEffect(() => {
+    // Restore user from Supabase session if we have one but no localStorage profile
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const localProfile = storageService.getUserProfile();
+        if (!localProfile) {
+          // Session exists but no local profile — fetch from system_users
+          supabase
+            .from('system_users')
+            .select('*')
+            .eq('email', session.user.email)
+            .maybeSingle()
+            .then(({ data }) => {
+              if (data) {
+                const restoredProfile: UserProfile = {
+                  id: data.id,
+                  name: data.name,
+                  email: data.email,
+                  role: data.role,
+                  organizationId: data.organization_id,
+                  storeBranchId: data.store_branch_id,
+                  permissions: data.permissions || {
+                    pdv: true, inventory: true, crm: true,
+                    finance: false, dashboard: false, settings: false,
+                  },
+                  active: data.active,
+                  createdAt: data.created_at,
+                };
+                storageService.saveUserProfile(restoredProfile);
+                setUser(restoredProfile);
+              }
+            });
+        }
+      }
+    });
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+        storageService.logout();
+        setUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut().catch(() => {});
     storageService.logout();
     setUser(null);
   };

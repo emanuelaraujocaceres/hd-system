@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShieldCheck, Lock, AlertCircle, LogIn } from 'lucide-react';
+import { ShieldCheck, Lock, AlertCircle, LogIn, Wifi, WifiOff } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
+import { supabase } from '../../lib/supabase';
 
 interface LoginModalProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -12,48 +13,114 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
   const [passwordInput, setPasswordInput] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [authMode, setAuthMode] = useState<'supabase' | 'local'>('supabase');
+  const isOnline = navigator.onLine;
 
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
-
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     if (!emailInput.trim()) return;
-
     if (!passwordInput.trim()) {
       setErrorMessage('Senha obrigatória');
       return;
     }
 
     setIsLoading(true);
-    timeoutRef.current = setTimeout(() => {
+
+    // Tentativa de login local (fallback ou modo offline)
+    const tryLocalLogin = (): boolean => {
       const user = storageService.getUserByEmail(emailInput);
       if (!user) {
-        setIsLoading(false);
-        setErrorMessage('Usuário não encontrado.');
-        return;
+        setErrorMessage('Usuário não encontrado no sistema local.');
+        return false;
       }
-      // Fix 1: Cloud-only users (from Supabase) don't have a local password,
-      // so only validate password when user has one set locally
       if (user.password && user.password !== passwordInput) {
-        setIsLoading(false);
         setErrorMessage('Senha incorreta. Tente novamente.');
-        return;
+        return false;
       }
-
       const res = storageService.loginWithGoogle(emailInput, passwordInput);
-      setIsLoading(false);
       if (res.success && res.user) {
         onLoginSuccess(res.user);
+        return true;
       } else {
         setErrorMessage(res.message || 'Erro ao realizar login.');
+        return false;
       }
-    }, 400);
+    };
+
+    try {
+      if (authMode === 'supabase' && isOnline) {
+        // TENTATIVA 1: Supabase Auth (JWT real, RLS funcional)
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email: emailInput.trim().toLowerCase(),
+          password: passwordInput,
+        });
+
+        if (authError) {
+          // Se erro de credenciais ou usuário não existe no Auth, cai no fallback
+          console.warn('[Login] Supabase Auth failed, falling back to local:', authError.message);
+          setAuthMode('local');
+          if (tryLocalLogin()) return;
+          throw authError;
+        }
+
+        if (authData.user) {
+          // Buscar profile completo do system_users
+          const { data: profileData, error: profileError } = await supabase
+            .from('system_users')
+            .select('*')
+            .eq('email', emailInput.trim().toLowerCase())
+            .maybeSingle();
+
+          if (profileData && !profileError) {
+            const userProfile: UserProfile = {
+              id: profileData.id,
+              name: profileData.name,
+              email: profileData.email,
+              role: profileData.role,
+              avatarUrl: profileData.avatar_url || undefined,
+              organizationId: profileData.organization_id,
+              storeBranchId: profileData.store_branch_id,
+              permissions: profileData.permissions || {
+                pdv: true, inventory: true, crm: true,
+                finance: false, dashboard: false, settings: false,
+              },
+              active: profileData.active,
+              createdAt: profileData.created_at,
+              password: undefined,
+            };
+            storageService.saveUserProfile(userProfile);
+            setIsLoading(false);
+            onLoginSuccess(userProfile);
+            return;
+          }
+
+          // Profile não encontrado no system_users — fallback do auth metadata
+          const meta = authData.user.user_metadata || {};
+          const fallbackProfile: UserProfile = {
+            id: authData.user.id,
+            name: (meta.name as string) || emailInput.trim().toLowerCase().split('@')[0],
+            email: emailInput.trim().toLowerCase(),
+            role: (meta.role as 'admin' | 'collaborator') || 'collaborator',
+            organizationId: storageService.getCurrentOrgId(),
+            storeBranchId: storageService.getSelectedBranchId(),
+            permissions: { pdv: true, inventory: true, crm: true, finance: false, dashboard: false, settings: false },
+            active: true,
+          };
+          storageService.saveUserProfile(fallbackProfile);
+          setIsLoading(false);
+          onLoginSuccess(fallbackProfile);
+          return;
+        }
+      }
+
+      // TENTATIVA 2: Local storage (offline ou Supabase Auth indisponível)
+      tryLocalLogin();
+
+    } catch (err: any) {
+      setIsLoading(false);
+      setErrorMessage(err?.message || 'Erro ao realizar login.');
+    }
   };
 
   return (
@@ -72,8 +139,28 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
             Acesso ao Sistema
           </h2>
           <p className="text-xs text-slate-300 mt-1 max-w-xs mx-auto">
-            Entre com sua conta cadastrada no sistema
+            Entre com sua conta cadastrada
           </p>
+
+          {/* Status badge */}
+          <div className="mt-2 flex items-center justify-center gap-1.5">
+            {isOnline ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] border border-emerald-500/30">
+                <Wifi className="w-3 h-3" />
+                Online
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] border border-amber-500/30">
+                <WifiOff className="w-3 h-3" />
+                Offline — modo local
+              </span>
+            )}
+            {authMode === 'local' && isOnline && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] border border-amber-500/30">
+                Login local
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Form Body */}
@@ -85,7 +172,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
             </div>
           )}
 
-          {/* Email + Password Login Form */}
           <form onSubmit={handleLoginSubmit} className="space-y-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
@@ -123,12 +209,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
             >
               <LogIn className="w-4 h-4" />
-              <span>{isLoading ? 'Verificando Conta...' : 'Entrar'}</span>
+              <span>{isLoading ? 'Verificando...' : 'Entrar'}</span>
             </button>
           </form>
+
+          {!isOnline && (
+            <p className="text-[10px] text-center text-slate-400">
+              Você está offline. O login usará dados locais.
+            </p>
+          )}
         </div>
       </div>
     </div>
