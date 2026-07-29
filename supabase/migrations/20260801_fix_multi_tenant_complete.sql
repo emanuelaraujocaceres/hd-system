@@ -25,14 +25,18 @@ GRANT EXECUTE ON FUNCTION public.get_auth_user_org_id TO authenticated;
 -- PARTE 2: RLS policies para self-upsert
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- Permite cada usuário inserir/atualizar seu próprio registro em system_users
+DROP POLICY IF EXISTS "RLS_system_users_self_insert" ON system_users;
 CREATE POLICY "RLS_system_users_self_insert" ON system_users
   FOR INSERT WITH CHECK (id = auth.uid());
+DROP POLICY IF EXISTS "RLS_system_users_self_update" ON system_users;
 CREATE POLICY "RLS_system_users_self_update" ON system_users
   FOR UPDATE USING (id = auth.uid());
 
 -- Permite cada usuário gerenciar settings da sua organização
+DROP POLICY IF EXISTS "RLS_system_settings_self_insert" ON system_settings;
 CREATE POLICY "RLS_system_settings_self_insert" ON system_settings
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_system_settings_self_update" ON system_settings;
 CREATE POLICY "RLS_system_settings_self_update" ON system_settings
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
 
