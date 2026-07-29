@@ -132,6 +132,9 @@ $$;
 -- 9. Marcar emanuel@gmail.com como superadmin (APENAS em system_users)
 UPDATE system_users SET superadmin = TRUE WHERE email = 'emanuel@gmail.com';
 
+-- 9b. Renomear organização padrão para 'Adega dos Parças'
+UPDATE organizations SET name = 'Adega dos Parças' WHERE id = '00000000-0000-0000-0000-000000000001';
+
 -- 10. Garantir que as funções estejam acessíveis
 GRANT EXECUTE ON FUNCTION public.get_is_superadmin TO authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_list_organizations TO authenticated;
