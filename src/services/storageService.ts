@@ -323,7 +323,7 @@ class StorageService {
       // Only upsert sale items AFTER the sale record exists (avoid FK violation)
       if (s.items && s.items.length > 0) {
         const items = s.items.map((item) => ({
-          id: `${s.id}-${item.productId}`,
+          // id omitido — Supabase gera UUID automático (gen_random_uuid())
           sale_id: s.id,
           product_id: item.productId,
           product_name: item.productName || '',
