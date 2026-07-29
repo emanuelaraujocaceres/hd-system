@@ -133,6 +133,7 @@ export interface Sale {
   total: number;
   payments: PaymentDetails[];
   status: 'completed' | 'cancelled' | 'pending';
+  updatedAt?: string;
 }
 
 export interface CashRegisterSession {

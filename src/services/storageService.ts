@@ -987,6 +987,7 @@ class StorageService {
               total: fixedTotal,
               payments: [{ method: r.payment_method || 'cash', amount: fixedTotal }],
               status: r.status || 'completed',
+              updatedAt: r.updated_at || new Date().toISOString(),
             };
           });
           this.set(KEYS.SALES, cloudMapped);
@@ -1022,6 +1023,7 @@ class StorageService {
               total: fixedTotal,
               payments: [{ method: r.payment_method || 'cash', amount: fixedTotal }],
               status: r.status || 'completed',
+              updatedAt: r.updated_at || new Date().toISOString(),
             };
           });
           const mergedSales = [
@@ -1220,6 +1222,13 @@ class StorageService {
       }
 
       console.log('[HD-Sync] Cloud hydration complete — merge strategy preserves all local data not yet in cloud');
+      // Força notify para garantir que o React state seja atualizado
+      // com o merge completo (não com dados parciais de um notify anterior).
+      if (this.notifyTimer) {
+        clearTimeout(this.notifyTimer);
+        this.notifyTimer = null;
+      }
+      this.listeners.forEach((fn) => { try { fn(); } catch {} });
       return true;
     } catch (e) {
       console.warn('[HD-Sync] Cloud hydration failed, using localStorage', e);

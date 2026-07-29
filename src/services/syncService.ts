@@ -215,7 +215,7 @@ class SupabaseSyncService {
   }
 
   // Tables that have an 'updated_at' column — only these get the timestamp appended
-  private static TABLES_WITH_UPDATED_AT: TableName[] = ['products', 'system_settings'];
+  private static TABLES_WITH_UPDATED_AT: TableName[] = ['products', 'system_settings', 'sales'];
 
   /**
    * Upsert a single row to Supabase.
