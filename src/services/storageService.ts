@@ -118,7 +118,10 @@ class StorageService {
     } else {
       localStorage.removeItem(KEYS.VIEWING_ORG);
     }
-    this.notify(); // força refresh da UI
+    // Chama listeners SÍNCRONA E ASSINCRONAMENTE para garantir que a UI
+    // atualize imediatamente (evita depender do setTimeout do notify()).
+    this.listeners.forEach((fn) => { try { fn(); } catch {} });
+    this.notify();
   }
 
   // Retorna a organização que o superadmin está visualizando, ou null

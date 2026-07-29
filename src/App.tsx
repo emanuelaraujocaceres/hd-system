@@ -112,10 +112,15 @@ export const App: React.FC = () => {
   const [currentBranch, setCurrentBranch] = useState<StoreBranch>(() => storageService.getSelectedBranch());
   const [user, setUser] = useState<UserProfile | null>(() => storageService.getUserProfile());
 
-  // Filtra filiais: superadmin vê todas, cada usuário vê só as da sua organização
+  // Filtra filiais: superadmin vê todas (a menos que tenha override ativo),
+  // cada usuário vê só as da sua organização
   const userBranches = React.useMemo(() => {
     if (!user) return branches;
-    if (user.superadmin) return branches;
+    if (user.superadmin) {
+      const viewingOrg = localStorage.getItem('hd_system_viewing_org');
+      if (viewingOrg) return branches.filter(b => b.organizationId === viewingOrg);
+      return branches; // sem override → vê tudo
+    }
     const orgId = user.organizationId;
     return branches.filter(b => !b.organizationId || b.organizationId === orgId);
   }, [branches, user]);
