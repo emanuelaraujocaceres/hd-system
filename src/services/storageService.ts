@@ -97,6 +97,35 @@ class StorageService {
     return DEFAULT_ORG_ID;
   }
 
+  // Retorna true se a organização atual for a DEFAULT_ORG_ID (Adega dos Parças)
+  private isDefaultOrg(): boolean {
+    return this.getCurrentOrgId() === DEFAULT_ORG_ID;
+  }
+
+  // Verifica se o usuário logado é superadmin
+  private isSuperAdmin(): boolean {
+    try {
+      const raw = localStorage.getItem('hd_system_user_profile');
+      if (raw) {
+        const profile = JSON.parse(raw);
+        return profile?.superadmin === true;
+      }
+    } catch {}
+    return false;
+  }
+
+  // Filtra um array pelo organization_id atual. Itens sem organizationId são exibidos
+  // apenas na organização padrão (para compatibilidade com dados legados).
+  // Superadmin vê TODOS os itens (cross-org).
+  private filterByOrg<T extends { organizationId?: string }>(items: T[]): T[] {
+    if (this.isSuperAdmin()) return items; // superadmin vê tudo
+    const orgId = this.getCurrentOrgId();
+    return items.filter((item) => {
+      if (!item.organizationId) return this.isDefaultOrg(); // legado: só na org padrão
+      return item.organizationId === orgId;
+    });
+  }
+
   // ─── MIGRAÇÃO LEGACY: TEXT → UUID (uma única vez) ─────────────────────
   private static MIGRATION_KEY = 'hd_system_uuid_migration_done_v2';
 
@@ -884,6 +913,7 @@ class StorageService {
             showOnTV: r.show_on_tv || false,
             tvPromoPrice: parseFloat(r.tv_promo_price) || undefined,
             tvHighlightTag: r.tv_highlight_tag || undefined,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
           };
         }, (p) => this.syncProduct(p), (p) => p.id, (localItem, cloudItem) => {
           // Preserve local salePrice if cloud sent 0
@@ -903,7 +933,10 @@ class StorageService {
       {
         const local = this.getCategories();
         const merged = mergeBy(KEYS.CATEGORIES, local, categories,
-          (r: any) => ({ id: r.id, name: r.name, color: r.color || '#6366f1' }),
+          (r: any) => ({
+            id: r.id, name: r.name, color: r.color || '#6366f1',
+            organizationId: r.organization_id || this.getCurrentOrgId(),
+          }),
           (c) => this.syncCategory(c),
         );
         if (merged !== null) this.set(KEYS.CATEGORIES, merged);
@@ -917,6 +950,7 @@ class StorageService {
             id: r.id, name: r.name, cpfCnpj: r.cpf_cnpj || '', email: r.email || '', phone: r.phone || '',
             creditLimit: parseFloat(r.credit_limit) || 0, currentBalance: 0, loyaltyPoints: 0,
             city: '', state: '', createdAt: r.created_at || new Date().toISOString(),
+            organizationId: r.organization_id || this.getCurrentOrgId(),
           }),
           (c) => this.syncCustomer(c),
         );
@@ -930,6 +964,7 @@ class StorageService {
           (r: any) => ({
             id: r.id, companyName: r.corporate_name || '', tradeName: r.trade_name || '',
             cnpj: r.cnpj || '', contactName: r.contact_person || '', email: r.email || '', phone: r.phone || '',
+            organizationId: r.organization_id || this.getCurrentOrgId(),
           }),
           (s) => this.syncSupplier(s),
         );
@@ -1057,7 +1092,7 @@ class StorageService {
             city: r.city || '', state: r.state || '', address: r.address || '',
             phone: r.phone || '', isHeadquarters: r.is_headquarters || false,
             active: r.active !== false,
-            organizationId: r.organization_id || undefined,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
           }),
           (b) => this.syncBranch(b),
         );
@@ -1083,20 +1118,24 @@ class StorageService {
       {
         const existing = this.getUsers();
         const cloudIds = new Set(users.map((r: any) => r.id));
+        const orgId = this.getCurrentOrgId();
 
         // NOTE: Não fazemos sync de local-only users para o cloud aqui.
         // system_users é gerenciado pelo servidor (server.ts), que usa o
         // Auth UUID real. IDs determinísticos do frontend nunca bateriam
         // com auth.uid() e o RLS bloquearia.
 
-        const mapped = users.map((r: any) => ({
+        // Só inclui usuários do cloud que pertencem à org atual
+        const cloudUsersInOrg = users.filter((r: any) => r.organization_id === orgId || (!r.organization_id && this.isDefaultOrg()));
+
+        const mapped = cloudUsersInOrg.map((r: any) => ({
           id: r.id, name: r.name, email: r.email, role: r.role || 'collaborator',
-          organizationId: r.organization_id || this.getCurrentOrgId(),
+          organizationId: r.organization_id || orgId,
           storeBranchId: r.store_branch_id || '',
           permissions: r.permissions || { pdv: true, inventory: true, crm: true, finance: true, dashboard: true, settings: true },
           active: r.active !== false, avatarUrl: r.avatar_url || undefined,
         }));
-        const initialIds = new Set(INITIAL_USERS.map((u) => u.id));
+        const initialIds = new Set(INITIAL_USERS.filter(u => u.organizationId === orgId || (!u.organizationId && this.isDefaultOrg())).map((u) => u.id));
         const merged = mapped.map((m: any) => {
           const local = existing.find((u) => u.id === m.id || (u.email || '').toLowerCase() === (m.email || '').toLowerCase());
           if (initialIds.has(m.id)) {
@@ -1111,8 +1150,13 @@ class StorageService {
           }
           return { ...m, password: local?.password || m.password };
         });
-        // Keep local users not in cloud (sem fazer upsert)
+        // Keep local users not in cloud (sem fazer upsert), da mesma org
+        const isSuper = this.isSuperAdmin();
         for (const e of existing) {
+          if (!isSuper) {
+            if (e.organizationId && e.organizationId !== orgId) continue;
+            if (!e.organizationId && !this.isDefaultOrg()) continue;
+          }
           if (!merged.find((m: any) => m.id === e.id || (m.email || '').toLowerCase() === (e.email || '').toLowerCase())) {
             merged.push(e);
           }
@@ -1260,11 +1304,14 @@ class StorageService {
 
   // --- PRODUCTS ---
   getProducts(): Product[] {
-    return this.get<Product[]>(KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    const fallback = this.isDefaultOrg() ? INITIAL_PRODUCTS : [];
+    const all = this.get<Product[]>(KEYS.PRODUCTS, fallback);
+    return this.filterByOrg<Product>(all);
   }
 
   saveProduct(product: Product): Product {
     product.id = StorageService.ensureUuid(product.id);
+    product.organizationId = this.getCurrentOrgId();
     const products = this.getProducts();
     const index = products.findIndex((p) => p.id === product.id);
     if (index >= 0) {
@@ -1370,11 +1417,14 @@ class StorageService {
 
   // --- CATEGORIES ---
   getCategories(): Category[] {
-    return this.get<Category[]>(KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    const fallback = this.isDefaultOrg() ? INITIAL_CATEGORIES : [];
+    const all = this.get<Category[]>(KEYS.CATEGORIES, fallback);
+    return this.filterByOrg<Category>(all);
   }
 
   saveCategory(category: Category) {
     category.id = StorageService.ensureUuid(category.id);
+    category.organizationId = this.getCurrentOrgId();
     const categories = this.getCategories();
     const idx = categories.findIndex((c) => c.id === category.id);
     if (idx >= 0) {
@@ -1394,11 +1444,14 @@ class StorageService {
 
   // --- CUSTOMERS ---
   getCustomers(): Customer[] {
-    return this.get<Customer[]>(KEYS.CUSTOMERS, INITIAL_CUSTOMERS);
+    const fallback = this.isDefaultOrg() ? INITIAL_CUSTOMERS : [];
+    const all = this.get<Customer[]>(KEYS.CUSTOMERS, fallback);
+    return this.filterByOrg<Customer>(all);
   }
 
   saveCustomer(customer: Customer) {
     customer.id = StorageService.ensureUuid(customer.id);
+    customer.organizationId = this.getCurrentOrgId();
     const customers = this.getCustomers();
     const idx = customers.findIndex((c) => c.id === customer.id);
     if (idx >= 0) {
@@ -1418,11 +1471,14 @@ class StorageService {
 
   // --- SUPPLIERS ---
   getSuppliers(): Supplier[] {
-    return this.get<Supplier[]>(KEYS.SUPPLIERS, INITIAL_SUPPLIERS);
+    const fallback = this.isDefaultOrg() ? INITIAL_SUPPLIERS : [];
+    const all = this.get<Supplier[]>(KEYS.SUPPLIERS, fallback);
+    return this.filterByOrg<Supplier>(all);
   }
 
   saveSupplier(supplier: Supplier) {
     supplier.id = StorageService.ensureUuid(supplier.id);
+    supplier.organizationId = this.getCurrentOrgId();
     const suppliers = this.getSuppliers();
     const idx = suppliers.findIndex((s) => s.id === supplier.id);
     if (idx >= 0) {
@@ -1442,7 +1498,15 @@ class StorageService {
 
   // --- SALES & PDV ---
   getSales(): Sale[] {
-    return this.get<Sale[]>(KEYS.SALES, INITIAL_SALES);
+    const fallback = this.isDefaultOrg() ? INITIAL_SALES : [];
+    const all = this.get<Sale[]>(KEYS.SALES, fallback);
+    if (this.isSuperAdmin()) return all;
+    // Sales não têm organizationId no tipo local, mas filtramos por storeBranchId
+    // que é vinculado à organização. Usuários de org não-default só veem vendas
+    // cujo storeBranchId corresponde a alguma filial da sua org.
+    if (this.isDefaultOrg()) return all;
+    const myBranchIds = new Set(this.getBranches().map(b => b.id));
+    return all.filter(s => myBranchIds.has(s.storeBranchId));
   }
 
   getSaleItems(): any[] {
@@ -1632,7 +1696,13 @@ class StorageService {
 
   // --- FINANCIAL ---
   getFinancialAccounts(): FinancialAccount[] {
-    return this.get<FinancialAccount[]>(KEYS.FINANCIAL, INITIAL_FINANCIAL_ACCOUNTS);
+    const fallback = this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : [];
+    const all = this.get<FinancialAccount[]>(KEYS.FINANCIAL, fallback);
+    if (this.isSuperAdmin()) return all;
+    // Financial não tem organizationId no tipo, filtra por storeBranchId
+    if (this.isDefaultOrg()) return all;
+    const myBranchIds = new Set(this.getBranches().map(b => b.id));
+    return all.filter(a => a.storeBranchId ? myBranchIds.has(a.storeBranchId) : false);
   }
 
   saveFinancialAccount(acc: FinancialAccount) {
@@ -1656,11 +1726,14 @@ class StorageService {
 
   // --- BRANCHES ---
   getBranches(): StoreBranch[] {
-    return this.get<StoreBranch[]>(KEYS.BRANCHES, INITIAL_BRANCHES);
+    const fallback = this.isDefaultOrg() ? INITIAL_BRANCHES : [];
+    const all = this.get<StoreBranch[]>(KEYS.BRANCHES, fallback);
+    return this.filterByOrg<StoreBranch>(all);
   }
 
   saveBranch(branch: StoreBranch) {
     branch.id = StorageService.ensureUuid(branch.id);
+    branch.organizationId = this.getCurrentOrgId();
     const branches = this.getBranches();
     const idx = branches.findIndex((b) => b.id === branch.id);
     if (idx >= 0) {
@@ -1693,7 +1766,7 @@ class StorageService {
       const found = branches.find((b) => b.id === savedId);
       if (found) return found;
     }
-    return branches[0] || { id: BRANCH_UUIDS['br-01'], name: 'HD-System Matriz São Paulo', code: 'SP-01', cnpj: '12.345.678/0001-90', city: 'São Paulo', state: 'SP', address: 'Av. Paulista, 1000', phone: '(11) 3000-0000', isHeadquarters: true, active: true, organizationId: DEFAULT_ORG_ID };
+    return branches[0] || { id: BRANCH_UUIDS['br-01'], name: 'HD-System Matriz São Paulo', code: 'SP-01', cnpj: '12.345.678/0001-90', city: 'São Paulo', state: 'SP', address: 'Av. Paulista, 1000', phone: '(11) 3000-0000', isHeadquarters: true, active: true, organizationId: this.getCurrentOrgId() };
   }
 
   getSelectedBranchId(): string {
@@ -1707,13 +1780,26 @@ class StorageService {
 
   // --- USERS & GOOGLE COLLABORATORS ---
   getUsers(): UserProfile[] {
+    const orgId = this.getCurrentOrgId();
+    const isSuper = this.isSuperAdmin();
     const stored = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
     // Ensure initial users always exist (merge by id)
     // CRITICAL: For INITIAL_USERS entries, NEVER let stored data overwrite email or password.
     // The stored/Supabase data may have stale emails from previous syncs.
-    const merged = [...INITIAL_USERS];
-    const initialIds = new Set(INITIAL_USERS.map((u) => u.id));
+    // Only include initial users whose org matches the current org (or has no org = legacy = default org)
+    // Superadmin vê todos os INITIAL_USERS.
+    const filteredInitials = isSuper ? INITIAL_USERS : INITIAL_USERS.filter((u) => {
+      if (!u.organizationId) return this.isDefaultOrg();
+      return u.organizationId === orgId;
+    });
+    const merged = [...filteredInitials];
+    const initialIds = new Set(filteredInitials.map((u) => u.id));
     for (const s of stored) {
+      // Skip stored users from other orgs (superadmin vê todos)
+      if (!isSuper) {
+        if (s.organizationId && s.organizationId !== orgId) continue;
+        if (!s.organizationId && !this.isDefaultOrg()) continue;
+      }
       if (initialIds.has(s.id)) {
         // Initial user — only merge non-auth fields (name, avatar, permissions, etc.)
         const idx = merged.findIndex((u) => u.id === s.id);
@@ -1737,6 +1823,7 @@ class StorageService {
 
   saveUser(user: UserProfile) {
     user.id = StorageService.ensureUuid(user.id);
+    user.organizationId = this.getCurrentOrgId();
     const users = this.getUsers();
     const idx = users.findIndex((u) => u.id === user.id || (u.email || '').toLowerCase() === (user.email || '').toLowerCase());
     if (idx >= 0) {
@@ -1766,8 +1853,10 @@ class StorageService {
   }
 
   getUserByEmail(email: string): UserProfile | undefined {
-    const users = this.getUsers();
-    return users.find((u) => (u.email || '').toLowerCase() === email.trim().toLowerCase());
+    // Busca em TODOS os usuários (necessário para login multi-org)
+    const stored = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
+    const all = [...INITIAL_USERS, ...stored];
+    return all.find((u) => (u.email || '').toLowerCase() === email.trim().toLowerCase());
   }
 
   getUserProfile(): UserProfile | null {

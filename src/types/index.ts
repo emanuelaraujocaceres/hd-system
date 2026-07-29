@@ -60,6 +60,7 @@ export interface Product {
   showOnTV?: boolean;
   tvPromoPrice?: number;
   tvHighlightTag?: string; // e.g. "COMBO DO DIA", "OFERTA TV", "LEVE 3 PAGUE 2"
+  organizationId?: string; // multi-tenant: qual organização este produto pertence
 }
 
 export interface Category {
@@ -68,6 +69,7 @@ export interface Category {
   icon?: string;
   color?: string;
   description?: string;
+  organizationId?: string; // multi-tenant
 }
 
 export interface CartItem {
@@ -102,6 +104,7 @@ export interface Customer {
   city: string;
   state: string;
   createdAt: string;
+  organizationId?: string; // multi-tenant
 }
 
 export interface Supplier {
@@ -112,6 +115,7 @@ export interface Supplier {
   contactName: string;
   email: string;
   phone: string;
+  organizationId?: string; // multi-tenant
 }
 
 export interface Sale {
