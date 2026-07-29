@@ -186,9 +186,20 @@ $$;
 -- 8. Marcar o usuário emanuel@gmail.com como superadmin
 --    Usa INSERT ... ON CONFLICT em vez de UPDATE puro para garantir que
 --    funciona mesmo se a linha em profiles ainda não existir.
-INSERT INTO profiles (id, email, superadmin)
-SELECT id, email, TRUE FROM auth.users WHERE email = 'emanuel@gmail.com'
+INSERT INTO profiles (id, organization_id, name, email, role, superadmin)
+SELECT
+  au.id,
+  (SELECT organization_id FROM system_users WHERE email = 'emanuel@gmail.com' LIMIT 1),
+  (SELECT name FROM system_users WHERE email = 'emanuel@gmail.com' LIMIT 1),
+  'emanuel@gmail.com',
+  'admin',
+  TRUE
+FROM auth.users au
+WHERE au.email = 'emanuel@gmail.com'
 ON CONFLICT (id) DO UPDATE SET superadmin = TRUE;
+
+-- Também marca na system_users (frontend lê desta tabela)
+UPDATE system_users SET superadmin = TRUE WHERE email = 'emanuel@gmail.com';
 
 -- 9. Garantir que as funções estejam acessíveis para usuários autenticados
 GRANT EXECUTE ON FUNCTION public.get_is_superadmin TO authenticated;
