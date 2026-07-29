@@ -1092,7 +1092,7 @@ class StorageService {
         }));
         const initialIds = new Set(INITIAL_USERS.map((u) => u.id));
         const merged = mapped.map((m: any) => {
-          const local = existing.find((u) => u.id === m.id || u.email.toLowerCase() === m.email.toLowerCase());
+          const local = existing.find((u) => u.id === m.id || (u.email || '').toLowerCase() === (m.email || '').toLowerCase());
           if (initialIds.has(m.id)) {
             const initialUser = INITIAL_USERS.find((u) => u.id === m.id);
             return {
@@ -1107,7 +1107,7 @@ class StorageService {
         });
         // Keep local users not in cloud
         for (const e of existing) {
-          if (!merged.find((m: any) => m.id === e.id || m.email.toLowerCase() === e.email.toLowerCase())) {
+          if (!merged.find((m: any) => m.id === e.id || (m.email || '').toLowerCase() === (e.email || '').toLowerCase())) {
             merged.push(e);
           }
         }
@@ -1725,7 +1725,7 @@ class StorageService {
   saveUser(user: UserProfile) {
     user.id = StorageService.ensureUuid(user.id);
     const users = this.getUsers();
-    const idx = users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
+    const idx = users.findIndex((u) => u.id === user.id || (u.email || '').toLowerCase() === (user.email || '').toLowerCase());
     if (idx >= 0) {
       // Preserve existing password if new one isn't provided
       const merged = { ...users[idx], ...user };
@@ -1741,7 +1741,7 @@ class StorageService {
 
     // If active logged in user updated, refresh profile
     const activeEmail = localStorage.getItem(KEYS.LOGGED_IN_EMAIL);
-    if (activeEmail && activeEmail.toLowerCase() === user.email.toLowerCase()) {
+    if (activeEmail && activeEmail.toLowerCase() === (user.email || '').toLowerCase()) {
       this.saveUserProfile(user);
     }
   }
@@ -1754,7 +1754,7 @@ class StorageService {
 
   getUserByEmail(email: string): UserProfile | undefined {
     const users = this.getUsers();
-    return users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+    return users.find((u) => (u.email || '').toLowerCase() === email.trim().toLowerCase());
   }
 
   getUserProfile(): UserProfile | null {

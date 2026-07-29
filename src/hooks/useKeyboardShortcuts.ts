@@ -25,7 +25,7 @@ export function useKeyboardShortcuts(shortcuts: Shortcut[], deps: any[] = []) {
         const ctrlOrMeta = s.ctrl ? (e.ctrlKey || e.metaKey) : true;
         const meta = s.meta ? e.metaKey : true;
         const shift = s.shift ? e.shiftKey : true;
-        const key = e.key.toLowerCase() === s.key.toLowerCase();
+        const key = (e.key || '').toLowerCase() === (s.key || '').toLowerCase();
 
         if (key && ctrlOrMeta && meta && shift) {
           // Skip if typing in an input, unless global

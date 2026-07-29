@@ -49,8 +49,8 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
       // Text search
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const matchesCode = sale.code?.toLowerCase().includes(q);
-        const matchesCustomer = sale.customerName?.toLowerCase().includes(q);
+        const matchesCode = (sale.code || '').toLowerCase().includes(q);
+        const matchesCustomer = (sale.customerName || '').toLowerCase().includes(q);
         const matchesDate = new Date(sale.date)
           .toLocaleDateString('pt-BR')
           .includes(q);
