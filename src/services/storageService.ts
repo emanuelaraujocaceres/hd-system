@@ -831,6 +831,9 @@ class StorageService {
   }
 
   updateUserFromRemote(row: any) {
+    // Superadmin é nível de sistema — não sincronizar como membro de org
+    if (INITIAL_USERS.some((u) => u.id === row.id && u.superadmin)) return;
+
     const users = this.getUsers();
     const mapped: UserProfile = {
       id: row.id,
@@ -1873,7 +1876,9 @@ class StorageService {
         merged.push(s);
       }
     }
-    return merged;
+    // Superadmin é nível de sistema, não membro de organização alguma.
+    // Remove superadmins da lista de usuários de org.
+    return merged.filter((u) => !u.superadmin);
   }
 
   saveUser(user: UserProfile) {
