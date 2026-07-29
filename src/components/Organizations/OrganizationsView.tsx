@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Building2, Plus, ChevronDown, ChevronRight, Users, MapPin,
   ShieldCheck, Loader2, Copy, Check, X, Mail, UserPlus, LogIn,
-  Store, AlertCircle,
+  Store, AlertCircle, ArrowRightFromLine,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { storageService } from '../../services/storageService';
 import { UserProfile } from '../../types';
 
 /* ------------------------------------------------------------------ */
@@ -96,9 +97,13 @@ interface UserRow {
 /*  OrganizationsView                                                   */
 /* ================================================================== */
 
-interface Props { user: UserProfile; }
+interface Props {
+  user: UserProfile;
+  /** Called when superadmin selects an org to view */
+  onEnterOrg?: (orgId: string) => void;
+}
 
-export const OrganizationsView: React.FC<Props> = ({ user }) => {
+export const OrganizationsView: React.FC<Props> = ({ user, onEnterOrg }) => {
   /* ---------- guards ---------- */
   if (!user.superadmin) {
     return (
@@ -114,14 +119,14 @@ export const OrganizationsView: React.FC<Props> = ({ user }) => {
     );
   }
 
-  return <OrganizationsManager />;
+  return <OrganizationsManager onEnterOrg={onEnterOrg} />;
 };
 
 /* ================================================================== */
 /*  OrganizationsManager (inner component, no guard check)              */
 /* ================================================================== */
 
-const OrganizationsManager: React.FC = () => {
+const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> = ({ onEnterOrg }) => {
   /* ---------- state ---------- */
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
   const [branchesMap, setBranchesMap] = useState<Record<string, BranchRow[]>>({});
@@ -241,6 +246,10 @@ const OrganizationsManager: React.FC = () => {
     catch { /* */ }
   };
 
+  /* ---------- viewing org state ---------- */
+  const viewingOrgId = localStorage.getItem('hd_system_viewing_org');
+  const viewingOrgName = viewingOrgId ? orgs.find(o => o.id === viewingOrgId)?.name : null;
+
   /* ---------- render ---------- */
 
   /* ---- Botão Nova Empresa ---- */
@@ -267,6 +276,10 @@ const OrganizationsManager: React.FC = () => {
 
   /* ---- Card de Organização ---- */
   const OrgCard = ({ org }: { org: OrgRow }) => {
+    const handleEnterOrg = () => {
+      storageService.superadminSetViewingOrg(org.id);
+      onEnterOrg?.(org.id);
+    };
     const isExpanded = expanded.has(org.id);
     const branches = branchesMap[org.id];
     const users = usersMap[org.id];
@@ -274,29 +287,40 @@ const OrganizationsManager: React.FC = () => {
     return (
       <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
         {/* Header do card */}
-        <button
-          onClick={() => toggleExpand(org.id)}
-          className="w-full flex items-center justify-between p-5 text-left hover:bg-slate-50 dark:hover:bg-[#09090b]/40 transition-colors gap-4"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-md">
-              <Building2 className="w-6 h-6 text-white" />
+        <div className="flex items-stretch">
+          <button
+            onClick={() => toggleExpand(org.id)}
+            className="flex-1 flex items-center justify-between p-5 text-left hover:bg-slate-50 dark:hover:bg-[#09090b]/40 transition-colors gap-4 min-w-0"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-md">
+                <Building2 className="w-6 h-6 text-white" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white truncate">{org.name}</h3>
+                <p className="text-[11px] text-slate-500 dark:text-[#71717a] mt-0.5">
+                  Criada em {new Date(org.created_at).toLocaleDateString('pt-BR')}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white truncate">{org.name}</h3>
-              <p className="text-[11px] text-slate-500 dark:text-[#71717a] mt-0.5">
-                Criada em {new Date(org.created_at).toLocaleDateString('pt-BR')}
-              </p>
+            <div className="flex items-center gap-4 shrink-0">
+              <div className="hidden sm:flex items-center gap-3 text-xs text-slate-500 dark:text-[#71717a]">
+                <span className="flex items-center gap-1"><Store className="w-3.5 h-3.5" />{org.branch_count} filiais</span>
+                <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{org.user_count} usuários</span>
+              </div>
+              {isExpanded ? <ChevronDown className="w-5 h-5 text-slate-400" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
             </div>
-          </div>
-          <div className="flex items-center gap-4 shrink-0">
-            <div className="hidden sm:flex items-center gap-3 text-xs text-slate-500 dark:text-[#71717a]">
-              <span className="flex items-center gap-1"><Store className="w-3.5 h-3.5" />{org.branch_count} filiais</span>
-              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{org.user_count} usuários</span>
-            </div>
-            {isExpanded ? <ChevronDown className="w-5 h-5 text-slate-400" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
-          </div>
-        </button>
+          </button>
+          {/* Botão Entrar — superadmin visualiza dados desta org */}
+          <button
+            onClick={handleEnterOrg}
+            className="flex items-center gap-1.5 px-4 py-2 m-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shrink-0 shadow-md shadow-indigo-600/20"
+            title="Visualizar dados desta organização"
+          >
+            <ArrowRightFromLine className="w-3.5 h-3.5" />
+            <span>Entrar</span>
+          </button>
+        </div>
 
         {/* Expandido: filiais + usuários */}
         {isExpanded && (
@@ -402,6 +426,23 @@ const OrganizationsManager: React.FC = () => {
         <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs flex items-start gap-2.5">
           <X className="w-4 h-4 shrink-0 mt-0.5 cursor-pointer" onClick={() => setError(null)} />
           <span>{error}</span>
+        </div>
+      )}
+
+      {/* Barra indicadora: superadmin visualizando uma org específica */}
+      {viewingOrgId && (
+        <div className="flex items-center justify-between p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30">
+          <div className="flex items-center gap-2.5 text-xs text-indigo-700 dark:text-indigo-300">
+            <ArrowRightFromLine className="w-4 h-4" />
+            <span>Visualizando dados de: <strong className="font-bold">{viewingOrgName || viewingOrgId}</strong></span>
+          </div>
+          <button
+            onClick={() => storageService.superadminSetViewingOrg(null)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] transition-all"
+          >
+            <X className="w-3 h-3" />
+            <span>Sair</span>
+          </button>
         </div>
       )}
 

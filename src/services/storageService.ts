@@ -58,6 +58,7 @@ const KEYS = {
   SETTINGS: 'hd_system_settings',
   SUBSCRIPTION: 'hd_system_subscription',
   CREDIT_PAYMENTS: 'hd_system_credit_payments',
+  VIEWING_ORG: 'hd_system_viewing_org',
 };
 
 class StorageService {
@@ -82,8 +83,17 @@ class StorageService {
     return StorageService.newId();
   }
 
-  // Retorna o organization_id do usuário logado, ou o DEFAULT_ORG_ID
+  // Retorna o organization_id do usuário logado, ou o DEFAULT_ORG_ID.
+  // Se o superadmin definiu um override de visualização, retorna esse override.
   getCurrentOrgId(): string {
+    // Superadmin override (visualizando outra org)
+    if (this.isSuperAdmin()) {
+      const override = localStorage.getItem(KEYS.VIEWING_ORG);
+      if (override) {
+        // Se o override é DEFAULT_ORG_ID, não precisa logar warning
+        return override;
+      }
+    }
     try {
       const raw = localStorage.getItem('hd_system_user_profile');
       if (raw) {
@@ -95,6 +105,26 @@ class StorageService {
       console.warn('[Storage] getCurrentOrgId() fallback to DEFAULT_ORG_ID — usuário logado sem organizationId no perfil');
     }
     return DEFAULT_ORG_ID;
+  }
+
+  // Define um override de organização para superadmin (visualizar dados de outra org)
+  superadminSetViewingOrg(orgId: string | null): void {
+    if (!this.isSuperAdmin()) {
+      console.warn('[Storage] Apenas superadmin pode definir viewing org');
+      return;
+    }
+    if (orgId) {
+      localStorage.setItem(KEYS.VIEWING_ORG, orgId);
+    } else {
+      localStorage.removeItem(KEYS.VIEWING_ORG);
+    }
+    this.notify(); // força refresh da UI
+  }
+
+  // Retorna a organização que o superadmin está visualizando, ou null
+  private getSuperadminViewingOrg(): string | null {
+    if (!this.isSuperAdmin()) return null;
+    return localStorage.getItem(KEYS.VIEWING_ORG);
   }
 
   // Retorna true se a organização atual for a DEFAULT_ORG_ID (Adega dos Parças)
@@ -116,9 +146,17 @@ class StorageService {
 
   // Filtra um array pelo organization_id atual. Itens sem organizationId são exibidos
   // apenas na organização padrão (para compatibilidade com dados legados).
-  // Superadmin vê TODOS os itens (cross-org).
+  // Superadmin vê TODOS os itens (cross-org), a menos que tenha um override ativo.
   private filterByOrg<T extends { organizationId?: string }>(items: T[]): T[] {
-    if (this.isSuperAdmin()) return items; // superadmin vê tudo
+    if (this.isSuperAdmin()) {
+      const viewingOrg = this.getSuperadminViewingOrg();
+      if (!viewingOrg) return items; // sem override → vê tudo
+      // Com override → filtrar para aquela org
+      return items.filter((item) => {
+        if (!item.organizationId) return false; // dados sem org só aparecem sem override
+        return item.organizationId === viewingOrg;
+      });
+    }
     const orgId = this.getCurrentOrgId();
     return items.filter((item) => {
       if (!item.organizationId) return this.isDefaultOrg(); // legado: só na org padrão
@@ -1500,11 +1538,18 @@ class StorageService {
   getSales(): Sale[] {
     const fallback = this.isDefaultOrg() ? INITIAL_SALES : [];
     const all = this.get<Sale[]>(KEYS.SALES, fallback);
-    if (this.isSuperAdmin()) return all;
-    // Sales não têm organizationId no tipo local, mas filtramos por storeBranchId
-    // que é vinculado à organização. Usuários de org não-default só veem vendas
-    // cujo storeBranchId corresponde a alguma filial da sua org.
+    const viewingOrg = this.getSuperadminViewingOrg();
+    // Superadmin sem override: vê tudo
+    if (this.isSuperAdmin() && !viewingOrg) return all;
+    // Com override (superadmin vendo org específica) ou usuário não-default:
+    // filtrar pelas filiais da organização em questão
+    if (viewingOrg) {
+      const branchIds = new Set(this.getBranches().filter(b => b.organizationId === viewingOrg).map(b => b.id));
+      return all.filter(s => branchIds.has(s.storeBranchId));
+    }
+    // Usuário da org padrão sem override: vê tudo (compatibilidade legada)
     if (this.isDefaultOrg()) return all;
+    // Usuário de org não-default: filtrar pelas suas filiais
     const myBranchIds = new Set(this.getBranches().map(b => b.id));
     return all.filter(s => myBranchIds.has(s.storeBranchId));
   }
@@ -1698,8 +1743,14 @@ class StorageService {
   getFinancialAccounts(): FinancialAccount[] {
     const fallback = this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : [];
     const all = this.get<FinancialAccount[]>(KEYS.FINANCIAL, fallback);
-    if (this.isSuperAdmin()) return all;
-    // Financial não tem organizationId no tipo, filtra por storeBranchId
+    const viewingOrg = this.getSuperadminViewingOrg();
+    // Superadmin sem override: vê tudo
+    if (this.isSuperAdmin() && !viewingOrg) return all;
+    // Com override ou usuário não-default: filtrar por branch das filiais da org
+    if (viewingOrg) {
+      const branchIds = new Set(this.getBranches().filter(b => b.organizationId === viewingOrg).map(b => b.id));
+      return all.filter(a => a.storeBranchId ? branchIds.has(a.storeBranchId) : false);
+    }
     if (this.isDefaultOrg()) return all;
     const myBranchIds = new Set(this.getBranches().map(b => b.id));
     return all.filter(a => a.storeBranchId ? myBranchIds.has(a.storeBranchId) : false);
@@ -1782,21 +1833,22 @@ class StorageService {
   getUsers(): UserProfile[] {
     const orgId = this.getCurrentOrgId();
     const isSuper = this.isSuperAdmin();
+    const viewingOrg = this.getSuperadminViewingOrg();
     const stored = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
     // Ensure initial users always exist (merge by id)
     // CRITICAL: For INITIAL_USERS entries, NEVER let stored data overwrite email or password.
     // The stored/Supabase data may have stale emails from previous syncs.
     // Only include initial users whose org matches the current org (or has no org = legacy = default org)
-    // Superadmin vê todos os INITIAL_USERS.
-    const filteredInitials = isSuper ? INITIAL_USERS : INITIAL_USERS.filter((u) => {
+    // Superadmin vê todos os INITIAL_USERS (a menos que tenha override ativo).
+    const filteredInitials = (isSuper && !viewingOrg) ? INITIAL_USERS : INITIAL_USERS.filter((u) => {
       if (!u.organizationId) return this.isDefaultOrg();
       return u.organizationId === orgId;
     });
     const merged = [...filteredInitials];
     const initialIds = new Set(filteredInitials.map((u) => u.id));
     for (const s of stored) {
-      // Skip stored users from other orgs (superadmin vê todos)
-      if (!isSuper) {
+      // Skip stored users from other orgs
+      if (!isSuper || viewingOrg) {
         if (s.organizationId && s.organizationId !== orgId) continue;
         if (!s.organizationId && !this.isDefaultOrg()) continue;
       }
@@ -1864,6 +1916,12 @@ class StorageService {
     if (activeEmail === 'LOGGED_OUT') return null;
 
     if (activeEmail) {
+      // 1. Tentar o perfil dedicado (KEYS.USER) — salvo por saveUserProfile no login
+      const savedProfile = this.get<UserProfile | null>(KEYS.USER, null);
+      if (savedProfile && (savedProfile.email || '').toLowerCase() === activeEmail.trim().toLowerCase()) {
+        return savedProfile;
+      }
+      // 2. Fallback: buscar na lista syncada (INITIAL_USERS + KEYS.USERS_LIST)
       const found = this.getUserByEmail(activeEmail);
       if (found) return found;
     }
