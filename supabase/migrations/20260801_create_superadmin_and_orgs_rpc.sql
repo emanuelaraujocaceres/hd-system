@@ -12,6 +12,9 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS superadmin BOOLEAN DEFAULT FALSE;
 ALTER TABLE system_users ADD COLUMN IF NOT EXISTS superadmin BOOLEAN DEFAULT FALSE;
 
+-- Garantir que profiles tenha updated_at (evita erro do trigger fn_update_updated_at)
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
 -- 2. Função para verificar se o usuário atual é superadmin
 --    Verifica tanto profiles (criado pelo Supabase Auth) quanto system_users (app)
 CREATE OR REPLACE FUNCTION public.get_is_superadmin()
@@ -184,8 +187,7 @@ END;
 $$;
 
 -- 8. Marcar o usuário emanuel@gmail.com como superadmin
---    Usa INSERT ... ON CONFLICT em vez de UPDATE puro para garantir que
---    funciona mesmo se a linha em profiles ainda não existir.
+--    Usa INSERT ... ON CONFLICT para funcionar mesmo se a linha não existir.
 INSERT INTO profiles (id, organization_id, name, email, role, superadmin)
 SELECT
   au.id,
