@@ -8,7 +8,9 @@
 -- 0. Garantir extensão pgcrypto
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- 1. Adicionar coluna superadmin APENAS em system_users
+-- 1. Garantir colunas necessárias em system_users
+-- updated_at é exigido pelo trigger fn_update_updated_at (BEFORE UPDATE)
+ALTER TABLE system_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 ALTER TABLE system_users ADD COLUMN IF NOT EXISTS superadmin BOOLEAN DEFAULT FALSE;
 
 -- 2. Função para verificar se o usuário atual é superadmin
