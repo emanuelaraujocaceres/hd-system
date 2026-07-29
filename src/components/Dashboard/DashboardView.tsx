@@ -9,9 +9,11 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
+  Users,
 } from 'lucide-react';
 import { Product, Sale, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
+import { CollaboratorPerformance } from './CollaboratorPerformance';
 
 interface DashboardViewProps {
   sales: Sale[];
@@ -454,6 +456,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* COLLABORATOR PERFORMANCE — admin only */}
+      {isAdmin && (
+        <CollaboratorPerformance sales={sales} />
+      )}
 
       {/* AI INTELLIGENT REPORT SECTION */}
       <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl overflow-hidden shadow-sm">
