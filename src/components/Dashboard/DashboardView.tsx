@@ -244,7 +244,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <thead>
               <tr className="text-[10px] text-slate-500 dark:text-[#71717a] uppercase border-b border-slate-200 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b]/50">
                 <th className="px-3 sm:px-6 py-3 font-bold">ID</th>
+                <th className="px-3 sm:px-6 py-3 font-bold">Data/Hora</th>
                 <th className="px-3 sm:px-6 py-3 font-bold">Cliente</th>
+                <th className="px-3 sm:px-6 py-3 font-bold">Operador</th>
                 <th className="px-3 sm:px-6 py-3 font-bold">Status</th>
                 <th className="px-3 sm:px-6 py-3 text-right font-bold">Valor</th>
               </tr>
@@ -264,7 +266,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                         </span>
                       </td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-500 dark:text-[#a1a1aa] text-[11px] whitespace-nowrap">
+                        {new Date(sale.date).toLocaleString('pt-BR')}
+                      </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 font-medium">{sale.customerName || 'Cliente Consumidor'}</td>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-slate-500 dark:text-[#a1a1aa] text-[11px]">{sale.operatorName}</td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[9px] font-bold uppercase tracking-wider">
                           CONCLUÍDO
@@ -274,7 +280,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan={4} className="px-3 sm:px-6 py-4 bg-slate-50 dark:bg-[#09090b]/50 border-b border-slate-200 dark:border-[#27272a]">
+                        <td colSpan={6} className="px-3 sm:px-6 py-4 bg-slate-50 dark:bg-[#09090b]/50 border-b border-slate-200 dark:border-[#27272a]">
                           <div className="space-y-3">
                             <div>
                               <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold mb-2">Itens Comprados</p>
@@ -328,7 +334,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               })}
               {sales.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-8 text-center text-slate-400 dark:text-[#52525b] text-xs">
+                  <td colSpan={6} className="py-8 text-center text-slate-400 dark:text-[#52525b] text-xs">
                     Nenhuma venda registrada.
                   </td>
                 </tr>
@@ -353,8 +359,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </span>
                     {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
                   </div>
-                  <p className="text-xs font-medium text-slate-900 dark:text-white mb-1.5">
+                  <p className="text-xs font-medium text-slate-900 dark:text-white mb-0.5">
                     {sale.customerName || 'Cliente Consumidor'}
+                  </p>
+                  <p className="text-[10px] text-slate-400 dark:text-[#71717a] mb-1.5">
+                    {new Date(sale.date).toLocaleString('pt-BR')} • {sale.operatorName}
                   </p>
                   <div className="flex items-center justify-between">
                     <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[9px] font-bold uppercase tracking-wider">

@@ -15,6 +15,8 @@ import {
   Building,
   Camera,
   Trash2,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { FinancialAccount, Sale, Product, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -487,46 +489,122 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
-                  {sales.map((sale) => (
-                    <tr key={sale.id} className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors">
-                      <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">{sale.code}</td>
-                      <td className="py-3 px-4 text-slate-600 dark:text-[#a1a1aa] font-medium">
-                        {new Date(sale.date).toLocaleDateString('pt-BR')}
-                      </td>
-                      <td className="py-3 px-4 text-slate-700 dark:text-[#a1a1aa]">{sale.customerName || 'Consumidor Final'}</td>
-                      <td className="py-3 px-4 font-extrabold text-emerald-600 dark:text-emerald-400">
-                        R$ {getSaleTotal(sale).toFixed(2)}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`px-2 py-1 rounded-lg font-bold text-[10px] ${
-                            sale.status === 'completed'
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              : sale.status === 'cancelled'
-                                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                          }`}
+                  {sales.map((sale) => {
+                    const isExpanded = selectedSaleId === sale.id;
+                    return (
+                      <React.Fragment key={sale.id}>
+                        <tr
+                          onClick={() => setSelectedSaleId(isExpanded ? null : sale.id)}
+                          className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors cursor-pointer"
                         >
-                          {sale.status === 'completed' ? 'Concluída' : sale.status === 'cancelled' ? 'Cancelada' : 'Pendente'}
-                        </span>
-                      </td>
-                        {user.role === 'admin' && (
-                        <td className="py-3 px-4 text-right">
-                          <button
-                            onClick={() => {
-                              if (confirm(`Tem certeza que deseja excluir a venda ${sale.code}?`)) {
-                                storageService.deleteSale(sale.id);
-                              }
-                            }}
-                            className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                            title="Excluir venda"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
+                          <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                            <span className="flex items-center gap-1.5">
+                              {sale.code}
+                              {isExpanded ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 dark:text-[#a1a1aa] font-medium">
+                            {new Date(sale.date).toLocaleString('pt-BR')}
+                          </td>
+                          <td className="py-3 px-4 text-slate-700 dark:text-[#a1a1aa]">{sale.customerName || 'Consumidor Final'}</td>
+                          <td className="py-3 px-4 font-extrabold text-emerald-600 dark:text-emerald-400">
+                            R$ {getSaleTotal(sale).toFixed(2)}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2 py-1 rounded-lg font-bold text-[10px] ${
+                                sale.status === 'completed'
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                  : sale.status === 'cancelled'
+                                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                              }`}
+                            >
+                              {sale.status === 'completed' ? 'Concluída' : sale.status === 'cancelled' ? 'Cancelada' : 'Pendente'}
+                            </span>
+                          </td>
+                          {user.role === 'admin' && (
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm(`Tem certeza que deseja excluir a venda ${sale.code}?`)) {
+                                    storageService.deleteSale(sale.id);
+                                  }
+                                }}
+                                className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                                title="Excluir venda"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={user.role === 'admin' ? 6 : 5} className="px-4 py-3 bg-slate-50 dark:bg-[#09090b]/40 border-b border-slate-200 dark:border-[#27272a]">
+                              <div className="space-y-3">
+                                {/* Items */}
+                                <div>
+                                  <h5 className="text-[10px] font-bold text-slate-400 dark:text-[#52525b] uppercase tracking-wider mb-1.5">Itens da Venda</h5>
+                                  <div className="space-y-1.5">
+                                    {(sale.items || []).map((item, idx) => (
+                                      <div key={idx} className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                          <span className="w-5 h-5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                            {item.quantity}x
+                                          </span>
+                                          <span className="text-slate-700 dark:text-[#a1a1aa] truncate">{item.productName}</span>
+                                        </div>
+                                        <span className="font-bold text-slate-900 dark:text-white shrink-0 ml-2">
+                                          R$ {item.total.toFixed(2)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                {/* Payment methods */}
+                                {sale.payments && sale.payments.length > 0 && (
+                                  <div>
+                                    <h5 className="text-[10px] font-bold text-slate-400 dark:text-[#52525b] uppercase tracking-wider mb-1.5">Formas de Pagamento</h5>
+                                    <div className="space-y-1">
+                                      {sale.payments.map((payment, idx) => (
+                                        <div key={idx} className="flex items-center justify-between text-xs">
+                                          <span className="text-slate-600 dark:text-[#a1a1aa] flex items-center gap-1">
+                                            <CreditCard className="w-3 h-3" />
+                                            {paymentMethodLabel(payment.method)}
+                                          </span>
+                                          <span className="font-bold text-slate-900 dark:text-white">
+                                            R$ {payment.amount.toFixed(2)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {/* Totals */}
+                                <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200 dark:border-[#27272a]">
+                                  <span className="text-slate-500 dark:text-[#71717a]">Subtotal</span>
+                                  <span className="text-slate-700 dark:text-[#a1a1aa]">R$ {sale.subtotal.toFixed(2)}</span>
+                                </div>
+                                {sale.discount > 0 && (
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-slate-500 dark:text-[#71717a]">Desconto</span>
+                                    <span className="text-rose-600 dark:text-rose-400">- R$ {sale.discount.toFixed(2)}</span>
+                                  </div>
+                                )}
+                                {/* Operator */}
+                                <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200 dark:border-[#27272a]">
+                                  <span className="text-slate-500 dark:text-[#71717a]">Operador(a)</span>
+                                  <span className="font-medium text-slate-700 dark:text-[#a1a1aa]">{sale.operatorName}</span>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
                         )}
-                    </tr>
-                  ))}
+                      </React.Fragment>
+                    );
+                  })}
                   {sales.length === 0 && (
                     <tr>
                       <td colSpan={user.role === 'admin' ? 6 : 5} className="py-8 text-center text-slate-400 dark:text-[#52525b] text-xs">
@@ -553,7 +631,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                         <div>
                           <h4 className="font-bold text-sm text-slate-900 dark:text-white">{sale.code}</h4>
                           <p className="text-xs text-slate-500 dark:text-[#71717a] mt-0.5">
-                            {new Date(sale.date).toLocaleDateString('pt-BR')}
+                            {new Date(sale.date).toLocaleString('pt-BR')}
                           </p>
                         </div>
                         <span
