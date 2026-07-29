@@ -195,16 +195,11 @@ const OrganizationsManager: React.FC = () => {
         setCreatedResult({ name: newOrgName.trim(), adminEmail: newAdminEmail.trim().toLowerCase(), adminPassword: data.password!, orgId: data.org_id! });
         fetchOrgs(); return;
       }
-      // Fallback: RPC (offline/sem servidor)
-      if (error) console.warn('[create-org] Server failed, fallback RPC:', error);
-      const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_create_organization', {
-        p_name: newOrgName.trim(), p_admin_email: newAdminEmail.trim().toLowerCase(), p_admin_name: newAdminName.trim(),
-      });
-      if (rpcErr) throw new Error(rpcErr.message);
-      const r = rpcData?.[0];
-      if (!r?.success) throw new Error(r?.message || 'Erro ao criar');
-      setCreatedResult({ name: newOrgName.trim(), adminEmail: newAdminEmail.trim().toLowerCase(), adminPassword: r.password, orgId: r.org_id });
-      fetchOrgs();
+      throw new Error(
+        'Servidor não disponível. Para criar organizações, inicie o servidor Express:\n' +
+        '  > npx tsx server.ts\n' +
+        'O servidor cria a conta Supabase Auth + registro no banco corretamente.'
+      );
     } catch (e: any) { setError(e.message); }
     finally { setCreating(false); }
   };
@@ -232,19 +227,11 @@ const OrganizationsManager: React.FC = () => {
         setUsersMap((prev) => ({ ...prev, [addUserOrgId]: parseJsonResponse<UserRow>(users) }));
         return;
       }
-      // Fallback: RPC (offline/sem servidor)
-      if (error) console.warn('[add-user] Server failed, fallback RPC:', error);
-      const { data: rpcData, error: rpcErr } = await supabase.rpc('admin_add_user', {
-        p_org_id: addUserOrgId, p_branch_id: addUserBranchId,
-        p_name: addUserName.trim(), p_email: addUserEmail.trim().toLowerCase(), p_role: 'admin',
-      });
-      if (rpcErr) throw new Error(rpcErr.message);
-      const r = rpcData?.[0];
-      setAddUserResult({ success: r?.success ?? false, message: r?.message || 'Erro' });
-      if (r?.success) {
-        const { data: users } = await supabase.rpc('admin_fetch_users', { p_org_id: addUserOrgId });
-        setUsersMap((prev) => ({ ...prev, [addUserOrgId]: parseJsonResponse<UserRow>(users) }));
-      }
+      throw new Error(
+        'Servidor não disponível. Para adicionar usuários, inicie o servidor Express:\n' +
+        '  > npx tsx server.ts\n' +
+        'O servidor cria a conta Supabase Auth + registro no banco corretamente.'
+      );
     } catch (e: any) { setAddUserResult({ success: false, message: e.message }); }
     finally { setAddingUser(false); }
   };

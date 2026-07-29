@@ -91,6 +91,9 @@ class StorageService {
         if (profile?.organizationId) return profile.organizationId;
       }
     } catch {}
+    if (localStorage.getItem('hd_system_logged_in_email') !== 'LOGGED_OUT') {
+      console.warn('[Storage] getCurrentOrgId() fallback to DEFAULT_ORG_ID — usuário logado sem organizationId no perfil');
+    }
     return DEFAULT_ORG_ID;
   }
 
@@ -764,7 +767,7 @@ class StorageService {
       name: row.name,
       email: row.email,
       role: row.role || 'collaborator',
-      organizationId: this.getCurrentOrgId(),
+      organizationId: row.organization_id || this.getCurrentOrgId(),
       storeBranchId: row.store_branch_id || '',
       permissions: row.permissions || { pdv: true, inventory: true, crm: true, finance: true, dashboard: true, settings: true },
       active: row.active !== false,
@@ -1088,7 +1091,7 @@ class StorageService {
 
         const mapped = users.map((r: any) => ({
           id: r.id, name: r.name, email: r.email, role: r.role || 'collaborator',
-          organizationId: this.getCurrentOrgId(),
+          organizationId: r.organization_id || this.getCurrentOrgId(),
           storeBranchId: r.store_branch_id || '',
           permissions: r.permissions || { pdv: true, inventory: true, crm: true, finance: true, dashboard: true, settings: true },
           active: r.active !== false, avatarUrl: r.avatar_url || undefined,
