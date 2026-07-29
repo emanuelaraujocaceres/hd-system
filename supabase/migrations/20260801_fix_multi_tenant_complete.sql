@@ -13,7 +13,6 @@
 --   Problema: system_users.id podia ser UUID determinístico (frontend) ou real
 --   auth.uid (servidor) — nunca batiam. get_auth_user_org_id() retornava NULL.
 -- Depois: 3 tentativas — profiles(id), system_users(id), system_users(email)
-DROP FUNCTION IF EXISTS public.get_auth_user_org_id();
 CREATE OR REPLACE FUNCTION public.get_auth_user_org_id()
 RETURNS UUID
 LANGUAGE sql STABLE SECURITY DEFINER
