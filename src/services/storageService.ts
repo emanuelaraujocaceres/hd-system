@@ -1081,12 +1081,10 @@ class StorageService {
         const existing = this.getUsers();
         const cloudIds = new Set(users.map((r: any) => r.id));
 
-        // Sync local-only users
-        for (const e of existing) {
-          if (!cloudIds.has(e.id)) {
-            this.syncSystemUser(e);
-          }
-        }
+        // NOTE: Não fazemos sync de local-only users para o cloud aqui.
+        // system_users é gerenciado pelo servidor (server.ts), que usa o
+        // Auth UUID real. IDs determinísticos do frontend nunca bateriam
+        // com auth.uid() e o RLS bloquearia.
 
         const mapped = users.map((r: any) => ({
           id: r.id, name: r.name, email: r.email, role: r.role || 'collaborator',
@@ -1110,7 +1108,7 @@ class StorageService {
           }
           return { ...m, password: local?.password || m.password };
         });
-        // Keep local users not in cloud
+        // Keep local users not in cloud (sem fazer upsert)
         for (const e of existing) {
           if (!merged.find((m: any) => m.id === e.id || (m.email || '').toLowerCase() === (e.email || '').toLowerCase())) {
             merged.push(e);
@@ -1217,10 +1215,10 @@ class StorageService {
           const merged = { ...localSettings, ...settings[0].settings };
           this.set(KEYS.SETTINGS, merged);
         } else {
-          // No settings in cloud — push local
-          const localSettings = this.getSettings();
-          console.log(`[HD-Sync] ☁️→☁️ Syncing local settings to cloud...`);
-          this.syncSettings(localSettings);
+          // No settings in cloud — manter só local por enquanto
+          // (evita RLS error ao tentar upsert com organization_id que
+          // pode não corresponder ao get_auth_user_org_id())
+          console.log(`[HD-Sync] ℹ️ No cloud settings found — using local settings`);
         }
       }
 
