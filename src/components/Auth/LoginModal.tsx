@@ -3,6 +3,7 @@ import { ShieldCheck, Lock, AlertCircle, LogIn, Wifi, WifiOff } from 'lucide-rea
 import { UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { supabase } from '../../lib/supabase';
+import { syncQueue } from '../../services/syncQueueService';
 
 interface LoginModalProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -40,6 +41,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
       }
       const res = storageService.loginWithGoogle(emailInput, passwordInput);
       if (res.success && res.user) {
+        syncQueue.clearQueue(); // Limpa operações pendentes de sessão anterior
         onLoginSuccess(res.user);
         return true;
       } else {
@@ -91,6 +93,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
               password: undefined,
             };
             storageService.saveUserProfile(userProfile);
+            syncQueue.clearQueue(); // Limpa fila de sessão anterior (org diferente)
             setIsLoading(false);
             onLoginSuccess(userProfile);
             return;
@@ -109,6 +112,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
             active: true,
           };
           storageService.saveUserProfile(fallbackProfile);
+          syncQueue.clearQueue(); // Limpa fila de sessão anterior
           setIsLoading(false);
           onLoginSuccess(fallbackProfile);
           return;

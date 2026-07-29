@@ -341,7 +341,7 @@ class StorageService {
         id: s.id,
         organization_id: this.getCurrentOrgId(),
         store_branch_id: s.storeBranchId,
-        user_id: s.operatorId,
+      user_id: s.operatorId || null,
         customer_id: s.customerId || null,
         code: s.code,
         created_at: s.date,                    // timestamp do momento da finalização

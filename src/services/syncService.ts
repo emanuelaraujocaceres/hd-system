@@ -222,6 +222,16 @@ class SupabaseSyncService {
    * If browser is offline, queue the operation for later sync.
    */
   async upsertRow(table: TableName, row: Record<string, any>) {
+    // Validação defensiva: se a linha tem organization_id e está vazio/nulo,
+    // não envia nem enfileira — evitaria enviar dados sem org ou enfileirar lixo
+    if (row && typeof row === 'object' && 'organization_id' in row) {
+      const orgId = (row as any).organization_id;
+      if (!orgId || orgId === '' || orgId === 'undefined' || orgId === 'null') {
+        console.warn(`[HD-Sync] ⚠️ Skipping ${table} upsert — organization_id inválido (${orgId})`);
+        return false;
+      }
+    }
+
     const rowWithTimestamp = SupabaseSyncService.TABLES_WITH_UPDATED_AT.includes(table)
       ? { ...row, updated_at: new Date().toISOString() }
       : row;

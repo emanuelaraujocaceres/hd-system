@@ -215,6 +215,14 @@ class SyncQueueService {
   // ─── SUPABASE EXECUTION ────────────────────────────────────────
 
   private async executeUpsert(table: TableName, data: Record<string, any>): Promise<boolean> {
+    // Validação defensiva: se a operação tem organization_id inválido, pula (evita 403 RLS eterno)
+    if (data && typeof data === 'object' && 'organization_id' in data) {
+      const orgId = data.organization_id as any;
+      if (!orgId || orgId === '' || orgId === 'undefined' || orgId === 'null') {
+        console.warn(`[SyncQueue] ⚠️ Skipping ${table} upsert — organization_id inválido (${orgId})`);
+        return true; // Treat as success to remove from queue
+      }
+    }
     const { error } = await supabase.from(table).upsert(data, { onConflict: 'id' });
     if (error) {
       console.warn(`[SyncQueue] Upsert ${table} failed:`, error.message);
