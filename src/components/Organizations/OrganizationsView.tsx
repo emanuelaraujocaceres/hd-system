@@ -8,6 +8,22 @@ import { supabase } from '../../lib/supabase';
 import { UserProfile } from '../../types';
 
 /* ------------------------------------------------------------------ */
+/*  Helpers                                                             */
+/* ------------------------------------------------------------------ */
+
+/** O Supabase client retorna JSON de RPC como string ou já parseado.
+ *  Esta função garante que o resultado seja um array. */
+function parseJsonResponse<T>(raw: any): T[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw as T[];
+  if (typeof raw === 'string') {
+    try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; }
+    catch { return []; }
+  }
+  return [];
+}
+
+/* ------------------------------------------------------------------ */
 /*  Tipos                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -96,13 +112,13 @@ const OrganizationsManager: React.FC = () => {
   const [addingUser, setAddingUser] = useState(false);
   const [addUserResult, setAddUserResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  /* ---------- fetch orgs ---------- */
+  /* ---------- fetch orgs (RPC JSON → imune a type mismatch) ---------- */
   const fetchOrgs = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const { data, error: err } = await supabase.rpc('admin_list_organizations');
+      const { data, error: err } = await supabase.rpc('admin_fetch_organizations');
       if (err) throw new Error(err.message);
-      setOrgs(data || []);
+      setOrgs(parseJsonResponse<OrgRow>(data));
     } catch (e: any) {
       setError(e.message || 'Erro ao carregar organizações');
     } finally { setLoading(false); }
@@ -118,12 +134,12 @@ const OrganizationsManager: React.FC = () => {
     }
     setExpanded((prev) => { const n = new Set(prev); n.add(orgId); return n; });
     if (!branchesMap[orgId]) {
-      const { data } = await supabase.rpc('admin_list_branches', { p_org_id: orgId });
-      setBranchesMap((prev) => ({ ...prev, [orgId]: data || [] }));
+      const { data } = await supabase.rpc('admin_fetch_branches', { p_org_id: orgId });
+      setBranchesMap((prev) => ({ ...prev, [orgId]: parseJsonResponse<BranchRow>(data) }));
     }
     if (!usersMap[orgId]) {
-      const { data } = await supabase.rpc('admin_list_users', { p_org_id: orgId });
-      setUsersMap((prev) => ({ ...prev, [orgId]: data || [] }));
+      const { data } = await supabase.rpc('admin_fetch_users', { p_org_id: orgId });
+      setUsersMap((prev) => ({ ...prev, [orgId]: parseJsonResponse<UserRow>(data) }));
     }
   };
 
@@ -166,8 +182,8 @@ const OrganizationsManager: React.FC = () => {
       setAddUserResult({ success: r?.success ?? false, message: r?.message || 'Erro' });
       if (r?.success) {
         // refresh users for this org
-        const { data: users } = await supabase.rpc('admin_list_users', { p_org_id: addUserOrgId });
-        setUsersMap((prev) => ({ ...prev, [addUserOrgId]: users || [] }));
+        const { data: users } = await supabase.rpc('admin_fetch_users', { p_org_id: addUserOrgId });
+        setUsersMap((prev) => ({ ...prev, [addUserOrgId]: parseJsonResponse<UserRow>(users) }));
       }
     } catch (e: any) { setAddUserResult({ success: false, message: e.message }); }
     finally { setAddingUser(false); }
