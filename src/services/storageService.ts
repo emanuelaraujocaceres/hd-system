@@ -25,6 +25,16 @@ import {
   INITIAL_USERS,
   INITIAL_SETTINGS,
   INITIAL_SUBSCRIPTION,
+  DEFAULT_ORG_ID,
+  BRANCH_UUIDS,
+  PRODUCT_UUIDS,
+  CATEGORY_UUIDS,
+  CUSTOMER_UUIDS,
+  SUPPLIER_UUIDS,
+  SALE_UUIDS,
+  USER_UUIDS,
+  CASH_SESSION_UUIDS,
+  FINANCIAL_UUIDS,
 } from '../data/mockData';
 import { syncService } from './syncService';
 import { supabase } from '../lib/supabase';
@@ -53,6 +63,141 @@ const KEYS = {
 class StorageService {
   private listeners: Set<() => void> = new Set();
   private notifyTimer: ReturnType<typeof setTimeout> | null = null;
+  private migrated = false;
+
+  // ─── UUID HELPERS ──────────────────────────────────────────────────────
+  // Gera um UUID v4 para novos registros (browser e Node 19+)
+  private static newId(): string {
+    return crypto.randomUUID();
+  }
+
+  // Regex para validar UUID (versão 3, 4, ou 5)
+  private static UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // Retorna o ID como UUID válido: se já for UUID, mantém; senão gera um novo.
+  // AVISO: IDs TEXT legados que não constam no mapa de migração serão
+  // convertidos para UUIDs aleatórios, perdendo a referência textual.
+  private static ensureUuid(id: string | undefined | null): string {
+    if (id && StorageService.UUID_RE.test(id)) return id;
+    return StorageService.newId();
+  }
+
+  // Retorna o organization_id do usuário logado, ou o DEFAULT_ORG_ID
+  private getCurrentOrgId(): string {
+    try {
+      const raw = localStorage.getItem('hd_system_user_profile');
+      if (raw) {
+        const profile = JSON.parse(raw);
+        if (profile?.organizationId) return profile.organizationId;
+      }
+    } catch {}
+    return DEFAULT_ORG_ID;
+  }
+
+  // ─── MIGRAÇÃO LEGACY: TEXT → UUID (uma única vez) ─────────────────────
+  private static MIGRATION_KEY = 'hd_system_uuid_migration_done_v2';
+
+  private migrateLegacyIds() {
+    if (this.migrated) return;
+    if (localStorage.getItem(StorageService.MIGRATION_KEY)) {
+      this.migrated = true;
+      return;
+    }
+
+    console.log('[HD-Migration] 🔄 Converting legacy TEXT IDs to UUID...');
+
+    // Mapa completo de conversão: old TEXT ID → novo UUID
+    // Usa o mesmo algoritmo determinístico do SQL e mockData
+    const legacyMap = new Map<string, string>([
+      ...Object.entries(BRANCH_UUIDS),
+      ...Object.entries(PRODUCT_UUIDS),
+      ...Object.entries(CATEGORY_UUIDS),
+      ...Object.entries(CUSTOMER_UUIDS),
+      ...Object.entries(SUPPLIER_UUIDS),
+      ...Object.entries(SALE_UUIDS),
+      ...Object.entries(USER_UUIDS),
+      ...Object.entries(CASH_SESSION_UUIDS),
+      ...Object.entries(FINANCIAL_UUIDS),
+    ]);
+
+    type MigrationSpec = {
+      key: string;
+      idField: string;
+      refFields?: string[]; // campos que contêm IDs de outras tabelas
+    };
+
+    const specs: MigrationSpec[] = [
+      { key: KEYS.PRODUCTS, idField: 'id', refFields: ['storeBranchId', 'supplierId'] },
+      { key: KEYS.CATEGORIES, idField: 'id' },
+      { key: KEYS.CUSTOMERS, idField: 'id' },
+      { key: KEYS.SUPPLIERS, idField: 'id' },
+      { key: KEYS.SALES, idField: 'id', refFields: ['operatorId', 'customerId', 'storeBranchId'] },
+      { key: KEYS.SALE_ITEMS, idField: 'id', refFields: ['sale_id', 'product_id', 'saleId', 'productId'] },
+      { key: KEYS.FINANCIAL, idField: 'id', refFields: ['storeBranchId'] },
+      { key: KEYS.CAIXA, idField: 'id', refFields: ['operatorId', 'storeBranchId'] },
+      { key: KEYS.CAIXA_HISTORY, idField: 'id', refFields: ['operatorId', 'storeBranchId'] },
+      { key: KEYS.MOVEMENTS, idField: 'id', refFields: ['productId', 'storeBranchId'] },
+      { key: KEYS.BRANCHES, idField: 'id' },
+      { key: KEYS.USERS_LIST, idField: 'id', refFields: ['storeBranchId'] },
+    ];
+
+    const convertId = (oldId: string | undefined | null): string => {
+      if (!oldId) return StorageService.newId();
+      if (StorageService.UUID_RE.test(oldId)) return oldId;
+      return legacyMap.get(oldId) || StorageService.newId();
+    };
+
+    const convertObject = (obj: any, spec: MigrationSpec) => {
+      if (!obj || typeof obj !== 'object') return;
+      // Converte o próprio ID
+      if (obj[spec.idField]) {
+        obj[spec.idField] = convertId(obj[spec.idField]);
+      }
+      // Converte campos que referenciam outras tabelas
+      for (const ref of spec.refFields || []) {
+        if (obj[ref]) {
+          obj[ref] = convertId(obj[ref]);
+        }
+      }
+      // Converte IDs aninhados (ex: sale.items[].productId)
+      if (obj.items && Array.isArray(obj.items)) {
+        for (const item of obj.items) {
+          if (item.productId) item.productId = convertId(item.productId);
+        }
+      }
+      // Converte IDs aninhados em sale_items storage
+      if (spec.key === KEYS.SALE_ITEMS || spec.key === KEYS.CREDIT_PAYMENTS) {
+        if (obj.sale_id) obj.sale_id = convertId(obj.sale_id);
+        if (obj.product_id) obj.product_id = convertId(obj.product_id);
+        if (obj.productId) obj.productId = convertId(obj.productId);
+      }
+    };
+
+    for (const spec of specs) {
+      try {
+        const raw = localStorage.getItem(spec.key);
+        if (!raw) continue;
+        const data = JSON.parse(raw);
+        if (Array.isArray(data)) {
+          for (const item of data) convertObject(item, spec);
+          localStorage.setItem(spec.key, JSON.stringify(data));
+        } else if (typeof data === 'object') {
+          convertObject(data, spec);
+          localStorage.setItem(spec.key, JSON.stringify(data));
+        }
+      } catch (e) {
+        console.warn(`[HD-Migration] ⚠️ Error migrating ${spec.key}:`, e);
+      }
+    }
+
+    localStorage.setItem(StorageService.MIGRATION_KEY, 'done');
+    this.migrated = true;
+    console.log('[HD-Migration] ✅ Legacy TEXT → UUID migration complete');
+  }
+
+  constructor() {
+    this.migrateLegacyIds();
+  }
 
   public subscribe(listener: () => void) {
     this.listeners.add(listener);
@@ -102,7 +247,7 @@ class StorageService {
   private syncProduct(p: Product) {
     syncService.upsertRow('products', {
       id: p.id,
-      organization_id: '00000000-0000-0000-0000-000000000001',
+      organization_id: this.getCurrentOrgId(),
       store_branch_id: p.storeBranchId || null,
       name: p.name,
       barcode: p.barcode,
@@ -123,7 +268,7 @@ class StorageService {
   private syncCategory(c: Category) {
     syncService.upsertRow('categories', {
       id: c.id,
-      organization_id: '00000000-0000-0000-0000-000000000001',
+      organization_id: this.getCurrentOrgId(),
       name: c.name,
       color: c.color || '#6366f1',
       store_branch_id: (c as any).storeBranchId || null,
@@ -133,7 +278,7 @@ class StorageService {
   private syncCustomer(c: Customer) {
     syncService.upsertRow('customers', {
       id: c.id,
-      organization_id: '00000000-0000-0000-0000-000000000001',
+      organization_id: this.getCurrentOrgId(),
       name: c.name,
       cpf_cnpj: c.cpfCnpj,
       email: c.email,
@@ -146,7 +291,7 @@ class StorageService {
   private syncSupplier(s: Supplier) {
     syncService.upsertRow('suppliers', {
       id: s.id,
-      organization_id: '00000000-0000-0000-0000-000000000001',
+      organization_id: this.getCurrentOrgId(),
       corporate_name: s.companyName,
       trade_name: s.tradeName,
       cnpj: s.cnpj,
@@ -162,7 +307,7 @@ class StorageService {
       // First upsert the parent sale — wait for it to complete
       await syncService.upsertRow('sales', {
         id: s.id,
-        organization_id: '00000000-0000-0000-0000-000000000001',
+        organization_id: this.getCurrentOrgId(),
         store_branch_id: s.storeBranchId,
         user_id: s.operatorId,
         customer_id: s.customerId || null,
@@ -196,7 +341,7 @@ class StorageService {
   private syncBranch(b: StoreBranch) {
     syncService.upsertRow('store_branches', {
       id: b.id,
-      organization_id: '00000000-0000-0000-0000-000000000001',
+      organization_id: this.getCurrentOrgId(),
       name: b.name,
       code: b.code,
       cnpj: b.cnpj,
@@ -212,7 +357,7 @@ class StorageService {
   private syncFinancialAccount(a: FinancialAccount) {
     syncService.upsertRow('financial_transactions', {
       id: a.id,
-      organization_id: '00000000-0000-0000-0000-000000000001',
+      organization_id: this.getCurrentOrgId(),
       store_branch_id: a.storeBranchId || null,
       type: a.type,
       description: a.title,
@@ -228,7 +373,7 @@ class StorageService {
   private syncCaixaSession(s: CashRegisterSession) {
     syncService.upsertRow('cash_sessions', {
       id: s.id,
-      organization_id: '00000000-0000-0000-0000-000000000001',
+      organization_id: this.getCurrentOrgId(),
       store_branch_id: s.storeBranchId || null,
       user_id: s.operatorId,
       operator_name: s.operatorName,
@@ -250,7 +395,7 @@ class StorageService {
   private syncStockMovement(m: StockMovement) {
     syncService.upsertRow('stock_movements', {
       id: m.id,
-      organization_id: '00000000-0000-0000-0000-000000000001',
+      organization_id: this.getCurrentOrgId(),
       store_branch_id: m.storeBranchId || null,
       product_id: m.productId,
       product_name: m.productName,
@@ -267,7 +412,7 @@ class StorageService {
   private syncSystemUser(u: UserProfile) {
     syncService.upsertRow('system_users', {
       id: u.id,
-      organization_id: '00000000-0000-0000-0000-000000000001',
+      organization_id: this.getCurrentOrgId(),
       store_branch_id: u.storeBranchId || null,
       name: u.name,
       email: u.email,
@@ -280,8 +425,8 @@ class StorageService {
 
   private syncSettings(s: SystemSettings) {
     syncService.upsertRow('system_settings', {
-      id: '00000000-0000-0000-0000-000000000001',
-      organization_id: '00000000-0000-0000-0000-000000000001',
+      id: this.getCurrentOrgId(),
+      organization_id: this.getCurrentOrgId(),
       settings: s,
       updated_at: new Date().toISOString(),
     });
@@ -617,7 +762,7 @@ class StorageService {
       name: row.name,
       email: row.email,
       role: row.role || 'collaborator',
-      organizationId: '00000000-0000-0000-0000-000000000001',
+      organizationId: this.getCurrentOrgId(),
       storeBranchId: row.store_branch_id || '',
       permissions: row.permissions || { pdv: true, inventory: true, crm: true, finance: true, dashboard: true, settings: true },
       active: row.active !== false,
@@ -940,7 +1085,7 @@ class StorageService {
 
         const mapped = users.map((r: any) => ({
           id: r.id, name: r.name, email: r.email, role: r.role || 'collaborator',
-          organizationId: '00000000-0000-0000-0000-000000000001',
+          organizationId: this.getCurrentOrgId(),
           storeBranchId: r.store_branch_id || '',
           permissions: r.permissions || { pdv: true, inventory: true, crm: true, finance: true, dashboard: true, settings: true },
           active: r.active !== false, avatarUrl: r.avatar_url || undefined,
@@ -1106,6 +1251,7 @@ class StorageService {
   }
 
   saveProduct(product: Product): Product {
+    product.id = StorageService.ensureUuid(product.id);
     const products = this.getProducts();
     const index = products.findIndex((p) => p.id === product.id);
     if (index >= 0) {
@@ -1144,9 +1290,8 @@ class StorageService {
     syncService.deleteRow('sales', id);
     // Also delete sale_items from Supabase to prevent orphaned records
     if (saleToDelete && saleToDelete.items) {
-      saleToDelete.items.forEach((item) => {
-        syncService.deleteRow('sale_items', `${id}-${item.productId}`);
-      });
+      // Delete sale_items from Supabase (we don't have individual IDs — delete by sale_id)
+      supabase.from('sale_items').delete().eq('sale_id', id).then(() => {});
     }
     // Also remove from separate localStorage key
     const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
@@ -1167,7 +1312,7 @@ class StorageService {
     // Log stock movement locally
     const movements = this.getMovements();
     const newMov: StockMovement = {
-      id: `mov-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      id: StorageService.newId(),
       productId,
       productName: prod.name,
       type: quantityDelta > 0 ? 'in' : 'out',
@@ -1216,6 +1361,7 @@ class StorageService {
   }
 
   saveCategory(category: Category) {
+    category.id = StorageService.ensureUuid(category.id);
     const categories = this.getCategories();
     const idx = categories.findIndex((c) => c.id === category.id);
     if (idx >= 0) {
@@ -1239,6 +1385,7 @@ class StorageService {
   }
 
   saveCustomer(customer: Customer) {
+    customer.id = StorageService.ensureUuid(customer.id);
     const customers = this.getCustomers();
     const idx = customers.findIndex((c) => c.id === customer.id);
     if (idx >= 0) {
@@ -1262,6 +1409,7 @@ class StorageService {
   }
 
   saveSupplier(supplier: Supplier) {
+    supplier.id = StorageService.ensureUuid(supplier.id);
     const suppliers = this.getSuppliers();
     const idx = suppliers.findIndex((s) => s.id === supplier.id);
     if (idx >= 0) {
@@ -1297,6 +1445,7 @@ class StorageService {
   }
 
   async addSale(sale: Sale) {
+    sale.id = StorageService.ensureUuid(sale.id);
     const sales = this.getSales();
     sales.unshift(sale);
     this.set(KEYS.SALES, sales);
@@ -1306,7 +1455,7 @@ class StorageService {
     if (sale.items && sale.items.length > 0) {
       const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
       const newItems = sale.items.map((item) => ({
-        id: `${sale.id}-${item.productId}`,
+        id: StorageService.newId(),
         sale_id: sale.id,
         product_id: item.productId,
         product_name: item.productName || '',
@@ -1343,7 +1492,7 @@ class StorageService {
         p_total: sale.total,
         p_reason: `Venda PDV #${sale.code}`,
         p_operator_name: sale.operatorName,
-        p_organization_id: '00000000-0000-0000-0000-000000000001',
+        p_organization_id: this.getCurrentOrgId(),
         p_store_branch_id: sale.storeBranchId || null,
       });
 
@@ -1387,6 +1536,7 @@ class StorageService {
   }
 
   saveActiveCaixaSession(session: CashRegisterSession) {
+    session.id = StorageService.ensureUuid(session.id);
     console.log(`[HD-Sync] 💾 Salvando CAIXA localmente: id=${session.id}, status=${session.status}, caixinha R$ ${session.currentCashBalance.toFixed(2)}`);
     console.log(`[HD-Sync] 💾 Conteúdo: operadora=${session.operatorName}, suprimentos=R$${session.suprimentos}, sangrias=R$${session.sangrias}, vendas cash=R$${session.totalSalesCash}`);
     this.set(KEYS.CAIXA, session);
@@ -1431,7 +1581,7 @@ class StorageService {
 
   openNewCaixaSession(operatorId: string, operatorName: string, initialCash: number, notes?: string) {
     const newSession: CashRegisterSession = {
-      id: `cx-${Date.now()}`,
+      id: StorageService.newId(),
       openedAt: new Date().toISOString(),
       operatorId,
       operatorName,
@@ -1473,6 +1623,7 @@ class StorageService {
   }
 
   saveFinancialAccount(acc: FinancialAccount) {
+    acc.id = StorageService.ensureUuid(acc.id);
     const accounts = this.getFinancialAccounts();
     const idx = accounts.findIndex((a) => a.id === acc.id);
     if (idx >= 0) {
@@ -1496,6 +1647,7 @@ class StorageService {
   }
 
   saveBranch(branch: StoreBranch) {
+    branch.id = StorageService.ensureUuid(branch.id);
     const branches = this.getBranches();
     const idx = branches.findIndex((b) => b.id === branch.id);
     if (idx >= 0) {
@@ -1528,7 +1680,7 @@ class StorageService {
       const found = branches.find((b) => b.id === savedId);
       if (found) return found;
     }
-    return branches[0] || { id: 'br-01', name: 'HD-System Matriz São Paulo', code: 'SP-01', cnpj: '12.345.678/0001-90', city: 'São Paulo', state: 'SP', address: 'Av. Paulista, 1000', phone: '(11) 3000-0000', isHeadquarters: true, active: true };
+    return branches[0] || { id: BRANCH_UUIDS['br-01'], name: 'HD-System Matriz São Paulo', code: 'SP-01', cnpj: '12.345.678/0001-90', city: 'São Paulo', state: 'SP', address: 'Av. Paulista, 1000', phone: '(11) 3000-0000', isHeadquarters: true, active: true };
   }
 
   getSelectedBranchId(): string {
@@ -1571,6 +1723,7 @@ class StorageService {
   }
 
   saveUser(user: UserProfile) {
+    user.id = StorageService.ensureUuid(user.id);
     const users = this.getUsers();
     const idx = users.findIndex((u) => u.id === user.id || u.email.toLowerCase() === user.email.toLowerCase());
     if (idx >= 0) {
@@ -1806,6 +1959,8 @@ class StorageService {
     localStorage.removeItem(KEYS.LOGGED_IN_EMAIL);
     localStorage.removeItem(KEYS.SETTINGS);
     localStorage.removeItem(KEYS.SUBSCRIPTION);
+    localStorage.removeItem(StorageService.MIGRATION_KEY);
+    this.migrated = false;
     this.notify();
   }
 }

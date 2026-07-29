@@ -12,9 +12,76 @@ import {
   SubscriptionInfo,
 } from '../types';
 
+// ============================================================================
+// IDs DETERMINÍSTICOS UUID v5
+// Gerados com namespace 'a7b9c81e-0000-4000-a000-9e0f1a2b3c4d' + nome da tabela
+// Garantem que os IDs do frontend coincidam com os gerados na migração SQL.
+// ============================================================================
+
+export const BRANCH_UUIDS = {
+  'br-01': 'f3265a77-5946-5cd3-b09c-725ac4d26952',
+  'br-02': '32b31da2-00e8-570c-8a10-2d6ae23c9eee',
+  'br-03': '62a2b07b-4237-559a-a2cd-e0fc7dcbecdc',
+} as const;
+
+export const USER_UUIDS = {
+  'usr-01': '4d7310f0-3097-526b-a3c5-1dc697dc2a89',
+} as const;
+
+export const CATEGORY_UUIDS = {
+  'cat-01': 'bc789c2c-655d-59b1-a2c6-7e06a8b17505',
+  'cat-02': '8a7eb5df-37f6-58e9-b24b-f386f950077a',
+  'cat-03': 'af65744e-8b70-5bb5-a254-c121b145e603',
+  'cat-04': '7ad6fc69-32c0-5d85-b882-effc13a5b5e3',
+  'cat-05': '0f85016b-130d-52cb-b693-dda207479fcb',
+  'cat-06': '2ffb8f4a-843c-57a7-b9dd-cb2dfab8b042',
+} as const;
+
+export const PRODUCT_UUIDS = {
+  'prod-01': 'eba9882f-c407-55be-9106-b9d67a4d31da',
+  'prod-02': '2e3bf53b-f17a-575e-9a28-707990ba2516',
+  'prod-03': '274e01c1-7283-5a19-8325-170bf4fd0ce4',
+  'prod-04': '4644a321-008d-5905-ac71-74e434bdff39',
+  'prod-05': '22fda07f-d1ba-563f-a132-c635af2b559d',
+  'prod-06': '1d3a1927-7ed4-5a53-ab9e-0e8229a52259',
+  'prod-07': '3c5738b4-43be-5b60-a266-4e50eb0cee4f',
+  'prod-08': '96112643-fc37-5a87-a8d9-e24b81b886d9',
+} as const;
+
+export const CUSTOMER_UUIDS = {
+  'cli-01': '46a33202-bb69-5ea7-9326-1eca7d334b0a',
+  'cli-02': '9337b095-64ff-5f29-9d22-d8d8975b62c6',
+  'cli-03': 'e4fd9eb3-fe29-5cbc-894f-411fa8db49a3',
+} as const;
+
+export const SUPPLIER_UUIDS = {
+  'sup-01': '49f0679c-6671-5fa3-84ac-bcd940a34a9a',
+  'sup-02': '72845ec4-efd0-55d3-be6d-e85a5c83de88',
+} as const;
+
+export const SALE_UUIDS = {
+  'sale-1001': 'c11c2d1b-0b28-5d2f-b9c7-124f1a01fd2e',
+  'sale-1002': 'af89201c-658d-5eb4-9994-00f494f25492',
+  'sale-1003': '5a9d3908-89a0-5768-8b4d-73f594e7aa4a',
+} as const;
+
+export const CASH_SESSION_UUIDS = {
+  'cx-active-01': '075bf5d1-0f1c-5080-b534-11834377c536',
+} as const;
+
+export const FINANCIAL_UUIDS = {
+  'fin-01': '0c4e4ea0-96d4-588d-89dc-fc9b70983049',
+  'fin-02': 'a3cf8507-adea-51f2-ba05-5a330d398c79',
+  'fin-03': '6767f203-aa8a-5bd8-a6bf-97110415722f',
+  'fin-04': '39071eb2-f510-51e1-b156-ae65f1d159ea',
+} as const;
+
+// Helper: retorna o organization_id padrão (sempre UUID)
+export const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000001';
+
 export const INITIAL_BRANCHES: StoreBranch[] = [
   {
-    id: 'br-01',
+    id: BRANCH_UUIDS['br-01'],
     name: 'HD-System Matriz - São Paulo',
     code: 'SP-01',
     cnpj: '12.345.678/0001-90',
@@ -26,7 +93,7 @@ export const INITIAL_BRANCHES: StoreBranch[] = [
     active: true,
   },
   {
-    id: 'br-02',
+    id: BRANCH_UUIDS['br-02'],
     name: 'HD-System Filial 01 - Campinas',
     code: 'SP-02',
     cnpj: '12.345.678/0002-71',
@@ -38,7 +105,7 @@ export const INITIAL_BRANCHES: StoreBranch[] = [
     active: true,
   },
   {
-    id: 'br-03',
+    id: BRANCH_UUIDS['br-03'],
     name: 'HD-System Filial 02 - Rio de Janeiro',
     code: 'RJ-01',
     cnpj: '12.345.678/0003-52',
@@ -53,14 +120,14 @@ export const INITIAL_BRANCHES: StoreBranch[] = [
 
 export const INITIAL_USERS: UserProfile[] = [
   {
-    id: 'usr-01',
+    id: USER_UUIDS['usr-01'],
     name: 'Emanuel Araújo',
     email: 'emanuel@gmail.com',
     password: '96235900',
     role: 'admin',
     avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    organizationId: 'org-nexus-01',
-    storeBranchId: 'br-01',
+    organizationId: DEFAULT_ORG_ID,
+    storeBranchId: BRANCH_UUIDS['br-01'],
     permissions: {
       pdv: true,
       inventory: true,
@@ -77,17 +144,17 @@ export const INITIAL_USERS: UserProfile[] = [
 export const INITIAL_USER: UserProfile = INITIAL_USERS[0];
 
 export const INITIAL_CATEGORIES: Category[] = [
-  { id: 'cat-01', name: 'Bebidas', icon: 'Wine', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200' },
-  { id: 'cat-02', name: 'Alimentos', icon: 'Utensils', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200' },
-  { id: 'cat-03', name: 'Eletrônicos', icon: 'Smartphone', color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-200' },
-  { id: 'cat-04', name: 'Limpeza & Higiene', icon: 'Sparkles', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200' },
-  { id: 'cat-05', name: 'Hortifruti', icon: 'Apple', color: 'bg-lime-500/10 text-lime-600 dark:text-lime-400 border-lime-200' },
-  { id: 'cat-06', name: 'Geral', icon: 'Package', color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200' },
+  { id: CATEGORY_UUIDS['cat-01'], name: 'Bebidas', icon: 'Wine', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200' },
+  { id: CATEGORY_UUIDS['cat-02'], name: 'Alimentos', icon: 'Utensils', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200' },
+  { id: CATEGORY_UUIDS['cat-03'], name: 'Eletrônicos', icon: 'Smartphone', color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-200' },
+  { id: CATEGORY_UUIDS['cat-04'], name: 'Limpeza & Higiene', icon: 'Sparkles', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200' },
+  { id: CATEGORY_UUIDS['cat-05'], name: 'Hortifruti', icon: 'Apple', color: 'bg-lime-500/10 text-lime-600 dark:text-lime-400 border-lime-200' },
+  { id: CATEGORY_UUIDS['cat-06'], name: 'Geral', icon: 'Package', color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200' },
 ];
 
 export const INITIAL_PRODUCTS: Product[] = [
   {
-    id: 'prod-01',
+    id: PRODUCT_UUIDS['prod-01'],
     barcode: '7891000100103',
     name: 'Refrigerante Coca-Cola 2L Zero',
     category: 'Bebidas',
@@ -106,7 +173,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     tvHighlightTag: 'OFERTA IMPERDÍVEL 💥',
   },
   {
-    id: 'prod-02',
+    id: PRODUCT_UUIDS['prod-02'],
     barcode: '7891991000854',
     name: 'Cerveja Heineken Long Neck 330ml (Pack 6un)',
     category: 'Bebidas',
@@ -125,14 +192,14 @@ export const INITIAL_PRODUCTS: Product[] = [
     tvHighlightTag: 'COMBO BEBIDAS 🍺',
   },
   {
-    id: 'prod-03',
+    id: PRODUCT_UUIDS['prod-03'],
     barcode: '7891000300015',
     name: 'Café Torrado e Moído Pilão 500g',
     category: 'Alimentos',
     unit: 'un',
     costPrice: 14.50,
     salePrice: 22.90,
-    currentStock: 8, // Low stock warning
+    currentStock: 8,
     minStock: 10,
     maxStock: 50,
     imageUrl: 'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=300&auto=format&fit=crop&q=80',
@@ -144,7 +211,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     tvHighlightTag: 'DESTAQUE DA MANHÃ ☕',
   },
   {
-    id: 'prod-04',
+    id: PRODUCT_UUIDS['prod-04'],
     barcode: '7891000001011',
     name: 'Azeite de Oliva Extra Virgem 500ml',
     category: 'Alimentos',
@@ -160,7 +227,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: 'prod-05',
+    id: PRODUCT_UUIDS['prod-05'],
     barcode: '7898558000123',
     name: 'Fone de Ouvido Bluetooth TWS Pro',
     category: 'Eletrônicos',
@@ -176,14 +243,14 @@ export const INITIAL_PRODUCTS: Product[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: 'prod-06',
+    id: PRODUCT_UUIDS['prod-06'],
     barcode: '7898558000451',
     name: 'Carregador Rápido USB-C 30W Power',
     category: 'Eletrônicos',
     unit: 'un',
     costPrice: 25.00,
     salePrice: 59.90,
-    currentStock: 3, // Low stock warning
+    currentStock: 3,
     minStock: 5,
     maxStock: 25,
     imageUrl: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=300&auto=format&fit=crop&q=80',
@@ -192,7 +259,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: 'prod-07',
+    id: PRODUCT_UUIDS['prod-07'],
     barcode: '7891150000010',
     name: 'Sabão em Pó Omo Lavagem Perfeita 1kg',
     category: 'Limpeza & Higiene',
@@ -208,7 +275,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     updatedAt: new Date().toISOString(),
   },
   {
-    id: 'prod-08',
+    id: PRODUCT_UUIDS['prod-08'],
     barcode: '7891000999011',
     name: 'Maçã Fuji Selecionada (kg)',
     category: 'Hortifruti',
@@ -227,7 +294,7 @@ export const INITIAL_PRODUCTS: Product[] = [
 
 export const INITIAL_CUSTOMERS: Customer[] = [
   {
-    id: 'cli-01',
+    id: CUSTOMER_UUIDS['cli-01'],
     name: 'Carlos Eduardo Silva',
     cpfCnpj: '123.456.789-00',
     email: 'carlos.silva@gmail.com',
@@ -240,20 +307,20 @@ export const INITIAL_CUSTOMERS: Customer[] = [
     createdAt: '2026-01-15',
   },
   {
-    id: 'cli-02',
+    id: CUSTOMER_UUIDS['cli-02'],
     name: 'Empresa Padaria Pão Doce Ltda',
     cpfCnpj: '45.678.910/0001-22',
     email: 'compras@padariapaodoce.com.br',
     phone: '(11) 3344-5566',
     creditLimit: 5000.00,
-    currentBalance: 420.50, // Has pending credit debt
+    currentBalance: 420.50,
     loyaltyPoints: 650,
     city: 'São Paulo',
     state: 'SP',
     createdAt: '2026-02-01',
   },
   {
-    id: 'cli-03',
+    id: CUSTOMER_UUIDS['cli-03'],
     name: 'Mariana Costa Oliveira',
     cpfCnpj: '987.654.321-11',
     email: 'mariana.costa@hotmail.com',
@@ -269,7 +336,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
 
 export const INITIAL_SUPPLIERS: Supplier[] = [
   {
-    id: 'sup-01',
+    id: SUPPLIER_UUIDS['sup-01'],
     companyName: 'Ambev S.A.',
     tradeName: 'Distribuidora Ambev Bebidas',
     cnpj: '07.526.557/0001-00',
@@ -278,7 +345,7 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
     phone: '(11) 4002-8922',
   },
   {
-    id: 'sup-02',
+    id: SUPPLIER_UUIDS['sup-02'],
     companyName: 'Atacadão de Alimentos do Brasil Ltda',
     tradeName: 'Atacadão Suprimentos',
     cnpj: '60.398.280/0001-66',
@@ -290,17 +357,17 @@ export const INITIAL_SUPPLIERS: Supplier[] = [
 
 export const INITIAL_SALES: Sale[] = [
   {
-    id: 'sale-1001',
+    id: SALE_UUIDS['sale-1001'],
     code: 'VEN-1001',
-    date: new Date(Date.now() - 3600000 * 2).toISOString(), // 2 hours ago
-    operatorId: 'usr-01',
+    date: new Date(Date.now() - 3600000 * 2).toISOString(),
+    operatorId: USER_UUIDS['usr-01'],
     operatorName: 'Emanuel Araújo',
-    customerId: 'cli-01',
+    customerId: CUSTOMER_UUIDS['cli-01'],
     customerName: 'Carlos Eduardo Silva',
-    storeBranchId: 'br-01',
+    storeBranchId: BRANCH_UUIDS['br-01'],
     items: [
-      { productId: 'prod-01', productName: 'Refrigerante Coca-Cola 2L Zero', unitPrice: 10.90, quantity: 2, total: 21.80 },
-      { productId: 'prod-02', productName: 'Cerveja Heineken Long Neck 330ml', unitPrice: 7.50, quantity: 4, total: 30.00 },
+      { productId: PRODUCT_UUIDS['prod-01'], productName: 'Refrigerante Coca-Cola 2L Zero', unitPrice: 10.90, quantity: 2, total: 21.80 },
+      { productId: PRODUCT_UUIDS['prod-02'], productName: 'Cerveja Heineken Long Neck 330ml', unitPrice: 7.50, quantity: 4, total: 30.00 },
     ],
     subtotal: 51.80,
     discount: 1.80,
@@ -309,16 +376,16 @@ export const INITIAL_SALES: Sale[] = [
     status: 'completed',
   },
   {
-    id: 'sale-1002',
+    id: SALE_UUIDS['sale-1002'],
     code: 'VEN-1002',
     date: new Date(Date.now() - 3600000 * 5).toISOString(),
-    operatorId: 'usr-01',
+    operatorId: USER_UUIDS['usr-01'],
     operatorName: 'Emanuel Araújo',
     customerName: 'Cliente Não Identificado',
-    storeBranchId: 'br-01',
+    storeBranchId: BRANCH_UUIDS['br-01'],
     items: [
-      { productId: 'prod-05', productName: 'Fone de Ouvido Bluetooth TWS Pro', unitPrice: 119.90, quantity: 1, total: 119.90 },
-      { productId: 'prod-06', productName: 'Carregador Rápido USB-C 30W Power', unitPrice: 59.90, quantity: 1, total: 59.90 },
+      { productId: PRODUCT_UUIDS['prod-05'], productName: 'Fone de Ouvido Bluetooth TWS Pro', unitPrice: 119.90, quantity: 1, total: 119.90 },
+      { productId: PRODUCT_UUIDS['prod-06'], productName: 'Carregador Rápido USB-C 30W Power', unitPrice: 59.90, quantity: 1, total: 59.90 },
     ],
     subtotal: 179.80,
     discount: 9.80,
@@ -327,17 +394,17 @@ export const INITIAL_SALES: Sale[] = [
     status: 'completed',
   },
   {
-    id: 'sale-1003',
+    id: SALE_UUIDS['sale-1003'],
     code: 'VEN-1003',
-    date: new Date(Date.now() - 3600000 * 24).toISOString(), // Yesterday
-    operatorId: 'usr-01',
+    date: new Date(Date.now() - 3600000 * 24).toISOString(),
+    operatorId: USER_UUIDS['usr-01'],
     operatorName: 'Emanuel Araújo',
-    customerId: 'cli-02',
+    customerId: CUSTOMER_UUIDS['cli-02'],
     customerName: 'Empresa Padaria Pão Doce Ltda',
-    storeBranchId: 'br-01',
+    storeBranchId: BRANCH_UUIDS['br-01'],
     items: [
-      { productId: 'prod-03', productName: 'Café Torrado e Moído Pilão 500g', unitPrice: 22.90, quantity: 5, total: 114.50 },
-      { productId: 'prod-04', productName: 'Azeite de Oliva Extra Virgem 500ml', unitPrice: 42.90, quantity: 2, total: 85.80 },
+      { productId: PRODUCT_UUIDS['prod-03'], productName: 'Café Torrado e Moído Pilão 500g', unitPrice: 22.90, quantity: 5, total: 114.50 },
+      { productId: PRODUCT_UUIDS['prod-04'], productName: 'Azeite de Oliva Extra Virgem 500ml', unitPrice: 42.90, quantity: 2, total: 85.80 },
     ],
     subtotal: 200.30,
     discount: 0.30,
@@ -348,9 +415,9 @@ export const INITIAL_SALES: Sale[] = [
 ];
 
 export const INITIAL_CAIXA_SESSION: CashRegisterSession = {
-  id: 'cx-active-01',
-  openedAt: new Date(new Date().setHours(8, 0, 0, 0)).toISOString(), // 8:00 AM today
-  operatorId: 'usr-01',
+  id: CASH_SESSION_UUIDS['cx-active-01'],
+  openedAt: new Date(new Date().setHours(8, 0, 0, 0)).toISOString(),
+  operatorId: USER_UUIDS['usr-01'],
   operatorName: 'Emanuel Araújo',
   initialCash: 250.00,
   currentCashBalance: 450.00,
@@ -366,7 +433,7 @@ export const INITIAL_CAIXA_SESSION: CashRegisterSession = {
 
 export const INITIAL_FINANCIAL_ACCOUNTS: FinancialAccount[] = [
   {
-    id: 'fin-01',
+    id: FINANCIAL_UUIDS['fin-01'],
     title: 'Fatura Fornecedor Ambev - Bebidas',
     type: 'payable',
     category: 'Fornecedores',
@@ -377,7 +444,7 @@ export const INITIAL_FINANCIAL_ACCOUNTS: FinancialAccount[] = [
     notes: 'Nota Fiscal de Entrada #88921',
   },
   {
-    id: 'fin-02',
+    id: FINANCIAL_UUIDS['fin-02'],
     title: 'Aluguel do Imóvel da Loja Matriz',
     type: 'payable',
     category: 'Instalações',
@@ -387,7 +454,7 @@ export const INITIAL_FINANCIAL_ACCOUNTS: FinancialAccount[] = [
     recipientOrPayer: 'Imobiliária Central SP',
   },
   {
-    id: 'fin-03',
+    id: FINANCIAL_UUIDS['fin-03'],
     title: 'Vendas Promocionais Corporativas',
     type: 'receivable',
     category: 'Vendas Faturadas',
@@ -397,7 +464,7 @@ export const INITIAL_FINANCIAL_ACCOUNTS: FinancialAccount[] = [
     recipientOrPayer: 'Empresa Padaria Pão Doce Ltda',
   },
   {
-    id: 'fin-04',
+    id: FINANCIAL_UUIDS['fin-04'],
     title: 'Conta de Energia Elétrica Enel',
     type: 'payable',
     category: 'Utilidades',
