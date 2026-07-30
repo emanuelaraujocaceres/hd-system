@@ -441,6 +441,8 @@ class StorageService {
   }
 
   private syncCaixaSession(s: CashRegisterSession) {
+    // Garantir que o ID seja UUID válido (pode vir do localStorage com ID legado TEXT)
+    s.id = StorageService.ensureUuid(s.id);
     const orgId = this.getCurrentOrgId();
     // Defensive: se organization_id for inválido, não tenta upsert
     if (!orgId || orgId === '' || orgId === 'undefined' || orgId === 'null' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) {
