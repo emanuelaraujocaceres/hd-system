@@ -21,6 +21,7 @@ import {
 import { FinancialAccount, Sale, Product, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { useToast } from '../shared/Toast';
 import { BoletoCameraScannerModal } from './BoletoCameraScannerModal';
 
 interface FinanceViewProps {
@@ -53,35 +54,61 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
   const [expandedDreRow, setExpandedDreRow] = useState<string | null>(null);
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const { addToast } = useToast();
 
-  const handleSaveAccount = (e: React.FormEvent) => {
+  const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newAcc: FinancialAccount = {
-      id: editingAccount ? editingAccount.id : `fin-${Date.now()}`,
-      title: formTitle,
-      type: formType,
-      category: formCategory,
-      amount: formAmount,
-      dueDate: formDueDate,
-      status: editingAccount ? editingAccount.status : 'pending',
-      paidDate: editingAccount?.paidDate,
-      recipientOrPayer: formRecipient,
-    };
+    if (!formTitle.trim()) {
+      addToast('error', 'Informe um título para a conta.');
+      return;
+    }
+    if (formAmount <= 0) {
+      addToast('error', 'O valor deve ser maior que zero.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const newAcc: FinancialAccount = {
+        id: editingAccount ? editingAccount.id : `fin-${Date.now()}`,
+        title: formTitle.trim(),
+        type: formType,
+        category: formCategory,
+        amount: formAmount,
+        dueDate: formDueDate,
+        status: editingAccount ? editingAccount.status : 'pending',
+        paidDate: editingAccount?.paidDate,
+        recipientOrPayer: formRecipient.trim(),
+      };
 
-    storageService.saveFinancialAccount(newAcc);
-    posAudio.chime();
-    setIsModalOpen(false);
-    setEditingAccount(null);
+      storageService.saveFinancialAccount(newAcc);
+      posAudio.chime();
+      setIsModalOpen(false);
+      setEditingAccount(null);
+      addToast('success', `Conta "${newAcc.title}" salva com sucesso.`);
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao salvar conta financeira.');
+      posAudio.error();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleMarkPaid = (account: FinancialAccount) => {
-    const updated: FinancialAccount = {
-      ...account,
-      status: 'paid',
-      paidDate: new Date().toISOString().slice(0, 10),
-    };
-    storageService.saveFinancialAccount(updated);
-    posAudio.chime();
+    if (account.status === 'paid') return;
+    try {
+      const updated: FinancialAccount = {
+        ...account,
+        status: 'paid',
+        paidDate: new Date().toISOString().slice(0, 10),
+      };
+      storageService.saveFinancialAccount(updated);
+      posAudio.chime();
+      addToast('success', `Conta "${account.title}" marcada como paga.`);
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao dar baixa na conta.');
+      posAudio.error();
+    }
   };
 
   const handleOpenEditAccount = (account: FinancialAccount) => {
@@ -107,9 +134,26 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   };
 
   const handleDeleteAccount = (id: string) => {
-    if (confirm('Tem certeza que deseja excluir esta conta financeira?')) {
+    if (!confirm('Tem certeza que deseja excluir esta conta financeira?')) return;
+    try {
       storageService.deleteFinancialAccount(id);
       posAudio.chime();
+      addToast('success', 'Conta excluída.');
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao excluir conta.');
+      posAudio.error();
+    }
+  };
+
+  const handleDeleteSale = (saleCode: string, saleId: string) => {
+    if (!confirm(`Tem certeza que deseja excluir a venda ${saleCode}?`)) return;
+    try {
+      storageService.deleteSale(saleId);
+      posAudio.chime();
+      addToast('success', `Venda ${saleCode} excluída.`);
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao excluir venda.');
+      posAudio.error();
     }
   };
 
@@ -528,9 +572,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (confirm(`Tem certeza que deseja excluir a venda ${sale.code}?`)) {
-                                    storageService.deleteSale(sale.id);
-                                  }
+                                  handleDeleteSale(sale.code, sale.id);
                                 }}
                                 className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                                 title="Excluir venda"
@@ -663,11 +705,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                         <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                           {user.role === 'admin' && (
                             <button
-                              onClick={() => {
-                                if (confirm(`Tem certeza que deseja excluir a venda ${sale.code}?`)) {
-                                  storageService.deleteSale(sale.id);
-                                }
-                              }}
+                              onClick={() => handleDeleteSale(sale.code, sale.id)}
                               className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                               title="Excluir venda"
                             >
@@ -995,9 +1033,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold min-h-[44px]"
+                  disabled={isSaving}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold min-h-[44px]"
                 >
-                  Salvar Conta
+                  {isSaving ? 'Salvando...' : 'Salvar Conta'}
                 </button>
               </div>
             </form>
