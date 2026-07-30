@@ -258,7 +258,15 @@ export const App: React.FC = () => {
       // Branch isolation: only accept changes that belong to current branch (or have no branch)
       const currentBranchId = storageService.getSelectedBranchId();
       if (currentBranchId && row?.store_branch_id) {
-        if (row.store_branch_id !== currentBranchId && row.store_branch_id !== null) {
+        // Resolve short codes (e.g. "br-01") to their UUID for comparison,
+        // since Supabase now stores UUIDs but localStorage may still have short codes
+        let resolvedBranchId = currentBranchId;
+        if (!StorageService.UUID_RE.test(currentBranchId)) {
+          const branches = storageService.getBranches();
+          const matched = branches.find(b => b.id === currentBranchId || b.code === currentBranchId);
+          if (matched) resolvedBranchId = matched.id;
+        }
+        if (row.store_branch_id !== resolvedBranchId && row.store_branch_id !== null) {
           console.log(`[HD-Sync] Ignoring cross-branch ${event} on ${table} (branch: ${row.store_branch_id})`);
           return;
         }
