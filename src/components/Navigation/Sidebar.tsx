@@ -156,7 +156,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Navigation Menu */}
       <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
-        <p className="px-3 text-[10px] lg:text-[10px] text-xs uppercase tracking-widest text-slate-500 dark:text-[#71717a] font-bold mb-2">Menu Principal</p>
+        <p className="px-3 text-[10px] uppercase tracking-widest text-slate-500 dark:text-[#71717a] font-bold mb-2">Menu Principal</p>
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;

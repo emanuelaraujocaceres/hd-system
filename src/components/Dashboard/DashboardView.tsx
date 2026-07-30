@@ -288,9 +288,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                               <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold mb-2">Itens Comprados</p>
                               <div className="space-y-1">
                                 {(sale.items || []).map((item, idx) => (
-                                  <div key={idx} className="flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#18181b] border border-slate-100 dark:border-[#27272a]">
-                                    <span className="font-medium text-slate-900 dark:text-white">{item.productName}</span>
-                                    <span className="text-slate-500 dark:text-[#a1a1aa]">{item.quantity}x R$ {item.unitPrice.toFixed(2)} = R$ {item.total.toFixed(2)}</span>
+                                  <div key={idx} className="flex items-center justify-between gap-2 text-[11px] px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#18181b] border border-slate-100 dark:border-[#27272a]">
+                                    <span className="font-medium text-slate-900 dark:text-white truncate min-w-0">{item.productName}</span>
+                                    <span className="text-slate-500 dark:text-[#a1a1aa] shrink-0">{item.quantity}x R$ {item.unitPrice.toFixed(2)} = R$ {item.total.toFixed(2)}</span>
                                   </div>
                                 ))}
                               </div>
@@ -380,9 +380,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold mb-2">Itens Comprados</p>
                         <div className="space-y-1">
                           {(sale.items || []).map((item, idx) => (
-                            <div key={idx} className="flex items-center justify-between text-[11px] px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#18181b] border border-slate-100 dark:border-[#27272a]">
-                              <span className="font-medium text-slate-900 dark:text-white">{item.productName}</span>
-                              <span className="text-slate-500 dark:text-[#a1a1aa]">{item.quantity}x R$ {item.unitPrice.toFixed(2)} = R$ {item.total.toFixed(2)}</span>
+                            <div key={idx} className="flex items-center justify-between gap-2 text-[11px] px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#18181b] border border-slate-100 dark:border-[#27272a]">
+                              <span className="font-medium text-slate-900 dark:text-white truncate min-w-0">{item.productName}</span>
+                              <span className="text-slate-500 dark:text-[#a1a1aa] shrink-0">{item.quantity}x R$ {item.unitPrice.toFixed(2)} = R$ {item.total.toFixed(2)}</span>
                             </div>
                           ))}
                         </div>

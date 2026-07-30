@@ -604,16 +604,16 @@ export const PDVView: React.FC<PDVViewProps> = ({
       <div className="flex-1 flex flex-col p-4 md:p-6 space-y-4 overflow-y-auto">
         {/* Closed Caixa Warning Banner */}
         {!isCaixaOpen && (
-          <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between text-amber-800 dark:text-amber-400 text-xs shadow-sm">
-            <div className="flex items-center gap-2">
-              <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+          <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-wrap items-center justify-between gap-2 text-amber-800 dark:text-amber-400 text-xs shadow-sm">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span className="font-semibold">
                 O caixa está fechado no momento. Abra o caixa para iniciar os lançamentos de vendas.
               </span>
             </div>
             <button
               onClick={onOpenCaixaModal}
-              className="px-3 py-1.5 rounded-full bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors"
+              className="px-3 py-1.5 rounded-full bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shrink-0"
             >
               Abrir Caixa
             </button>
@@ -683,7 +683,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
         </div>
 
         {/* Product Cards Catalog Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 flex-1 overflow-y-auto pr-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5 flex-1 overflow-y-auto pr-1">
           {filteredProducts.map((p) => {
             const isLowStock = p.currentStock <= p.minStock;
             return (
@@ -694,7 +694,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
               >
                 <div>
                   {/* Thumbnail Image */}
-                  <div className="w-full h-24 rounded-xl bg-slate-100 dark:bg-[#09090b] overflow-hidden mb-2 relative">
+                  <div className="w-full h-24 md:h-28 xl:h-32 rounded-xl bg-slate-100 dark:bg-[#09090b] overflow-hidden mb-2 relative">
                     <img
                       src={p.imageUrl}
                       alt={p.name}

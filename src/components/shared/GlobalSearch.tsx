@@ -152,7 +152,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ isOpen, onClose, onN
         </div>
 
         {/* Results */}
-        <div className="max-h-80 overflow-y-auto">
+        <div className="max-h-60 sm:max-h-80 overflow-y-auto">
           {results.length > 0 ? (
             results.map((r, idx) => (
               <button

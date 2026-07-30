@@ -233,7 +233,7 @@ export const Header: React.FC<HeaderProps> = ({
               alt={user.name}
               className="w-5 h-5 rounded-full object-cover"
             />
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 max-w-[100px] truncate">
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 max-w-[80px] lg:max-w-[120px] truncate">
               {user.name.split(' ')[0]}
             </span>
             <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
