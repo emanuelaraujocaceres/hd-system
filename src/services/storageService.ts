@@ -1457,7 +1457,7 @@ class StorageService {
     // Also delete sale_items from Supabase to prevent orphaned records
     if (saleToDelete && saleToDelete.items) {
       // Delete sale_items from Supabase (we don't have individual IDs — delete by sale_id)
-      supabase.from('sale_items').delete().eq('sale_id', id).then(() => {});
+      supabase.from('sale_items').delete().eq('sale_id', id).then(() => {}).catch((err: any) => console.warn('[Storage] Erro ao limpar sale_items do Supabase:', err?.message));
     }
     // Also remove from separate localStorage key
     const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
