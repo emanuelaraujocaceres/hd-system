@@ -52,13 +52,12 @@ GRANT EXECUTE ON FUNCTION public.debug_auth TO authenticated;
 -- ==============================================================================
 -- 40 vendas têm store_branch_id = '' (string vazia) em vez de NULL.
 -- O filtro do frontend usa .is.null que não captura string vazia.
+-- (products.store_branch_id é UUID, então não tem string vazia.)
 UPDATE sales SET store_branch_id = NULL WHERE store_branch_id = '';
-UPDATE products SET store_branch_id = NULL WHERE store_branch_id = '';
-UPDATE store_branches SET store_branch_id = NULL WHERE store_branch_id = '';
 
 -- ==============================================================================
 -- VERIFICAÇÃO
 -- ==============================================================================
-SELECT 'store_branch_id vazios normalizados' AS acao,
+SELECT 'store_branch_id normalizados' AS acao,
   (SELECT COUNT(*) FROM sales WHERE store_branch_id IS NULL) AS sales_null,
   (SELECT COUNT(*) FROM sales WHERE store_branch_id = '') AS sales_vazios;
