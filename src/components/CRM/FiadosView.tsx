@@ -19,6 +19,7 @@ import {
 import { Sale, Customer, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { useToast } from '../shared/Toast';
 
 // ─── Local types ────────────────────────────────────────────────
 interface CreditPayment {
@@ -57,10 +58,12 @@ interface FiadosViewProps {
 // ─── Component ──────────────────────────────────────────────────
 export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }) => {
   const isAdmin = user.role === 'admin';
+  const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [creditPayments, setCreditPayments] = useState<CreditPayment[]>(storageService.getCreditPayments());
   const [paymentModalSaleId, setPaymentModalSaleId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [registeringPayment, setRegisteringPayment] = useState(false);
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
 
   // ── Build debt data ────────────────────────────────────────────
@@ -193,7 +196,10 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
   const handleRegisterPayment = useCallback(
     (customerId: string, saleIds: string[]) => {
       const amount = parseFloat(paymentAmount);
-      if (!amount || amount <= 0) return;
+      if (!amount || amount <= 0) {
+        addToast('error', 'Informe um valor de pagamento válido.');
+        return;
+      }
 
       const debt = customerDebts.find(
         (d) => d.customer.id === customerId
@@ -201,86 +207,102 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
       if (!debt) return;
 
       if (amount > debt.remaining + 0.01) {
+        addToast('error', `O valor excede o saldo restante de ${formatCurrency(debt.remaining)}.`);
         posAudio.error();
         return;
       }
 
-      // FIFO: oldest sales first
-      const sortedSaleIds = [...saleIds].sort((a, b) => {
-        const saleA = sales.find((s) => s.id === a);
-        const saleB = sales.find((s) => s.id === b);
-        return (
-          (saleA ? new Date(saleA.date).getTime() : 0) -
-          (saleB ? new Date(saleB.date).getTime() : 0)
-        );
-      });
-
-      // Distribute payment across sales (FIFO)
-      let remaining = amount;
-      const newPayments: CreditPayment[] = [];
-
-      for (const saleId of sortedSaleIds) {
-        if (remaining <= 0) break;
-
-        // Calculate what's still owed on this sale
-        const existingPayments = creditPayments.filter((cp) => cp.saleId === saleId);
-        const totalPaidOnSale = existingPayments.reduce(
-          (acc, cp) => acc + cp.amount,
-          0
-        );
-        const sale = sales.find((s) => s.id === saleId);
-        if (!sale) continue;
-
-        const saleSubtotal = (sale.items || []).reduce((acc, item) => acc + item.total, 0);
-        const saleTotal = sale.total > 0 ? sale.total : (sale.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0);
-        const creditAmount =
-          sale.payments.find((p) => p.method === 'credit_account')?.amount || saleTotal;
-        const ratio = saleSubtotal > 0 ? creditAmount / saleSubtotal : 1;
-        const totalSaleDebt = Math.round(saleSubtotal * ratio * 100) / 100;
-        const remainingOnSale = Math.max(
-          0,
-          Math.round((totalSaleDebt - totalPaidOnSale) * 100) / 100
-        );
-
-        if (remainingOnSale <= 0) continue;
-
-        const apply = Math.min(remaining, remainingOnSale);
-        newPayments.push({
-          id: `crdpay-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-          saleId,
-          customerId,
-          amount: Math.round(apply * 100) / 100,
-          date: new Date().toISOString(),
+      setRegisteringPayment(true);
+      try {
+        // FIFO: oldest sales first
+        const sortedSaleIds = [...saleIds].sort((a, b) => {
+          const saleA = sales.find((s) => s.id === a);
+          const saleB = sales.find((s) => s.id === b);
+          return (
+            (saleA ? new Date(saleA.date).getTime() : 0) -
+            (saleB ? new Date(saleB.date).getTime() : 0)
+          );
         });
 
-        remaining = Math.round((remaining - apply) * 100) / 100;
-      }
+        // Distribute payment across sales (FIFO)
+        let remaining = amount;
+        const newPayments: CreditPayment[] = [];
 
-      if (newPayments.length > 0) {
-        const updated = [...creditPayments, ...newPayments];
-        setCreditPayments(updated);
-        storageService.saveCreditPayments(updated);
-        posAudio.chime();
-      } else {
+        for (const saleId of sortedSaleIds) {
+          if (remaining <= 0) break;
+
+          // Calculate what's still owed on this sale
+          const existingPayments = creditPayments.filter((cp) => cp.saleId === saleId);
+          const totalPaidOnSale = existingPayments.reduce(
+            (acc, cp) => acc + cp.amount,
+            0
+          );
+          const sale = sales.find((s) => s.id === saleId);
+          if (!sale) continue;
+
+          const saleSubtotal = (sale.items || []).reduce((acc, item) => acc + item.total, 0);
+          const saleTotal = sale.total > 0 ? sale.total : (sale.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0);
+          const creditAmount =
+            sale.payments.find((p) => p.method === 'credit_account')?.amount || saleTotal;
+          const ratio = saleSubtotal > 0 ? creditAmount / saleSubtotal : 1;
+          const totalSaleDebt = Math.round(saleSubtotal * ratio * 100) / 100;
+          const remainingOnSale = Math.max(
+            0,
+            Math.round((totalSaleDebt - totalPaidOnSale) * 100) / 100
+          );
+
+          if (remainingOnSale <= 0) continue;
+
+          const apply = Math.min(remaining, remainingOnSale);
+          newPayments.push({
+            id: `crdpay-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+            saleId,
+            customerId,
+            amount: Math.round(apply * 100) / 100,
+            date: new Date().toISOString(),
+          });
+
+          remaining = Math.round((remaining - apply) * 100) / 100;
+        }
+
+        if (newPayments.length > 0) {
+          const updated = [...creditPayments, ...newPayments];
+          setCreditPayments(updated);
+          storageService.saveCreditPayments(updated);
+          posAudio.chime();
+          addToast('success', `Pagamento de ${formatCurrency(amount)} registrado com sucesso.`);
+        } else {
+          addToast('warning', 'Nenhum valor pendente para esta dívida.');
+          posAudio.error();
+        }
+      } catch (err: any) {
+        addToast('error', err?.message || 'Erro ao registrar pagamento.');
         posAudio.error();
+      } finally {
+        setRegisteringPayment(false);
+        setPaymentAmount('');
+        setPaymentModalSaleId(null);
       }
-
-      setPaymentAmount('');
-      setPaymentModalSaleId(null);
     },
-    [paymentAmount, creditPayments, customerDebts, sales]
+    [paymentAmount, creditPayments, customerDebts, sales, addToast]
   );
 
   // ── Delete credit payment handler (admin only) ──────────────────
   const handleDeleteCreditPayment = useCallback(
     (paymentId: string) => {
       if (!confirm('Tem certeza que deseja excluir este registro de pagamento?')) return;
-      const updated = creditPayments.filter((cp) => cp.id !== paymentId);
-      setCreditPayments(updated);
-      storageService.saveCreditPayments(updated);
-      posAudio.chime();
+      try {
+        const updated = creditPayments.filter((cp) => cp.id !== paymentId);
+        setCreditPayments(updated);
+        storageService.saveCreditPayments(updated);
+        posAudio.chime();
+        addToast('success', 'Pagamento excluído.');
+      } catch (err: any) {
+        addToast('error', err?.message || 'Erro ao excluir pagamento.');
+        posAudio.error();
+      }
     },
-    [creditPayments]
+    [creditPayments, addToast]
   );
 
   // ── Helpers ────────────────────────────────────────────────────
@@ -717,11 +739,11 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
                     );
                   }
                 }}
-                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+                disabled={registeringPayment || !paymentAmount || parseFloat(paymentAmount) <= 0}
                 className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                Confirmar Pagamento
+                {registeringPayment ? 'Registrando...' : 'Confirmar Pagamento'}
               </button>
             </div>
           </div>
