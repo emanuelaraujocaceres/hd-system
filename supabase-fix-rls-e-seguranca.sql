@@ -24,16 +24,19 @@ DROP FUNCTION IF EXISTS fn_log_stock_changes;
 -- 2. POLÍTICAS FALTANTES: stock_change_log
 -- ================================================================
 -- Antes: só SELECT. Adicionar INSERT, UPDATE, DELETE.
+DROP POLICY IF EXISTS "RLS_stock_change_log_insert" ON stock_change_log;
 CREATE POLICY "RLS_stock_change_log_insert" ON stock_change_log
   FOR INSERT WITH CHECK (
     EXISTS (SELECT 1 FROM products WHERE products.id = stock_change_log.product_id AND products.organization_id = get_auth_user_org_id())
   );
 
+DROP POLICY IF EXISTS "RLS_stock_change_log_update" ON stock_change_log;
 CREATE POLICY "RLS_stock_change_log_update" ON stock_change_log
   FOR UPDATE USING (
     EXISTS (SELECT 1 FROM products WHERE products.id = stock_change_log.product_id AND products.organization_id = get_auth_user_org_id())
   );
 
+DROP POLICY IF EXISTS "RLS_stock_change_log_delete" ON stock_change_log;
 CREATE POLICY "RLS_stock_change_log_delete" ON stock_change_log
   FOR DELETE USING (
     EXISTS (SELECT 1 FROM products WHERE products.id = stock_change_log.product_id AND products.organization_id = get_auth_user_org_id())
@@ -43,6 +46,7 @@ CREATE POLICY "RLS_stock_change_log_delete" ON stock_change_log
 -- 3. POLÍTICA DELETE: movimentacoes_falhas
 -- ================================================================
 -- Antes: SELECT + INSERT. Falta DELETE para gestão da DLQ.
+DROP POLICY IF EXISTS "RLS_movimentacoes_falhas_delete" ON movimentacoes_falhas;
 CREATE POLICY "RLS_movimentacoes_falhas_delete" ON movimentacoes_falhas
   FOR DELETE USING (organization_id = get_auth_user_org_id());
 
