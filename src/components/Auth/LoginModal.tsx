@@ -16,12 +16,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [authMode, setAuthMode] = useState<'supabase' | 'local'>('supabase');
   const isOnline = navigator.onLine;
-
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-    if (!emailInput.trim()) return;
-    if (!passwordInput.trim()) {
+    const email = emailInput.trim();
+    const password = passwordInput.trim();
+    if (!email) return;
+    if (!password) {
       setErrorMessage('Senha obrigatória');
       return;
     }
@@ -30,18 +31,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
 
     // Tentativa de login local (fallback ou modo offline)
     const tryLocalLogin = (): boolean => {
-      const user = storageService.getUserByEmail(emailInput);
+      const user = storageService.getUserByEmail(email);
       if (!user) {
         setErrorMessage('Usuário não encontrado no sistema local.');
         return false;
       }
-      if (user.password && user.password !== passwordInput) {
+      if (user.password && user.password !== password) {
         setErrorMessage('Senha incorreta. Tente novamente.');
         return false;
       }
-      const res = storageService.loginWithGoogle(emailInput, passwordInput);
+      const res = storageService.loginWithGoogle(email, password);
       if (res.success && res.user) {
         syncQueue.clearQueue(); // Limpa operações pendentes de sessão anterior
+        setIsLoading(false);
         onLoginSuccess(res.user);
         return true;
       } else {
@@ -51,18 +53,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
     };
 
     try {
-      if (authMode === 'supabase' && isOnline) {
+      const online = navigator.onLine;
+      if (authMode === 'supabase' && online) {
         // TENTATIVA 1: Supabase Auth (JWT real, RLS funcional)
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: emailInput.trim().toLowerCase(),
-          password: passwordInput,
+          email: email.toLowerCase(),
+          password,
         });
 
         if (authError) {
           // Se erro de credenciais ou usuário não existe no Auth, cai no fallback
           console.warn('[Login] Supabase Auth failed, falling back to local:', authError.message);
           setAuthMode('local');
-          if (tryLocalLogin()) return;
+          if (tryLocalLogin()) { setIsLoading(false); return; }
           throw authError;
         }
 
@@ -71,8 +74,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
           const { data: profileData, error: profileError } = await supabase
             .from('system_users')
             .select('*')
-            .eq('email', emailInput.trim().toLowerCase())
+            .eq('email', email.toLowerCase())
             .maybeSingle();
+
+          if (profileError) {
+            console.error('[Login] Erro ao buscar perfil no Supabase:', profileError.message);
+            setAuthMode('local');
+            if (tryLocalLogin()) { setIsLoading(false); return; }
+          }
 
           if (profileData && !profileError) {
             const userProfile: UserProfile = {
@@ -103,8 +112,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
           const meta = authData.user.user_metadata || {};
           const fallbackProfile: UserProfile = {
             id: authData.user.id,
-            name: (meta.name as string) || emailInput.trim().toLowerCase().split('@')[0],
-            email: emailInput.trim().toLowerCase(),
+            name: (meta.name as string) || email.split('@')[0],
+            email: email.toLowerCase(),
             role: (meta.role as 'admin' | 'collaborator') || 'collaborator',
             organizationId: storageService.getCurrentOrgId(),
             storeBranchId: storageService.getSelectedBranchId(),
@@ -120,7 +129,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
       }
 
       // TENTATIVA 2: Local storage (offline ou Supabase Auth indisponível)
-      tryLocalLogin();
+      if (tryLocalLogin()) { setIsLoading(false); return; }
 
     } catch (err: any) {
       setIsLoading(false);
