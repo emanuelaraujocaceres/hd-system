@@ -140,6 +140,7 @@ export interface Sale {
   payments: PaymentDetails[];
   status: 'completed' | 'cancelled' | 'pending';
   updatedAt?: string;
+  organizationId?: string; // multi-tenant
 }
 
 export interface CashRegisterSession {
@@ -159,6 +160,7 @@ export interface CashRegisterSession {
   status: 'open' | 'closed';
   notes?: string;
   storeBranchId?: string;
+  organizationId?: string; // multi-tenant
 }
 
 export interface StockMovement {
@@ -173,12 +175,13 @@ export interface StockMovement {
   date: string;
   operatorName: string;
   storeBranchId?: string;
+  organizationId?: string; // multi-tenant
 }
 
 export interface FinancialAccount {
   id: string;
   title: string;
-  type: 'payable' | 'receivable'; // Contas a Pagar x Receber
+  type: 'payable' | 'receivable';
   category: string;
   amount: number;
   dueDate: string;
@@ -187,6 +190,7 @@ export interface FinancialAccount {
   recipientOrPayer: string;
   notes?: string;
   storeBranchId?: string;
+  organizationId?: string; // multi-tenant
 }
 
 export interface SubscriptionInvoice {

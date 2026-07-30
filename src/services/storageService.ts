@@ -531,6 +531,7 @@ class StorageService {
       showOnTV: row.show_on_tv || false,
       tvPromoPrice: parseFloat(row.tv_promo_price) || undefined,
       tvHighlightTag: row.tv_highlight_tag || undefined,
+      organizationId: row.organization_id || undefined,
     };
     const idx = products.findIndex((p) => p.id === mapped.id);
     if (idx >= 0) {
@@ -579,6 +580,7 @@ class StorageService {
       id: row.id,
       name: row.name,
       color: row.color || '#6366f1',
+      organizationId: row.organization_id || undefined,
     };
     const idx = categories.findIndex((c) => c.id === mapped.id);
     if (idx >= 0) categories[idx] = mapped;
@@ -629,6 +631,7 @@ class StorageService {
       total: parseFloat(row.total) || 0,
       payments: existing?.payments || [{ method: (row.payment_method as any) || 'cash', amount: parseFloat(row.total) || 0 }],
       status: row.status || 'completed',
+      organizationId: row.organization_id || existing?.organizationId || undefined,
     };
 
     const idx = sales.findIndex((s) => s.id === mapped.id);
@@ -663,6 +666,7 @@ class StorageService {
       city: '',
       state: '',
       createdAt: row.created_at || new Date().toISOString(),
+      organizationId: row.organization_id || undefined,
     };
     const idx = customers.findIndex((c) => c.id === mapped.id);
     if (idx >= 0) customers[idx] = mapped;
@@ -685,6 +689,7 @@ class StorageService {
       contactName: row.contact_person || '',
       email: row.email || '',
       phone: row.phone || '',
+      organizationId: row.organization_id || undefined,
     };
     const idx = suppliers.findIndex((s) => s.id === mapped.id);
     if (idx >= 0) suppliers[idx] = mapped;
@@ -710,6 +715,7 @@ class StorageService {
       status: row.status,
       recipientOrPayer: row.notes || '',
       storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
     };
     const idx = accounts.findIndex((a) => a.id === mapped.id);
     if (idx >= 0) accounts[idx] = mapped;
@@ -769,6 +775,7 @@ class StorageService {
       status: row.status || 'open',
       notes: row.notes || undefined,
       storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
     };
     this.set(KEYS.CAIXA, session);
   }
@@ -786,6 +793,7 @@ class StorageService {
       phone: row.phone || '',
       isHeadquarters: row.is_headquarters || false,
       active: row.active !== false,
+      organizationId: row.organization_id || undefined,
     };
     const idx = branches.findIndex((b) => b.id === mapped.id);
     if (idx >= 0) branches[idx] = mapped;
@@ -818,6 +826,7 @@ class StorageService {
       date: row.created_at || new Date().toISOString(),
       operatorName: row.operator_name || '',
       storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
     };
     const idx = movements.findIndex((m) => m.id === mapped.id);
     if (idx >= 0) movements[idx] = mapped;
@@ -895,7 +904,8 @@ class StorageService {
         getId: (item: T) => string = (item: any) => item.id,
         extraMerge?: (local: T, cloudMapped: T) => T,
       ): T[] | null => {
-        const hasLocalData = localStorage.getItem(key) !== null;
+        const hasLocalData = localStorage.getItem(key) !== null
+          || (this.getStorageKey(key) !== key && localStorage.getItem(this.getStorageKey(key)) !== null);
 
         // First-time init: localStorage was never written (using INITIAL_* defaults).
         // If cloud has data, replace local with it (discard mock data).
@@ -1018,7 +1028,8 @@ class StorageService {
       // ── SALES + SALE_ITEMS ────────────────────────────────────────
       {
         const salesKey = KEYS.SALES;
-        const hasLocalSales = localStorage.getItem(salesKey) !== null;
+        const hasLocalSales = localStorage.getItem(salesKey) !== null
+          || (this.getStorageKey(salesKey) !== salesKey && localStorage.getItem(this.getStorageKey(salesKey)) !== null);
         const localSalesBefore = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
         console.log(`[HD-Sync] 📊 Sales hydration: hasLocalSales=${hasLocalSales}, localCount=${localSalesBefore.length}, cloudCount=${sales.length}`);
         if (localSalesBefore.length > 0) {
@@ -1226,7 +1237,9 @@ class StorageService {
 
       // ── CAIXA SESSION ─────────────────────────────────────────────
       {
-        const hasLocalCaixa = localStorage.getItem(KEYS.CAIXA) !== null;
+        const caixaKey = KEYS.CAIXA;
+        const hasLocalCaixa = localStorage.getItem(caixaKey) !== null
+          || (this.getStorageKey(caixaKey) !== caixaKey && localStorage.getItem(this.getStorageKey(caixaKey)) !== null);
 
         if (caixa.length > 0) {
           if (!hasLocalCaixa) {
@@ -1328,10 +1341,35 @@ class StorageService {
     }
   }
 
+  // Chaves que NÃO devem ser particionadas por organização (globais do usuário/sessão)
+  private static GLOBAL_KEYS = new Set<string>([
+    'hd_system_user_profile',
+    'hd_system_logged_in_email',
+    'hd_system_viewing_org',
+  ]);
+
+  // Retorna a chave de storage particionada por organização.
+  // Chaves globais (perfil, sessão) não são prefixadas.
+  // Superadmin sem override usa chave global (vê dados de todas as orgs).
+  private getStorageKey(rawKey: string): string {
+    if (StorageService.GLOBAL_KEYS.has(rawKey)) return rawKey;
+    // Superadmin sem override: usa chave global (cross-org)
+    if (this.isSuperAdmin() && !this.getSuperadminViewingOrg()) return rawKey;
+    const orgId = this.getCurrentOrgId();
+    return `${rawKey}_${orgId}`;
+  }
+
   private get<T>(key: string, defaultValue: T): T {
     try {
-      const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : defaultValue;
+      const storageKey = this.getStorageKey(key);
+      let item = localStorage.getItem(storageKey);
+      if (item !== null) return JSON.parse(item);
+      // Fallback: tentar chave global (existente antes da partição)
+      if (storageKey !== key) {
+        item = localStorage.getItem(key);
+        if (item !== null) return JSON.parse(item);
+      }
+      return defaultValue;
     } catch {
       return defaultValue;
     }
@@ -1339,7 +1377,7 @@ class StorageService {
 
   private set<T>(key: string, value: T) {
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      localStorage.setItem(this.getStorageKey(key), JSON.stringify(value));
       this.notify();
     } catch (e) {
       console.error('Error writing to localStorage:', e);
@@ -1371,6 +1409,14 @@ class StorageService {
   deleteProduct(id: string) {
     const allProducts = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
     const product = allProducts.find((p) => p.id === id);
+    // Defense-in-depth: só permite deletar se o produto pertence à org atual
+    if (product && !this.isSuperAdmin()) {
+      const filtered = this.filterByOrg([product]);
+      if (filtered.length === 0) {
+        console.warn(`[Storage] Blocked delete of product ${id} from another org`);
+        return;
+      }
+    }
     const products = allProducts.filter((p) => p.id !== id);
     this.set(KEYS.PRODUCTS, products);
     syncService.deleteRow('products', id);
@@ -1389,6 +1435,22 @@ class StorageService {
   deleteSale(id: string) {
     const allSales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
     const saleToDelete = allSales.find((s) => s.id === id);
+    // Defense-in-depth: só permite deletar se a venda pertence à org atual
+    if (saleToDelete && !this.isSuperAdmin()) {
+      if (saleToDelete.organizationId && saleToDelete.organizationId !== this.getCurrentOrgId()) {
+        console.warn(`[Storage] Blocked delete of sale ${id} from another org`);
+        return;
+      }
+      // Para vendas sem organizationId (legado), verificar pela filial
+      if (!saleToDelete.organizationId) {
+        const targetOrgId = this.getCurrentOrgId();
+        const branchIds = new Set(this.getBranches().filter(b => b.organizationId === targetOrgId).map(b => b.id));
+        if (!branchIds.has(saleToDelete.storeBranchId)) {
+          console.warn(`[Storage] Blocked delete of sale ${id} from another org (branch check)`);
+          return;
+        }
+      }
+    }
     const sales = allSales.filter((s) => s.id !== id);
     this.set(KEYS.SALES, sales);
     syncService.deleteRow('sales', id);
@@ -1443,6 +1505,7 @@ class StorageService {
         p_type: type,
         p_reason: reason,
         p_operator_name: operatorName,
+        p_organization_id: this.getCurrentOrgId(),
       });
       if (error) {
         console.warn('[HD-Sync] ajustar_estoque RPC failed:', error.message);
@@ -1456,7 +1519,22 @@ class StorageService {
 
   // --- MOVEMENTS ---
   getMovements(): StockMovement[] {
-    return this.get<StockMovement[]>(KEYS.MOVEMENTS, []);
+    const all = this.get<StockMovement[]>(KEYS.MOVEMENTS, []);
+    const viewingOrg = this.getSuperadminViewingOrg();
+    // Superadmin sem override: vê tudo
+    if (this.isSuperAdmin() && !viewingOrg) return all;
+    // Com override: filtrar pelas filiais da org
+    if (viewingOrg) {
+      const branchIds = new Set(this.getBranches().filter(b => b.organizationId === viewingOrg).map(b => b.id));
+      return all.filter(m => m.storeBranchId ? branchIds.has(m.storeBranchId) : false);
+    }
+    // Usuário comum: filtrar pelas filiais da sua org
+    const targetOrgId = this.getCurrentOrgId();
+    const branchIds = new Set(this.getBranches().filter(b => b.organizationId === targetOrgId).map(b => b.id));
+    return all.filter(m => {
+      if (!m.storeBranchId) return this.isDefaultOrg();
+      return branchIds.has(m.storeBranchId);
+    });
   }
 
   // --- CATEGORIES ---
@@ -1547,25 +1625,34 @@ class StorageService {
     const viewingOrg = this.getSuperadminViewingOrg();
     // Superadmin sem override: vê tudo
     if (this.isSuperAdmin() && !viewingOrg) return all;
-    // Com override (superadmin vendo org específica) ou usuário não-default:
-    // filtrar pelas filiais da organização em questão
+    // Com override (superadmin vendo org específica): filtrar pelas filiais da org
     if (viewingOrg) {
       const branchIds = new Set(this.getBranches().filter(b => b.organizationId === viewingOrg).map(b => b.id));
       return all.filter(s => branchIds.has(s.storeBranchId));
     }
-    // Usuário da org padrão sem override: vê tudo (compatibilidade legada)
-    if (this.isDefaultOrg()) return all;
-    // Usuário de org não-default: filtrar pelas suas filiais
-    const myBranchIds = new Set(this.getBranches().map(b => b.id));
-    return all.filter(s => myBranchIds.has(s.storeBranchId));
+    // Usuário comum (qualquer org, incluindo default): filtrar pelas filiais da sua org
+    const targetOrgId = this.getCurrentOrgId();
+    const branchIds = new Set(this.getBranches().filter(b => b.organizationId === targetOrgId).map(b => b.id));
+    return all.filter(s => {
+      if (!s.storeBranchId) return this.isDefaultOrg(); // legado: só na org padrão
+      return branchIds.has(s.storeBranchId);
+    });
   }
 
   getSaleItems(): any[] {
-    return this.get<any[]>(KEYS.SALE_ITEMS, []);
+    const all = this.get<any[]>(KEYS.SALE_ITEMS, []);
+    // Filtra por vendas que pertencem à org atual (defense-in-depth)
+    const sales = this.getSales();
+    const validSaleIds = new Set(sales.map(s => s.id));
+    return all.filter(item => validSaleIds.has(item.sale_id));
   }
 
   getCreditPayments(): any[] {
-    return this.get<any[]>(KEYS.CREDIT_PAYMENTS, []);
+    const all = this.get<any[]>(KEYS.CREDIT_PAYMENTS, []);
+    // Filtra por vendas que pertencem à org atual
+    const sales = this.getSales();
+    const validSaleIds = new Set(sales.map(s => s.id));
+    return all.filter(p => validSaleIds.has(p.sale_id));
   }
 
   saveCreditPayments(payments: any[]) {
@@ -1574,6 +1661,7 @@ class StorageService {
 
   async addSale(sale: Sale) {
     sale.id = StorageService.ensureUuid(sale.id);
+    sale.organizationId = this.getCurrentOrgId();
     const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
     sales.unshift(sale);
     this.set(KEYS.SALES, sales);
@@ -1722,6 +1810,7 @@ class StorageService {
       suprimentos: 0,
       sangrias: 0,
       status: 'open',
+      organizationId: this.getCurrentOrgId(),
       notes: notes || 'Caixa aberto com sucesso.',
     };
     this.saveActiveCaixaSession(newSession);
@@ -1752,18 +1841,20 @@ class StorageService {
     const viewingOrg = this.getSuperadminViewingOrg();
     // Superadmin sem override: vê tudo
     if (this.isSuperAdmin() && !viewingOrg) return all;
-    // Com override ou usuário não-default: filtrar por branch das filiais da org
+    // Com override: filtrar pelas filiais da org
     if (viewingOrg) {
       const branchIds = new Set(this.getBranches().filter(b => b.organizationId === viewingOrg).map(b => b.id));
       return all.filter(a => a.storeBranchId ? branchIds.has(a.storeBranchId) : false);
     }
-    if (this.isDefaultOrg()) return all;
-    const myBranchIds = new Set(this.getBranches().map(b => b.id));
-    return all.filter(a => a.storeBranchId ? myBranchIds.has(a.storeBranchId) : false);
+    // Usuário comum (qualquer org): filtrar pelas filiais da sua org
+    const targetOrgId = this.getCurrentOrgId();
+    const branchIds = new Set(this.getBranches().filter(b => b.organizationId === targetOrgId).map(b => b.id));
+    return all.filter(a => a.storeBranchId ? branchIds.has(a.storeBranchId) : false);
   }
 
   saveFinancialAccount(acc: FinancialAccount) {
     acc.id = StorageService.ensureUuid(acc.id);
+    acc.organizationId = this.getCurrentOrgId();
     const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
     const idx = accounts.findIndex((a) => a.id === acc.id);
     if (idx >= 0) {
@@ -1776,7 +1867,24 @@ class StorageService {
   }
 
   deleteFinancialAccount(id: string) {
-    const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []).filter((a) => a.id !== id);
+    const allAccounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
+    const accToDelete = allAccounts.find(a => a.id === id);
+    // Defense-in-depth: só permite deletar se pertence à org atual
+    if (accToDelete && !this.isSuperAdmin()) {
+      if (accToDelete.organizationId && accToDelete.organizationId !== this.getCurrentOrgId()) {
+        console.warn(`[Storage] Blocked delete of financial account ${id} from another org`);
+        return;
+      }
+      if (!accToDelete.organizationId) {
+        const targetOrgId = this.getCurrentOrgId();
+        const branchIds = new Set(this.getBranches().filter(b => b.organizationId === targetOrgId).map(b => b.id));
+        if (accToDelete.storeBranchId && !branchIds.has(accToDelete.storeBranchId)) {
+          console.warn(`[Storage] Blocked delete of financial account ${id} from another org (branch check)`);
+          return;
+        }
+      }
+    }
+    const accounts = allAccounts.filter((a) => a.id !== id);
     this.set(KEYS.FINANCIAL, accounts);
     syncService.deleteRow('financial_transactions', id);
   }
@@ -2111,22 +2219,21 @@ class StorageService {
 
   // --- RESET DEMO DATA ---
   resetDemoData() {
-    localStorage.removeItem(KEYS.PRODUCTS);
-    localStorage.removeItem(KEYS.CATEGORIES);
-    localStorage.removeItem(KEYS.CUSTOMERS);
-    localStorage.removeItem(KEYS.SUPPLIERS);
-    localStorage.removeItem(KEYS.SALES);
-    localStorage.removeItem(KEYS.SALE_ITEMS);
-    localStorage.removeItem(KEYS.CAIXA);
-    localStorage.removeItem(KEYS.CAIXA_HISTORY);
-    localStorage.removeItem(KEYS.FINANCIAL);
-    localStorage.removeItem(KEYS.MOVEMENTS);
-    localStorage.removeItem(KEYS.BRANCHES);
+    const dataKeys = [
+      KEYS.PRODUCTS, KEYS.CATEGORIES, KEYS.CUSTOMERS, KEYS.SUPPLIERS,
+      KEYS.SALES, KEYS.SALE_ITEMS, KEYS.CAIXA, KEYS.CAIXA_HISTORY,
+      KEYS.FINANCIAL, KEYS.MOVEMENTS, KEYS.BRANCHES, KEYS.USERS_LIST,
+      KEYS.SETTINGS, KEYS.SUBSCRIPTION, KEYS.CREDIT_PAYMENTS,
+    ];
+    // Remove chaves globais + chaves particionadas por org
+    const orgId = this.getCurrentOrgId();
+    for (const key of dataKeys) {
+      localStorage.removeItem(key); // chave global (legado)
+      localStorage.removeItem(`${key}_${orgId}`); // chave particionada
+    }
+    // Chaves que são sempre globais (não particionadas)
     localStorage.removeItem(KEYS.USER);
-    localStorage.removeItem(KEYS.USERS_LIST);
     localStorage.removeItem(KEYS.LOGGED_IN_EMAIL);
-    localStorage.removeItem(KEYS.SETTINGS);
-    localStorage.removeItem(KEYS.SUBSCRIPTION);
     localStorage.removeItem(StorageService.MIGRATION_KEY);
     this.migrated = false;
     this.notify();

@@ -369,6 +369,7 @@ export const INITIAL_SALES: Sale[] = [
     customerId: CUSTOMER_UUIDS['cli-01'],
     customerName: 'Carlos Eduardo Silva',
     storeBranchId: BRANCH_UUIDS['br-01'],
+    organizationId: DEFAULT_ORG_ID,
     items: [
       { productId: PRODUCT_UUIDS['prod-01'], productName: 'Refrigerante Coca-Cola 2L Zero', unitPrice: 10.90, quantity: 2, total: 21.80 },
       { productId: PRODUCT_UUIDS['prod-02'], productName: 'Cerveja Heineken Long Neck 330ml', unitPrice: 7.50, quantity: 4, total: 30.00 },
@@ -387,6 +388,7 @@ export const INITIAL_SALES: Sale[] = [
     operatorName: 'Emanuel Araújo',
     customerName: 'Cliente Não Identificado',
     storeBranchId: BRANCH_UUIDS['br-01'],
+    organizationId: DEFAULT_ORG_ID,
     items: [
       { productId: PRODUCT_UUIDS['prod-05'], productName: 'Fone de Ouvido Bluetooth TWS Pro', unitPrice: 119.90, quantity: 1, total: 119.90 },
       { productId: PRODUCT_UUIDS['prod-06'], productName: 'Carregador Rápido USB-C 30W Power', unitPrice: 59.90, quantity: 1, total: 59.90 },
@@ -406,6 +408,7 @@ export const INITIAL_SALES: Sale[] = [
     customerId: CUSTOMER_UUIDS['cli-02'],
     customerName: 'Empresa Padaria Pão Doce Ltda',
     storeBranchId: BRANCH_UUIDS['br-01'],
+    organizationId: DEFAULT_ORG_ID,
     items: [
       { productId: PRODUCT_UUIDS['prod-03'], productName: 'Café Torrado e Moído Pilão 500g', unitPrice: 22.90, quantity: 5, total: 114.50 },
       { productId: PRODUCT_UUIDS['prod-04'], productName: 'Azeite de Oliva Extra Virgem 500ml', unitPrice: 42.90, quantity: 2, total: 85.80 },
@@ -432,6 +435,7 @@ export const INITIAL_CAIXA_SESSION: CashRegisterSession = {
   suprimentos: 0,
   sangrias: 0,
   status: 'open',
+  organizationId: DEFAULT_ORG_ID,
   notes: 'Caixa aberto com troco inicial padrão R$ 250,00.',
 };
 

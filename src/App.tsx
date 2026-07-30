@@ -246,7 +246,15 @@ export const App: React.FC = () => {
       const event = payload.eventType; // INSERT, UPDATE, DELETE
       const row = payload.new || payload.old;
 
-      // Organization isolation: RLS já filtra no servidor, ignora no cliente
+      // Organization isolation: defense-in-depth no cliente
+      // Se o payload tem organization_id, verificar se corresponde à org atual
+      if (row?.organization_id && !storageService.isSuperAdmin()) {
+        const currentOrgId = storageService.getCurrentOrgId();
+        if (row.organization_id !== currentOrgId) {
+          console.log(`[HD-Sync] Ignoring cross-org ${event} on ${table} (org: ${row.organization_id})`);
+          return;
+        }
+      }
       // Branch isolation: only accept changes that belong to current branch (or have no branch)
       const currentBranchId = storageService.getSelectedBranchId();
       if (currentBranchId && row?.store_branch_id) {
