@@ -453,7 +453,7 @@ class StorageService {
       id: s.id,
       organization_id: orgId,
       store_branch_id: s.storeBranchId || null,
-      user_id: s.operatorId,
+      user_id: s.operatorId && StorageService.UUID_RE.test(s.operatorId) ? s.operatorId : null,
       operator_name: s.operatorName,
       opening_balance: s.initialCash,
       closing_balance: s.status === 'closed' ? s.currentCashBalance : null,
