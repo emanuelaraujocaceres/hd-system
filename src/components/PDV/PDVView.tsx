@@ -75,6 +75,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
+  const [stockAlert, setStockAlert] = useState<{ product: Product; currentQty: number } | null>(null);
 
   // Camera Scanner state
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -86,7 +87,6 @@ export const PDVView: React.FC<PDVViewProps> = ({
   const scannerIntervalRef = useRef<number | null>(null);
   const lastScannedRef = useRef<string>('');
   const scanCooldownRef = useRef(false);
-  const alertDismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const productsRef = useRef(products);
   useEffect(() => {
     productsRef.current = products;
@@ -173,139 +173,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
     const currentQtyInCart = existingItem ? existingItem.quantity : 0;
     if (currentQtyInCart >= product.currentStock) {
       posAudio.error();
-      // Create a custom modal-like alert using safe DOM manipulation
-      const alertContainer = document.createElement('div');
-      alertContainer.style.cssText = `
-        position: fixed; inset: 0; z-index: 9999;
-        background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
-        display: flex; align-items: center; justify-content: center; padding: 16px;
-        animation: fadeIn 0.2s ease-out;
-      `;
-      alertContainer.setAttribute('data-alert', 'true');
-
-      // Inner modal wrapper
-      const modal = document.createElement('div');
-      modal.style.cssText = `
-        background: white; border-radius: 20px; max-width: 360px; width: 100%;
-        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
-        overflow: hidden; animation: slideUp 0.3s ease-out;
-      `;
-
-      // Content wrapper
-      const contentWrapper = document.createElement('div');
-      contentWrapper.style.cssText = 'font-family: inherit; padding: 16px; max-width: 320px;';
-
-      // --- Header: icon + title ---
-      const headerRow = document.createElement('div');
-      headerRow.style.cssText = 'display: flex; align-items: center; gap: 12px; margin-bottom: 12px;';
-
-      const iconCircle = document.createElement('div');
-      iconCircle.style.cssText = 'width: 48px; height: 48px; border-radius: 50%; background: #fef2f2; border: 2px solid #fecaca; display: flex; align-items: center; justify-content: center; flex-shrink: 0;';
-      iconCircle.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
-
-      const headerText = document.createElement('div');
-      const title = document.createElement('h3');
-      title.style.cssText = 'margin: 0; font-size: 16px; font-weight: 700; color: #991b1b;';
-      title.textContent = 'Estoque Insuficiente';
-      const subtitle = document.createElement('p');
-      subtitle.style.cssText = 'margin: 4px 0 0; font-size: 13px; color: #7f1d1d;';
-      subtitle.textContent = 'Não é possível adicionar mais itens';
-      headerText.appendChild(title);
-      headerText.appendChild(subtitle);
-
-      headerRow.appendChild(iconCircle);
-      headerRow.appendChild(headerText);
-      contentWrapper.appendChild(headerRow);
-
-      // --- Details box ---
-      const detailsBox = document.createElement('div');
-      detailsBox.style.cssText = 'background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 12px; margin-bottom: 12px;';
-
-      // Helper to create a styled row
-      const addDetailRow = (label: string, value: string, labelColor: string, valueColor: string, valueWeight: string) => {
-        const row = document.createElement('div');
-        row.style.cssText = 'display: flex; justify-content: space-between; margin-bottom: 8px;';
-        const labelSpan = document.createElement('span');
-        labelSpan.style.cssText = `font-size: 13px; color: ${labelColor};`;
-        labelSpan.textContent = label;
-        const valueSpan = document.createElement('span');
-        valueSpan.style.cssText = `font-size: 13px; font-weight: ${valueWeight}; color: ${valueColor};`;
-        valueSpan.textContent = value;
-        row.appendChild(labelSpan);
-        row.appendChild(valueSpan);
-        detailsBox.appendChild(row);
-      };
-
-      addDetailRow('Produto', product.name, '#7f1d1d', '#991b1b', '600');
-      addDetailRow('Disponível em estoque', `${product.currentStock} ${product.unit}`, '#7f1d1d', '#ef4444', '700');
-      addDetailRow('Já no carrinho', `${currentQtyInCart} ${product.unit}`, '#7f1d1d', '#f59e0b', '700');
-
-      // Divider row for max allowed
-      const divider = document.createElement('div');
-      divider.style.cssText = 'padding-top: 8px; border-top: 1px solid #fecaca;';
-      const maxRow = document.createElement('div');
-      maxRow.style.cssText = 'display: flex; justify-content: space-between;';
-      const maxLabel = document.createElement('span');
-      maxLabel.style.cssText = 'font-size: 13px; color: #7f1d1d;';
-      maxLabel.textContent = 'Máximo permitido';
-      const maxValue = document.createElement('span');
-      maxValue.style.cssText = 'font-size: 13px; font-weight: 700; color: #991b1b;';
-      maxValue.textContent = `${product.currentStock} ${product.unit}`;
-      maxRow.appendChild(maxLabel);
-      maxRow.appendChild(maxValue);
-      divider.appendChild(maxRow);
-      detailsBox.appendChild(divider);
-
-      contentWrapper.appendChild(detailsBox);
-
-      // --- Tip box ---
-      const tipBox = document.createElement('div');
-      tipBox.style.cssText = 'background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 12px;';
-      const tipHeader = document.createElement('div');
-      tipHeader.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-bottom: 8px;';
-      tipHeader.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>';
-      const tipLabel = document.createElement('span');
-      tipLabel.style.cssText = 'font-size: 12px; font-weight: 600; color: #92400e;';
-      tipLabel.textContent = 'Dica:';
-      tipHeader.appendChild(tipLabel);
-      tipBox.appendChild(tipHeader);
-      const tipText = document.createElement('p');
-      tipText.style.cssText = 'margin: 0; font-size: 12px; color: #92400e;';
-      tipText.textContent = 'Remova itens do carrinho ou finalize a venda atual antes de adicionar mais.';
-      tipBox.appendChild(tipText);
-      contentWrapper.appendChild(tipBox);
-
-      modal.appendChild(contentWrapper);
-
-      // --- "Entendido" button ---
-      const button = document.createElement('button');
-      button.style.cssText = `
-        width: 100%; padding: 14px; margin-top: 16px;
-        background: linear-gradient(135deg, #ef4444, #dc2626);
-        color: white; border: none; border-radius: 12px;
-        font-size: 14px; font-weight: 700; cursor: pointer;
-        transition: transform 0.1s, box-shadow 0.1s;
-      `;
-      button.textContent = 'Entendido';
-      button.addEventListener('click', () => alertContainer.remove());
-      button.addEventListener('mousedown', () => { button.style.transform = 'scale(0.98)'; });
-      button.addEventListener('mouseup', () => { button.style.transform = 'scale(1)'; });
-      modal.appendChild(button);
-
-      // --- Animation styles ---
-      const styleEl = document.createElement('style');
-      styleEl.textContent = `
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-      `;
-
-      alertContainer.appendChild(modal);
-      alertContainer.appendChild(styleEl);
-      document.body.appendChild(alertContainer);
-      
-      // Auto-remove after 8 seconds
-      if (alertDismissTimeoutRef.current) clearTimeout(alertDismissTimeoutRef.current);
-      alertDismissTimeoutRef.current = setTimeout(() => alertContainer.remove(), 8000);
+      setStockAlert({ product, currentQty: currentQtyInCart });
       return;
     }
 
@@ -394,8 +262,12 @@ export const PDVView: React.FC<PDVViewProps> = ({
 
   // Remove Item
   const handleRemoveItem = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.product.id !== productId));
-    posAudio.click();
+    const item = cart.find((i) => i.product.id === productId);
+    if (!item) return;
+    if (confirm(`Remover "${item.product.name}" do carrinho?`)) {
+      setCart((prev) => prev.filter((item) => item.product.id !== productId));
+      posAudio.click();
+    }
   };
 
   // Clear Cart
@@ -575,13 +447,6 @@ export const PDVView: React.FC<PDVViewProps> = ({
     return () => {
       if (scannerIntervalRef.current) clearInterval(scannerIntervalRef.current);
       if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
-
-  // Cleanup alert dismiss timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (alertDismissTimeoutRef.current) clearTimeout(alertDismissTimeoutRef.current);
     };
   }, []);
 
@@ -1104,6 +969,72 @@ export const PDVView: React.FC<PDVViewProps> = ({
               className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-600 dark:text-slate-400 text-xs font-bold transition-colors"
             >
               Fechar Scanner
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────
+           Stock Alert Modal (React state)
+           ────────────────────────────────────────────── */}
+      {stockAlert && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setStockAlert(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl max-w-[360px] w-full shadow-2xl overflow-hidden animate-slideUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4">
+              {/* Header */}
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-6 h-6 text-red-500" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-red-900 dark:text-red-300 m-0">Estoque Insuficiente</h3>
+                  <p className="text-xs text-red-700 dark:text-red-400 m-0 mt-1">Não é possível adicionar mais itens</p>
+                </div>
+              </div>
+
+              {/* Details */}
+              <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-xl p-3 mb-3 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-xs text-red-700 dark:text-red-400">Produto</span>
+                  <span className="text-xs font-semibold text-red-900 dark:text-red-200">{stockAlert.product.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-red-700 dark:text-red-400">Disponível em estoque</span>
+                  <span className="text-xs font-bold text-red-600 dark:text-red-400">{stockAlert.product.currentStock} {stockAlert.product.unit}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-red-700 dark:text-red-400">Já no carrinho</span>
+                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400">{stockAlert.currentQty} {stockAlert.product.unit}</span>
+                </div>
+                <div className="pt-2 border-t border-red-200 dark:border-red-800 flex justify-between">
+                  <span className="text-xs text-red-700 dark:text-red-400">Máximo permitido</span>
+                  <span className="text-xs font-bold text-red-900 dark:text-red-200">{stockAlert.product.currentStock} {stockAlert.product.unit}</span>
+                </div>
+              </div>
+
+              {/* Tip */}
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl p-3 mb-2">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">Dica:</span>
+                </div>
+                <p className="text-xs text-amber-700 dark:text-amber-400 m-0">
+                  Remova itens do carrinho ou finalize a venda atual antes de adicionar mais.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setStockAlert(null)}
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold text-sm border-none cursor-pointer transition-all active:scale-[0.98]"
+            >
+              Entendido
             </button>
           </div>
         </div>

@@ -260,7 +260,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           payments.push({
             method: 'pix',
             amount: totalAmount,
-            pixTxId: `PIX-${Date.now()}`,
+            pixTxId: `PIX-SIMULATED-${Date.now()}`,
           });
         } else if (method === 'credit_card') {
           payments.push({
@@ -291,7 +291,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           });
         }
 
-      const saleCode = `VEN-${Math.floor(1000 + Math.random() * 9000)}`;
+      const saleCode = `VEN-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
       const newSale: Sale = {
         id: `sale-${Date.now()}`,
         code: saleCode,
@@ -418,7 +418,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             {!isSplit ? (
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 {[
-                  { id: 'pix', label: 'PIX QrCode', icon: QrCode, badge: 'Rápido' },
+                  { id: 'pix', label: 'PIX QrCode', icon: QrCode, badge: 'Simulação' },
                   { id: 'cash', label: 'Dinheiro', icon: Banknote, badge: 'Troco' },
                   { id: 'credit_card', label: 'Crédito', icon: CreditCard, badge: 'Até 12x' },
                   { id: 'debit_card', label: 'Débito', icon: CreditCard },
@@ -650,6 +650,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         <div className="flex items-center justify-center sm:justify-start gap-2">
                           <span className="text-xs font-bold text-slate-900 dark:text-white">
                             Pagamento PIX Instantâneo
+                          </span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 italic">
+                            Simulação
                           </span>
                           {pixPaid ? (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
