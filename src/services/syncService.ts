@@ -310,8 +310,11 @@ class SupabaseSyncService {
         // Fetch rows where store_branch_id matches OR is null (shared data)
         query = query.or(`store_branch_id.eq.${branchId},store_branch_id.is.null`);
       }
-      // Always order by created_at descending so newest appears first
-      query = query.order('created_at', { ascending: false });
+      // Order by created_at DESC only for tables that have this column
+      const tablesWithCreatedAt: TableName[] = ['sales', 'stock_movements', 'customers', 'system_users'];
+      if (tablesWithCreatedAt.includes(table)) {
+        query = query.order('created_at', { ascending: false });
+      }
       const { data, error } = await query;
       if (error) {
         console.warn(`[HD-Sync] Fetch ${table} failed:`, error.message);

@@ -441,9 +441,15 @@ class StorageService {
   }
 
   private syncCaixaSession(s: CashRegisterSession) {
+    const orgId = this.getCurrentOrgId();
+    // Defensive: se organization_id for inválido, não tenta upsert
+    if (!orgId || orgId === '' || orgId === 'undefined' || orgId === 'null' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) {
+      console.warn(`[HD-Sync] ⚠️ syncCaixaSession skipped — organization_id inválido (${orgId})`);
+      return;
+    }
     syncService.upsertRow('cash_sessions', {
       id: s.id,
-      organization_id: this.getCurrentOrgId(),
+      organization_id: orgId,
       store_branch_id: s.storeBranchId || null,
       user_id: s.operatorId,
       operator_name: s.operatorName,
