@@ -16,6 +16,7 @@ import {
 import { Customer, Supplier, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { useToast } from '../shared/Toast';
 
 interface CRMViewProps {
   customers: Customer[];
@@ -25,8 +26,11 @@ interface CRMViewProps {
 
 export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) => {
   const isAdmin = user.role === 'admin';
+  const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState<'customers' | 'suppliers'>('customers');
   const [searchTerm, setSearchTerm] = useState('');
+  const [savingCustomer, setSavingCustomer] = useState(false);
+  const [savingSupplier, setSavingSupplier] = useState(false);
 
   // Customer Modal state
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -68,23 +72,45 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
 
   const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
-    const updatedCust: Customer = {
-      id: editingCustomer ? editingCustomer.id : `cli-${Date.now()}`,
-      name: custName,
-      cpfCnpj: custCpfCnpj,
-      email: custEmail,
-      phone: custPhone,
-      creditLimit: custLimit,
-      currentBalance: editingCustomer?.currentBalance || 0,
-      loyaltyPoints: editingCustomer?.loyaltyPoints || 50,
-      city: editingCustomer?.city || 'São Paulo',
-      state: editingCustomer?.state || 'SP',
-      createdAt: editingCustomer?.createdAt || new Date().toISOString().slice(0, 10),
-    };
+    if (!custName.trim()) {
+      addToast('error', 'Nome do cliente é obrigatório.');
+      return;
+    }
+    if (!custCpfCnpj.trim()) {
+      addToast('error', 'CPF/CNPJ é obrigatório.');
+      return;
+    }
+    if (custLimit < 0) {
+      addToast('error', 'Limite de crédito não pode ser negativo.');
+      return;
+    }
 
-    storageService.saveCustomer(updatedCust);
-    posAudio.chime();
-    setIsCustomerModalOpen(false);
+    setSavingCustomer(true);
+    try {
+      const updatedCust: Customer = {
+        id: editingCustomer ? editingCustomer.id : `cli-${Date.now()}`,
+        name: custName.trim(),
+        cpfCnpj: custCpfCnpj.trim(),
+        email: custEmail.trim(),
+        phone: custPhone.trim(),
+        creditLimit: custLimit,
+        currentBalance: editingCustomer?.currentBalance || 0,
+        loyaltyPoints: editingCustomer?.loyaltyPoints || 50,
+        city: editingCustomer?.city || 'São Paulo',
+        state: editingCustomer?.state || 'SP',
+        createdAt: editingCustomer?.createdAt || new Date().toISOString().slice(0, 10),
+      };
+
+      storageService.saveCustomer(updatedCust);
+      posAudio.chime();
+      addToast('success', `Cliente "${updatedCust.name}" salvo com sucesso.`);
+      setIsCustomerModalOpen(false);
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao salvar cliente.');
+      posAudio.error();
+    } finally {
+      setSavingCustomer(false);
+    }
   };
 
   const handleOpenSupplierModal = (supplier?: Supplier) => {
@@ -110,32 +136,60 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
 
   const handleSaveSupplier = (e: React.FormEvent) => {
     e.preventDefault();
-    const updatedSup: Supplier = {
-      id: editingSupplier ? editingSupplier.id : `sup-${Date.now()}`,
-      companyName: supCompanyName,
-      tradeName: supTradeName,
-      cnpj: supCnpj,
-      contactName: supContact,
-      email: supEmail,
-      phone: supPhone,
-    };
+    if (!supCompanyName.trim()) {
+      addToast('error', 'Razão social é obrigatória.');
+      return;
+    }
+    if (!supCnpj.trim()) {
+      addToast('error', 'CNPJ é obrigatório.');
+      return;
+    }
 
-    storageService.saveSupplier(updatedSup);
-    posAudio.chime();
-    setIsSupplierModalOpen(false);
+    setSavingSupplier(true);
+    try {
+      const updatedSup: Supplier = {
+        id: editingSupplier ? editingSupplier.id : `sup-${Date.now()}`,
+        companyName: supCompanyName.trim(),
+        tradeName: supTradeName.trim(),
+        cnpj: supCnpj.trim(),
+        contactName: supContact.trim(),
+        email: supEmail.trim(),
+        phone: supPhone.trim(),
+      };
+
+      storageService.saveSupplier(updatedSup);
+      posAudio.chime();
+      addToast('success', `Fornecedor "${updatedSup.tradeName || updatedSup.companyName}" salvo com sucesso.`);
+      setIsSupplierModalOpen(false);
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao salvar fornecedor.');
+      posAudio.error();
+    } finally {
+      setSavingSupplier(false);
+    }
   };
 
   const handleDeleteCustomer = (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este cliente?')) {
+    if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+    try {
       storageService.deleteCustomer(id);
       posAudio.chime();
+      addToast('success', 'Cliente excluído.');
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao excluir cliente.');
+      posAudio.error();
     }
   };
 
   const handleDeleteSupplier = (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este fornecedor?')) {
+    if (!confirm('Tem certeza que deseja excluir este fornecedor?')) return;
+    try {
       storageService.deleteSupplier(id);
       posAudio.chime();
+      addToast('success', 'Fornecedor excluído.');
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao excluir fornecedor.');
+      posAudio.error();
     }
   };
 
@@ -420,9 +474,10 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold"
+                  disabled={savingCustomer}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold disabled:opacity-60"
                 >
-                  {editingCustomer ? 'Salvar Alterações' : 'Salvar Cliente'}
+                  {savingCustomer ? 'Salvando...' : editingCustomer ? 'Salvar Alterações' : 'Salvar Cliente'}
                 </button>
               </div>
             </form>
@@ -521,9 +576,10 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold"
+                  disabled={savingSupplier}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold disabled:opacity-60"
                 >
-                  {editingSupplier ? 'Salvar Alterações' : 'Salvar Fornecedor'}
+                  {savingSupplier ? 'Salvando...' : editingSupplier ? 'Salvar Alterações' : 'Salvar Fornecedor'}
                 </button>
               </div>
             </form>
