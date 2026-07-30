@@ -373,13 +373,17 @@ ALTER TABLE movimentacoes_falhas ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAM
 SELECT '3️⃣  PASSO 3: Recriando funções RPC...' AS progresso;
 
 -- 3.1. get_auth_user_org_id — retorna a organização do usuário logado
+-- CORRIGIDO: adiciona fallback por email do JWT (auth.jwt() ->> 'email')
+-- porque system_users.id e profiles.id são gerados pelo frontend e NÃO
+-- batem com auth.uid() (UUID do Supabase Auth).
 CREATE OR REPLACE FUNCTION public.get_auth_user_org_id()
 RETURNS UUID
 LANGUAGE sql STABLE SECURITY DEFINER
 AS $$
   SELECT COALESCE(
     (SELECT organization_id FROM profiles WHERE id = auth.uid()),
-    (SELECT organization_id FROM system_users WHERE id = auth.uid())
+    (SELECT organization_id FROM system_users WHERE id = auth.uid()),
+    (SELECT organization_id FROM system_users WHERE email = (auth.jwt() ->> 'email'))
   );
 $$;
 GRANT EXECUTE ON FUNCTION public.get_auth_user_org_id TO authenticated;
