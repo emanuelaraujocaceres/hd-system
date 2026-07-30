@@ -1120,6 +1120,8 @@ class StorageService {
             ...cloudMapped,
             ...localSales.filter((s) => !cloudSaleIds.has(s.id)),
           ];
+          // Sort: newest first by date (defensive — cloud ORDER BY + local safety net)
+          mergedSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           console.log(`[HD-Sync] 📊 Merged ${mergedSales.length} sales (cloud: ${cloudMapped.length}, local-only: ${mergedSales.length - cloudMapped.length})`);
           if (cloudMapped.length > 0) console.log(`[HD-Sync] 📊 Cloud sale IDs:`, cloudMapped.map(s => `${s.id} (customer: ${s.customerName || 'N/A'})`));
           // Defensive: warn if any local sale with unique ID went missing

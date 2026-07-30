@@ -426,17 +426,17 @@ export const INITIAL_CAIXA_SESSION: CashRegisterSession = {
   openedAt: new Date(new Date().setHours(8, 0, 0, 0)).toISOString(),
   operatorId: USER_UUIDS['usr-01'],
   operatorName: 'Emanuel Araújo',
-  initialCash: 250.00,
-  currentCashBalance: 450.00,
-  totalSalesCash: 200.00,
-  totalSalesPix: 50.00,
-  totalSalesCard: 170.00,
+  initialCash: 0,
+  currentCashBalance: 0,
+  totalSalesCash: 0,
+  totalSalesPix: 0,
+  totalSalesCard: 0,
   totalSalesCreditAccount: 0,
   suprimentos: 0,
   sangrias: 0,
   status: 'open',
   organizationId: DEFAULT_ORG_ID,
-  notes: 'Caixa aberto com troco inicial padrão R$ 250,00.',
+  notes: 'Caixa inicial (sem movimentação).',
 };
 
 export const INITIAL_FINANCIAL_ACCOUNTS: FinancialAccount[] = [];
