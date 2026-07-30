@@ -235,7 +235,75 @@ $$;
 GRANT EXECUTE ON FUNCTION process_sale_transaction TO authenticated;
 
 -- ================================================================
--- 7. GARANTIR PERMISSÕES EM TODAS AS FUNÇÕES
+-- 7. CORRIGIR get_auth_user_org_id() — FALLBACK POR EMAIL
+-- ================================================================
+-- O RLS em cash_sessions (e outras tabelas) usa esta função.
+-- Se o auth.uid() não encontrar profile, retorna NULL → RLS bloqueia tudo.
+-- Adicionamos fallbacks: system_users(id) → system_users(email).
+-- ================================================================
+
+-- 7.1. Sincronizar profiles com auth.users (cria se não existir)
+INSERT INTO profiles (id, organization_id, name, email, role)
+SELECT
+  au.id,
+  su.organization_id,
+  su.name,
+  su.email,
+  COALESCE(su.role, 'admin')
+FROM auth.users au
+JOIN system_users su ON LOWER(au.email) = LOWER(su.email)
+ON CONFLICT (id) DO UPDATE SET
+  organization_id = EXCLUDED.organization_id,
+  name = EXCLUDED.name,
+  email = EXCLUDED.email,
+  role = EXCLUDED.role;
+
+-- 7.2. Recriar get_auth_user_org_id com fallbacks
+CREATE OR REPLACE FUNCTION public.get_auth_user_org_id()
+RETURNS UUID
+LANGUAGE sql STABLE SECURITY DEFINER
+AS $$
+  SELECT COALESCE(
+    (SELECT organization_id FROM profiles WHERE id = auth.uid()),
+    (SELECT organization_id FROM system_users WHERE id = auth.uid()),
+    (SELECT organization_id FROM system_users WHERE email = (auth.jwt() ->> 'email')),
+    (SELECT organization_id FROM system_users WHERE LOWER(email) = LOWER(auth.jwt() ->> 'email'))
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_auth_user_org_id TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_auth_user_org_id TO service_role;
+
+-- 7.3. Recriar is_superadmin com fallback por email
+CREATE OR REPLACE FUNCTION public.is_superadmin()
+RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM system_users
+    WHERE (id = auth.uid() OR LOWER(email) = LOWER(auth.jwt() ->> 'email'))
+      AND superadmin = TRUE
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_superadmin TO authenticated;
+
+-- 7.4. Recriar get_is_superadmin com fallback por email
+CREATE OR REPLACE FUNCTION public.get_is_superadmin()
+RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER
+AS $$
+  SELECT COALESCE(
+    (SELECT superadmin FROM system_users WHERE id = auth.uid()),
+    (SELECT superadmin FROM system_users WHERE LOWER(email) = LOWER(auth.jwt() ->> 'email')),
+    FALSE
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_is_superadmin TO authenticated;
+
+-- ================================================================
+-- 8. GARANTIR PERMISSÕES EM TODAS AS FUNÇÕES
 -- ================================================================
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
 
@@ -256,7 +324,14 @@ SELECT 'Fn ajustar_estoque secdef',
   (SELECT CASE WHEN prosecdef THEN 'SECURITY DEFINER' ELSE 'SECURITY INVOKER' END FROM pg_proc WHERE proname = 'ajustar_estoque')
 UNION ALL
 SELECT 'Fn process_sale_transaction secdef',
-  (SELECT CASE WHEN prosecdef THEN 'SECURITY DEFINER' ELSE 'SECURITY INVOKER' END FROM pg_proc WHERE proname = 'process_sale_transaction');
+  (SELECT CASE WHEN prosecdef THEN 'SECURITY DEFINER' ELSE 'SECURITY INVOKER' END FROM pg_proc WHERE proname = 'process_sale_transaction')
+UNION ALL
+SELECT 'get_auth_user_org_id fallbacks',
+  (SELECT 'profiles → system_users(id) → system_users(email)' FROM pg_proc WHERE proname = 'get_auth_user_org_id' AND prosecdef = true)
+UNION ALL
+SELECT 'profiles count', COUNT(*)::text FROM profiles
+UNION ALL
+SELECT 'system_users count', COUNT(*)::text FROM system_users;
 
 DO $$
 BEGIN
@@ -268,5 +343,7 @@ BEGIN
   RAISE NOTICE '4. ajustar_estoque: SECURITY DEFINER';
   RAISE NOTICE '5. process_sale_transaction: SECURITY DEFINER';
   RAISE NOTICE '6. trg_log_stock_changes: removido (garantia)';
+  RAISE NOTICE '7. get_auth_user_org_id: fallback profiles → system_users(id) → system_users(email)';
+  RAISE NOTICE '8. profiles sincronizados com auth.users';
   RAISE NOTICE '========================================';
 END $$;
