@@ -192,14 +192,21 @@ export const PDVView: React.FC<PDVViewProps> = ({
             : item
         );
       } else {
+        // Usa preço promocional da TV se o produto estiver em oferta ativa
+        const effectivePrice =
+          product.showOnTV &&
+          product.tvPromoPrice != null &&
+          product.tvPromoPrice !== product.salePrice
+            ? product.tvPromoPrice
+            : product.salePrice;
         return [
           ...prev,
           {
             product,
             quantity: 1,
-            unitPrice: product.salePrice,
+            unitPrice: effectivePrice,
             discount: 0,
-            totalPrice: product.salePrice,
+            totalPrice: effectivePrice,
           },
         ];
       }
