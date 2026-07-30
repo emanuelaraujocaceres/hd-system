@@ -92,7 +92,7 @@ WHERE store_branch_id::text IN ('f3265a77-5946-5cd3-b09c-725ac4d26952', '32b31da
 -- =============================================================
 -- 7. VERIFICAR E CORRIGIR PREÇO DO HEINEKEN 269ml
 -- =============================================================
-SELECT id, name, COALESCE(salePrice, 0) AS salePrice, COALESCE(costPrice, 0) AS costPrice, barcode
+SELECT id, name, COALESCE(sale_price, 0) AS sale_price, COALESCE(cost_price, 0) AS cost_price, barcode
 FROM products
 WHERE LOWER(name) LIKE '%heineken%';
 
