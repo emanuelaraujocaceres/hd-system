@@ -89,13 +89,12 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
+      document.documentElement.requestFullscreen()
+        .then(() => setIsFullscreen(true))
+        .catch(() => { /* User gesture required or browser denied */ });
     } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
-      }
+      document.exitFullscreen?.();
+      // fullscreenchange event handles state sync
     }
   };
 
