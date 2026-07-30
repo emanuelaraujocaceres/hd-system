@@ -691,6 +691,7 @@ export const App: React.FC = () => {
                   sales={sales}
                   products={products}
                   user={user}
+                  financialAccounts={financialAccounts}
                   onNavigateTab={handleTabChange}
                   onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
                 />

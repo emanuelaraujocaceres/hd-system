@@ -30,6 +30,7 @@ import {
 import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, SubscriptionInfo, SubscriptionInvoice } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { supabase } from '../../lib/supabase';
 
 interface SettingsViewProps {
   settings: SystemSettings;
@@ -244,7 +245,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     setIsUserModalOpen(true);
   };
 
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userEmail.includes('@')) {
       setErrorMessage('Por favor, informe um e-mail de usuário válido.');
@@ -271,6 +272,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       createdAt: editingUser?.createdAt || new Date().toISOString().split('T')[0],
       password: userPassword || editingUser?.password || undefined,
     };
+
+    // Se for um usuário NOVO (não edição) e tem senha, criar também no Supabase Auth
+    if (!editingUser && userPassword) {
+      const { error: signUpError } = await supabase.auth.signUp({
+        email: userEmail.trim().toLowerCase(),
+        password: userPassword,
+      });
+      if (signUpError) {
+        console.warn('[Settings] Supabase Auth signUp warning (non-fatal):', signUpError.message);
+        // Não bloqueia — o usuário pode usar login local mesmo sem Supabase Auth
+      }
+    }
 
     storageService.saveUser(newUser);
     refreshUsersList();

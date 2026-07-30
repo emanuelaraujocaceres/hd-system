@@ -435,50 +435,7 @@ export const INITIAL_CAIXA_SESSION: CashRegisterSession = {
   notes: 'Caixa aberto com troco inicial padrão R$ 250,00.',
 };
 
-export const INITIAL_FINANCIAL_ACCOUNTS: FinancialAccount[] = [
-  {
-    id: FINANCIAL_UUIDS['fin-01'],
-    title: 'Fatura Fornecedor Ambev - Bebidas',
-    type: 'payable',
-    category: 'Fornecedores',
-    amount: 1450.00,
-    dueDate: '2026-07-28',
-    status: 'pending',
-    recipientOrPayer: 'Ambev S.A.',
-    notes: 'Nota Fiscal de Entrada #88921',
-  },
-  {
-    id: FINANCIAL_UUIDS['fin-02'],
-    title: 'Aluguel do Imóvel da Loja Matriz',
-    type: 'payable',
-    category: 'Instalações',
-    amount: 3200.00,
-    dueDate: '2026-08-05',
-    status: 'pending',
-    recipientOrPayer: 'Imobiliária Central SP',
-  },
-  {
-    id: FINANCIAL_UUIDS['fin-03'],
-    title: 'Vendas Promocionais Corporativas',
-    type: 'receivable',
-    category: 'Vendas Faturadas',
-    amount: 850.00,
-    dueDate: '2026-07-25',
-    status: 'pending',
-    recipientOrPayer: 'Empresa Padaria Pão Doce Ltda',
-  },
-  {
-    id: FINANCIAL_UUIDS['fin-04'],
-    title: 'Conta de Energia Elétrica Enel',
-    type: 'payable',
-    category: 'Utilidades',
-    amount: 680.40,
-    dueDate: '2026-07-20',
-    paidDate: '2026-07-19',
-    status: 'paid',
-    recipientOrPayer: 'Enel Distribuição SP',
-  },
-];
+export const INITIAL_FINANCIAL_ACCOUNTS: FinancialAccount[] = [];
 
 export const INITIAL_SETTINGS: SystemSettings = {
   companyName: 'HD-System Comércio e Soluções LTDA',

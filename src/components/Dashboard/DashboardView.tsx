@@ -11,7 +11,7 @@ import {
   ChevronUp,
   Users,
 } from 'lucide-react';
-import { Product, Sale, UserProfile } from '../../types';
+import { Product, Sale, UserProfile, FinancialAccount } from '../../types';
 import { storageService } from '../../services/storageService';
 import { CollaboratorPerformance } from './CollaboratorPerformance';
 
@@ -19,6 +19,7 @@ interface DashboardViewProps {
   sales: Sale[];
   products: Product[];
   user: UserProfile;
+  financialAccounts: FinancialAccount[];
   onNavigateTab: (tab: string) => void;
   onOpenCaixaModal: () => void;
 }
@@ -27,6 +28,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   sales,
   products,
   user,
+  financialAccounts,
   onNavigateTab,
   onOpenCaixaModal,
 }) => {
@@ -432,23 +434,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Right Column Widgets */}
         <div className="lg:col-span-4 space-y-4 sm:space-y-6">
-          {/* Upcoming Payments Widget */}
+          {/* Upcoming Payments Widget - Dados reais do Financeiro */}
           <button onClick={() => onNavigateTab('finance')} className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm cursor-pointer hover:shadow-md hover:border-slate-300 dark:hover:border-[#3f3f46] transition-all text-left w-full">
             <h3 className="text-xs uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a] mb-4">Próximos Pagamentos</h3>
             <div className="space-y-4">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-600 dark:text-[#a1a1aa]">Aluguel Galpão A</span>
-                <span className="font-medium text-rose-500">R$ 3.500</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-600 dark:text-[#a1a1aa]">Fornecedor Distribuição</span>
-                <span className="font-medium text-rose-500">R$ 1.120</span>
-              </div>
-              <div className="h-px bg-slate-200 dark:bg-[#27272a] my-2"></div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-900 dark:text-white font-bold">Total Pendente</span>
-                <span className="font-bold text-slate-900 dark:text-white">R$ 4.620</span>
-              </div>
+              {(() => {
+                const pending = financialAccounts
+                  .filter(a => a.type === 'payable' && a.status === 'pending')
+                  .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+                  .slice(0, 3);
+                const total = pending.reduce((s, a) => s + a.amount, 0);
+                if (pending.length === 0) {
+                  return <p className="text-xs text-slate-400 dark:text-[#71717a]">Nenhum pagamento pendente</p>;
+                }
+                return (
+                  <>
+                    {pending.map(acc => (
+                      <div key={acc.id} className="flex items-center justify-between text-xs">
+                        <span className="text-slate-600 dark:text-[#a1a1aa] truncate max-w-[70%]">{acc.title}</span>
+                        <span className="font-medium text-rose-500">R$ {acc.amount.toFixed(2).replace('.', ',')}</span>
+                      </div>
+                    ))}
+                    <div className="h-px bg-slate-200 dark:bg-[#27272a] my-2"></div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-900 dark:text-white font-bold">Total Pendente</span>
+                      <span className="font-bold text-slate-900 dark:text-white">R$ {total.toFixed(2).replace('.', ',')}</span>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </button>
 
