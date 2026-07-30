@@ -14,9 +14,9 @@
 -- =============================================================
 UPDATE sales
 SET store_branch_id = CASE store_branch_id::text
-  WHEN 'br-01' THEN 'f3265a77-5946-5cd3-b09c-725ac4d26952'::uuid
-  WHEN 'br-02' THEN '32b31da2-00e8-570c-8a10-2d6ae23c9eee'::uuid
-  WHEN 'br-03' THEN '62a2b07b-4237-559a-a2cd-e0fc7dcbecdc'::uuid
+  WHEN 'br-01' THEN 'f3265a77-5946-5cd3-b09c-725ac4d26952'
+  WHEN 'br-02' THEN '32b31da2-00e8-570c-8a10-2d6ae23c9eee'
+  WHEN 'br-03' THEN '62a2b07b-4237-559a-a2cd-e0fc7dcbecdc'
   ELSE store_branch_id
 END
 WHERE store_branch_id::text IN ('br-01', 'br-02', 'br-03');
@@ -30,9 +30,9 @@ WHERE store_branch_id IN ('f3265a77-5946-5cd3-b09c-725ac4d26952'::uuid, '32b31da
 -- =============================================================
 UPDATE cash_sessions
 SET store_branch_id = CASE store_branch_id::text
-  WHEN 'br-01' THEN 'f3265a77-5946-5cd3-b09c-725ac4d26952'::uuid
-  WHEN 'br-02' THEN '32b31da2-00e8-570c-8a10-2d6ae23c9eee'::uuid
-  WHEN 'br-03' THEN '62a2b07b-4237-559a-a2cd-e0fc7dcbecdc'::uuid
+  WHEN 'br-01' THEN 'f3265a77-5946-5cd3-b09c-725ac4d26952'
+  WHEN 'br-02' THEN '32b31da2-00e8-570c-8a10-2d6ae23c9eee'
+  WHEN 'br-03' THEN '62a2b07b-4237-559a-a2cd-e0fc7dcbecdc'
   ELSE store_branch_id
 END
 WHERE store_branch_id::text IN ('br-01', 'br-02', 'br-03');
@@ -46,9 +46,9 @@ WHERE store_branch_id IN ('f3265a77-5946-5cd3-b09c-725ac4d26952'::uuid, '32b31da
 -- =============================================================
 UPDATE stock_movements
 SET store_branch_id = CASE store_branch_id::text
-  WHEN 'br-01' THEN 'f3265a77-5946-5cd3-b09c-725ac4d26952'::uuid
-  WHEN 'br-02' THEN '32b31da2-00e8-570c-8a10-2d6ae23c9eee'::uuid
-  WHEN 'br-03' THEN '62a2b07b-4237-559a-a2cd-e0fc7dcbecdc'::uuid
+  WHEN 'br-01' THEN 'f3265a77-5946-5cd3-b09c-725ac4d26952'
+  WHEN 'br-02' THEN '32b31da2-00e8-570c-8a10-2d6ae23c9eee'
+  WHEN 'br-03' THEN '62a2b07b-4237-559a-a2cd-e0fc7dcbecdc'
   ELSE store_branch_id
 END
 WHERE store_branch_id::text IN ('br-01', 'br-02', 'br-03');
@@ -62,9 +62,9 @@ WHERE store_branch_id IN ('f3265a77-5946-5cd3-b09c-725ac4d26952'::uuid, '32b31da
 -- =============================================================
 UPDATE financial_transactions
 SET store_branch_id = CASE store_branch_id::text
-  WHEN 'br-01' THEN 'f3265a77-5946-5cd3-b09c-725ac4d26952'::uuid
-  WHEN 'br-02' THEN '32b31da2-00e8-570c-8a10-2d6ae23c9eee'::uuid
-  WHEN 'br-03' THEN '62a2b07b-4237-559a-a2cd-e0fc7dcbecdc'::uuid
+  WHEN 'br-01' THEN 'f3265a77-5946-5cd3-b09c-725ac4d26952'
+  WHEN 'br-02' THEN '32b31da2-00e8-570c-8a10-2d6ae23c9eee'
+  WHEN 'br-03' THEN '62a2b07b-4237-559a-a2cd-e0fc7dcbecdc'
   ELSE store_branch_id
 END
 WHERE store_branch_id::text IN ('br-01', 'br-02', 'br-03');
@@ -78,9 +78,9 @@ WHERE store_branch_id IN ('f3265a77-5946-5cd3-b09c-725ac4d26952'::uuid, '32b31da
 -- =============================================================
 UPDATE products
 SET store_branch_id = CASE store_branch_id::text
-  WHEN 'br-01' THEN 'f3265a77-5946-5cd3-b09c-725ac4d26952'::uuid
-  WHEN 'br-02' THEN '32b31da2-00e8-570c-8a10-2d6ae23c9eee'::uuid
-  WHEN 'br-03' THEN '62a2b07b-4237-559a-a2cd-e0fc7dcbecdc'::uuid
+  WHEN 'br-01' THEN 'f3265a77-5946-5cd3-b09c-725ac4d26952'
+  WHEN 'br-02' THEN '32b31da2-00e8-570c-8a10-2d6ae23c9eee'
+  WHEN 'br-03' THEN '62a2b07b-4237-559a-a2cd-e0fc7dcbecdc'
   ELSE store_branch_id
 END
 WHERE store_branch_id::text IN ('br-01', 'br-02', 'br-03');
