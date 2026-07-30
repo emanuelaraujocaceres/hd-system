@@ -7,6 +7,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { storageService } from '../../services/storageService';
 import { UserProfile } from '../../types';
+import { useToast } from '../shared/Toast';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers de API                                                    */
@@ -127,6 +128,7 @@ export const OrganizationsView: React.FC<Props> = ({ user, onEnterOrg }) => {
 /* ================================================================== */
 
 const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> = ({ onEnterOrg }) => {
+  const { addToast } = useToast();
   /* ---------- state ---------- */
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
   const [branchesMap, setBranchesMap] = useState<Record<string, BranchRow[]>>({});
@@ -176,20 +178,29 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
       return;
     }
     setExpanded((prev) => { const n = new Set(prev); n.add(orgId); return n; });
-    if (!branchesMap[orgId]) {
-      const { data } = await supabase.rpc('admin_fetch_branches', { p_org_id: orgId });
-      setBranchesMap((prev) => ({ ...prev, [orgId]: parseJsonResponse<BranchRow>(data) }));
-    }
-    if (!usersMap[orgId]) {
-      const { data } = await supabase.rpc('admin_fetch_users', { p_org_id: orgId });
-      setUsersMap((prev) => ({ ...prev, [orgId]: parseJsonResponse<UserRow>(data) }));
+    try {
+      if (!branchesMap[orgId]) {
+        const { data, error: brErr } = await supabase.rpc('admin_fetch_branches', { p_org_id: orgId });
+        if (brErr) throw new Error(brErr.message);
+        setBranchesMap((prev) => ({ ...prev, [orgId]: parseJsonResponse<BranchRow>(data) }));
+      }
+      if (!usersMap[orgId]) {
+        const { data, error: usrErr } = await supabase.rpc('admin_fetch_users', { p_org_id: orgId });
+        if (usrErr) throw new Error(usrErr.message);
+        setUsersMap((prev) => ({ ...prev, [orgId]: parseJsonResponse<UserRow>(data) }));
+      }
+    } catch (e: any) {
+      addToast('error', e?.message || 'Erro ao carregar dados da organização.');
     }
   };
 
   /* ---------- criar org ---------- */
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newOrgName.trim() || !newAdminName.trim() || !newAdminEmail.trim()) return;
+    if (!newOrgName.trim() || !newAdminName.trim() || !newAdminEmail.trim()) {
+      addToast('error', 'Preencha todos os campos obrigatórios.');
+      return;
+    }
     setCreating(true); setCreatedResult(null);
     try {
       // Tenta servidor primeiro (cria Auth + system_users)
@@ -218,7 +229,10 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addUserName.trim() || !addUserEmail.trim()) return;
+    if (!addUserName.trim() || !addUserEmail.trim()) {
+      addToast('error', 'Preencha nome e e-mail do administrador.');
+      return;
+    }
     setAddingUser(true); setAddUserResult(null);
     try {
       // Tenta servidor primeiro (cria Auth + system_users)
