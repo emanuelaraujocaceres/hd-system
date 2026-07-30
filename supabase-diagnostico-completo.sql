@@ -1129,40 +1129,11 @@ CREATE TRIGGER trg_stock_not_negative
   EXECUTE FUNCTION fn_prevent_negative_stock();
 
 -- 6.3. Trigger: Log de mudanças de estoque
-CREATE OR REPLACE FUNCTION fn_log_stock_changes()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  IF OLD.stock_quantity IS DISTINCT FROM NEW.stock_quantity THEN
-    INSERT INTO stock_movements (
-      id, organization_id, product_id, product_name,
-      type, quantity, previous_stock, new_stock,
-      reason, operator_name, created_at
-    ) VALUES (
-      gen_random_uuid(),
-      NEW.organization_id,
-      NEW.id,
-      NEW.name,
-      CASE WHEN NEW.stock_quantity > OLD.stock_quantity THEN 'in' ELSE 'out' END,
-      ABS(NEW.stock_quantity - OLD.stock_quantity),
-      OLD.stock_quantity,
-      NEW.stock_quantity,
-      'Ajuste automático (trigger)',
-      'system',
-      NOW()
-    );
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS trg_log_stock_changes ON products;
-CREATE TRIGGER trg_log_stock_changes
-  AFTER UPDATE OF stock_quantity ON products
-  FOR EACH ROW
-  WHEN (OLD.stock_quantity IS DISTINCT FROM NEW.stock_quantity)
-  EXECUTE FUNCTION fn_log_stock_changes();
+-- REMOVIDA: as RPCs ajustar_estoque() e process_sale_transaction() já criam
+-- stock_movements com contexto real (operador, motivo, referência). A trigger
+-- gerava duplicatas com reason='Ajuste automático (trigger)' genérico.
+-- DROP TRIGGER IF EXISTS trg_log_stock_changes ON products;
+-- DROP FUNCTION IF EXISTS fn_log_stock_changes();
 
 -- 6.4. Trigger: Sincronizar product_name em sale_items e stock_movements
 CREATE OR REPLACE FUNCTION fn_sync_product_name()
@@ -1265,7 +1236,7 @@ WHERE n.nspname = 'public'
     'ajustar_estoque', 'process_sale_transaction',
     'fn_insserir_dlq', 'check_stock_consistency',
     'fn_update_updated_at', 'fn_prevent_negative_stock',
-    'fn_log_stock_changes', 'fn_sync_product_name'
+    'fn_sync_product_name'
   )
 ORDER BY p.proname;
 
@@ -1295,7 +1266,7 @@ WHERE tgname IN (
   'trg_products_updated_at', 'trg_store_branches_updated_at',
   'trg_customers_updated_at', 'trg_suppliers_updated_at',
   'trg_sales_updated_at', 'trg_system_users_updated_at',
-  'trg_stock_not_negative', 'trg_log_stock_changes',
+  'trg_stock_not_negative',
   'trg_sync_product_name'
 )
 ORDER BY tgname;
