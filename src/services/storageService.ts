@@ -377,11 +377,18 @@ class StorageService {
 
   private async syncSale(s: Sale) {
     try {
+      // Normalize storeBranchId to UUID (resolve short codes like "br-01" to UUID)
+      let branchUuid = s.storeBranchId || '';
+      if (branchUuid && !StorageService.UUID_RE.test(branchUuid)) {
+        const branches = this.getBranches();
+        const matched = branches.find(b => b.code === branchUuid || b.id === branchUuid);
+        if (matched) branchUuid = matched.id;
+      }
       // First upsert the parent sale — wait for it to complete
       await syncService.upsertRow('sales', {
         id: s.id,
         organization_id: this.getCurrentOrgId(),
-        store_branch_id: s.storeBranchId,
+        store_branch_id: branchUuid,
       user_id: s.operatorId || null,
         customer_id: s.customerId || null,
         code: s.code,
@@ -443,6 +450,13 @@ class StorageService {
   private syncCaixaSession(s: CashRegisterSession) {
     // Garantir que o ID seja UUID válido (pode vir do localStorage com ID legado TEXT)
     s.id = StorageService.ensureUuid(s.id);
+    // Normalize storeBranchId to UUID
+    let branchUuid = s.storeBranchId || '';
+    if (branchUuid && !StorageService.UUID_RE.test(branchUuid)) {
+      const branches = this.getBranches();
+      const matched = branches.find(b => b.code === branchUuid || b.id === branchUuid);
+      if (matched) branchUuid = matched.id;
+    }
     const orgId = this.getCurrentOrgId();
     // Defensive: se organization_id for inválido, não tenta upsert
     if (!orgId || orgId === '' || orgId === 'undefined' || orgId === 'null' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) {
@@ -452,7 +466,7 @@ class StorageService {
     syncService.upsertRow('cash_sessions', {
       id: s.id,
       organization_id: orgId,
-      store_branch_id: s.storeBranchId || null,
+      store_branch_id: branchUuid || null,
       user_id: s.operatorId && StorageService.UUID_RE.test(s.operatorId) ? s.operatorId : null,
       operator_name: s.operatorName,
       opening_balance: s.initialCash,
@@ -1644,11 +1658,11 @@ class StorageService {
     const all = this.get<Sale[]>(KEYS.SALES, fallback);
     const viewingOrg = this.getSuperadminViewingOrg();
     // Superadmin sem override: vê tudo
-    if (this.isSuperAdmin() && !viewingOrg) return all;
+    if (this.isSuperAdmin() && !viewingOrg) return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     // Com override (superadmin vendo org específica): filtrar pelas filiais da org
     if (viewingOrg) {
       const branchIds = new Set(this.getBranches().filter(b => b.organizationId === viewingOrg).map(b => b.id));
-      return all.filter(s => branchIds.has(s.storeBranchId));
+      return all.filter(s => branchIds.has(s.storeBranchId)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
     // Usuário comum (qualquer org, incluindo default): filtrar pelas filiais da sua org
     const targetOrgId = this.getCurrentOrgId();
@@ -1656,7 +1670,7 @@ class StorageService {
     return all.filter(s => {
       if (!s.storeBranchId) return this.isDefaultOrg(); // legado: só na org padrão
       return branchIds.has(s.storeBranchId);
-    });
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
 
   getSaleItems(): any[] {
