@@ -527,7 +527,19 @@ $$;
 GRANT EXECUTE ON FUNCTION public.admin_add_user TO authenticated;
 
 -- 3.9. ajustar_estoque — RPC de ajuste de estoque (usada pelo frontend)
-DROP FUNCTION IF EXISTS ajustar_estoque;
+-- Dropar TODAS as sobrecargas existentes (evita "not unique")
+DO $$ DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN (
+    SELECT p.oid::regprocedure AS signature
+    FROM pg_proc p
+    JOIN pg_namespace n ON p.pronamespace = n.oid
+    WHERE n.nspname = 'public' AND p.proname = 'ajustar_estoque'
+  ) LOOP
+    EXECUTE 'DROP FUNCTION IF EXISTS ' || r.signature || ' CASCADE';
+  END LOOP;
+END $$;
 
 CREATE OR REPLACE FUNCTION ajustar_estoque(
   p_product_id UUID,
@@ -579,7 +591,21 @@ GRANT EXECUTE ON FUNCTION ajustar_estoque TO authenticated;
 -- ⚠ ATENÇÃO: Esta versão CORRIGE a assinatura para corresponder ao que o
 -- frontend (storageService.ts:1702) realmente envia. A versão anterior na
 -- migração 20260729 só aceitava 4 parâmetros e estava QUEBRADA.
-DROP FUNCTION IF EXISTS process_sale_transaction;
+--
+-- Primeiro: dropar TODAS as sobrecargas existentes (pode haver múltiplas
+-- assinaturas de migrações anteriores causando "not unique").
+DO $$ DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN (
+    SELECT p.oid::regprocedure AS signature
+    FROM pg_proc p
+    JOIN pg_namespace n ON p.pronamespace = n.oid
+    WHERE n.nspname = 'public' AND p.proname = 'process_sale_transaction'
+  ) LOOP
+    EXECUTE 'DROP FUNCTION IF EXISTS ' || r.signature || ' CASCADE';
+  END LOOP;
+END $$;
 
 CREATE OR REPLACE FUNCTION process_sale_transaction(
   p_sale_id UUID,
