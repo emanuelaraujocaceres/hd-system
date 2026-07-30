@@ -35,6 +35,7 @@ import {
   Sale,
 } from '../../types';
 import { posAudio } from '../../services/audioService';
+import { useToast } from '../shared/Toast';
 import { PaymentModal } from './PaymentModal';
 import { ThermalReceiptModal } from './ThermalReceiptModal';
 
@@ -61,6 +62,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
   settings,
   user,
 }) => {
+  const { addToast } = useToast();
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -162,7 +164,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
 
     if (product.currentStock <= 0) {
       posAudio.error();
-      alert(`Atenção: O produto "${product.name}" está com estoque esgotado!`);
+      addToast('error', `"${product.name}" está com estoque esgotado!`);
       return;
     }
 
@@ -352,6 +354,10 @@ export const PDVView: React.FC<PDVViewProps> = ({
     } else if (filteredProducts.length === 1) {
       handleAddToCart(filteredProducts[0]);
       setSearchTerm('');
+    } else if (filteredProducts.length === 0) {
+      addToast('warning', `Nenhum produto encontrado para "${searchTerm}".`);
+    } else {
+      addToast('info', `${filteredProducts.length} produtos encontrados. Selecione um na lista.`);
     }
   };
 
@@ -362,9 +368,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
       const item = cart.find((i) => i.product.id === productId);
       if (item && item.quantity >= item.product.currentStock) {
         posAudio.error();
-        alert(
-          `Estoque insuficiente! "${item.product.name}" tem apenas ${item.product.currentStock} ${item.product.unit}(s) disponível(is).`
-        );
+        addToast('error', `Estoque insuficiente! "${item.product.name}" tem apenas ${item.product.currentStock} ${item.product.unit}(s) disponível(is).`);
         return;
       }
     }

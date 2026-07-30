@@ -321,9 +321,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
       onSaleSuccess(newSale);
       onClose();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
       posAudio.error();
+      setPaymentError(e?.message || 'Erro ao finalizar venda. Verifique o saldo de estoque e tente novamente.');
     } finally {
       setLoading(false);
     }

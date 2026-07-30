@@ -1703,13 +1703,14 @@ class StorageService {
         p_sale_id: sale.id,
         p_product_id: sale.items?.[0]?.productId || '',
         p_quantity: sale.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
-        p_unit_price: sale.total,
+        p_unit_price: sale.items?.[0]?.unitPrice || sale.total,
         p_discount: sale.discount || 0,
         p_total: sale.total,
         p_reason: `Venda PDV #${sale.code}`,
         p_operator_name: sale.operatorName,
         p_organization_id: this.getCurrentOrgId(),
         p_store_branch_id: sale.storeBranchId || null,
+        p_sale_items: saleItemsJson,
       });
 
       if (error) {
