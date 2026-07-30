@@ -14,6 +14,7 @@ import { CashRegisterSession, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
+import { useToast } from '../shared/Toast';
 
 interface CaixaModalProps {
   isOpen: boolean;
@@ -28,7 +29,9 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
   caixaSession,
   user,
 }) => {
+  const { addToast } = useToast();
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
+  const [loading, setLoading] = useState(false);
 
   // Forms state
   const [initialCashInput, setInitialCashInput] = useState<number>(250);
@@ -66,49 +69,91 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleOpenCaixa = (e: React.FormEvent) => {
+  const handleOpenCaixa = async (e: React.FormEvent) => {
     e.preventDefault();
-    storageService.openNewCaixaSession(user.id, user.name, initialCashInput, openingNotes);
-    posAudio.chime();
-    onClose();
+    if (initialCashInput <= 0) {
+      addToast('error', 'O valor inicial do caixa precisa ser maior que zero.');
+      return;
+    }
+    setLoading(true);
+    try {
+      storageService.openNewCaixaSession(user.id, user.name, initialCashInput, openingNotes);
+      posAudio.chime();
+      onClose();
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao abrir caixa.');
+      posAudio.error();
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSuprimento = (e: React.FormEvent) => {
+  const handleSuprimento = async (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(suprimentoAmount);
-    if (!isNaN(val) && val > 0) {
+    if (isNaN(val) || val <= 0) {
+      addToast('error', 'Informe um valor de suprimento válido (maior que zero).');
+      return;
+    }
+    setLoading(true);
+    try {
       storageService.addSuprimento(val, suprimentoReason || 'Suprimento de Caixa');
       posAudio.beep();
       setSuprimentoAmount('');
       setSuprimentoReason('');
       setActiveTab('resumo');
+      addToast('success', `Suprimento de R$ ${val.toFixed(2)} registrado.`);
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao registrar suprimento.');
+      posAudio.error();
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSangria = (e: React.FormEvent) => {
+  const handleSangria = async (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(sangriaAmount);
-    if (!isNaN(val) && val > 0) {
-      if (val > caixaSession.currentCashBalance) {
-        alert(`Saldo insuficiente para sangria. Saldo disponível: R$ ${caixaSession.currentCashBalance.toFixed(2)}`);
-        return;
-      }
+    if (isNaN(val) || val <= 0) {
+      addToast('error', 'Informe um valor de sangria válido (maior que zero).');
+      return;
+    }
+    if (val > caixaSession.currentCashBalance) {
+      addToast('error', `Saldo insuficiente para sangria. Saldo disponível: R$ ${caixaSession.currentCashBalance.toFixed(2)}`);
+      return;
+    }
+    setLoading(true);
+    try {
       storageService.addSangria(val, sangriaReason || 'Sangria de Caixa');
       posAudio.beep();
       setSangriaAmount('');
       setSangriaReason('');
       setActiveTab('resumo');
+      addToast('success', `Sangria de R$ ${val.toFixed(2)} registrada.`);
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao registrar sangria.');
+      posAudio.error();
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCloseCaixa = (e: React.FormEvent) => {
+  const handleCloseCaixa = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!confirm('Tem certeza que deseja fechar o caixa? Esta ação não pode ser desfeita.')) {
       return;
     }
-    storageService.closeCaixaSession(closeNotes || 'Caixa encerrado no horário.');
-    posAudio.chime();
-    onClose();
+    setLoading(true);
+    try {
+      storageService.closeCaixaSession(closeNotes || 'Caixa encerrado no horário.');
+      posAudio.chime();
+      onClose();
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao fechar caixa.');
+      posAudio.error();
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -189,10 +234,11 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
               <button
                 type="submit"
-                className="w-full min-h-[44px] py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
+                disabled={loading}
+                className="w-full min-h-[44px] py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
               >
                 <Unlock className="w-4 h-4" />
-                <span>Confirmar Abertura do Caixa</span>
+                <span>{loading ? 'Abrindo...' : 'Confirmar Abertura do Caixa'}</span>
               </button>
             </form>
           ) : (
@@ -339,10 +385,11 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full min-h-[44px] py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+                    disabled={loading}
+                    className="w-full min-h-[44px] py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
                   >
                     <PlusCircle className="w-4 h-4" />
-                    <span>Registrar Suprimento</span>
+                    <span>{loading ? 'Registrando...' : 'Registrar Suprimento'}</span>
                   </button>
                 </form>
               )}
@@ -386,10 +433,11 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full min-h-[44px] py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
+                    disabled={loading}
+                    className="w-full min-h-[44px] py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-2"
                   >
                     <MinusCircle className="w-4 h-4" />
-                    <span>Registrar Sangria</span>
+                    <span>{loading ? 'Registrando...' : 'Registrar Sangria'}</span>
                   </button>
                 </form>
               )}
@@ -423,10 +471,11 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full min-h-[44px] py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-lg shadow-rose-600/20 transition-all flex items-center justify-center gap-2"
+                    disabled={loading}
+                    className="w-full min-h-[44px] py-3 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-lg shadow-rose-600/20 transition-all flex items-center justify-center gap-2"
                   >
                     <Lock className="w-4 h-4" />
-                    <span>Encerrar e Fechar Caixa</span>
+                    <span>{loading ? 'Encerrando...' : 'Encerrar e Fechar Caixa'}</span>
                   </button>
                 </form>
               )}
