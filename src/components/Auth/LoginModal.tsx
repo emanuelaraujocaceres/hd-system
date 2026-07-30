@@ -90,7 +90,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
               email: profileData.email,
               role: profileData.role,
               avatarUrl: profileData.avatar_url || undefined,
-              organizationId: profileData.organization_id,
+              // Fallback: se organization_id veio NULL do banco, usa o DEFAULT org
+              // (o banco será corrigido pelo script supabase-corrigir-rls-cash-sessions.sql)
+              organizationId: profileData.organization_id || storageService.getCurrentOrgId(),
               storeBranchId: profileData.store_branch_id,
               superadmin: profileData.superadmin || false,
               permissions: profileData.permissions || {

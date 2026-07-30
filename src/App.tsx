@@ -416,7 +416,7 @@ export const App: React.FC = () => {
                   name: data.name,
                   email: data.email,
                   role: data.role,
-                  organizationId: data.organization_id,
+                  organizationId: data.organization_id || storageService.getCurrentOrgId(),
                   storeBranchId: data.store_branch_id,
                   permissions: data.permissions || {
                     pdv: true, inventory: true, crm: true,
