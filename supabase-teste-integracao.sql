@@ -128,25 +128,36 @@ FROM cash_sessions
 ORDER BY closed_at DESC NULLS LAST
 LIMIT 5;
 
--- 3b. Verificar cálculo: expected_balance deve ser:
---     opening_balance + total_sales_cash + total_sales_pix + total_sales_card
---     + total_sales_credit_account + suprimentos - sangrias
+-- 3b. Verificar cálculo: expected_balance é o saldo EM DINHEIRO FÍSICO no caixa.
+--     ⚠ O frontend calcula como: opening_balance + total_sales_cash + suprimentos - sangrias
+--     (Pix, cartão e conta corrente NÃO entram — são meios eletrônicos, não afetam a gaveta)
+--     Referência: storageService.ts linha 1735
 SELECT id, operator_name,
        opening_balance,
-       (total_sales_cash + total_sales_pix + total_sales_card
-        + total_sales_credit_account) AS total_vendas,
+       total_sales_cash AS vendas_dinheiro,
        suprimentos, sangrias,
        expected_balance,
-       (opening_balance + total_sales_cash + total_sales_pix
-        + total_sales_card + total_sales_credit_account
-        + suprimentos - sangrias) AS expected_balance_calculado,
+       (opening_balance + total_sales_cash + suprimentos - sangrias) AS expected_balance_calculado,
        CASE
-         WHEN expected_balance = (opening_balance + total_sales_cash + total_sales_pix
-           + total_sales_card + total_sales_credit_account
-           + suprimentos - sangrias)
+         WHEN expected_balance = (opening_balance + total_sales_cash + suprimentos - sangrias)
          THEN '✅ Correto'
          ELSE '❌ DIVERGENTE'
        END AS status
+FROM cash_sessions
+ORDER BY closed_at DESC NULLS LAST
+LIMIT 5;
+
+-- 3c. Ver referência completa com TODOS os métodos (para auditoria)
+SELECT id, operator_name,
+       opening_balance,
+       total_sales_cash, total_sales_pix, total_sales_card,
+       total_sales_credit_account,
+       suprimentos, sangrias,
+       expected_balance,
+       (opening_balance + total_sales_cash + suprimentos - sangrias) AS expected_balance_real,
+       (opening_balance + total_sales_cash + total_sales_pix
+        + total_sales_card + total_sales_credit_account
+        + suprimentos - sangrias) AS saldo_geral_com_todos_metodos
 FROM cash_sessions
 ORDER BY closed_at DESC NULLS LAST
 LIMIT 5;
@@ -227,11 +238,9 @@ FROM movimentacoes_falhas
 ORDER BY created_at DESC
 LIMIT 20;
 
--- 6b. Há operações pendentes na sync_queue do banco?
-SELECT id, table_name, operation, status, created_at, processed_at
-FROM sync_queue
-ORDER BY created_at DESC
-LIMIT 20;
+-- 6b. sync_queue não verificada (tabela não existe no banco atual).
+-- O frontend gerencia a fila offline no localStorage mesmo.
+-- Para ver a fila no navegador: syncService.getPendingCount()
 
 -- 6c. Resumo das falhas por tabela (ajuda a identificar padrões)
 SELECT table_name, operation_type,
