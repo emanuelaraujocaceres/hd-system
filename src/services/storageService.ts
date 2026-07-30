@@ -396,16 +396,11 @@ class StorageService {
         customer_name: s.customerName || null,
       });
       // Only upsert sale items AFTER the sale record exists (avoid FK violation)
-      if (s.items && s.items.length > 0) {
-        const items = s.items.map((item) => ({
-          // id omitido — Supabase gera UUID automático (gen_random_uuid())
-          sale_id: s.id,
-          product_id: item.productId,
-          product_name: item.productName || '',
-          quantity: item.quantity,
-          unit_price: item.unitPrice,
-          total_price: item.total,
-        }));
+      // Items are read from KEYS.SALE_ITEMS (which have stable IDs set by addSale),
+      // so upsert with onConflict: 'id' correctly deduplicates instead of inserting.
+      const allItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
+      const items = allItems.filter((i: any) => i.sale_id === s.id);
+      if (items.length > 0) {
         await syncService.upsertRows('sale_items', items);
       }
     } catch (err) {
@@ -1662,12 +1657,8 @@ class StorageService {
   async addSale(sale: Sale) {
     sale.id = StorageService.ensureUuid(sale.id);
     sale.organizationId = this.getCurrentOrgId();
-    const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
-    sales.unshift(sale);
-    this.set(KEYS.SALES, sales);
-    this.syncSale(sale);
-
-    // Save sale_items to separate localStorage key
+    // Save sale_items to separate localStorage key FIRST (with stable IDs)
+    // so syncSale can read them and upsert with onConflict: 'id' deduplication.
     if (sale.items && sale.items.length > 0) {
       const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
       const newItems = sale.items.map((item) => ({
@@ -1682,6 +1673,11 @@ class StorageService {
       const filtered = existingItems.filter((i: any) => i.sale_id !== sale.id);
       this.set(KEYS.SALE_ITEMS, [...newItems, ...filtered]);
     }
+
+    const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
+    sales.unshift(sale);
+    this.set(KEYS.SALES, sales);
+    this.syncSale(sale);
 
     // ─── Deduce stock locally (instant UI) ────────────────────
     for (const item of sale.items || []) {
