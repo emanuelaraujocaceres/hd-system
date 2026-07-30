@@ -96,6 +96,6 @@ SELECT id, name, COALESCE(sale_price, 0) AS sale_price, COALESCE(cost_price, 0) 
 FROM products
 WHERE LOWER(name) LIKE '%heineken%';
 
--- Se Heineken 269ml estiver com salePrice = 0, atualizar:
--- ATENÇÃO: substitua 'UUID_AQUI' pelo id correto do produto após consultar acima
--- UPDATE products SET salePrice = 7.50 WHERE id = 'UUID_AQUI';
+-- Resultado atual (executado pelo usuário — 2026-07-30):
+-- Heineken 269ml (eb6b4a69-...) está com sale_price = 5.00 — OK, não precisa de correção.
+-- "cerveja heineken" (3198586d-..., barcode 123123) parece produto de teste — considerar remover.
