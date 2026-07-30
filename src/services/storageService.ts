@@ -1720,6 +1720,14 @@ class StorageService {
         discount: 0,
       }));
 
+      // Resolve storeBranchId from short code (e.g. "br-01") to UUID for RPC
+      let branchUuid = sale.storeBranchId || null;
+      if (branchUuid && !StorageService.UUID_RE.test(branchUuid)) {
+        const branches = this.getBranches();
+        const matched = branches.find(b => b.code === branchUuid || b.id === branchUuid);
+        if (matched) branchUuid = matched.id;
+      }
+
       const { data, error } = await supabase.rpc('process_sale_transaction', {
         p_sale_id: sale.id,
         p_product_id: sale.items?.[0]?.productId || '',
@@ -1730,7 +1738,7 @@ class StorageService {
         p_reason: `Venda PDV #${sale.code}`,
         p_operator_name: sale.operatorName,
         p_organization_id: this.getCurrentOrgId(),
-        p_store_branch_id: sale.storeBranchId || null,
+        p_store_branch_id: branchUuid,
         p_sale_items: saleItemsJson,
       });
 
