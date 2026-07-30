@@ -1260,17 +1260,27 @@ class StorageService {
               return new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime();
             });
             const s = sorted[0];
+            // Se o caixa foi aberto em um dia ANTERIOR, reinicia o saldo para o dia atual
+            const openedDate = new Date(s.opened_at).toDateString();
+            const today = new Date().toDateString();
+            const isPreviousDay = openedDate !== today;
+            // Recalcula o saldo: se sessão de hoje, usa expected_balance; se de dia anterior, reinicia
+            const expectedBalance = parseFloat(s.expected_balance) || 0;
+            const totalSalesCash = parseFloat(s.total_sales_cash) || 0;
+            const suprimentos = parseFloat(s.suprimentos) || 0;
+            const sangrias = parseFloat(s.sangrias) || 0;
+            const initialCash = parseFloat(s.opening_balance) || 0;
             this.set(KEYS.CAIXA, {
               id: s.id, openedAt: s.opened_at, closedAt: s.closed_at || undefined,
               operatorId: s.user_id || '', operatorName: s.operator_name || '',
-              initialCash: parseFloat(s.opening_balance) || 0,
-              currentCashBalance: parseFloat(s.expected_balance) || 0,
-              totalSalesCash: parseFloat(s.total_sales_cash) || 0,
-              totalSalesPix: parseFloat(s.total_sales_pix) || 0,
-              totalSalesCard: parseFloat(s.total_sales_card) || 0,
-              totalSalesCreditAccount: parseFloat(s.total_sales_credit_account) || 0,
-              suprimentos: parseFloat(s.suprimentos) || 0,
-              sangrias: parseFloat(s.sangrias) || 0,
+              initialCash: initialCash,
+              currentCashBalance: isPreviousDay ? initialCash : expectedBalance,
+              totalSalesCash: isPreviousDay ? 0 : totalSalesCash,
+              totalSalesPix: isPreviousDay ? 0 : (parseFloat(s.total_sales_pix) || 0),
+              totalSalesCard: isPreviousDay ? 0 : (parseFloat(s.total_sales_card) || 0),
+              totalSalesCreditAccount: isPreviousDay ? 0 : (parseFloat(s.total_sales_credit_account) || 0),
+              suprimentos: isPreviousDay ? 0 : suprimentos,
+              sangrias: isPreviousDay ? 0 : sangrias,
               status: s.status, notes: s.notes || undefined,
               storeBranchId: s.store_branch_id || undefined,
             });
@@ -1289,17 +1299,22 @@ class StorageService {
             if (localSession && localSession.id === s.id && localSession.status === 'open') {
               console.log(`[HD-Sync] 🔄 Caixa session "${s.id}" já existe localmente — mantendo dados locais`);
             } else {
+              // Se o caixa foi aberto em um dia ANTERIOR, reinicia o saldo para o dia atual
+              const openedDate = new Date(s.opened_at).toDateString();
+              const today = new Date().toDateString();
+              const isPreviousDay = openedDate !== today;
+              const initialCash = parseFloat(s.opening_balance) || 0;
               this.set(KEYS.CAIXA, {
                 id: s.id, openedAt: s.opened_at, closedAt: s.closed_at || undefined,
                 operatorId: s.user_id || '', operatorName: s.operator_name || '',
-                initialCash: parseFloat(s.opening_balance) || 0,
-                currentCashBalance: parseFloat(s.expected_balance) || 0,
-                totalSalesCash: parseFloat(s.total_sales_cash) || 0,
-                totalSalesPix: parseFloat(s.total_sales_pix) || 0,
-                totalSalesCard: parseFloat(s.total_sales_card) || 0,
-                totalSalesCreditAccount: parseFloat(s.total_sales_credit_account) || 0,
-                suprimentos: parseFloat(s.suprimentos) || 0,
-                sangrias: parseFloat(s.sangrias) || 0,
+                initialCash: initialCash,
+                currentCashBalance: isPreviousDay ? initialCash : (parseFloat(s.expected_balance) || 0),
+                totalSalesCash: isPreviousDay ? 0 : (parseFloat(s.total_sales_cash) || 0),
+                totalSalesPix: isPreviousDay ? 0 : (parseFloat(s.total_sales_pix) || 0),
+                totalSalesCard: isPreviousDay ? 0 : (parseFloat(s.total_sales_card) || 0),
+                totalSalesCreditAccount: isPreviousDay ? 0 : (parseFloat(s.total_sales_credit_account) || 0),
+                suprimentos: isPreviousDay ? 0 : (parseFloat(s.suprimentos) || 0),
+                sangrias: isPreviousDay ? 0 : (parseFloat(s.sangrias) || 0),
                 status: s.status, notes: s.notes || undefined,
                 storeBranchId: s.store_branch_id || undefined,
               });

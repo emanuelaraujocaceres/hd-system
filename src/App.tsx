@@ -364,6 +364,19 @@ export const App: React.FC = () => {
         setIsOnline(true);
         isOnlineRef.current = true;
         setSyncStatus('online');
+        // Force state refresh after hydration — ensures products/sales
+        // loaded from cloud appear in the UI immediately (not just after F5)
+        setProducts(storageService.getProducts());
+        setCategories(storageService.getCategories());
+        setCustomers(storageService.getCustomers());
+        setSuppliers(storageService.getSuppliers());
+        setSales(storageService.getSales());
+        setCaixaSession(storageService.getActiveCaixaSession());
+        setFinancialAccounts(storageService.getFinancialAccounts());
+        setSettings(storageService.getSettings());
+        setBranches(storageService.getBranches());
+        setCurrentBranch(storageService.getSelectedBranch());
+        setUser(storageService.getUserProfile());
       } else {
         // Hydration failed — we might be offline on first load
         console.log('[HD-Sync] Cloud hydration skipped — using local data');
@@ -409,25 +422,26 @@ export const App: React.FC = () => {
             .select('*')
             .eq('email', session.user.email)
             .maybeSingle()
-            .then(({ data }) => {
-              if (data) {
-                const restoredProfile: UserProfile = {
-                  id: data.id,
-                  name: data.name,
-                  email: data.email,
-                  role: data.role,
-                  organizationId: data.organization_id || storageService.getCurrentOrgId(),
-                  storeBranchId: data.store_branch_id,
-                  permissions: data.permissions || {
-                    pdv: true, inventory: true, crm: true,
-                    finance: false, dashboard: false, settings: false,
-                  },
-                  active: data.active,
-                  createdAt: data.created_at,
-                };
-                storageService.saveUserProfile(restoredProfile);
-                setUser(restoredProfile);
-              }
+          .then(({ data }) => {
+               if (data) {
+                 const restoredProfile: UserProfile = {
+                   id: data.id,
+                   name: data.name,
+                   email: data.email,
+                   role: data.role,
+                   organizationId: data.organization_id || storageService.getCurrentOrgId(),
+                   storeBranchId: data.store_branch_id,
+                   superadmin: data.superadmin || false,
+                   permissions: data.permissions || {
+                     pdv: true, inventory: true, crm: true,
+                     finance: false, dashboard: false, settings: false,
+                   },
+                   active: data.active,
+                   createdAt: data.created_at,
+                 };
+                 storageService.saveUserProfile(restoredProfile);
+                 setUser(restoredProfile);
+               }
             });
         }
       }

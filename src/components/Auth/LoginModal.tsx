@@ -119,6 +119,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
             role: (meta.role as 'admin' | 'collaborator') || 'collaborator',
             organizationId: storageService.getCurrentOrgId(),
             storeBranchId: storageService.getSelectedBranchId(),
+            superadmin: false,
             permissions: { pdv: true, inventory: true, crm: true, finance: false, dashboard: false, settings: false },
             active: true,
           };
