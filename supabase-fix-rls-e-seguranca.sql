@@ -246,13 +246,13 @@ SELECT 'trg_log_stock_changes exists',
   CASE WHEN EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_log_stock_changes') THEN 'YES (!!!)' ELSE 'removed' END
 UNION ALL
 SELECT 'Fn fn_insserir_dlq secdef',
-  CASE WHEN prosecdef FROM pg_proc WHERE proname = 'fn_insserir_dlq' THEN 'SECURITY DEFINER' ELSE 'SECURITY INVOKER' END
+  (SELECT CASE WHEN prosecdef THEN 'SECURITY DEFINER' ELSE 'SECURITY INVOKER' END FROM pg_proc WHERE proname = 'fn_insserir_dlq')
 UNION ALL
 SELECT 'Fn ajustar_estoque secdef',
-  CASE WHEN prosecdef FROM pg_proc WHERE proname = 'ajustar_estoque' THEN 'SECURITY DEFINER' ELSE 'SECURITY INVOKER' END
+  (SELECT CASE WHEN prosecdef THEN 'SECURITY DEFINER' ELSE 'SECURITY INVOKER' END FROM pg_proc WHERE proname = 'ajustar_estoque')
 UNION ALL
 SELECT 'Fn process_sale_transaction secdef',
-  CASE WHEN prosecdef FROM pg_proc WHERE proname = 'process_sale_transaction' THEN 'SECURITY DEFINER' ELSE 'SECURITY INVOKER' END;
+  (SELECT CASE WHEN prosecdef THEN 'SECURITY DEFINER' ELSE 'SECURITY INVOKER' END FROM pg_proc WHERE proname = 'process_sale_transaction');
 
 DO $$
 BEGIN
