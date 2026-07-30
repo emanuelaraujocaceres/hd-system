@@ -83,6 +83,7 @@ export const CollaboratorPerformance: React.FC<Props> = ({ sales }) => {
 
     const filteredSales = sales.filter((s) => {
       const d = new Date(s.date);
+      if (isNaN(d.getTime())) return false;
       return d >= start && d <= now;
     });
 
@@ -109,7 +110,10 @@ export const CollaboratorPerformance: React.FC<Props> = ({ sales }) => {
 
     // Sort: admin first (aggregate), then by revenue desc
     const result: CollaboratorStats[] = [];
-    const getSaleTotal = (s: Sale) => s.total || s.items?.reduce((sum, i) => sum + (i.total || 0), 0) || 0;
+    const getSaleTotal = (s: Sale) =>
+      (typeof s.total === 'number' && s.total >= 0)
+        ? s.total
+        : s.items?.reduce((sum, i) => sum + (i.total || 0), 0) || 0;
 
     // Aggregate total
     let totalRevenueAll = 0;
