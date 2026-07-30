@@ -45,27 +45,21 @@ DROP POLICY IF EXISTS "RLS_cash_sessions_self_upsert" ON cash_sessions;
 CREATE POLICY "RLS_cash_sessions_self_upsert" ON cash_sessions
   FOR INSERT
   WITH CHECK (
-    user_id = auth.uid()::text
-    OR
-    user_id IS NULL
+    user_id IS NOT NULL AND user_id::text = auth.uid()::text
   );
 
 DROP POLICY IF EXISTS "RLS_cash_sessions_self_update" ON cash_sessions;
 CREATE POLICY "RLS_cash_sessions_self_update" ON cash_sessions
   FOR UPDATE
   USING (
-    user_id = auth.uid()::text
-    OR
-    user_id IS NULL
+    user_id IS NOT NULL AND user_id::text = auth.uid()::text
   );
 
 DROP POLICY IF EXISTS "RLS_cash_sessions_self_delete" ON cash_sessions;
 CREATE POLICY "RLS_cash_sessions_self_delete" ON cash_sessions
   FOR DELETE
   USING (
-    user_id = auth.uid()::text
-    OR
-    user_id IS NULL
+    user_id IS NOT NULL AND user_id::text = auth.uid()::text
   );
 
 -- ==============================================================================
