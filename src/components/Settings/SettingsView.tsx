@@ -79,6 +79,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [printerPaperSize, setPrinterPaperSize] = useState<'80mm' | '58mm'>(settings.printerPaperSize || '80mm');
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(settings.autoPrintReceipt);
 
+  // Loading states
+  const [savingFiscal, setSavingFiscal] = useState(false);
+  const [savingBranch, setSavingBranch] = useState(false);
+  const [savingUser, setSavingUser] = useState(false);
+  const [savingTv, setSavingTv] = useState(false);
+
   // TV Showcase Settings State
   const [tvSlideSpeed, setTvSlideSpeed] = useState(settings.tvSlideSpeed || 6);
   const [tvDisplayMode, setTvDisplayMode] = useState<'single' | 'grid'>(settings.tvDisplayMode || 'single');
@@ -134,22 +140,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   const handleSaveFiscal = (e: React.FormEvent) => {
     e.preventDefault();
-    const updated: SystemSettings = {
-      ...settings,
-      tradeName,
-      companyName,
-      cnpj,
-      ie,
-      address,
-      phone,
-      pixKey,
-      printerPaperSize,
-      autoPrintReceipt,
-    };
+    if (!tradeName.trim() || !cnpj.trim()) {
+      setErrorMessage('Nome fantasia e CNPJ são obrigatórios.');
+      return;
+    }
+    setSavingFiscal(true);
+    try {
+      const updated: SystemSettings = {
+        ...settings,
+        tradeName: tradeName.trim(),
+        companyName: companyName.trim(),
+        cnpj: cnpj.trim(),
+        ie: ie.trim(),
+        address: address.trim(),
+        phone: phone.trim(),
+        pixKey: pixKey.trim(),
+        printerPaperSize,
+        autoPrintReceipt,
+      };
 
-    storageService.saveSettings(updated);
-    posAudio.chime();
-    setSuccessMessage('Configurações salvas com sucesso!');
+      storageService.saveSettings(updated);
+      posAudio.chime();
+      setSuccessMessage('Configurações salvas com sucesso!');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Erro ao salvar configurações.');
+      posAudio.error();
+    } finally {
+      setSavingFiscal(false);
+    }
   };
 
   // Branch Handlers
@@ -180,23 +198,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   const handleSaveBranch = (e: React.FormEvent) => {
     e.preventDefault();
-    const newBranch: StoreBranch = {
-      id: editingBranch ? editingBranch.id : `br-${Date.now()}`,
-      name: branchName,
-      code: branchCode,
-      cnpj: branchCnpj,
-      city: branchCity,
-      state: branchState,
-      address: branchAddress,
-      phone: branchPhone,
-      isHeadquarters: branchIsHQ,
-      active: true,
-      organizationId: editingBranch?.organizationId || user.organizationId,
-    };
+    if (!branchName.trim()) {
+      setErrorMessage('Nome da filial é obrigatório.');
+      return;
+    }
+    if (!branchCode.trim()) {
+      setErrorMessage('Código da filial é obrigatório.');
+      return;
+    }
+    setSavingBranch(true);
+    try {
+      const newBranch: StoreBranch = {
+        id: editingBranch ? editingBranch.id : `br-${Date.now()}`,
+        name: branchName.trim(),
+        code: branchCode.trim(),
+        cnpj: branchCnpj.trim(),
+        city: branchCity.trim(),
+        state: branchState.trim(),
+        address: branchAddress.trim(),
+        phone: branchPhone.trim(),
+        isHeadquarters: branchIsHQ,
+        active: true,
+        organizationId: editingBranch?.organizationId || user.organizationId,
+      };
 
-    storageService.saveBranch(newBranch);
-    setIsBranchModalOpen(false);
-    posAudio.chime();
+      storageService.saveBranch(newBranch);
+      setIsBranchModalOpen(false);
+      posAudio.chime();
+      setSuccessMessage(`Filial "${newBranch.name}" salva com sucesso.`);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Erro ao salvar filial.');
+      posAudio.error();
+    } finally {
+      setSavingBranch(false);
+    }
   };
 
   const handleDeleteBranch = (id: string) => {
@@ -204,8 +239,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       setErrorMessage('O sistema precisa de pelo menos 1 filial cadastrada.');
       return;
     }
-    if (confirm('Tem certeza que deseja excluir esta filial?')) {
+    if (!confirm('Tem certeza que deseja excluir esta filial?')) return;
+    try {
       storageService.deleteBranch(id);
+      posAudio.chime();
+      setSuccessMessage('Filial excluída.');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Erro ao excluir filial.');
+      posAudio.error();
     }
   };
 
@@ -247,48 +288,61 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!userName.trim()) {
+      setErrorMessage('Nome do usuário é obrigatório.');
+      return;
+    }
     if (!userEmail.includes('@')) {
       setErrorMessage('Por favor, informe um e-mail de usuário válido.');
       return;
     }
 
-    const newUser: UserProfile = {
-      id: editingUser ? editingUser.id : `usr-${Date.now()}`,
-      name: userName,
-      email: userEmail.trim().toLowerCase(),
-      role: userRole,
-      avatarUrl: editingUser?.avatarUrl || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`,
-      organizationId: user.organizationId,
-      storeBranchId: userBranchId,
-      permissions: userRole === 'admin' ? {
-        pdv: true,
-        inventory: true,
-        crm: true,
-        finance: true,
-        dashboard: true,
-        settings: true,
-      } : userPermissions,
-      active: true,
-      createdAt: editingUser?.createdAt || new Date().toISOString().split('T')[0],
-      password: userPassword || editingUser?.password || undefined,
-    };
-
-    // Se for um usuário NOVO (não edição) e tem senha, criar também no Supabase Auth
-    if (!editingUser && userPassword) {
-      const { error: signUpError } = await supabase.auth.signUp({
+    setSavingUser(true);
+    try {
+      const newUser: UserProfile = {
+        id: editingUser ? editingUser.id : `usr-${Date.now()}`,
+        name: userName.trim(),
         email: userEmail.trim().toLowerCase(),
-        password: userPassword,
-      });
-      if (signUpError) {
-        console.warn('[Settings] Supabase Auth signUp warning (non-fatal):', signUpError.message);
-        // Não bloqueia — o usuário pode usar login local mesmo sem Supabase Auth
-      }
-    }
+        role: userRole,
+        avatarUrl: editingUser?.avatarUrl || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`,
+        organizationId: user.organizationId,
+        storeBranchId: userBranchId,
+        permissions: userRole === 'admin' ? {
+          pdv: true,
+          inventory: true,
+          crm: true,
+          finance: true,
+          dashboard: true,
+          settings: true,
+        } : userPermissions,
+        active: true,
+        createdAt: editingUser?.createdAt || new Date().toISOString().split('T')[0],
+        password: userPassword || editingUser?.password || undefined,
+      };
 
-    storageService.saveUser(newUser);
-    refreshUsersList();
-    setIsUserModalOpen(false);
-    posAudio.chime();
+      // Se for um usuário NOVO (não edição) e tem senha, criar também no Supabase Auth
+      if (!editingUser && userPassword) {
+        const { error: signUpError } = await supabase.auth.signUp({
+          email: userEmail.trim().toLowerCase(),
+          password: userPassword,
+        });
+        if (signUpError) {
+          console.warn('[Settings] Supabase Auth signUp warning (non-fatal):', signUpError.message);
+          // Não bloqueia — o usuário pode usar login local mesmo sem Supabase Auth
+        }
+      }
+
+      storageService.saveUser(newUser);
+      refreshUsersList();
+      setIsUserModalOpen(false);
+      posAudio.chime();
+      setSuccessMessage(`Usuário "${newUser.name}" salvo com sucesso.`);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Erro ao salvar usuário.');
+      posAudio.error();
+    } finally {
+      setSavingUser(false);
+    }
   };
 
   const handleDeleteUser = (id: string) => {
@@ -296,9 +350,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       setErrorMessage('Você não pode excluir sua própria conta atualmente logada.');
       return;
     }
-    if (confirm('Tem certeza que deseja excluir este colaborador da empresa?')) {
+    if (!confirm('Tem certeza que deseja excluir este colaborador da empresa?')) return;
+    try {
       storageService.deleteUser(id);
       refreshUsersList();
+      posAudio.chime();
+      setSuccessMessage('Usuário excluído.');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Erro ao excluir usuário.');
+      posAudio.error();
     }
   };
 
@@ -334,20 +394,43 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     }
   };
 
-  const handleConfirmStripeRenewal = () => {
+  const handleConfirmStripeRenewal = async () => {
     setIsProcessingStripe(true);
-    setTimeout(() => {
+    try {
       const methodText = stripePaymentMethod === 'card'
         ? 'Cartão de Crédito (Stripe Checkout) **** 4242'
         : 'PIX Instantâneo (Stripe QrCode)';
       const updated = storageService.renewSubscriptionViaStripe(methodText);
       setSubscription(updated);
-      setIsProcessingStripe(false);
       setIsStripeModalOpen(false);
       setPaymentSuccessAlert(true);
       posAudio.chime();
       setTimeout(() => setPaymentSuccessAlert(false), 8000);
-    }, 1200);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Erro ao renovar assinatura.');
+      posAudio.error();
+    } finally {
+      setIsProcessingStripe(false);
+    }
+  };
+
+  const handleSaveTv = () => {
+    setSavingTv(true);
+    try {
+      const updated: SystemSettings = {
+        ...settings,
+        tvSlideSpeed,
+        tvDisplayMode,
+      };
+      storageService.saveSettings(updated);
+      posAudio.chime();
+      setSuccessMessage('Configurações da TV salvas!');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Erro ao salvar configurações da TV.');
+      posAudio.error();
+    } finally {
+      setSavingTv(false);
+    }
   };
 
   return (
@@ -589,10 +672,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           <div className="flex justify-end">
             <button
               type="submit"
-              className="min-h-[44px] px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2"
+              disabled={savingFiscal}
+              className="min-h-[44px] px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2"
             >
               <Save className="w-4 h-4" />
-              <span>Salvar Parâmetros do Sistema</span>
+              <span>{savingFiscal ? 'Salvando...' : 'Salvar Parâmetros do Sistema'}</span>
             </button>
           </div>
         </form>
@@ -1553,9 +1637,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 </button>
                 <button
                   type="submit"
-                  className="min-h-[44px] px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
+                  disabled={savingBranch}
+                  className="min-h-[44px] px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold disabled:opacity-60"
                 >
-                  Salvar Filial
+                  {savingBranch ? 'Salvando...' : 'Salvar Filial'}
                 </button>
               </div>
             </form>
@@ -1741,9 +1826,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 </button>
                 <button
                   type="submit"
-                  className="min-h-[44px] px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                  disabled={savingUser}
+                  className="min-h-[44px] px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold disabled:opacity-60"
                 >
-                  Salvar Colaborador
+                  {savingUser ? 'Salvando...' : 'Salvar Colaborador'}
                 </button>
               </div>
             </form>
@@ -1825,20 +1911,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             </div>
 
             <button
-              onClick={() => {
-                const updated: SystemSettings = {
-                  ...settings,
-                  tvSlideSpeed,
-                  tvDisplayMode,
-                };
-                storageService.saveSettings(updated);
-                posAudio.chime();
-                setSuccessMessage('Configurações da TV salvas!');
-              }}
-              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shadow-md transition-colors flex items-center gap-2"
+              onClick={handleSaveTv}
+              disabled={savingTv}
+              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black font-bold text-xs shadow-md transition-colors flex items-center gap-2"
             >
               <CheckCircle className="w-4 h-4" />
-              Salvar Configurações da TV
+              {savingTv ? 'Salvando...' : 'Salvar Configurações da TV'}
             </button>
           </div>
         </div>
