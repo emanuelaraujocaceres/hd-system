@@ -11,13 +11,13 @@
 
 BEGIN;
 
--- Remove linhas duplicadas mantendo a mais antiga (menor created_at
--- ou menor id como fallback)
+-- Remove linhas duplicadas mantendo um ID por (sale_id, product_id).
+-- Usamos DISTINCT ON (PostgreSQL) porque MIN/MAX não funcionam em UUID.
 DELETE FROM sale_items
 WHERE id NOT IN (
-  SELECT MIN(id)
+  SELECT DISTINCT ON (sale_id, product_id) id
   FROM sale_items
-  GROUP BY sale_id, product_id
+  ORDER BY sale_id, product_id, id
 );
 
 -- Verifica resultado
