@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Test, diagnóstico e utilitários de desenvolvimento (executáveis .cjs)
+_check_*.cjs
+_test_*.cjs
+test_*.cjs
+execute_*.cjs
