@@ -25,6 +25,7 @@ import {
 import { Product, Category, Supplier, StockMovement, UserProfile, SystemSettings } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { useToast } from '../shared/Toast';
 import { BarcodeLabelModal } from './BarcodeLabelModal';
 import { CategoryManagerModal } from './CategoryManagerModal';
 import { StockCameraScannerModal } from './StockCameraScannerModal';
@@ -110,6 +111,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   // 3. useDebounce (custom hook)
   // ============================================================
   const debouncedSearch = useDebounce(searchTerm, 300);
+  const { addToast } = useToast();
 
   // ============================================================
   // 4. TODOS OS useEffect
@@ -223,6 +225,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           posAudio.chime();
         }
       };
+      reader.onerror = () => {
+        addToast('error', 'Erro ao ler o arquivo de imagem.');
+      };
       reader.readAsDataURL(file);
     }
   };
@@ -330,33 +335,54 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setIsProductModalOpen(true);
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newProd: Product = {
-      id: editingProduct ? editingProduct.id : `prod-${Date.now()}`,
-      barcode: formBarcode,
-      name: formName,
-      category: formCategory,
-      unit: formUnit,
-      costPrice: parseFloat(formCostPrice) || 0,
-      salePrice: parseFloat(formSalePrice) || 0,
-      currentStock: parseInt(formCurrentStock) || 0,
-      minStock: parseInt(formMinStock) || 0,
-      maxStock: parseInt(formMaxStock) || 100,
-      imageUrl: formImageUrl || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80',
-      active: true,
-      updatedAt: new Date().toISOString(),
-      storeBranchId: user.storeBranchId,
-      showOnTV: formShowOnTV,
-      tvPromoPrice: formTvPromoPrice ? parseFloat(formTvPromoPrice) || undefined : undefined,
-      tvHighlightTag: formTvHighlightTag || undefined,
-    };
+  const [savingProduct, setSavingProduct] = useState(false);
 
-    storageService.saveProduct(newProd);
-    posAudio.chime();
-    setHighlightedProductId(newProd.id);
-    setTimeout(() => setHighlightedProductId(null), 2000);
-    setIsProductModalOpen(false);
+  const handleSaveProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const costPrice = parseFloat(formCostPrice) || 0;
+    const salePrice = parseFloat(formSalePrice) || 0;
+    if (salePrice <= 0) {
+      addToast('error', 'O preço de venda deve ser maior que zero.');
+      return;
+    }
+    if (costPrice < 0) {
+      addToast('error', 'O preço de custo não pode ser negativo.');
+      return;
+    }
+    setSavingProduct(true);
+    try {
+      const newProd: Product = {
+        id: editingProduct ? editingProduct.id : `prod-${Date.now()}`,
+        barcode: formBarcode,
+        name: formName,
+        category: formCategory,
+        unit: formUnit,
+        costPrice,
+        salePrice,
+        currentStock: parseInt(formCurrentStock) || 0,
+        minStock: parseInt(formMinStock) || 0,
+        maxStock: parseInt(formMaxStock) || 100,
+        imageUrl: formImageUrl || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80',
+        active: true,
+        updatedAt: new Date().toISOString(),
+        storeBranchId: user.storeBranchId,
+        showOnTV: formShowOnTV,
+        tvPromoPrice: formTvPromoPrice ? parseFloat(formTvPromoPrice) || undefined : undefined,
+        tvHighlightTag: formTvHighlightTag || undefined,
+      };
+
+      storageService.saveProduct(newProd);
+      posAudio.chime();
+      setHighlightedProductId(newProd.id);
+      setTimeout(() => setHighlightedProductId(null), 2000);
+      setIsProductModalOpen(false);
+      addToast('success', `Produto "${newProd.name}" salvo com sucesso.`);
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao salvar produto.');
+      posAudio.error();
+    } finally {
+      setSavingProduct(false);
+    }
   };
 
   const handleDeleteProduct = (id: string) => {
@@ -366,12 +392,26 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     }
   };
 
+  const [savingStock, setSavingStock] = useState(false);
+
   const handleApplyStockAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (stockTargetProduct) {
+    if (!stockTargetProduct) return;
+    if (stockDelta === 0) {
+      addToast('warning', 'Informe uma quantidade diferente de zero para movimentar o estoque.');
+      return;
+    }
+    setSavingStock(true);
+    try {
       await storageService.updateStock(stockTargetProduct.id, stockDelta, stockReason, user.name);
       posAudio.chime();
       setIsStockModalOpen(false);
+      addToast('success', `Estoque de "${stockTargetProduct.name}" ajustado em ${stockDelta > 0 ? '+' : ''}${stockDelta} ${stockTargetProduct.unit}.`);
+    } catch (err: any) {
+      addToast('error', err?.message || 'Erro ao ajustar estoque.');
+      posAudio.error();
+    } finally {
+      setSavingStock(false);
     }
   };
 
@@ -1108,9 +1148,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md"
+                  disabled={savingProduct}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md"
                 >
-                  Salvar Produto
+                  {savingProduct ? 'Salvando...' : 'Salvar Produto'}
                 </button>
               </div>
             </form>
@@ -1211,9 +1252,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-bold"
+                  disabled={savingStock}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold"
                 >
-                  Confirmar Ajuste
+                  {savingStock ? 'Ajustando...' : 'Confirmar Ajuste'}
                 </button>
               </div>
             </form>
@@ -1294,7 +1336,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       <StockCameraScannerModal
         isOpen={isStockCameraModalOpen}
         onClose={() => setIsStockCameraModalOpen(false)}
-        onProductsImported={() => {}}
+        onProductsImported={() => {
+          addToast('success', 'Produtos importados com sucesso!');
+        }}
         onNavigateToNewProduct={(barcode) => {
           setIsStockCameraModalOpen(false);
           resetProductForm(barcode);
