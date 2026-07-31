@@ -83,8 +83,10 @@ class StorageService {
     return StorageService.newId();
   }
 
-  // Retorna o organization_id do usuário logado, ou o DEFAULT_ORG_ID.
-  // Se o superadmin definiu um override de visualização, retorna esse override.
+  // Retorna o organization_id do usuário logado.
+  // FAIL-CLOSED: se o perfil existe mas não tem organizationId, retorna ''
+  // (escrever fica bloqueado em vez de gravar na organização errada).
+  // O fallback para DEFAULT_ORG_ID só ocorre sem perfil salvo (bootstrap/offline).
   getCurrentOrgId(): string {
     // Superadmin override (visualizando outra org)
     if (this.isSuperAdmin()) {
@@ -99,10 +101,13 @@ class StorageService {
       if (raw) {
         const profile = JSON.parse(raw);
         if (profile?.organizationId) return profile.organizationId;
+        // Perfil existe mas SEM org: bloquear em vez de poluir outra organização
+        console.error('[Storage] getCurrentOrgId() — usuário logado sem organizationId. Falha fechada: escrita bloqueada até o perfil ser corrigido.');
+        return '';
       }
     } catch {}
     if (localStorage.getItem('hd_system_logged_in_email') !== 'LOGGED_OUT') {
-      console.warn('[Storage] getCurrentOrgId() fallback to DEFAULT_ORG_ID — usuário logado sem organizationId no perfil');
+      console.warn('[Storage] getCurrentOrgId() fallback to DEFAULT_ORG_ID — bootstrap/offline sem perfil salvo');
     }
     return DEFAULT_ORG_ID;
   }

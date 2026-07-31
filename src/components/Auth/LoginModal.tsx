@@ -70,12 +70,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
         }
 
         if (authData.user) {
-          // Buscar profile completo do system_users
-          const { data: profileData, error: profileError } = await supabase
-            .from('system_users')
-            .select('*')
-            .eq('email', email.toLowerCase())
-            .maybeSingle();
+          // Buscar perfil completo via RPC get_my_profile() — independe de RLS
+          // e resolve a organização SEMPRE pelo banco (nunca herda org de outra sessão).
+          const { data: profileData, error: profileError } = await supabase.rpc('get_my_profile');
 
           if (profileError) {
             console.error('[Login] Erro ao buscar perfil no Supabase:', profileError.message);
@@ -84,15 +81,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
           }
 
           if (profileData && !profileError) {
+            // Fail-closed: sem organização definida no banco, o login é BLOQUEADO.
+            // (antes, caía na org padrão e gravava dados na organização errada)
+            const orgId = profileData.organization_id || undefined;
+            if (!orgId) {
+              console.error('[Login] Usuário sem organização configurada no banco:', email);
+              setErrorMessage('Sua conta ainda não está vinculada a uma organização. Fale com o administrador do sistema.');
+              setIsLoading(false);
+              return;
+            }
             const userProfile: UserProfile = {
               id: profileData.id,
               name: profileData.name,
               email: profileData.email,
               role: profileData.role,
               avatarUrl: profileData.avatar_url || undefined,
-              // Fallback: se organization_id veio NULL do banco, usa o DEFAULT org
-              // (o banco será corrigido pelo script supabase-corrigir-rls-cash-sessions.sql)
-              organizationId: profileData.organization_id || storageService.getCurrentOrgId(),
+              organizationId: orgId,
               storeBranchId: profileData.store_branch_id,
               superadmin: profileData.superadmin || false,
               permissions: profileData.permissions || {
@@ -110,23 +114,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
             return;
           }
 
-          // Profile não encontrado no system_users — fallback do auth metadata
-          const meta = authData.user.user_metadata || {};
-          const fallbackProfile: UserProfile = {
-            id: authData.user.id,
-            name: (meta.name as string) || email.split('@')[0],
-            email: email.toLowerCase(),
-            role: (meta.role as 'admin' | 'collaborator') || 'collaborator',
-            organizationId: storageService.getCurrentOrgId(),
-            storeBranchId: storageService.getSelectedBranchId(),
-            superadmin: false,
-            permissions: { pdv: true, inventory: true, crm: true, finance: false, dashboard: false, settings: false },
-            active: true,
-          };
-          storageService.saveUserProfile(fallbackProfile);
-          syncQueue.clearQueue(); // Limpa fila de sessão anterior
+          // Usuário autenticado no Supabase mas sem registro em system_users:
+          // sem organização não é possível operar com segurança → bloqueia.
+          console.error('[Login] Usuário autenticado sem registro em system_users:', email);
+          setErrorMessage('Sua conta não está cadastrada no sistema de usuários. Fale com o administrador.');
           setIsLoading(false);
-          onLoginSuccess(fallbackProfile);
           return;
         }
       }

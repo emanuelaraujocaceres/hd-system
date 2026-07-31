@@ -419,39 +419,50 @@ export const App: React.FC = () => {
   // On mount, check for existing Supabase Auth session.
   // Listen for auth state changes (sign out, token refresh, etc.).
   useEffect(() => {
-    // Restore user from Supabase session if we have one but no localStorage profile
+    // Restore user from Supabase session — SEMPRE revalida o perfil no banco
+    // (evita que uma org antiga/errada continue no localStorage após o login)
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        const localProfile = storageService.getUserProfile();
-        if (!localProfile) {
-          // Session exists but no local profile — fetch from system_users
-          supabase
-            .from('system_users')
-            .select('*')
-            .eq('email', session.user.email)
-            .maybeSingle()
-          .then(({ data }) => {
-               if (data) {
-                 const restoredProfile: UserProfile = {
-                   id: data.id,
-                   name: data.name,
-                   email: data.email,
-                   role: data.role,
-                   organizationId: data.organization_id || storageService.getCurrentOrgId(),
-                   storeBranchId: data.store_branch_id,
-                   superadmin: data.superadmin || false,
-                   permissions: data.permissions || {
-                     pdv: true, inventory: true, crm: true,
-                     finance: false, dashboard: false, settings: false,
-                   },
-                   active: data.active,
-                   createdAt: data.created_at,
-                 };
-                 storageService.saveUserProfile(restoredProfile);
-                 setUser(restoredProfile);
-               }
-            });
-        }
+        supabase
+          .rpc('get_my_profile')
+        .then(({ data, error }) => {
+          if (error) {
+            // Falha de rede/banco: mantém o perfil local (offline-first)
+            console.warn('[Auth] get_my_profile indisponível, mantendo perfil local:', error.message);
+            return;
+          }
+          if (!data) {
+            // Sessão sem registro em system_users: limpa e volta para o login
+            storageService.logout();
+            setUser(null);
+            return;
+          }
+          const orgId = data.organization_id || undefined;
+          if (!orgId) {
+            // Conta sem organização: fail-closed — não permite operar
+            console.error('[Auth] Usuário sem organização configurada. Encerrando sessão:', session.user.email);
+            storageService.logout();
+            setUser(null);
+            return;
+          }
+          const restoredProfile: UserProfile = {
+            id: data.id,
+            name: data.name,
+            email: data.email,
+            role: data.role,
+            organizationId: orgId,
+            storeBranchId: data.store_branch_id,
+            superadmin: data.superadmin || false,
+            permissions: data.permissions || {
+              pdv: true, inventory: true, crm: true,
+              finance: false, dashboard: false, settings: false,
+            },
+            active: data.active,
+            createdAt: data.created_at,
+          };
+          storageService.saveUserProfile(restoredProfile);
+          setUser(restoredProfile);
+        });
       }
     });
 
