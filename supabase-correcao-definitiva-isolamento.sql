@@ -53,15 +53,16 @@ FROM ranked
 WHERE cnt > 1;
 
 -- Reatribui vendas e caixas dos duplicados removidos para o id mantido (Auth)
-UPDATE sales SET user_id = d.auth_id::text
+-- NOTA: user_id é UUID (REFERENCES public.profiles(id)) — sem casts para text
+UPDATE sales SET user_id = d.auth_id
 FROM su_dedup_map d
 WHERE d.rn > 1 AND d.auth_id IS NOT NULL
-  AND sales.user_id::text = d.id::text;
+  AND sales.user_id = d.id;
 
-UPDATE cash_sessions SET user_id = d.auth_id::text
+UPDATE cash_sessions SET user_id = d.auth_id
 FROM su_dedup_map d
 WHERE d.rn > 1 AND d.auth_id IS NOT NULL
-  AND cash_sessions.user_id::text = d.id::text;
+  AND cash_sessions.user_id = d.id;
 
 -- Remove os duplicados
 DELETE FROM system_users su
@@ -94,17 +95,18 @@ FROM store_branches sb
 WHERE su.organization_id IS NULL
   AND sb.id::text = su.store_branch_id;
 
--- 3B. MAPEAMENTO EXPLÍCITO (CONFIRMADO NO DIAGNÓSTICO)
--- >>> AJUSTE AQUI: troque os e-mails pelos reais do diagnóstico e confirme a org.
---     Plantão da Cerveja = 361fb95a-3e9f-43be-a43c-0dc91f851f31
+-- 3B. MAPEAMENTO EXPLÍCITO (CONFIRMADO NO DIAGNÓSTICO REAL DE 01/08)
 --     Adega dos Parças (padrão) = 00000000-0000-0000-0000-000000000001
+--     Plantão da Cerveja        = 361fb95a-3e9f-43be-a43c-0dc91f851f31
 UPDATE system_users su
-SET organization_id = m.org_id
+SET organization_id = m.org_id::uuid
 FROM (VALUES
-  ('emanuel@gmail.com',            '00000000-0000-0000-0000-000000000001')
-  -- Exemplos (descomente e ajuste):
-  -- ('gustavo@exemplo.com',        '361fb95a-3e9f-43be-a43c-0dc91f851f31'),
-  -- ('maria@exemplo.com',          '361fb95a-3e9f-43be-a43c-0dc91f851f31')
+  ('emanuel@gmail.com', '00000000-0000-0000-0000-000000000001'), -- superadmin
+  ('bia@gmail.com',     '00000000-0000-0000-0000-000000000001'),
+  ('gut@gmail.com',     '00000000-0000-0000-0000-000000000001'),
+  ('marcelo@gmail.com', '00000000-0000-0000-0000-000000000001'),
+  ('gustavo@gmail.com', '361fb95a-3e9f-43be-a43c-0dc91f851f31'), -- Plantão
+  ('maria@gmail.com',   '361fb95a-3e9f-43be-a43c-0dc91f851f31')  -- Plantão
 ) AS m(email, org_id)
 WHERE su.email = m.email;
 
