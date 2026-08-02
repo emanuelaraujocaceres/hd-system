@@ -573,9 +573,15 @@ export const PDVView: React.FC<PDVViewProps> = ({
                   {/* Thumbnail Image */}
                   <div className="w-full h-24 md:h-28 xl:h-32 rounded-xl bg-slate-100 dark:bg-[#09090b] overflow-hidden mb-2 relative">
                     <img
-                      src={p.imageUrl}
+                      src={p.imageUrl || 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&auto=format&fit=crop&q=80'}
                       alt={p.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        const img = e.target as HTMLImageElement;
+                        if (!img.src.includes('photo-1584308666744')) {
+                          img.src = 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&auto=format&fit=crop&q=80';
+                        }
+                      }}
                     />
                     <span className="absolute top-1.5 right-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/60 text-white backdrop-blur-sm">
                       {p.category}
