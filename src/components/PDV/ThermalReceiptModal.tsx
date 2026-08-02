@@ -79,17 +79,22 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
             </div>
 
             {/* Items Table */}
-            <div className="py-2 border-b border-dashed border-gray-400">
-              <div className="grid grid-cols-12 font-bold mb-1 border-b border-gray-200 pb-0.5">
-                <span className="col-span-6">ITEM / QTD x UNIT</span>
-                <span className="col-span-6 text-right">TOTAL (R$)</span>
+            <div className="py-2 border-b border-dashed border-gray-400 max-h-[50vh] overflow-y-auto">
+              <div className="grid grid-cols-12 font-bold mb-1 border-b border-gray-200 pb-0.5 text-[9px]">
+                <span className="col-span-1">#</span>
+                <span className="col-span-5">PRODUTO</span>
+                <span className="col-span-2 text-right">QTD</span>
+                <span className="col-span-2 text-right">UN</span>
+                <span className="col-span-2 text-right">TOTAL</span>
               </div>
               {sale.items.map((it, idx) => (
-                <div key={idx} className="mb-1 text-[10px]">
-                  <p className="font-bold truncate">{idx + 1}. {it.productName}</p>
-                  <div className="flex justify-between text-gray-700">
-                    <span>{it.quantity} un x R$ {it.unitPrice.toFixed(2)}</span>
-                    <span className="font-bold text-black">R$ {it.total.toFixed(2)}</span>
+                <div key={idx} className="mb-0.5 text-[9px] leading-tight">
+                  <div className="flex justify-between">
+                    <span className="col-span-1">{idx + 1}.</span>
+                    <span className="col-span-5 truncate">{it.productName}</span>
+                    <span className="col-span-2 text-right">{it.quantity}</span>
+                    <span className="col-span-2 text-right">R$ {it.unitPrice.toFixed(2)}</span>
+                    <span className="col-span-2 text-right font-bold">R$ {it.total.toFixed(2)}</span>
                   </div>
                 </div>
               ))}
