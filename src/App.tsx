@@ -567,44 +567,93 @@ export const App: React.FC = () => {
   };
 
   // Keyboard shortcuts
-  const shortcuts = useMemo(() => [
-    {
-      key: 'n',
-      ctrl: true,
-      handler: () => {
-        if (activeTab === 'inventory') {
-          window.dispatchEvent(new CustomEvent('hd:new-product'));
-        }
-      },
-    },
-    {
-      key: 'f',
-      ctrl: true,
-      handler: () => {
+  const shortcuts = useMemo(() => {
+    const canAccess = (tab: string): boolean => {
+      if (user.role === 'admin') return true;
+      const p = user.permissions;
+      if (tab === 'pdv') return !!p?.pdv;
+      if (tab === 'inventory') return !!p?.inventory;
+      if (tab === 'finance') return !!p?.finance;
+      if (tab === 'crm') return !!p?.crm;
+      return false;
+    };
+    // Navega para uma aba e foca a busca assim que a tela montar
+    const goto = (tab: string) => {
+      handleTabChange(tab);
+      setTimeout(() => {
         const input = document.querySelector<HTMLInputElement>('[data-search-input]');
         if (input) { input.focus(); input.select(); }
-      },
-    },
-    {
-      key: 'F11',
-      handler: () => {
-        if (activeTab === 'tv-showcase') {
-          if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(() => {});
-          } else {
-            document.exitFullscreen().catch(() => {});
+      }, 150);
+    };
+    return [
+      {
+        key: 'n',
+        ctrl: true,
+        handler: () => {
+          if (activeTab === 'inventory') {
+            window.dispatchEvent(new CustomEvent('hd:new-product'));
           }
-        }
+        },
       },
-      global: true,
-    },
-    {
-      key: 'k',
-      ctrl: true,
-      handler: () => setIsGlobalSearchOpen(prev => !prev),
-      global: true,
-    },
-  ], [activeTab]);
+      {
+        key: 'f',
+        ctrl: true,
+        handler: () => {
+          const input = document.querySelector<HTMLInputElement>('[data-search-input]');
+          if (input) { input.focus(); input.select(); }
+        },
+      },
+      {
+        key: 'F11',
+        handler: () => {
+          if (activeTab === 'tv-showcase') {
+            if (!document.fullscreenElement) {
+              document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+              document.exitFullscreen().catch(() => {});
+            }
+          }
+        },
+        global: true,
+      },
+      {
+        key: 'k',
+        ctrl: true,
+        handler: () => setIsGlobalSearchOpen(prev => !prev),
+        global: true,
+      },
+      // Atalhos de navegação rápida: Ctrl+Shift+1 → PDV, 2 → Estoque,
+      // 3 → Financeiro, 4 → Clientes (respeita permissões do usuário)
+      {
+        key: '1',
+        ctrl: true,
+        shift: true,
+        handler: () => { if (canAccess('pdv')) goto('pdv'); },
+        global: true,
+      },
+      {
+        key: '2',
+        ctrl: true,
+        shift: true,
+        handler: () => { if (canAccess('inventory')) goto('inventory'); },
+        global: true,
+      },
+      {
+        key: '3',
+        ctrl: true,
+        shift: true,
+        handler: () => { if (canAccess('finance')) goto('finance'); },
+        global: true,
+      },
+      {
+        key: '4',
+        ctrl: true,
+        shift: true,
+        handler: () => { if (canAccess('crm')) goto('crm'); },
+        global: true,
+      },
+    ];
+  }, [activeTab, user, handleTabChange]);
 
   useKeyboardShortcuts(shortcuts, [activeTab]);
 

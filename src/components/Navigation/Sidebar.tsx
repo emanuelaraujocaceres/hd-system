@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ShoppingCart,
   LayoutDashboard,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { StoreBranch, UserProfile, CashRegisterSession } from '../../types';
 import { ResetDataButton } from '../shared/ResetDataButton';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 interface SidebarProps {
   currentTab: string;
@@ -50,6 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
   const isAdmin = user.role === 'admin';
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const perms = user.permissions || {
     pdv: true,
     inventory: true,
@@ -203,7 +205,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           <button
-            onClick={onLogout}
+            onClick={() => setConfirmLogout(true)}
             title="Sair da Conta (Logout)"
             className="p-2.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-colors shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
@@ -212,6 +214,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <ResetDataButton />
+
+        {/* Confirm: sair da conta */}
+        <ConfirmDialog
+          isOpen={confirmLogout}
+          title="Sair da conta?"
+          message="Você precisará entrar novamente para usar o sistema."
+          confirmLabel="Sair"
+          onConfirm={() => {
+            setConfirmLogout(false);
+            onLogout();
+          }}
+          onCancel={() => setConfirmLogout(false)}
+        />
       </div>
     </aside>
   );

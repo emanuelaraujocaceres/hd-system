@@ -73,7 +73,39 @@ export const PDVView: React.FC<PDVViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [customerQuery, setCustomerQuery] = useState('');
+  const [customerSuggestOpen, setCustomerSuggestOpen] = useState(false);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
+
+  // Sugestões de cliente — busca por nome OU telefone (normaliza caracteres)
+  const customerSuggestions = React.useMemo(() => {
+    const q = customerQuery.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (!q) return customers.slice(0, 8);
+    return customers
+      .filter((c) => {
+        const name = (c.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const phone = (c.phone || '').replace(/\D/g, '');
+        const digits = q.replace(/\D/g, '');
+        return name.includes(q) || (digits.length > 0 && phone.includes(digits));
+      })
+      .slice(0, 8);
+  }, [customers, customerQuery]);
+
+  // Cross-sell: quando há cliente selecionado e itens no carrinho, sugere
+  // produtos da categoria mais comprada na venda atual (fora do carrinho)
+  const crossSellSuggestions = React.useMemo(() => {
+    if (!selectedCustomer || cart.length === 0) return [];
+    const catCount: Record<string, number> = {};
+    cart.forEach((i) => {
+      catCount[i.product.category] = (catCount[i.product.category] || 0) + i.quantity;
+    });
+    const topCategory = Object.entries(catCount).sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (!topCategory) return [];
+    const inCart = new Set(cart.map((i) => i.product.id));
+    return products
+      .filter((p) => p.category === topCategory && p.currentStock > 0 && !inCart.has(p.id) && p.active !== false)
+      .slice(0, 4);
+  }, [selectedCustomer, cart, products]);
 
   // Modals state
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
@@ -510,6 +542,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Digite o nome ou código de barras... (F4)"
+              data-search-input="true"
               className="w-full pl-10 pr-10 py-2.5 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl text-xs sm:text-sm text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
             />
             <button
@@ -642,28 +675,103 @@ export const PDVView: React.FC<PDVViewProps> = ({
           </button>
         </div>
 
-        {/* Customer Assignment Field */}
+        {/* Customer Assignment Field — busca por nome ou telefone */}
         <div className="p-3 border-b border-slate-200 dark:border-[#27272a] bg-slate-50/50 dark:bg-[#09090b]/30">
           <div className="flex items-center justify-between text-xs mb-1">
             <span className="font-semibold text-slate-600 dark:text-[#a1a1aa]">Cliente (Opcional):</span>
             <UserCheck className="w-3.5 h-3.5 text-indigo-500" />
           </div>
-          <select
-            value={selectedCustomer?.id || ''}
-            onChange={(e) => {
-              const cust = customers.find((c) => c.id === e.target.value);
-              setSelectedCustomer(cust || null);
-            }}
-            className="w-full bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white outline-none cursor-pointer"
-          >
-            <option value="">Consumidor Não Identificado</option>
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.cpfCnpj})
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <input
+              type="text"
+              value={customerQuery}
+              onChange={(e) => {
+                setCustomerQuery(e.target.value);
+                setCustomerSuggestOpen(true);
+              }}
+              onFocus={() => setCustomerSuggestOpen(true)}
+              onBlur={() => setTimeout(() => setCustomerSuggestOpen(false), 150)}
+              placeholder="Buscar por nome ou telefone..."
+              className="w-full bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-xl px-2.5 py-1.5 text-xs text-slate-900 dark:text-white outline-none cursor-text"
+            />
+            {selectedCustomer && !customerQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCustomer(null);
+                  setCustomerQuery('');
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                title="Remover cliente"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {customerSuggestOpen && (
+              <div className="absolute z-30 mt-1 w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+                {customerSuggestions.length === 0 ? (
+                  <div className="px-3 py-2.5 text-[11px] text-slate-400 dark:text-[#71717a]">
+                    Nenhum cliente encontrado.
+                  </div>
+                ) : (
+                  customerSuggestions.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        setSelectedCustomer(c);
+                        setCustomerQuery('');
+                        setCustomerSuggestOpen(false);
+                        posAudio.click();
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-indigo-50 dark:hover:bg-[#27272a] transition-colors flex items-center justify-between gap-2"
+                    >
+                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate min-w-0">{c.name}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-[#71717a] shrink-0 font-mono">
+                        {c.phone || c.cpfCnpj}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Cross-sell: sugestões para o cliente na venda atual */}
+        {selectedCustomer && crossSellSuggestions.length > 0 && (
+          <div className="px-3 pt-2 border-b border-slate-200 dark:border-[#27272a]">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <Sparkles className="w-3 h-3 text-purple-500" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#71717a]">
+                Já pensou em levar também?
+              </span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {crossSellSuggestions.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    handleAddToCart(p);
+                    posAudio.click();
+                  }}
+                  className="shrink-0 w-28 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] hover:border-purple-500 transition-colors overflow-hidden text-left"
+                  title={`Adicionar ${p.name}`}
+                >
+                  <img src={p.imageUrl} alt={p.name} className="w-full h-12 object-cover" />
+                  <div className="p-1.5">
+                    <p className="text-[9px] font-bold text-slate-900 dark:text-white truncate leading-tight">{p.name}</p>
+                    <p className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400">
+                      R$ {p.salePrice.toFixed(2)}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Cart Item List */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
@@ -797,6 +905,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
           setIsReceiptOpen(true);
           setCart([]);
           setSelectedCustomer(null);
+          setCustomerQuery('');
           setDiscountAmount(0);
         }}
       />
@@ -1108,6 +1217,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
         onConfirm={() => {
           setCart([]);
           setSelectedCustomer(null);
+          setCustomerQuery('');
           setDiscountAmount(0);
           posAudio.click();
           setConfirmClearCart(false);
