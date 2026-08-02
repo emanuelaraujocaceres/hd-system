@@ -1043,7 +1043,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                         ) : (
                           <Globe className="w-4 h-4 text-indigo-500" />
                         )}
-                        <span>Buscar Imagem no Google</span>
+                        <span>Buscar Imagem na Web</span>
                       </button>
                     </div>
 
