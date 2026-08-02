@@ -10,7 +10,8 @@ const ASSETS_TO_CACHE = [
   "/logo-hd-system/favicon-16x16.png",
   "/logo-hd-system/favicon-32x32.png",
   "/logo-hd-system/apple-touch-icon.png",
-  "/logo-hd-system/logo-og.png"
+  "/logo-hd-system/logo-og.png",
+  "/logo-hd-system/logo_whatsapp.png"
 ];
 
 self.addEventListener("install", (event) => {
