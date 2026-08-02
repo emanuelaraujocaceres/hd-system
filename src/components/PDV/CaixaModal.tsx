@@ -77,7 +77,14 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
     }
     setLoading(true);
     try {
-      storageService.openNewCaixaSession(user.id, user.name, initialCashInput, openingNotes);
+      const session = await storageService.openNewCaixaSession(user.id, user.name, initialCashInput, openingNotes);
+      if (session.status === 'open') {
+        if (session.operatorId !== user.id) {
+          addToast('info', `Caixa já estava aberto na filial — operando caixa de ${session.operatorName} (R$ ${session.currentCashBalance.toFixed(2)}).`);
+        } else {
+          addToast('success', `Caixa aberto com R$ ${initialCashInput.toFixed(2)}.`);
+        }
+      }
       posAudio.chime();
       onClose();
     } catch (err: any) {

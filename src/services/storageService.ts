@@ -1881,7 +1881,66 @@ class StorageService {
     }
   }
 
-  openNewCaixaSession(operatorId: string, operatorName: string, initialCash: number, notes?: string) {
+  /**
+   * Abre (ou ADOTA) o caixa da filial atual — caixa único por filial.
+   *
+   * Antes: cada dispositivo gerava UUID próprio ao abrir caixa, criando
+   * sessões duplicadas na mesma filial — o realtime/hydrate acabava
+   * sobrescrevendo uma pela outra (ex: R$ 250 no PC vs R$ 0 no celular).
+   *
+   * Agora: se já existe caixa ABERTO na mesma filial (no cloud), este
+   * dispositivo adota essa sessão (mesmo id, mesmos contadores) em vez
+   * de criar duplicata. Ambos passam a operar o MESMO caixa em tempo real.
+   * Offline: cria nova sessão local (subirá ao cloud quando reconectar).
+   */
+  async openNewCaixaSession(operatorId: string, operatorName: string, initialCash: number, notes?: string): Promise<CashRegisterSession> {
+    const orgId = this.getCurrentOrgId();
+    // Resolver a filial atual (short code → UUID), como syncCaixaSession faz
+    let branchId = this.getSelectedBranchId();
+    if (branchId && !StorageService.UUID_RE.test(branchId)) {
+      const branches = this.getBranches();
+      const matched = branches.find(b => b.id === branchId || b.code === branchId);
+      if (matched) branchId = matched.id;
+    }
+
+    // Tentativa de adotar caixa aberto existente na mesma filial (cloud)
+    try {
+      let query = supabase
+        .from('cash_sessions')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('status', 'open');
+      if (branchId) query = query.eq('store_branch_id', branchId);
+      const { data } = await query.order('opened_at', { ascending: false }).limit(1);
+      if (data && data.length > 0) {
+        const s = data[0];
+        const adopted: CashRegisterSession = {
+          id: s.id,
+          openedAt: s.opened_at,
+          closedAt: s.closed_at || undefined,
+          operatorId: s.user_id || operatorId,
+          operatorName: s.operator_name || operatorName,
+          initialCash: parseFloat(s.opening_balance) || 0,
+          currentCashBalance: parseFloat(s.expected_balance) || 0,
+          totalSalesCash: parseFloat(s.total_sales_cash) || 0,
+          totalSalesPix: parseFloat(s.total_sales_pix) || 0,
+          totalSalesCard: parseFloat(s.total_sales_card) || 0,
+          totalSalesCreditAccount: parseFloat(s.total_sales_credit_account) || 0,
+          suprimentos: parseFloat(s.suprimentos) || 0,
+          sangrias: parseFloat(s.sangrias) || 0,
+          status: 'open',
+          organizationId: orgId,
+          storeBranchId: s.store_branch_id || branchId || undefined,
+          notes: s.notes || notes || `Caixa adotado por ${operatorName}.`,
+        };
+        console.log(`[HD-Caixa] 🔄 Caixa único por filial — adotando sessão existente (id=${adopted.id}, operador=${adopted.operatorName}, saldo=R$ ${adopted.currentCashBalance.toFixed(2)})`);
+        this.saveActiveCaixaSession(adopted);
+        return adopted;
+      }
+    } catch (e) {
+      console.warn('[HD-Caixa] Falha ao consultar caixa aberto no cloud — criando nova sessão local:', e);
+    }
+
     const newSession: CashRegisterSession = {
       id: StorageService.newId(),
       openedAt: new Date().toISOString(),
@@ -1896,10 +1955,12 @@ class StorageService {
       suprimentos: 0,
       sangrias: 0,
       status: 'open',
-      organizationId: this.getCurrentOrgId(),
+      organizationId: orgId,
+      storeBranchId: branchId || undefined,
       notes: notes || 'Caixa aberto com sucesso.',
     };
     this.saveActiveCaixaSession(newSession);
+    return newSession;
   }
 
   addSuprimento(amount: number, reason: string) {
