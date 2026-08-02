@@ -21,7 +21,6 @@ import {
   Sparkles,
   RefreshCw,
   Tv,
-  Wine,
 } from 'lucide-react';
 import { Product, Category, Supplier, StockMovement, UserProfile, SystemSettings } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -102,11 +101,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formShowOnTV, setFormShowOnTV] = useState(false);
   const [formTvPromoPrice, setFormTvPromoPrice] = useState('');
   const [formTvHighlightTag, setFormTvHighlightTag] = useState('');
-  const [formVintage, setFormVintage] = useState('');
-  const [formCountry, setFormCountry] = useState('');
-  const [formGrape, setFormGrape] = useState('');
-  const [formAlcoholContent, setFormAlcoholContent] = useState('');
-  const [formBottleVolume, setFormBottleVolume] = useState('');
 
   // ============================================================
   // 2. TODOS OS useRef
@@ -161,11 +155,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setFormShowOnTV(false);
       setFormTvPromoPrice('');
       setFormTvHighlightTag('');
-      setFormVintage('');
-      setFormCountry('');
-      setFormGrape('');
-      setFormAlcoholContent('');
-      setFormBottleVolume('');
       setImageSuggestions([]);
       setIsSearchingImages(false);
       setIsProductModalOpen(true);
@@ -323,11 +312,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormShowOnTV(false);
     setFormTvPromoPrice('');
     setFormTvHighlightTag('');
-    setFormVintage('');
-    setFormCountry('');
-    setFormGrape('');
-    setFormAlcoholContent('');
-    setFormBottleVolume('');
     setImageSuggestions([]);
     setIsSearchingImages(false);
   };
@@ -352,11 +336,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormShowOnTV(product.showOnTV || false);
     setFormTvPromoPrice(String(product.tvPromoPrice || ''));
     setFormTvHighlightTag(product.tvHighlightTag || '');
-    setFormVintage(product.vintage || '');
-    setFormCountry(product.country || '');
-    setFormGrape(product.grape || '');
-    setFormAlcoholContent(product.alcoholContent || '');
-    setFormBottleVolume(product.bottleVolume || '');
     setIsProductModalOpen(true);
   };
 
@@ -390,15 +369,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         imageUrl: formImageUrl || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80',
         active: true,
         updatedAt: new Date().toISOString(),
-        storeBranchId: user.storeBranchId,
+        storeBranchId: storageService.getSelectedBranchId() || user.storeBranchId,
         showOnTV: formShowOnTV,
         tvPromoPrice: formTvPromoPrice ? parseBrlToNumber(formTvPromoPrice) || undefined : undefined,
         tvHighlightTag: formTvHighlightTag || undefined,
-        vintage: formVintage.trim() || undefined,
-        country: formCountry.trim() || undefined,
-        grape: formGrape.trim() || undefined,
-        alcoholContent: formAlcoholContent.trim() || undefined,
-        bottleVolume: formBottleVolume.trim() || undefined,
       };
 
       storageService.saveProduct(newProd);
@@ -1104,92 +1078,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   />
                 )}
               </div>
-
-              {/* ─── INFORMAÇÕES DO VINHO (adega) ─── */}
-              {(() => {
-                const isWineCategory = /vinho|adega/i.test(formCategory);
-                const hasWineData = Boolean(
-                  formVintage || formCountry || formGrape || formAlcoholContent || formBottleVolume
-                );
-                if (!isWineCategory && !hasWineData) return null;
-                return (
-                  <div className="pt-3 border-t border-slate-200 dark:border-[#27272a] space-y-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded bg-purple-500/20 flex items-center justify-center">
-                        <Wine className="w-3 h-3 text-purple-500" />
-                      </div>
-                      <h4 className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a]">
-                        Informações do Vinho
-                      </h4>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                          Safra (ano)
-                        </label>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={4}
-                          value={formVintage}
-                          onChange={(e) => setFormVintage(e.target.value)}
-                          className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
-                          placeholder="Ex: 2019"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                          País de Origem
-                        </label>
-                        <input
-                          type="text"
-                          value={formCountry}
-                          onChange={(e) => setFormCountry(e.target.value)}
-                          className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
-                          placeholder="Ex: Chile"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                          Uva
-                        </label>
-                        <input
-                          type="text"
-                          value={formGrape}
-                          onChange={(e) => setFormGrape(e.target.value)}
-                          className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
-                          placeholder="Ex: Cabernet Sauvignon"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                          Teor Alcoólico
-                        </label>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={formAlcoholContent}
-                          onChange={(e) => setFormAlcoholContent(e.target.value)}
-                          className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
-                          placeholder="Ex: 13,5%"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                          Volume da Garrafa
-                        </label>
-                        <input
-                          type="text"
-                          value={formBottleVolume}
-                          onChange={(e) => setFormBottleVolume(e.target.value)}
-                          className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
-                          placeholder="Ex: 750ml"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
 
               {/* ─── OFERTAS / TV ─── */}
               <div className="pt-3 border-t border-slate-200 dark:border-[#27272a] space-y-3">

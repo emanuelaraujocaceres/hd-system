@@ -301,6 +301,13 @@ export const App: React.FC = () => {
       const event = payload.eventType; // INSERT, UPDATE, DELETE
       const row = payload.new || payload.old;
 
+      // Regra preventiva (safeSync): payload malformado não pode derrubar o sync.
+      // Um único payload null/undefined já quebrou handlers que liam row.id direto.
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        console.warn(`[HD-Sync] Ignorando payload inválido em ${table}:`, payload);
+        return;
+      }
+
       // Organization isolation: defense-in-depth no cliente
       // Se o payload tem organization_id, verificar se corresponde à org atual
       if (row?.organization_id && !storageService.isSuperAdmin()) {

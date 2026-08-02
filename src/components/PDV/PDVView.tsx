@@ -23,7 +23,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   Package,
-  Wine,
 } from 'lucide-react';
 import {
   Product,
@@ -622,12 +621,6 @@ export const PDVView: React.FC<PDVViewProps> = ({
                     {p.name}
                   </p>
                   <p className="text-[10px] text-slate-400 dark:text-[#71717a] font-mono mt-0.5">EAN: {p.barcode}</p>
-                  {(p.vintage || p.country || p.grape) && (
-                    <p className="text-[10px] text-purple-500 dark:text-purple-400 font-semibold mt-0.5 line-clamp-1">
-                      <Wine className="inline w-2.5 h-2.5 mr-0.5 -mt-0.5" />
-                      {[p.vintage, p.country, p.grape].filter(Boolean).join(' · ')}
-                    </p>
-                  )}
                 </div>
 
                 <div className="mt-2 pt-2 border-t border-slate-100 dark:border-[#27272a] flex items-center justify-between">

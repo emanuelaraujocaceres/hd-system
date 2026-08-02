@@ -105,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div>
               <h1 className="font-serif-italic text-lg font-semibold tracking-tight text-slate-900 dark:text-white leading-tight flex items-center gap-1.5">
-                HD-System <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 font-sans font-bold">PRO</span>
+                HD-System
               </h1>
             </div>
           </div>

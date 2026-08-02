@@ -39,6 +39,7 @@ import {
 import { syncService } from './syncService';
 import { supabase } from '../lib/supabase';
 import { undoManager } from '../lib/undoManager';
+import { asArray, mapRows } from '../lib/safeSync';
 
 const KEYS = {
   PRODUCTS: 'hd_system_products',
@@ -175,6 +176,15 @@ class StorageService {
       if (!item.organizationId) return this.isDefaultOrg(); // legado: só na org padrão
       return item.organizationId === orgId;
     });
+  }
+
+  // Isolamento por filial: itens COM storeBranchId só aparecem na filial
+  // selecionada no seletor. Itens SEM storeBranchId (legado / dados mock)
+  // são tratados como compartilhados da org e ficam visíveis em qualquer filial.
+  private filterBySelectedBranch<T extends { storeBranchId?: string }>(items: T[]): T[] {
+    const branchId = this.getSelectedBranchId();
+    if (!branchId) return items;
+    return items.filter((i) => !i.storeBranchId || i.storeBranchId === branchId);
   }
 
   // ─── MIGRAÇÃO LEGACY: TEXT → UUID (uma única vez) ─────────────────────
@@ -367,7 +377,7 @@ class StorageService {
       email: c.email,
       phone: c.phone,
       credit_limit: c.creditLimit,
-      store_branch_id: (c as any).storeBranchId || null,
+      store_branch_id: c.storeBranchId || null,
     });
   }
 
@@ -381,7 +391,7 @@ class StorageService {
       contact_person: s.contactName,
       email: s.email,
       phone: s.phone,
-      store_branch_id: (s as any).storeBranchId || null,
+      store_branch_id: s.storeBranchId || null,
     });
   }
 
@@ -522,6 +532,7 @@ class StorageService {
       permissions: u.permissions,
       avatar_url: u.avatarUrl || null,
       active: u.active,
+      superadmin: u.superadmin === true,
     });
   }
 
@@ -869,8 +880,16 @@ class StorageService {
   }
 
   updateUserFromRemote(row: any) {
-    // Superadmin é nível de sistema — não sincronizar como membro de org
-    if (INITIAL_USERS.some((u) => u.id === row.id && u.superadmin)) return;
+    // Superadmin é nível de sistema — não sincronizar como membro de org.
+    // Compara por id OU email: após a migração de IDs para auth.uid(),
+    // o id do banco difere dos UUIDs determinísticos (ex: usr-01), então
+    // a comparação por id sozinha deixava o superadmin vazar para as orgs.
+    const isSuperadminRemote = row?.superadmin === true
+      || INITIAL_USERS.some((u) => u.id === row?.id || (u.email || '').toLowerCase() === (row?.email || '').toLowerCase());
+    if (isSuperadminRemote) {
+      console.log(`[HD-Sync] Ignorando update remoto de superadmin ${row?.email || row?.id} na lista de org`);
+      return;
+    }
 
     const users = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
     const mapped: UserProfile = {
@@ -890,6 +909,7 @@ class StorageService {
       // so the cloud row always has no password. Without this merge, the password
       // would be stripped on every Realtime update, breaking login.
       mapped.password = users[idx].password;
+      mapped.superadmin = users[idx].superadmin; // preserve flag por segurança
       users[idx] = mapped;
     } else {
       // New user from cloud — no local password exists (can't login without one)
@@ -897,6 +917,17 @@ class StorageService {
       users.unshift(mapped);
     }
     this.set(KEYS.USERS_LIST, users);
+
+    // Se o usuário atualizado é o logado, atualiza também o perfil dedicado
+    // (KEYS.USER) — ex: foto de perfil trocada em outro dispositivo aparece
+    // na sidebar/header em tempo real.
+    const activeEmail = localStorage.getItem(KEYS.LOGGED_IN_EMAIL);
+    if (activeEmail && activeEmail !== 'LOGGED_OUT' && (mapped.email || '').toLowerCase() === activeEmail.toLowerCase()) {
+      const current = this.get<UserProfile | null>(KEYS.USER, null);
+      if (current) {
+        this.saveUserProfile({ ...current, ...mapped, password: current.password || mapped.password });
+      }
+    }
   }
 
   // ─── INITIAL LOAD FROM SUPABASE ──────────────────────────────────
@@ -936,16 +967,23 @@ class StorageService {
         const hasLocalData = localStorage.getItem(key) !== null
           || (this.getStorageKey(key) !== key && localStorage.getItem(this.getStorageKey(key)) !== null);
 
+        // SANITIZAÇÃO (regra preventiva): linhas inválidas da nuvem
+        // (null/undefined/parciais) são descartadas ANTES de qualquer
+        // mapeamento. Antes, um único registro inválido derrubava a
+        // hidratação inteira: TypeError: Cannot read properties of
+        // undefined (reading 'id') — e o app caía para localStorage.
+        const safeCloud = mapRows(cloud, mapCloud, key);
+
         // First-time init: localStorage was never written (using INITIAL_* defaults).
         // If cloud has data, replace local with it (discard mock data).
         // If cloud is empty too, skip entirely (keep INITIAL_* defaults).
         if (!hasLocalData) {
-          if (cloud.length === 0) return null;
-          return cloud.map(mapCloud);
+          if (safeCloud.length === 0) return null;
+          return safeCloud;
         }
 
         // Normal merge: local data is real (user-created)
-        const cloudMapped = cloud.map(mapCloud);
+        const cloudMapped = safeCloud;
         const cloudIds = new Set(cloudMapped.map(getId));
 
         // Sync local-only records that cloud doesn't have yet
@@ -1056,23 +1094,26 @@ class StorageService {
 
       // ── SALES + SALE_ITEMS ────────────────────────────────────────
       {
+        // Regra preventiva: descarta linhas inválidas antes de qualquer uso
+        const safeSales = asArray<any>(sales);
+        const safeSaleItems = asArray<any>(saleItems);
         const salesKey = KEYS.SALES;
         const hasLocalSales = localStorage.getItem(salesKey) !== null
           || (this.getStorageKey(salesKey) !== salesKey && localStorage.getItem(this.getStorageKey(salesKey)) !== null);
         const localSalesBefore = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
-        console.log(`[HD-Sync] 📊 Sales hydration: hasLocalSales=${hasLocalSales}, localCount=${localSalesBefore.length}, cloudCount=${sales.length}`);
+        console.log(`[HD-Sync] 📊 Sales hydration: hasLocalSales=${hasLocalSales}, localCount=${localSalesBefore.length}, cloudCount=${safeSales.length}`);
         if (localSalesBefore.length > 0) {
           console.log(`[HD-Sync] 📊 Local sale IDs:`, localSalesBefore.map(s => `${s.id} (customer: ${s.customerName || 'N/A'})`));
         }
 
         // Handle sale_items first (they're needed for sales merge)
-        if (saleItems && saleItems.length > 0) {
-          this.set(KEYS.SALE_ITEMS, saleItems);
+        if (safeSaleItems.length > 0) {
+          this.set(KEYS.SALE_ITEMS, safeSaleItems);
         }
 
         // Group sale_items by sale_id
         const itemsBySaleId: Record<string, any[]> = {};
-        let effectiveItems = saleItems && saleItems.length > 0 ? saleItems : null;
+        let effectiveItems = safeSaleItems.length > 0 ? safeSaleItems : null;
         if (!effectiveItems) {
           const localSaleItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
           if (localSaleItems.length > 0) {
@@ -1092,11 +1133,11 @@ class StorageService {
           }
         }
 
-        if (!hasLocalSales && sales.length === 0) {
+        if (!hasLocalSales && safeSales.length === 0) {
           // Neither real local data nor cloud — skip (keep INITIAL_SALES)
-        } else if (!hasLocalSales && sales.length > 0) {
+        } else if (!hasLocalSales && safeSales.length > 0) {
           // First time: replace INITIAL_SALES with cloud data
-          const cloudMapped = sales.map((r: any) => {
+          const cloudMapped = safeSales.map((r: any) => {
             const cloudItems = itemsBySaleId[r.id] || [];
             const storedTotal = parseFloat(r.total) || 0;
             const computedItemsTotal = cloudItems.reduce((sum: number, item: any) => sum + (item.total || 0), 0);
@@ -1119,7 +1160,7 @@ class StorageService {
           // Normal merge: has real local data
           const localSales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
           const localSalesById = new Map(localSales.map((s) => [s.id, s]));
-          const cloudSaleIds = new Set(sales.map((r: any) => r.id));
+          const cloudSaleIds = new Set(safeSales.map((r: any) => r.id));
 
           // Sync local-only sales to cloud
           for (const s of localSales) {
@@ -1129,7 +1170,7 @@ class StorageService {
           }
 
           // Merge: map cloud sales preserving local items when cloud has none
-          const cloudMapped = sales.map((r: any) => {
+          const cloudMapped = safeSales.map((r: any) => {
             const cloudItems = itemsBySaleId[r.id] || [];
             const items = cloudItems.length > 0 ? cloudItems : (localSalesById.get(r.id)?.items || []);
             const storedTotal = parseFloat(r.total) || 0;
@@ -1203,7 +1244,8 @@ class StorageService {
       // ── USERS ─────────────────────────────────────────────────────
       {
         const existing = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
-        const cloudIds = new Set(users.map((r: any) => r.id));
+        const safeUsers = asArray<any>(users);
+        const cloudIds = new Set(safeUsers.map((r: any) => r.id));
         const orgId = this.getCurrentOrgId();
 
         // NOTE: Não fazemos sync de local-only users para o cloud aqui.
@@ -1211,8 +1253,17 @@ class StorageService {
         // Auth UUID real. IDs determinísticos do frontend nunca bateriam
         // com auth.uid() e o RLS bloquearia.
 
-        // Só inclui usuários do cloud que pertencem à org atual
-        const cloudUsersInOrg = users.filter((r: any) => r.organization_id === orgId || (!r.organization_id && this.isDefaultOrg()));
+        // Só inclui usuários do cloud que pertencem à org atual.
+        // Superadmins globais (INITIAL_USERS com superadmin) nunca entram
+        // na lista de membros de uma org — nem pelo id (que mudou para
+        // auth.uid() pós-migração) nem pelo email.
+        const isSuperadminRemote = (r: any) =>
+          r?.superadmin === true
+          || INITIAL_USERS.some((u) => u.superadmin && ((u.id === r?.id) || (u.email || '').toLowerCase() === (r?.email || '').toLowerCase()));
+        const cloudUsersInOrg = safeUsers.filter((r: any) =>
+          !isSuperadminRemote(r)
+          && (r.organization_id === orgId || (!r.organization_id && this.isDefaultOrg()))
+        );
 
         const mapped = cloudUsersInOrg.map((r: any) => ({
           id: r.id, name: r.name, email: r.email, role: r.role || 'collaborator',
@@ -1222,16 +1273,23 @@ class StorageService {
           active: r.active !== false, avatarUrl: r.avatar_url || undefined,
         }));
         const initialIds = new Set(INITIAL_USERS.filter(u => u.organizationId === orgId || (!u.organizationId && this.isDefaultOrg())).map((u) => u.id));
+        const initialByEmail = new Map(
+          INITIAL_USERS.filter(u => u.email)
+            .map((u) => [(u.email || '').toLowerCase(), u]),
+        );
         const merged = mapped.map((m: any) => {
           const local = existing.find((u) => u.id === m.id || (u.email || '').toLowerCase() === (m.email || '').toLowerCase());
-          if (initialIds.has(m.id)) {
-            const initialUser = INITIAL_USERS.find((u) => u.id === m.id);
+          const initialUser = initialIds.has(m.id) ? INITIAL_USERS.find((u) => u.id === m.id)
+            : initialByEmail.get((m.email || '').toLowerCase());
+          if (initialUser) {
             return {
               ...(initialUser || m),
-              name: m.name || initialUser?.name || m.name,
-              avatarUrl: m.avatarUrl || initialUser?.avatarUrl,
-              permissions: m.permissions || initialUser?.permissions,
-              active: m.active !== undefined ? m.active : (initialUser?.active ?? true),
+              name: m.name || initialUser.name,
+              avatarUrl: m.avatarUrl || initialUser.avatarUrl,
+              permissions: m.permissions || initialUser.permissions,
+              active: m.active !== undefined ? m.active : (initialUser.active ?? true),
+              storeBranchId: m.storeBranchId || initialUser.storeBranchId,
+              superadmin: initialUser.superadmin === true,
             };
           }
           return { ...m, password: local?.password || m.password };
@@ -1239,6 +1297,7 @@ class StorageService {
         // Keep local users not in cloud (sem fazer upsert), da mesma org
         const isSuper = this.isSuperAdmin();
         for (const e of existing) {
+          if (e.superadmin === true) continue; // superadmin global não entra na lista de org
           if (!isSuper) {
             if (e.organizationId && e.organizationId !== orgId) continue;
             if (!e.organizationId && !this.isDefaultOrg()) continue;
@@ -1268,18 +1327,19 @@ class StorageService {
 
       // ── CAIXA SESSION ─────────────────────────────────────────────
       {
+        const safeCaixa = asArray<any>(caixa);
         const caixaKey = KEYS.CAIXA;
         const hasLocalCaixa = localStorage.getItem(caixaKey) !== null
           || (this.getStorageKey(caixaKey) !== caixaKey && localStorage.getItem(this.getStorageKey(caixaKey)) !== null);
 
-        if (caixa.length > 0) {
+        if (safeCaixa.length > 0) {
           if (!hasLocalCaixa) {
             // First time: replace INITIAL_CAIXA with cloud data
-            let filtered = caixa;
+            let filtered = safeCaixa;
             if (branchId) {
-              filtered = caixa.filter((r: any) => r.store_branch_id === branchId);
+              filtered = safeCaixa.filter((r: any) => r.store_branch_id === branchId);
             }
-            if (filtered.length === 0 && !branchId) filtered = caixa;
+            if (filtered.length === 0 && branchId) filtered = safeCaixa;
             const sorted = [...filtered].sort((a: any, b: any) => {
               if (a.status === 'open' && b.status !== 'open') return -1;
               if (a.status !== 'open' && b.status === 'open') return 1;
@@ -1312,9 +1372,9 @@ class StorageService {
             });
           } else {
             // Normal: prefer local open session over cloud
-            let filtered = caixa;
-            if (branchId) filtered = caixa.filter((r: any) => r.store_branch_id === branchId);
-            if (filtered.length === 0 && !branchId) filtered = caixa;
+            let filtered = safeCaixa;
+            if (branchId) filtered = safeCaixa.filter((r: any) => r.store_branch_id === branchId);
+            else filtered = safeCaixa;
             const sorted = [...filtered].sort((a: any, b: any) => {
               if (a.status === 'open' && b.status !== 'open') return -1;
               if (a.status !== 'open' && b.status === 'open') return 1;
@@ -1359,10 +1419,12 @@ class StorageService {
 
       // ── SETTINGS ──────────────────────────────────────────────────
       {
-        if (settings.length > 0 && settings[0].settings) {
+        // Regra preventiva: primeiro elemento pode ser null/undefined
+        const firstSetting = asArray(settings)[0];
+        if (firstSetting && firstSetting.settings) {
           // Merge: cloud settings override, but keep any local-only keys
           const localSettings = this.getSettings();
-          const merged = { ...localSettings, ...settings[0].settings };
+          const merged = { ...localSettings, ...firstSetting.settings };
           this.set(KEYS.SETTINGS, merged);
         } else {
           // No settings in cloud — manter só local por enquanto
@@ -1434,12 +1496,15 @@ class StorageService {
   getProducts(): Product[] {
     const fallback = this.isDefaultOrg() ? INITIAL_PRODUCTS : [];
     const all = this.get<Product[]>(KEYS.PRODUCTS, fallback);
-    return this.filterByOrg<Product>(all);
+    return this.filterBySelectedBranch<Product>(this.filterByOrg<Product>(all));
   }
 
   saveProduct(product: Product): Product {
     product.id = StorageService.ensureUuid(product.id);
     product.organizationId = this.getCurrentOrgId();
+    // Isolamento por filial: produto criado/alterado pertence à filial selecionada
+    const branchId = this.getSelectedBranchId();
+    if (branchId) product.storeBranchId = branchId;
     const products = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
     const index = products.findIndex((p) => p.id === product.id);
     if (index >= 0) {
@@ -1555,6 +1620,7 @@ class StorageService {
       reason,
       date: new Date().toISOString(),
       operatorName,
+      storeBranchId: prod.storeBranchId,
     };
     movements.unshift(newMov);
     this.set(KEYS.MOVEMENTS, movements);
@@ -1588,20 +1654,25 @@ class StorageService {
   getMovements(): StockMovement[] {
     const all = this.get<StockMovement[]>(KEYS.MOVEMENTS, []);
     const viewingOrg = this.getSuperadminViewingOrg();
+    let result: StockMovement[];
     // Superadmin sem override: vê tudo
-    if (this.isSuperAdmin() && !viewingOrg) return all;
+    if (this.isSuperAdmin() && !viewingOrg) result = all;
     // Com override: filtrar pelas filiais da org
-    if (viewingOrg) {
+    else if (viewingOrg) {
       const branchIds = new Set(this.getBranches().filter(b => b.organizationId === viewingOrg).map(b => b.id));
-      return all.filter(m => m.storeBranchId ? branchIds.has(m.storeBranchId) : false);
+      result = all.filter(m => m.storeBranchId ? branchIds.has(m.storeBranchId) : false);
     }
     // Usuário comum: filtrar pelas filiais da sua org
-    const targetOrgId = this.getCurrentOrgId();
-    const branchIds = new Set(this.getBranches().filter(b => b.organizationId === targetOrgId).map(b => b.id));
-    return all.filter(m => {
-      if (!m.storeBranchId) return this.isDefaultOrg();
-      return branchIds.has(m.storeBranchId);
-    });
+    else {
+      const targetOrgId = this.getCurrentOrgId();
+      const branchIds = new Set(this.getBranches().filter(b => b.organizationId === targetOrgId).map(b => b.id));
+      result = all.filter(m => {
+        if (!m.storeBranchId) return this.isDefaultOrg();
+        return branchIds.has(m.storeBranchId);
+      });
+    }
+    // Isolamento: dentro do escopo da org, mostra só a filial selecionada
+    return this.filterBySelectedBranch(result);
   }
 
   // --- CATEGORIES ---
@@ -1635,12 +1706,14 @@ class StorageService {
   getCustomers(): Customer[] {
     const fallback = this.isDefaultOrg() ? INITIAL_CUSTOMERS : [];
     const all = this.get<Customer[]>(KEYS.CUSTOMERS, fallback);
-    return this.filterByOrg<Customer>(all);
+    return this.filterBySelectedBranch<Customer>(this.filterByOrg<Customer>(all));
   }
 
   saveCustomer(customer: Customer) {
     customer.id = StorageService.ensureUuid(customer.id);
     customer.organizationId = this.getCurrentOrgId();
+    const branchId = this.getSelectedBranchId();
+    if (branchId) customer.storeBranchId = branchId;
     const customers = this.get<Customer[]>(KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : []);
     const idx = customers.findIndex((c) => c.id === customer.id);
     if (idx >= 0) {
@@ -1662,12 +1735,14 @@ class StorageService {
   getSuppliers(): Supplier[] {
     const fallback = this.isDefaultOrg() ? INITIAL_SUPPLIERS : [];
     const all = this.get<Supplier[]>(KEYS.SUPPLIERS, fallback);
-    return this.filterByOrg<Supplier>(all);
+    return this.filterBySelectedBranch<Supplier>(this.filterByOrg<Supplier>(all));
   }
 
   saveSupplier(supplier: Supplier) {
     supplier.id = StorageService.ensureUuid(supplier.id);
     supplier.organizationId = this.getCurrentOrgId();
+    const branchId = this.getSelectedBranchId();
+    if (branchId) supplier.storeBranchId = branchId;
     const suppliers = this.get<Supplier[]>(KEYS.SUPPLIERS, this.isDefaultOrg() ? INITIAL_SUPPLIERS : []);
     const idx = suppliers.findIndex((s) => s.id === supplier.id);
     if (idx >= 0) {
@@ -1690,20 +1765,26 @@ class StorageService {
     const fallback = this.isDefaultOrg() ? INITIAL_SALES : [];
     const all = this.get<Sale[]>(KEYS.SALES, fallback);
     const viewingOrg = this.getSuperadminViewingOrg();
+    const sortDesc = (arr: Sale[]) => arr.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    let result: Sale[];
     // Superadmin sem override: vê tudo
-    if (this.isSuperAdmin() && !viewingOrg) return all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    if (this.isSuperAdmin() && !viewingOrg) result = all;
     // Com override (superadmin vendo org específica): filtrar pelas filiais da org
-    if (viewingOrg) {
+    else if (viewingOrg) {
       const branchIds = new Set(this.getBranches().filter(b => b.organizationId === viewingOrg).map(b => b.id));
-      return all.filter(s => branchIds.has(s.storeBranchId)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      result = all.filter(s => branchIds.has(s.storeBranchId));
     }
     // Usuário comum (qualquer org, incluindo default): filtrar pelas filiais da sua org
-    const targetOrgId = this.getCurrentOrgId();
-    const branchIds = new Set(this.getBranches().filter(b => b.organizationId === targetOrgId).map(b => b.id));
-    return all.filter(s => {
-      if (!s.storeBranchId) return this.isDefaultOrg(); // legado: só na org padrão
-      return branchIds.has(s.storeBranchId);
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    else {
+      const targetOrgId = this.getCurrentOrgId();
+      const branchIds = new Set(this.getBranches().filter(b => b.organizationId === targetOrgId).map(b => b.id));
+      result = all.filter(s => {
+        if (!s.storeBranchId) return this.isDefaultOrg(); // legado: só na org padrão
+        return branchIds.has(s.storeBranchId);
+      });
+    }
+    // Isolamento: dentro do escopo da org, mostra só a filial selecionada
+    return sortDesc(this.filterBySelectedBranch(result));
   }
 
   getSaleItems(): any[] {
@@ -1729,6 +1810,9 @@ class StorageService {
   async addSale(sale: Sale) {
     sale.id = StorageService.ensureUuid(sale.id);
     sale.organizationId = this.getCurrentOrgId();
+    // Isolamento por filial: a venda pertence à filial selecionada no PDV
+    const branchId = this.getSelectedBranchId();
+    if (branchId) sale.storeBranchId = branchId;
     // Save sale_items to separate localStorage key FIRST (with stable IDs)
     // so syncSale can read them and upsert with onConflict: 'id' deduplication.
     if (sale.items && sale.items.length > 0) {
@@ -1832,7 +1916,26 @@ class StorageService {
       const item = localStorage.getItem(storageKey);
       if (item !== null) {
         const session = JSON.parse(item) as CashRegisterSession;
-        if (session?.id) return session;
+        if (session?.id) {
+          // Isolamento por filial: o caixa aberto pertence à filial em que
+          // foi aberto. Se o usuário trocou de filial, NÃO mostra o caixa
+          // da outra (cada filial tem seu caixa único).
+          const branchId = this.getSelectedBranchId();
+          if (branchId && session.storeBranchId && session.storeBranchId !== branchId) {
+            // Caixa de outra filial → retorna sessão fechada (fail-closed)
+            return {
+              ...INITIAL_CAIXA_SESSION,
+              id: '00000000-0000-0000-0000-000000000000',
+              status: 'closed',
+              organizationId: this.getCurrentOrgId(),
+              operatorId: '',
+              operatorName: '',
+              openedAt: new Date().toISOString(),
+              notes: '',
+            };
+          }
+          return session;
+        }
       }
     } catch {}
     // FAIL-CLOSED: sem caixa aberto salvo nesta org, retorna uma sessão
@@ -2001,22 +2104,29 @@ class StorageService {
     const fallback = this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : [];
     const all = this.get<FinancialAccount[]>(KEYS.FINANCIAL, fallback);
     const viewingOrg = this.getSuperadminViewingOrg();
+    let result: FinancialAccount[];
     // Superadmin sem override: vê tudo
-    if (this.isSuperAdmin() && !viewingOrg) return all;
+    if (this.isSuperAdmin() && !viewingOrg) result = all;
     // Com override: filtrar pelas filiais da org
-    if (viewingOrg) {
+    else if (viewingOrg) {
       const branchIds = new Set(this.getBranches().filter(b => b.organizationId === viewingOrg).map(b => b.id));
-      return all.filter(a => a.storeBranchId ? branchIds.has(a.storeBranchId) : false);
+      result = all.filter(a => a.storeBranchId ? branchIds.has(a.storeBranchId) : false);
     }
     // Usuário comum (qualquer org): filtrar pelas filiais da sua org
-    const targetOrgId = this.getCurrentOrgId();
-    const branchIds = new Set(this.getBranches().filter(b => b.organizationId === targetOrgId).map(b => b.id));
-    return all.filter(a => a.storeBranchId ? branchIds.has(a.storeBranchId) : false);
+    else {
+      const targetOrgId = this.getCurrentOrgId();
+      const branchIds = new Set(this.getBranches().filter(b => b.organizationId === targetOrgId).map(b => b.id));
+      result = all.filter(a => a.storeBranchId ? branchIds.has(a.storeBranchId) : false);
+    }
+    // Isolamento: dentro do escopo da org, mostra só a filial selecionada
+    return this.filterBySelectedBranch(result);
   }
 
   saveFinancialAccount(acc: FinancialAccount) {
     acc.id = StorageService.ensureUuid(acc.id);
     acc.organizationId = this.getCurrentOrgId();
+    const branchId = this.getSelectedBranchId();
+    if (branchId) acc.storeBranchId = branchId;
     const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
     const idx = accounts.findIndex((a) => a.id === acc.id);
     if (idx >= 0) {
@@ -2097,7 +2207,14 @@ class StorageService {
   }
 
   getSelectedBranchId(): string {
-    return localStorage.getItem('hd_system_selected_branch_id') || '';
+    const savedId = localStorage.getItem('hd_system_selected_branch_id');
+    if (!savedId) return '';
+    // Valida contra as filiais visíveis no escopo atual (org em foco).
+    // Antes retornava o valor bruto — ao trocar de org (override do
+    // superadmin), o filtro usava a filial de outra org e zerava as listas.
+    const branches = this.getBranches();
+    const found = branches.find((b) => b.id === savedId || b.code === savedId);
+    return found ? found.id : '';
   }
 
   setSelectedBranchId(id: string) {
@@ -2122,15 +2239,18 @@ class StorageService {
     });
     const merged = [...filteredInitials];
     const initialIds = new Set(filteredInitials.map((u) => u.id));
+    const initialByEmail = new Map(filteredInitials.filter((u) => u.email).map((u) => [(u.email || '').toLowerCase(), u]));
     for (const s of stored) {
       // Skip stored users from other orgs
       if (!isSuper || viewingOrg) {
         if (s.organizationId && s.organizationId !== orgId) continue;
         if (!s.organizationId && !this.isDefaultOrg()) continue;
       }
-      if (initialIds.has(s.id)) {
+      const initialUser = initialIds.has(s.id) ? filteredInitials.find((u) => u.id === s.id)
+        : initialByEmail.get((s.email || '').toLowerCase());
+      if (initialUser) {
         // Initial user — only merge non-auth fields (name, avatar, permissions, etc.)
-        const idx = merged.findIndex((u) => u.id === s.id);
+        const idx = merged.findIndex((u) => u.id === initialUser.id);
         if (idx >= 0) {
           merged[idx] = {
             ...merged[idx],
@@ -2147,8 +2267,16 @@ class StorageService {
       }
     }
     // Superadmin é nível de sistema, não membro de organização alguma.
-    // Remove superadmins da lista de usuários de org.
-    return merged.filter((u) => !u.superadmin);
+    // Remove superadmins da lista de usuários de org — pela flag OU por
+    // correspondência de email com os perfis globais (cobre o caso de o
+    // id ter sido migrado para auth.uid() e a flag não ter vindo da nuvem).
+    const superEmails = new Set(
+      INITIAL_USERS.filter((u) => u.superadmin && u.email).map((u) => (u.email || '').toLowerCase()),
+    );
+    const superIds = new Set(INITIAL_USERS.filter((u) => u.superadmin).map((u) => u.id));
+    return merged.filter(
+      (u) => !u.superadmin && !superIds.has(u.id) && !superEmails.has((u.email || '').toLowerCase()),
+    );
   }
 
   saveUser(user: UserProfile) {
