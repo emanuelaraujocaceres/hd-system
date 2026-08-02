@@ -32,6 +32,13 @@ import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { supabase } from '../../lib/supabase';
 
+// ─── STRIPE (DESLIGADO TEMPORARIAMENTE) ──────────────────────────────────────
+// Pagamento online via Stripe foi desativado por decisão do proprietário:
+// a cobrança mensal é feita pessoalmente/manualmente. O código NÃO foi excluído
+// (modal, handlers, API) e será reativado quando o sistema tiver mais de uma
+// organização em produção — basta voltar esta flag para `true`.
+const STRIPE_ENABLED = false;
+
 interface SettingsViewProps {
   settings: SystemSettings;
   branches: StoreBranch[];
@@ -444,7 +451,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             Configurações Globais do HD-System ERP
           </h2>
           <p className="text-xs text-slate-500">
-            Gerencie dados fiscais, filiais, equipe do sistema e sua assinatura Stripe
+            Gerencie dados fiscais, filiais, equipe do sistema e sua assinatura{STRIPE_ENABLED ? ' Stripe' : ''}
           </p>
         </div>
 
@@ -495,7 +502,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             }`}
           >
             <CreditCard className="w-4 h-4" />
-            <span>Assinatura & Stripe</span>
+            <span>{STRIPE_ENABLED ? 'Assinatura & Stripe' : 'Assinatura'}</span>
             <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500 text-white animate-pulse">
               {subscription.daysRemaining}d
             </span>
@@ -1018,7 +1025,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       {activeSubTab === 'subscription' && (
         <div className="space-y-6">
           {/* Success Banner */}
-          {paymentSuccessAlert && (
+          {STRIPE_ENABLED && paymentSuccessAlert && (
             <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <CheckCircle className="w-6 h-6 text-emerald-500 shrink-0" />
@@ -1039,7 +1046,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           )}
 
           {/* Top Status & Metrics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className={`grid grid-cols-1 ${STRIPE_ENABLED ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-4`}>
             {/* Metric 1: Status & Plan */}
             <div className="p-5 rounded-3xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm flex flex-col justify-between space-y-4">
               <div className="flex items-start justify-between">
@@ -1115,43 +1122,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               </div>
             </div>
 
-            {/* Metric 3: Quick Stripe Payment CTA */}
-            <div className="p-5 rounded-3xl bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white shadow-lg flex flex-col justify-between space-y-4">
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1">
-                    <Zap className="w-3.5 h-3.5 text-amber-400" /> Gateway Stripe Ativo
-                  </span>
-                  <span className="text-[10px] font-mono bg-white/10 px-2 py-0.5 rounded text-indigo-200">
-                    Stripe Live
-                  </span>
+            {/* Metric 3: Quick Stripe Payment CTA (oculto enquanto STRIPE_ENABLED=false) */}
+            {STRIPE_ENABLED && (
+              <div className="p-5 rounded-3xl bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white shadow-lg flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300 flex items-center gap-1">
+                      <Zap className="w-3.5 h-3.5 text-amber-400" /> Gateway Stripe Ativo
+                    </span>
+                    <span className="text-[10px] font-mono bg-white/10 px-2 py-0.5 rounded text-indigo-200">
+                      Stripe Live
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white mt-1">
+                    Renovação & Pagamento Online
+                  </h3>
+                  <p className="text-xs text-indigo-200/80 mt-1">
+                    Pague com cartão ou PIX e garanta o funcionamento sem interrupções do HD-System.
+                  </p>
                 </div>
-                <h3 className="text-sm font-bold text-white mt-1">
-                  Renovação & Pagamento Online
-                </h3>
-                <p className="text-xs text-indigo-200/80 mt-1">
-                  Pague com cartão ou PIX e garanta o funcionamento sem interrupções do HD-System.
-                </p>
-              </div>
 
-              <button
-                onClick={handleInitiateStripeCheckout}
-                disabled={isProcessingStripe}
-                className="w-full min-h-[44px] py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {isProcessingStripe ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Conectando ao Stripe...</span>
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="w-4 h-4" />
-                    <span>Pagar Assinatura via Stripe</span>
-                  </>
-                )}
-              </button>
-            </div>
+                <button
+                  onClick={handleInitiateStripeCheckout}
+                  disabled={isProcessingStripe}
+                  className="w-full min-h-[44px] py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isProcessingStripe ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Conectando ao Stripe...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4" />
+                      <span>Pagar Assinatura via Stripe</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Metric 3 (alternativo): cobrança manual — exibido enquanto o Stripe estiver desligado */}
+            {!STRIPE_ENABLED && (
+              <div className="p-5 rounded-3xl bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 text-white shadow-lg flex flex-col justify-between space-y-4">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-amber-400" /> Cobrança Manual
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold text-white mt-1">
+                    Renovação Mensal Manual
+                  </h3>
+                  <p className="text-xs text-slate-300/80 mt-1">
+                    A cobrança da assinatura é feita diretamente pela administração. Em caso de dúvidas ou atrasos, fale com o suporte.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Details & Invoices Section */}
@@ -1256,23 +1284,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 </li>
                 <li className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300 font-medium">
                   <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Suporte Técnico Prioritário Stripe 24/7</span>
+                  <span>Suporte Técnico Prioritário 24/7</span>
                 </li>
               </ul>
 
-              <div className="pt-4 border-t border-slate-100 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] p-3.5 rounded-2xl text-[11px] text-slate-500">
-                <p className="font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Identificador de Contrato Stripe
-                </p>
-                <p className="font-mono text-[10px] break-all">{subscription.stripeSubscriptionId}</p>
-              </div>
+              {STRIPE_ENABLED && (
+                <div className="pt-4 border-t border-slate-100 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] p-3.5 rounded-2xl text-[11px] text-slate-500">
+                  <p className="font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Identificador de Contrato Stripe
+                  </p>
+                  <p className="font-mono text-[10px] break-all">{subscription.stripeSubscriptionId}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* --- STRIPE CHECKOUT MODAL --- */}
-      {isStripeModalOpen && (
+      {/* --- STRIPE CHECKOUT MODAL (oculto enquanto STRIPE_ENABLED=false) --- */}
+      {STRIPE_ENABLED && isStripeModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5">
             {/* Header Stripe */}
@@ -1481,7 +1511,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               </div>
 
               <div className="pt-3 text-center text-[10px] text-slate-400">
-                Processado via Stripe Gateway. Assinatura Válida.
+                {STRIPE_ENABLED
+                  ? 'Processado via Stripe Gateway. Assinatura Válida.'
+                  : 'Assinatura válida. Recibo de licença de uso do HD-System.'}
               </div>
             </div>
 

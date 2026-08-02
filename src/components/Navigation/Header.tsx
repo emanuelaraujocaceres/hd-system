@@ -73,7 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
     inventory: { title: 'Gestão de Estoque & Catalog', subtitle: 'Cadastro de produtos, movimentações e código de barras' },
     finance: { title: 'Financeiro & Fluxo de Caixa', subtitle: 'Contas a pagar, contas a receber e DRE gerencial' },
     crm: { title: 'Clientes & Fornecedores (CRM)', subtitle: 'Cadastro de clientes, limite de crédito e parceiros' },
-    settings: { title: 'Configurações do ERP', subtitle: 'Dados da empresa, impressoras e assinatura Stripe HD-System' },
+    settings: { title: 'Configurações do ERP', subtitle: 'Dados da empresa, impressoras e assinatura HD-System' },
   };
 
   const currentInfo = tabTitles[currentTab] || { title: 'HD-System ERP', subtitle: 'Sistema de Gestão & PDV' };
