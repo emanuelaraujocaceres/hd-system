@@ -236,11 +236,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     }
   };
 
-  // Google / Unsplash Auto Search
-  const handleAutoSearchImage = () => {
+  // Busca real de imagens por termo (Wikimedia Commons - aberto, sem chave, CORS liberado)
+  const handleAutoSearchImage = async () => {
     setIsSearchingImages(true);
-    const term = (formName || formCategory || 'produto').toLowerCase();
+    const term = (formName || formCategory || 'produto').trim();
 
+    // Presets como fallback caso a busca online falhe ou não retorne nada
     const presetMap: Record<string, string[]> = {
       coca: [
         'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=400&q=80',
@@ -267,34 +268,61 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       snack: [
         'https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=400&q=80',
         'https://images.unsplash.com/photo-1599490659213-e2b9527bd087?w=400&q=80',
-      ]
+      ],
     };
 
-    let found: string[] = [];
-    for (const [key, imgs] of Object.entries(presetMap)) {
-      if (term.includes(key)) {
-        found = imgs;
-        break;
+    const fallbackImages = (): string[] => {
+      const lower = term.toLowerCase();
+      for (const [key, imgs] of Object.entries(presetMap)) {
+        if (lower.includes(key)) {
+          return imgs;
+        }
       }
-    }
-
-    if (found.length === 0) {
-      found = [
+      return [
         'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=400&q=80',
         'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&q=80',
         'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&q=80',
         'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80',
       ];
-    }
+    };
 
-    setTimeout(() => {
-      setImageSuggestions(found);
-      setIsSearchingImages(false);
-      if (found[0]) {
+    try {
+      const url =
+        'https://commons.wikimedia.org/w/api.php' +
+        '?action=query&generator=search' +
+        `&gsrsearch=${encodeURIComponent(term)}&gsrnamespace=6&gsrlimit=8` +
+        '&prop=imageinfo&iiprop=url|mediatype&iiurlwidth=400&format=json&origin=*';
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Busca de imagens indisponível');
+      const data = await res.json();
+
+      type PageInfo = { imageinfo?: { thumburl?: string; url?: string; mediatype?: string }[] };
+      const pages: Record<string, PageInfo> = data?.query?.pages || {};
+      const found = Object.values(pages)
+        .filter((p) => p.imageinfo?.[0]?.mediatype === 'BITMAP')
+        .map((p) => p.imageinfo?.[0]?.thumburl || p.imageinfo?.[0]?.url)
+        .filter((u): u is string => !!u)
+        .slice(0, 3);
+
+      if (found.length > 0) {
+        setImageSuggestions(found);
         setFormImageUrl(found[0]);
         posAudio.chime();
+        return;
       }
-    }, 500);
+
+      addToast('warning', `Nenhuma imagem encontrada para "${term}" — mostrando opções padrão.`);
+    } catch {
+      addToast('warning', 'Sem conexão com a busca de imagens — mostrando opções padrão.');
+    } finally {
+      const fallback = fallbackImages();
+      setImageSuggestions(fallback);
+      if (fallback[0]) {
+        setFormImageUrl(fallback[0]);
+        posAudio.chime();
+      }
+      setIsSearchingImages(false);
+    }
   };
 
   const resetProductForm = (barcode?: string) => {
