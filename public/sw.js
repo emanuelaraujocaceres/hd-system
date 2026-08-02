@@ -1,9 +1,14 @@
-const CACHE_NAME = 'hd-system-v1';
+﻿const CACHE_NAME = 'hd-system-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/favicon.svg'
+  '/logo%20hd-system/android-chrome-192x192.png',
+  '/logo%20hd-system/android-chrome-512x512.png',
+  '/logo%20hd-system/favicon.ico',
+  '/logo%20hd-system/favicon-32x32.png',
+  '/logo%20hd-system/apple-touch-icon.png',
+  '/logo%20hd-system/logo-og.png'
 ];
 
 self.addEventListener('install', (event) => {

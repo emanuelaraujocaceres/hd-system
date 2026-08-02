@@ -121,11 +121,11 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
       {/* TOP TV HEADER — Logo HD-System + Relógio */}
       <header className="px-6 md:px-12 py-5 bg-black/60 backdrop-blur-xl border-b border-zinc-800/80 flex items-center justify-between z-10 shrink-0">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-indigo-600 p-0.5 shadow-lg shadow-indigo-500/20 flex items-center justify-center">
-            <div className="w-full h-full bg-zinc-950 rounded-[14px] flex items-center justify-center font-bold text-lg text-amber-400">
-              HD
-            </div>
-          </div>
+          <img
+            src="/logo%20hd-system/android-chrome-192x192.png"
+            alt="HD-System"
+            className="w-12 h-12 rounded-2xl object-cover shadow-lg shadow-indigo-500/20"
+          />
           <div>
             <h1 className="text-xl md:text-2xl font-black tracking-tight">
               <span>{settings.companyName || 'HD-System ERP'}</span>

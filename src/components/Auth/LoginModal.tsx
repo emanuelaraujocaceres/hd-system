@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ShieldCheck, Lock, AlertCircle, LogIn, Wifi, WifiOff } from 'lucide-react';
+import { Lock, AlertCircle, LogIn, Wifi, WifiOff } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { supabase } from '../../lib/supabase';
@@ -165,9 +165,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
         <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-black p-6 text-white text-center relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.2),transparent_50%)] pointer-events-none" />
           
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-md mb-3 shadow-inner">
-            <ShieldCheck className="w-6 h-6 text-indigo-300" />
-          </div>
+          <img
+            src="/logo%20hd-system/android-chrome-192x192.png"
+            alt="HD-System"
+            className="w-12 h-12 rounded-2xl object-cover border border-white/20 backdrop-blur-md mb-3 shadow-inner"
+          />
 
           <h2 className="text-xl font-bold tracking-tight text-white">
             Acesso ao Sistema

@@ -110,9 +110,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-4 border-b border-slate-800 dark:border-[#27272a] flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-white shadow-md shadow-indigo-600/30">
-              HD
-            </div>
+            <img
+              src="/logo%20hd-system/android-chrome-192x192.png"
+              alt="HD-System"
+              className="w-8 h-8 rounded-lg object-cover shadow-md shadow-indigo-600/30"
+            />
             <div>
               <h1 className="font-serif-italic text-lg font-semibold tracking-tight text-slate-900 dark:text-white leading-tight flex items-center gap-1.5">
                 HD-System
