@@ -122,7 +122,7 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
       <header className="px-6 md:px-12 py-5 bg-black/60 backdrop-blur-xl border-b border-zinc-800/80 flex items-center justify-between z-10 shrink-0">
         <div className="flex items-center gap-4">
           <img
-            src="/logo%20hd-system/android-chrome-192x192.png"
+            src="/logo-hd-system/android-chrome-192x192.png"
             alt="HD-System"
             className="w-12 h-12 rounded-2xl object-cover shadow-lg shadow-indigo-500/20"
           />

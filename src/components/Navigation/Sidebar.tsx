@@ -111,7 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
-              src="/logo%20hd-system/android-chrome-192x192.png"
+              src="/logo-hd-system/android-chrome-192x192.png"
               alt="HD-System"
               className="w-8 h-8 rounded-lg object-cover shadow-md shadow-indigo-600/30"
             />

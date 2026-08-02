@@ -3,12 +3,12 @@
   "name": "HD-System ERP & PDV SaaS",
   "icons": [
     {
-      "src": "/logo%20hd-system/android-chrome-192x192.png",
+      "src": "/logo-hd-system/android-chrome-192x192.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "/logo%20hd-system/android-chrome-512x512.png",
+      "src": "/logo-hd-system/android-chrome-512x512.png",
       "type": "image/png",
       "sizes": "512x512"
     }
@@ -20,3 +20,4 @@
   "orientation": "portrait",
   "description": "Sistema ERP e Ponto de Venda (PDV) SaaS com Supabase, PWA offline e IA."
 }
+
