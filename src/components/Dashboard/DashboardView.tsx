@@ -11,7 +11,7 @@ import {
   ChevronUp,
   Users,
 } from 'lucide-react';
-import { Product, Sale, UserProfile, FinancialAccount } from '../../types';
+import { Product, Sale, UserProfile, FinancialAccount, CashRegisterSession } from '../../types';
 import { storageService } from '../../services/storageService';
 import { CollaboratorPerformance } from './CollaboratorPerformance';
 
@@ -20,8 +20,10 @@ interface DashboardViewProps {
   products: Product[];
   user: UserProfile;
   financialAccounts: FinancialAccount[];
+  caixaSession: CashRegisterSession;
   onNavigateTab: (tab: string) => void;
   onOpenCaixaModal: () => void;
+  onOpenSubscriptionTab: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -29,8 +31,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   products,
   user,
   financialAccounts,
+  caixaSession,
   onNavigateTab,
   onOpenCaixaModal,
+  onOpenSubscriptionTab,
 }) => {
   const isAdmin = user.role === 'admin';
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
@@ -53,6 +57,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const todayRevenue = todaySales.reduce((acc, s) => acc + getSaleTotal(s), 0);
   const totalSalesCount = todaySales.length;
   const ticketMedio = totalSalesCount > 0 ? todayRevenue / totalSalesCount : 0;
+
+  // Período do caixa aberto: enquanto o caixa está aberto, os cards de
+  // faturamento/transações refletem as vendas desde a abertura (até fechar);
+  // com o caixa fechado, volta a usar o dia de hoje como período.
+  const caixaIsOpen = caixaSession?.status === 'open';
+  const periodStart = caixaIsOpen && caixaSession?.openedAt ? new Date(caixaSession.openedAt) : todayStart;
+  const caixaPeriodSales = caixaIsOpen
+    ? sales.filter((s) => new Date(s.date) >= periodStart)
+    : todaySales;
+  const caixaPeriodRevenue = caixaPeriodSales.reduce((acc, s) => acc + getSaleTotal(s), 0);
+  const caixaPeriodCount = caixaPeriodSales.length;
+  const caixaPeriodTicket = caixaPeriodCount > 0 ? caixaPeriodRevenue / caixaPeriodCount : 0;
 
   const lowStockCount = products.filter((p) => p.currentStock <= p.minStock).length;
 
@@ -182,26 +198,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* KPI METRIC CARDS GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-        {/* Card 1: Faturamento Hoje */}
+        {/* Card 1: Faturamento Hoje / Período do Caixa */}
         <button onClick={() => onNavigateTab('finance')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
-          <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">Vendas Hoje</p>
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">
+            {caixaIsOpen ? 'Faturamento do Caixa' : 'Vendas Hoje'}
+          </p>
           <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
-            R$ {todayRevenue.toFixed(2)}
+            R$ {caixaPeriodRevenue.toFixed(2)}
           </p>
           <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
-            {todayRevenue > 0 ? <span className="text-emerald-500">✓ </span> : <span className="text-slate-400">—</span>}
-            <span className="text-slate-400 dark:text-[#71717a]">vendas hoje</span>
+            {caixaPeriodRevenue > 0 ? <span className="text-emerald-500">✓ </span> : <span className="text-slate-400">—</span>}
+            <span className="text-slate-400 dark:text-[#71717a]">
+              {caixaIsOpen ? 'vendas desde a abertura' : 'vendas hoje'}
+            </span>
           </div>
         </button>
 
-        {/* Card 2: Qtd Vendas Hoje */}
-        <button onClick={() => onNavigateTab('pdv')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
-          <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">Transações</p>
+        {/* Card 2: Qtd Vendas Hoje / Transações do período do caixa */}
+        <button onClick={() => onNavigateTab('finance')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">
+            {caixaIsOpen ? 'Transações do Caixa' : 'Transações'}
+          </p>
           <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
-            {totalSalesCount}
+            {caixaPeriodCount}
           </p>
           <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
-            <span className="text-slate-400 dark:text-[#71717a]">ticket médio R$ {ticketMedio.toFixed(2)}</span>
+            <span className="text-slate-400 dark:text-[#71717a]">ticket médio R$ {caixaPeriodTicket.toFixed(2)}</span>
           </div>
         </button>
 
@@ -218,7 +240,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </button>
 
         {/* Card 4: Assinatura Pro / Status SaaS */}
-        <button onClick={() => onNavigateTab('settings')} className="p-4 sm:p-6 rounded-2xl bg-indigo-600 text-white shadow-md cursor-pointer hover:shadow-lg hover:scale-[1.01] transition-all text-left w-full">
+        <button onClick={onOpenSubscriptionTab} className="p-4 sm:p-6 rounded-2xl bg-indigo-600 text-white shadow-md cursor-pointer hover:shadow-lg hover:scale-[1.01] transition-all text-left w-full">
           <p className="text-[10px] uppercase tracking-wider opacity-80 font-bold">Assinatura Pro</p>
           <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter font-serif-italic">Ativa</p>
           <div className="mt-3 sm:mt-4 text-xs opacity-80 font-medium">

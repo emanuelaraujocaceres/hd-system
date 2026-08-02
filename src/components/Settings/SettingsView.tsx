@@ -36,11 +36,12 @@ interface SettingsViewProps {
   settings: SystemSettings;
   branches: StoreBranch[];
   user: UserProfile;
+  initialSubTab?: 'fiscal' | 'branches' | 'collaborators' | 'subscription' | 'tv';
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, user }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, user, initialSubTab = 'fiscal' }) => {
   const isAdmin = user.role === 'admin';
-  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'subscription' | 'tv'>('fiscal');
+  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'subscription' | 'tv'>(initialSubTab);
 
   // Subscription & Stripe State
   const [subscription, setSubscription] = useState<SubscriptionInfo>(() => storageService.getSubscription());
