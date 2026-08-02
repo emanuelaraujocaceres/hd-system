@@ -427,8 +427,55 @@ class StorageService {
       if (items.length > 0) {
         await syncService.upsertRows('sale_items', items);
       }
+
+      // Atualizar caixa em tempo real: somar a venda aos totais da sessão ativa
+      await this.updateCaixaFromSale(s, branchUuid);
     } catch (err) {
       console.warn('[HD-Sync] syncSale failed (will retry via queue):', err);
+    }
+  }
+
+  /**
+   * Atualiza os totais da sessão de caixa ativa quando uma venda
+   * é sincronizada de outro dispositivo.
+   */
+  private async updateCaixaFromSale(s: Sale, branchUuid: string) {
+    try {
+      const orgId = this.getCurrentOrgId();
+      if (!orgId) return;
+
+      // Buscar a sessão de caixa ativa da filial
+      const { data: activeSession, error: sessionError } = await supabase
+        .from('cash_sessions')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('store_branch_id', branchUuid || null)
+        .eq('status', 'open')
+        .maybeSingle();
+
+      if (sessionError || !activeSession) return;
+
+      // Calcular o valor da venda por método de pagamento
+      const paymentTotals: Record<string, number> = {};
+      s.payments.forEach((p) => {
+        const method = p.method || 'cash';
+        paymentTotals[method] = (paymentTotals[method] || 0) + (p.amount || 0);
+      });
+
+      // Atualizar os totais da sessão de caixa
+      const updatedSession = {
+        ...activeSession,
+        total_sales_cash: (parseFloat(activeSession.total_sales_cash) || 0) + (paymentTotals['cash'] || 0),
+        total_sales_pix: (parseFloat(activeSession.total_sales_pix) || 0) + (paymentTotals['pix'] || 0),
+        total_sales_card: (parseFloat(activeSession.total_sales_card) || 0) + (paymentTotals['card'] || 0),
+        total_sales_credit_account: (parseFloat(activeSession.total_sales_credit_account) || 0) + (paymentTotals['credit_account'] || 0),
+        expected_balance: (parseFloat(activeSession.expected_balance) || 0) + s.total,
+      };
+
+      await syncService.upsertRow('cash_sessions', updatedSession);
+      console.log(`[HD-Sync] 🔄 Caixa atualizado em tempo real: venda R$${s.total.toFixed(2)}`);
+    } catch (err) {
+      console.warn('[HD-Sync] updateCaixaFromSale failed (non-critical):', err);
     }
   }
 
