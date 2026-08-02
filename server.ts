@@ -269,7 +269,7 @@ async function startServer() {
         is_headquarters: true,
       });
       if (branchErr) {
-        await supabaseAdmin.from("organizations").delete().eq("id", orgId).catch(() => {});
+        try { await supabaseAdmin.from("organizations").delete().eq("id", orgId); } catch {}
         await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
         return res.status(500).json({ success: false, message: `Erro ao criar filial: ${branchErr.message}` });
       }
@@ -286,8 +286,8 @@ async function startServer() {
         superadmin: false,
       });
       if (userErr) {
-        await supabaseAdmin.from("store_branches").delete().eq("id", branchId).catch(() => {});
-        await supabaseAdmin.from("organizations").delete().eq("id", orgId).catch(() => {});
+        try { await supabaseAdmin.from("store_branches").delete().eq("id", branchId); } catch {}
+        try { await supabaseAdmin.from("organizations").delete().eq("id", orgId); } catch {}
         await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
         return res.status(500).json({ success: false, message: `Erro ao salvar admin: ${userErr.message}` });
       }

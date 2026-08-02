@@ -447,6 +447,12 @@ class SupabaseSyncService {
   private isConnectionError(error: any): boolean {
     if (!error) return false;
     const msg = (error.message || '').toLowerCase();
+    // PGRST301 (JWT expirado / não autenticado) NÃO é erro de conexão:
+    // enfileirar operações com token expirado só inundaria a fila com
+    // falhas permanentes — o retry nunca resolveria a autenticação.
+    if (error.code === 'PGRST301' || msg.includes('jwt') || msg.includes('not authenticated')) {
+      return false;
+    }
     return (
       msg.includes('network') ||
       msg.includes('fetch') ||
@@ -455,8 +461,7 @@ class SupabaseSyncService {
       msg.includes('enotfound') ||
       msg.includes('failed to fetch') ||
       msg.includes('could not connect') ||
-      msg.includes('channel') ||
-      error.code === 'PGRST301' // Not authenticated
+      msg.includes('channel')
     );
   }
 }

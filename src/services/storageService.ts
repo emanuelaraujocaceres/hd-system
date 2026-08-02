@@ -141,7 +141,7 @@ class StorageService {
   }
 
   // Verifica se o usuário logado é superadmin
-  private isSuperAdmin(): boolean {
+  isSuperAdmin(): boolean {
     try {
       const raw = localStorage.getItem('hd_system_user_profile');
       if (raw) {
@@ -150,6 +150,11 @@ class StorageService {
       }
     } catch {}
     return false;
+  }
+
+  // Verifica se um ID já é UUID (usado pelo App.tsx na resolução de filiais)
+  isUuid(value: string | undefined | null): boolean {
+    return !!value && StorageService.UUID_RE.test(value);
   }
 
   // Filtra um array pelo organization_id atual. Itens sem organizationId são exibidos
@@ -638,19 +643,21 @@ class StorageService {
     };
 
     // Use existing items as fallback while items are being fetched
+    // Fallbacks defensivos com existing?. — se o payload vier parcial (ex:
+    // via realtime), os campos faltantes NUNCA zeram a venda local.
     const mapped: Sale = {
       id: row.id,
-      code: row.code,
-      date: row.created_at || new Date().toISOString(),
-      operatorId: row.user_id || '',
+      code: row.code ?? existing?.code,
+      date: row.created_at || existing?.date || new Date().toISOString(),
+      operatorId: row.user_id ?? existing?.operatorId ?? '',
       operatorName: row.operator_name || existing?.operatorName || 'Sistema',
       customerId: row.customer_id || existing?.customerId || undefined,
       customerName: (row.customer_name ?? row.notes) || existing?.customerName || undefined,
-      storeBranchId: row.store_branch_id || '',
+      storeBranchId: row.store_branch_id ?? existing?.storeBranchId ?? '',
       items: existing?.items || [],
-      subtotal: parseFloat(row.subtotal) || 0,
-      discount: parseFloat(row.discount) || 0,
-      total: parseFloat(row.total) || 0,
+      subtotal: row.subtotal !== undefined && row.subtotal !== null ? parseFloat(row.subtotal) : (existing?.subtotal ?? 0),
+      discount: row.discount !== undefined && row.discount !== null ? parseFloat(row.discount) : (existing?.discount ?? 0),
+      total: row.total !== undefined && row.total !== null ? parseFloat(row.total) : (existing?.total ?? 0),
       payments: existing?.payments || [{ method: (row.payment_method as any) || 'cash', amount: parseFloat(row.total) || 0 }],
       status: row.status || 'completed',
       organizationId: row.organization_id || existing?.organizationId || undefined,
@@ -1496,7 +1503,13 @@ class StorageService {
     // Also delete sale_items from Supabase to prevent orphaned records
     if (saleToDelete && saleToDelete.items) {
       // Delete sale_items from Supabase (we don't have individual IDs — delete by sale_id)
-      supabase.from('sale_items').delete().eq('sale_id', id).then(() => {}).catch((err: any) => console.warn('[Storage] Erro ao limpar sale_items do Supabase:', err?.message));
+      (async () => {
+        try {
+          await supabase.from('sale_items').delete().eq('sale_id', id);
+        } catch (err: any) {
+          console.warn('[Storage] Erro ao limpar sale_items do Supabase:', err?.message);
+        }
+      })();
     }
     // Also remove from separate localStorage key
     const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);

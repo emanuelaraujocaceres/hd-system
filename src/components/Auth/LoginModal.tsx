@@ -30,13 +30,26 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     // Tentativa de login local (fallback ou modo offline)
+    // SEGURANÇA: usuários sincronizados do cloud não possuem senha local
+    // (o Supabase nunca armazena senha). Permitir login local sem exigir
+    // senha permitiria acesso com QUALQUER senha digitada — validação
+    // passa a exigir senha local obrigatória. Login sem senha local só é
+    // possível via Supabase Auth (fluxo online).
     const tryLocalLogin = (): boolean => {
       const user = storageService.getUserByEmail(email);
       if (!user) {
         setErrorMessage('Usuário não encontrado no sistema local.');
         return false;
       }
-      if (user.password && user.password !== password) {
+      if (!user.active) {
+        setErrorMessage(`A conta (${email}) está inativa no momento. Entre em contato com o Administrador.`);
+        return false;
+      }
+      if (!user.password) {
+        setErrorMessage('Conta sem senha local definida. Faça login online ou defina uma senha em Usuários & Permissões.');
+        return false;
+      }
+      if (user.password !== password) {
         setErrorMessage('Senha incorreta. Tente novamente.');
         return false;
       }
@@ -87,6 +100,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
             if (!orgId) {
               console.error('[Login] Usuário sem organização configurada no banco:', email);
               setErrorMessage('Sua conta ainda não está vinculada a uma organização. Fale com o administrador do sistema.');
+              setIsLoading(false);
+              return;
+            }
+            // Usuário inativo não pode entrar mesmo com Supabase Auth válido
+            if (profileData.active === false) {
+              console.warn('[Login] Usuário inativo bloqueado no Supabase:', email);
+              setErrorMessage(`A conta (${email}) está inativa no momento. Entre em contato com o Administrador.`);
               setIsLoading(false);
               return;
             }

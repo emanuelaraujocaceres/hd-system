@@ -319,7 +319,7 @@ export const App: React.FC = () => {
         // Resolve short codes (e.g. "br-01") to their UUID for comparison,
         // since Supabase now stores UUIDs but localStorage may still have short codes
         let resolvedBranchId = currentBranchId;
-        if (!StorageService.UUID_RE.test(currentBranchId)) {
+        if (!storageService.isUuid(currentBranchId)) {
           const branches = storageService.getBranches();
           const matched = branches.find(b => b.id === currentBranchId || b.code === currentBranchId);
           if (matched) resolvedBranchId = matched.id;
@@ -377,9 +377,19 @@ export const App: React.FC = () => {
           storageService.updateSettingsFromRemote(row);
           break;
         case 'sale_items':
-          // sale_items are nested inside sales — forward to updateSaleFromRemote
-          if (event !== 'DELETE') {
-            storageService.updateSaleFromRemote({ id: row.sale_id });
+          // sale_items are nested inside sales — a venda precisa ser buscada
+          // COMPLETA no cloud antes de aplicar: o payload de sale_items só tem
+          // { sale_id }, e updateSaleFromRemote com payload parcial zerava a
+          // venda local (code/total/date sobrescritos com undefined/0).
+          if (event !== 'DELETE' && row?.sale_id) {
+            supabase.from('sales').select('*').eq('id', row.sale_id).maybeSingle().then(({ data: sale, error: saleError }) => {
+              if (saleError || !sale) {
+                console.warn(`[HD-Sync] ⚠️ Sale ${row.sale_id} not found for sale_items event — skipping remote update`, saleError?.message);
+                return;
+              }
+              storageService.updateSaleFromRemote(sale);
+              setLastSyncTime(new Date());
+            });
           }
           break;
       }
@@ -511,7 +521,7 @@ export const App: React.FC = () => {
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+      if (event === 'SIGNED_OUT') {
         storageService.logout();
         setUser(null);
       }
