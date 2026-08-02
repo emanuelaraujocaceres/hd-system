@@ -150,6 +150,18 @@ class SyncQueueService {
     let processed = 0;
     let failed = 0;
     const queue = this.getQueue();
+    // Órfãs: operações marcadas 'processing' por um ciclo interrompido (ex: F5
+    // no meio do processamento) ficariam presas para sempre — o loop abaixo só
+    // pega 'pending' e getPendingCount() as conta como pendentes. Resetá-las.
+    let orphanReset = false;
+    for (const op of queue) {
+      if (op.status === 'processing') {
+        op.status = 'pending';
+        op.retries = 0;
+        orphanReset = true;
+      }
+    }
+    if (orphanReset) this.saveQueue(queue);
     const pending = queue.filter((op) => op.status === 'pending');
 
     console.log(`[SyncQueue] 🔄 Processing ${pending.length} pending operations...`);
@@ -193,10 +205,8 @@ class SyncQueueService {
           console.warn(`[SyncQueue] ⚠️ ${op.action} on ${op.table} failed (retry ${op.retries}/${op.maxRetries}):`, op.lastError);
         }
         
-        // Backoff: wait before next retry (exponential: 1s, 2s, 4s)
-        const backoffMs = Math.min(1000 * Math.pow(2, op.retries - 1), 8000);
-        await new Promise((resolve) => setTimeout(resolve, backoffMs));
-        
+        // Sem backoff por item: com centenas de operações pendentes, o sleep
+        // exponencial por item tornaria o processamento da fila inviável.
         this.saveQueue([...this.getQueue().filter((q) => q.id !== op.id), op]);
       }
     }

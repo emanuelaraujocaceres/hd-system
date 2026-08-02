@@ -158,8 +158,11 @@ class SupabaseSyncService {
    * Uses only navigator.onLine — Realtime channel status is NOT required.
    * Realtime is only for RECEIVING changes from other devices, not for sending.
    * If the request fails due to network, queue for retry.
+   * Returns { ok, error } so the caller can decide whether to enqueue:
+   * only connection errors should be queued — permanent errors (RLS/permission)
+   * would loop forever in the queue growing it unbounded (the "541 pendentes" bug).
    */
-  private async tryUpsert(table: TableName, row: Record<string, any>): Promise<boolean> {
+  private async tryUpsert(table: TableName, row: Record<string, any>): Promise<{ ok: boolean; error?: any }> {
     try {
       const { error } = await supabase.from(table).upsert(row, { onConflict: 'id' });
       if (error) {
@@ -176,41 +179,41 @@ class SupabaseSyncService {
             p_browser_id: navigator.userAgent.slice(0, 50),
           });
         } catch {}
-        return false;
+        return { ok: false, error };
       }
-      return true;
+      return { ok: true };
     } catch (e) {
       console.warn(`[HD-Sync] Upsert ${table} exception:`, e);
-      return false; // Network error — queue for retry
+      return { ok: false, error: e }; // Network error — queue for retry
     }
   }
 
-  private async tryDelete(table: TableName, id: string): Promise<boolean> {
+  private async tryDelete(table: TableName, id: string): Promise<{ ok: boolean; error?: any }> {
     try {
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) {
         console.warn(`[HD-Sync] ❌ Delete ${table} failed:`, error.message, `(id: ${id})`);
-        return false;
+        return { ok: false, error };
       }
-      return true;
+      return { ok: true };
     } catch (e) {
       console.warn(`[HD-Sync] Delete ${table} exception:`, e);
-      return false;
+      return { ok: false, error: e };
     }
   }
 
-  private async tryUpsertBatch(table: TableName, rows: Record<string, any>[]): Promise<boolean> {
-    if (rows.length === 0) return true;
+  private async tryUpsertBatch(table: TableName, rows: Record<string, any>[]): Promise<{ ok: boolean; error?: any }> {
+    if (rows.length === 0) return { ok: true };
     try {
       const { error } = await supabase.from(table).upsert(rows, { onConflict: 'id' });
       if (error) {
         console.warn(`[HD-Sync] ❌ Batch upsert ${table} failed:`, error.message);
-        return false;
+        return { ok: false, error };
       }
-      return true;
+      return { ok: true };
     } catch (e) {
       console.warn(`[HD-Sync] Batch upsert ${table} exception:`, e);
-      return false;
+      return { ok: false, error: e };
     }
   }
 
@@ -243,13 +246,18 @@ class SupabaseSyncService {
       return false;
     }
 
-    const ok = await this.tryUpsert(table, rowWithTimestamp);
-    if (!ok) {
-      console.log(`[HD-Sync] 📝 Queuing ${table} upsert (network error — will retry)`);
-      syncQueue.enqueue(table, 'upsert', { data: rowWithTimestamp });
-      this._pendingCount = syncQueue.getPendingCount();
+    const result = await this.tryUpsert(table, rowWithTimestamp);
+    if (!result.ok) {
+      // Só enfileira erros de CONEXÃO. Erros permanentes (RLS/permissão,
+      // org inválida) nunca vão passar com retry — enfileirar só faria a
+      // fila crescer sem limite. O erro já foi logado no console + DLQ.
+      if (this.isConnectionError(result.error)) {
+        console.log(`[HD-Sync] 📝 Queuing ${table} upsert (network error — will retry)`);
+        syncQueue.enqueue(table, 'upsert', { data: rowWithTimestamp });
+        this._pendingCount = syncQueue.getPendingCount();
+      }
     }
-    return ok;
+    return result.ok;
   }
 
   /**
@@ -264,13 +272,16 @@ class SupabaseSyncService {
       return false;
     }
 
-    const ok = await this.tryDelete(table, id);
-    if (!ok) {
-      console.log(`[HD-Sync] 📝 Queuing ${table} delete (network error — will retry)`);
-      syncQueue.enqueue(table, 'delete', { rowId: id });
-      this._pendingCount = syncQueue.getPendingCount();
+    const result = await this.tryDelete(table, id);
+    if (!result.ok) {
+      // Só enfileira erros de CONEXÃO (mesma regra do upsert — evita fila infinita)
+      if (this.isConnectionError(result.error)) {
+        console.log(`[HD-Sync] 📝 Queuing ${table} delete (network error — will retry)`);
+        syncQueue.enqueue(table, 'delete', { rowId: id });
+        this._pendingCount = syncQueue.getPendingCount();
+      }
     }
-    return ok;
+    return result.ok;
   }
 
   /**
@@ -291,13 +302,16 @@ class SupabaseSyncService {
       return false;
     }
 
-    const ok = await this.tryUpsertBatch(table, rowsWithTimestamp);
-    if (!ok) {
-      console.log(`[HD-Sync] 📝 Queuing ${table} batch upsert (network error — will retry)`);
-      syncQueue.enqueue(table, 'upsert_batch', { dataArray: rowsWithTimestamp });
-      this._pendingCount = syncQueue.getPendingCount();
+    const result = await this.tryUpsertBatch(table, rowsWithTimestamp);
+    if (!result.ok) {
+      // Só enfileira erros de CONEXÃO (mesma regra do upsert — evita fila infinita)
+      if (this.isConnectionError(result.error)) {
+        console.log(`[HD-Sync] 📝 Queuing ${table} batch upsert (network error — will retry)`);
+        syncQueue.enqueue(table, 'upsert_batch', { dataArray: rowsWithTimestamp });
+        this._pendingCount = syncQueue.getPendingCount();
+      }
     }
-    return ok;
+    return result.ok;
   }
 
   /**

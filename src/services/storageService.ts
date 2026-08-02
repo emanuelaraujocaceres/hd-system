@@ -1807,23 +1807,21 @@ class StorageService {
         if (session?.id) return session;
       }
     } catch {}
-    // FAIL-CLOSED: sem caixa aberto salvo nesta org, orgs não-default recebem
-    // uma sessão FECHADA e vazia — NUNCA o INITIAL_CAIXA_SESSION (que é o caixa
-    // ABERTO da Adega, org default). Antes disso, a Plantão herdava um "caixa
-    // aberto fantasma" da Adega e as vendas não entravam na sessão correta.
-    if (!this.isDefaultOrg()) {
-      return {
-        ...INITIAL_CAIXA_SESSION,
-        id: '00000000-0000-0000-0000-000000000000',
-        status: 'closed',
-        organizationId: this.getCurrentOrgId(),
-        operatorId: '',
-        operatorName: '',
-        openedAt: new Date().toISOString(),
-        notes: '',
-      };
-    }
-    return INITIAL_CAIXA_SESSION;
+    // FAIL-CLOSED: sem caixa aberto salvo nesta org, retorna uma sessão
+    // FECHADA e vazia — NUNCA o INITIAL_CAIXA_SESSION. Antes, a org default
+    // (Adega) mostrava um "caixa aberto fantasma" com R$ 0,00 em dispositivos
+    // que ainda não haviam aberto caixa (ex: celular), divergindo do caixa
+    // real aberto em outro dispositivo (ex: PC com R$ 250).
+    return {
+      ...INITIAL_CAIXA_SESSION,
+      id: '00000000-0000-0000-0000-000000000000',
+      status: 'closed',
+      organizationId: this.getCurrentOrgId(),
+      operatorId: '',
+      operatorName: '',
+      openedAt: new Date().toISOString(),
+      notes: '',
+    };
   }
 
   saveActiveCaixaSession(session: CashRegisterSession) {

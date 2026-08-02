@@ -20,7 +20,7 @@ import { syncService } from './services/syncService';
 import { syncQueue } from './services/syncQueueService';
 import { supabase } from './lib/supabase';
 import { posAudio } from './services/audioService';
-import { Lock, ShieldAlert, Wifi, WifiOff, ArrowLeft, Loader2, Store, X } from 'lucide-react';
+import { Lock, ShieldAlert, ArrowLeft, Loader2, Store, X } from 'lucide-react';
 import { GlobalSearch } from './components/shared/GlobalSearch';
 import {
   Product,
@@ -246,6 +246,12 @@ export const App: React.FC = () => {
 
   // Listen for pending count changes from syncQueue
   useEffect(() => {
+    // Inicializa a contagem com o que já está na fila do localStorage
+    // (após F5, sem esperar um novo enqueue para o número aparecer)
+    const initialCount = syncService.getPendingCount();
+    setSyncPendingCount(initialCount);
+    syncPendingCountRef.current = initialCount;
+
     const unsub = syncQueue.subscribe((count) => {
       setSyncPendingCount(count);
       syncPendingCountRef.current = count;
@@ -394,15 +400,19 @@ export const App: React.FC = () => {
       if (nowConnected) {
         const pending = syncPendingCountRef.current;
         setSyncStatus(pending > 0 ? 'syncing' : 'online');
-        // If we just came back online and there are pending operations, process them
-        if (!isOnlineRef.current && pending > 0) {
-          console.log(`[HD-Sync] 🔄 Connection restored — processing ${pending} pending operations`);
+        // Processa pendentes SEMPRE que houver e a conexão estiver OK — não
+        // apenas na transição offline→online. Antes, no F5 (com isOnline já
+        // true no mount), a fila existente nunca era processada: cada nova
+        // escrita falhada entrava e a fila só crescia (o "541 pendentes").
+        if (pending > 0) {
+          console.log(`[HD-Sync] 🔄 Processing ${pending} pending operations...`);
           syncService.processPendingQueue().then((result) => {
-            setSyncStatus('online');
-            setLastSyncTime(new Date());
             if (result.failed > 0) {
               setSyncStatus('error');
               console.warn(`[HD-Sync] ${result.failed} operations still pending`);
+            } else {
+              setSyncStatus('online');
+              setLastSyncTime(new Date());
             }
           });
         }
@@ -620,19 +630,6 @@ export const App: React.FC = () => {
 
   return (
     <ToastProvider>
-      {/* Connection indicator */}
-      {!isOnline && (
-        <div className="fixed top-2 right-2 z-[9998] px-3 py-1.5 rounded-xl bg-rose-600 text-white text-[10px] font-bold shadow-lg flex items-center gap-1.5 animate-fadeIn">
-          <WifiOff className="w-3 h-3" />
-          <span>Sem conexão</span>
-        </div>
-      )}
-      {isOnline && (
-        <div className="fixed top-2 right-2 z-[9998] px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-medium shadow-sm no-print flex items-center gap-1">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Sync {Math.floor((Date.now() - lastSyncTime.getTime()) / 60000)}min</span>
-        </div>
-      )}
     <div className={`min-h-screen font-sans bg-slate-100 dark:bg-[#09090b] text-slate-900 dark:text-[#fafafa] flex flex-col md:flex-row transition-colors duration-200`}>
       {/* Sidebar Navigation */}
       <Sidebar
