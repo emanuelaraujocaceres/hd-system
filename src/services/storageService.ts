@@ -445,13 +445,18 @@ class StorageService {
       if (!orgId) return;
 
       // Buscar a sessão de caixa ativa da filial
-      const { data: activeSession, error: sessionError } = await supabase
+      // Se branchUuid for vazio, não filtrar por store_branch_id
+      let query = supabase
         .from('cash_sessions')
         .select('*')
         .eq('organization_id', orgId)
-        .eq('store_branch_id', branchUuid || null)
-        .eq('status', 'open')
-        .maybeSingle();
+        .eq('status', 'open');
+
+      if (branchUuid) {
+        query = query.eq('store_branch_id', branchUuid);
+      }
+
+      const { data: activeSession, error: sessionError } = await query.maybeSingle();
 
       if (sessionError || !activeSession) return;
 
@@ -473,7 +478,7 @@ class StorageService {
       };
 
       await syncService.upsertRow('cash_sessions', updatedSession);
-      console.log(`[HD-Sync] 🔄 Caixa atualizado em tempo real: venda R$${s.total.toFixed(2)}`);
+      console.log(`[HD-Sync] Caixa atualizado em tempo real: venda R$${s.total.toFixed(2)}`);
     } catch (err) {
       console.warn('[HD-Sync] updateCaixaFromSale failed (non-critical):', err);
     }
