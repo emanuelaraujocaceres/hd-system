@@ -24,6 +24,7 @@ import { posAudio } from '../../services/audioService';
 import { supabase } from '../../lib/supabase';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { BranchCheck } from '../Admin/BranchCheck';
 
 interface SettingsViewProps {
   settings: SystemSettings;
@@ -1377,16 +1378,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         onCancel={() => setConfirmDeleteBranch(null)}
       />
 
-      {/* Confirm: excluir colaborador */}
-      <ConfirmDialog
-        isOpen={confirmDeleteUser !== null}
-        title="Excluir colaborador?"
-        message="O colaborador perderá o acesso ao sistema."
-        itemName={confirmDeleteUser?.name}
-        confirmLabel="Excluir"
-        onConfirm={handleConfirmDeleteUser}
-        onCancel={() => setConfirmDeleteUser(null)}
-      />
-    </div>
+{/* Confirm: excluir colaborador */}
+<ConfirmDialog
+  isOpen={confirmDeleteUser !== null}
+  title="Excluir colaborador?"
+  message="O colaborador perder� o acesso ao sistema."
+  itemName={confirmDeleteUser?.name}
+  confirmLabel="Excluir"
+  onConfirm={handleConfirmDeleteUser}
+  onCancel={() => setConfirmDeleteUser(null)}
+/>
+
+{/* Branch Check — verificar filial de cada usu�rio */}
+<BranchCheck />
+</div>
   );
 };
