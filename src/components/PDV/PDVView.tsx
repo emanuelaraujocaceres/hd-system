@@ -10,7 +10,6 @@ import {
   CreditCard,
   Percent,
   AlertCircle,
-  Sparkles,
   Lock,
   Unlock,
   ChevronRight,
@@ -655,7 +654,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
       </div>
 
       {/* RIGHT COLUMN: SHOPPING CART & PDV CHECKOUT */}
-      <div className="w-full lg:w-96 bg-white dark:bg-[#18181b] border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-[#27272a] flex flex-col lg:h-full max-h-[50vh] lg:max-h-none shadow-xl shrink-0 lg:shrink">
+      <div className="w-full lg:w-96 bg-white dark:bg-[#18181b] border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-[#27272a] flex flex-col flex-1 min-h-0 lg:h-full shadow-xl shrink-0 lg:shrink">
         {/* Cart Top Header */}
         <div className="p-4 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between bg-slate-50 dark:bg-[#09090b]/50">
           <div className="flex items-center gap-2">
@@ -744,49 +743,6 @@ export const PDVView: React.FC<PDVViewProps> = ({
           </div>
         </div>
 
-        {/* Cross-sell: sugestões para o cliente na venda atual */}
-        {selectedCustomer && crossSellSuggestions.length > 0 && (
-          <div className="px-3 pt-2 border-b border-slate-200 dark:border-[#27272a]">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <Sparkles className="w-3 h-3 text-purple-500" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#71717a]">
-                Já pensou em levar também?
-              </span>
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {crossSellSuggestions.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => {
-                    handleAddToCart(p);
-                    posAudio.click();
-                  }}
-                  className="shrink-0 w-28 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] hover:border-purple-500 transition-colors overflow-hidden text-left"
-                  title={`Adicionar ${p.name}`}
-                >
-                  <img src={p.imageUrl} alt={p.name} className="w-full h-12 object-cover" />
-                  <div className="p-1.5">
-                    <p className="text-[9px] font-bold text-slate-900 dark:text-white truncate leading-tight">{p.name}</p>
-                    {p.showOnTV && p.tvPromoPrice != null && p.tvPromoPrice > 0 && p.tvPromoPrice !== p.salePrice ? (
-                      <>
-                        <p className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400">
-                          R$ {getEffectivePrice(p).toFixed(2)}
-                        </p>
-                        <p className="text-[8px] text-slate-400 line-through">R$ {p.salePrice.toFixed(2)}</p>
-                      </>
-                    ) : (
-                      <p className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400">
-                        R$ {getEffectivePrice(p).toFixed(2)}
-                      </p>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Cart Item List */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {cart.length === 0 ? (
@@ -855,7 +811,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
         </div>
 
         {/* Cart Totals & Discount Footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b]/50 space-y-3">
+        <div className="p-4 border-t border-slate-200 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b]/50 space-y-3 pb-8 lg:pb-4">
           {/* Discount Field */}
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-slate-600 dark:text-[#a1a1aa] flex items-center gap-1">
