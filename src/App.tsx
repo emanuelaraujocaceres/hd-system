@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react';
 import { Sidebar } from './components/Navigation/Sidebar';
 import { Header } from './components/Navigation/Header';
 import { PDVView } from './components/PDV/PDVView';
@@ -235,6 +235,40 @@ export const App: React.FC = () => {
     return unsub;
   }, []);
 
+  // Hidrata o localStorage com os dados do Supabase e força o refresh de todo o
+  // estado da UI. Extraído para ser reutilizado no LOGIN (e na restauração de
+  // sessão): sem isso, orgs não-default (ex.: Plantão da Cerveja) só carregavam
+  // dados após F5, porque a hidratação rodava uma única vez no mount, antes de
+  // o perfil/organização do usuário estar disponível.
+  const runHydration = useCallback(async () => {
+    const branchId = storageService.getSelectedBranchId();
+    const ok = await storageService.hydrateFromCloud(branchId || undefined);
+    if (ok) {
+      console.log('[HD-Sync] Cloud hydration OK');
+      setIsSyncConnected(true);
+      setIsOnline(true);
+      isOnlineRef.current = true;
+      setSyncStatus('online');
+      // Force state refresh after hydration — ensures products/sales
+      // loaded from cloud appear in the UI immediately (not just after F5)
+      setProducts(storageService.getProducts());
+      setCategories(storageService.getCategories());
+      setCustomers(storageService.getCustomers());
+      setSuppliers(storageService.getSuppliers());
+      setSales(storageService.getSales());
+      setCaixaSession(storageService.getActiveCaixaSession());
+      setFinancialAccounts(storageService.getFinancialAccounts());
+      setSettings(storageService.getSettings());
+      setBranches(storageService.getBranches());
+      setCurrentBranch(storageService.getSelectedBranch());
+      setUser(storageService.getUserProfile());
+    } else {
+      // Hydration failed — we might be offline on first load
+      console.log('[HD-Sync] Cloud hydration skipped — using local data');
+      setSyncStatus('offline');
+    }
+  }, []);
+
   useEffect(() => {
     // Handler for remote changes from Supabase Realtime
     const handleRemoteChange = (table: string, payload: any) => {
@@ -364,39 +398,13 @@ export const App: React.FC = () => {
     const healthInterval = setInterval(checkConnection, 30000);
 
     // Initial hydration from Supabase (load cloud data into localStorage)
-    const branchId = storageService.getSelectedBranchId();
-    storageService.hydrateFromCloud(branchId || undefined).then((ok) => {
-      if (ok) {
-        console.log('[HD-Sync] Initial cloud hydration OK');
-        setIsSyncConnected(true);
-        setIsOnline(true);
-        isOnlineRef.current = true;
-        setSyncStatus('online');
-        // Force state refresh after hydration — ensures products/sales
-        // loaded from cloud appear in the UI immediately (not just after F5)
-        setProducts(storageService.getProducts());
-        setCategories(storageService.getCategories());
-        setCustomers(storageService.getCustomers());
-        setSuppliers(storageService.getSuppliers());
-        setSales(storageService.getSales());
-        setCaixaSession(storageService.getActiveCaixaSession());
-        setFinancialAccounts(storageService.getFinancialAccounts());
-        setSettings(storageService.getSettings());
-        setBranches(storageService.getBranches());
-        setCurrentBranch(storageService.getSelectedBranch());
-        setUser(storageService.getUserProfile());
-      } else {
-        // Hydration failed — we might be offline on first load
-        console.log('[HD-Sync] Cloud hydration skipped — using local data');
-        setSyncStatus('offline');
-      }
-    });
+    runHydration();
 
     return () => {
       clearInterval(healthInterval);
       syncService.unsubscribeRealtime(handleRemoteChange);
     };
-  }, []);
+  }, [runHydration]);
 
   // Process pending queue when coming back online
   useEffect(() => {
@@ -462,6 +470,13 @@ export const App: React.FC = () => {
           };
           storageService.saveUserProfile(restoredProfile);
           setUser(restoredProfile);
+          // Se a organização revalidada difere da que o mount hidratou,
+          // re-hidrata (mesma classe do bug do login: as chaves da nova org
+          // ainda não estão populadas no localStorage).
+          const prevOrg = storageService.getCurrentOrgId();
+          if (prevOrg !== orgId) {
+            runHydration();
+          }
         });
       }
     });
@@ -477,7 +492,7 @@ export const App: React.FC = () => {
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [runHydration]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut().catch(() => {});
@@ -487,6 +502,10 @@ export const App: React.FC = () => {
 
   const handleLoginSuccess = (loggedUser: UserProfile) => {
     setUser(loggedUser);
+    // Re-hidrata com a organização do usuário recém-logado — corrige orgs
+    // não-default (ex.: Plantão da Cerveja) que só carregavam dados após F5
+    // (a hidratação do mount rodava antes do perfil existir).
+    runHydration();
     // Redirect to the first permitted tab
     if (loggedUser.role !== 'admin') {
       const allowedTabs = ['pdv', 'inventory', 'finance', 'crm', 'dashboard', 'settings'] as const;

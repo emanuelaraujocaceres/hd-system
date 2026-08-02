@@ -1797,7 +1797,33 @@ class StorageService {
 
   // --- CAIXA (CASH REGISTER) ---
   getActiveCaixaSession(): CashRegisterSession {
-    return this.get<CashRegisterSession>(KEYS.CAIXA, INITIAL_CAIXA_SESSION);
+    // Leitura direta da chave particionada (sem o fallback do get<> para a
+    // chave global, que poderia vazar o caixa de outra org para esta).
+    const storageKey = this.getStorageKey(KEYS.CAIXA);
+    try {
+      const item = localStorage.getItem(storageKey);
+      if (item !== null) {
+        const session = JSON.parse(item) as CashRegisterSession;
+        if (session?.id) return session;
+      }
+    } catch {}
+    // FAIL-CLOSED: sem caixa aberto salvo nesta org, orgs não-default recebem
+    // uma sessão FECHADA e vazia — NUNCA o INITIAL_CAIXA_SESSION (que é o caixa
+    // ABERTO da Adega, org default). Antes disso, a Plantão herdava um "caixa
+    // aberto fantasma" da Adega e as vendas não entravam na sessão correta.
+    if (!this.isDefaultOrg()) {
+      return {
+        ...INITIAL_CAIXA_SESSION,
+        id: '00000000-0000-0000-0000-000000000000',
+        status: 'closed',
+        organizationId: this.getCurrentOrgId(),
+        operatorId: '',
+        operatorName: '',
+        openedAt: new Date().toISOString(),
+        notes: '',
+      };
+    }
+    return INITIAL_CAIXA_SESSION;
   }
 
   saveActiveCaixaSession(session: CashRegisterSession) {
