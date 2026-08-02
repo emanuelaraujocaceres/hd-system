@@ -620,7 +620,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
       </div>
 
       {/* RIGHT COLUMN: SHOPPING CART & PDV CHECKOUT */}
-      <div className="w-full lg:w-96 bg-white dark:bg-[#18181b] border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-[#27272a] flex flex-col flex-1 min-h-0 lg:h-full shadow-xl shrink-0 lg:shrink">
+      <div className="w-full lg:w-96 bg-white dark:bg-[#18181b] border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-[#27272a] flex flex-col h-[55vh] lg:flex-1 lg:min-h-0 lg:h-full shadow-xl shrink-0 lg:shrink">
         {/* Cart Top Header */}
         <div className="p-4 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between bg-slate-50 dark:bg-[#09090b]/50">
           <div className="flex items-center gap-2">
