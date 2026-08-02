@@ -31,6 +31,8 @@ import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, Subscr
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { supabase } from '../../lib/supabase';
+import { friendlyErrorMessage } from '../../lib/friendlyError';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 // ─── STRIPE (DESLIGADO TEMPORARIAMENTE) ──────────────────────────────────────
 // Pagamento online via Stripe foi desativado por decisão do proprietário:
@@ -171,7 +173,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       posAudio.chime();
       setSuccessMessage('Configurações salvas com sucesso!');
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Erro ao salvar configurações.');
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível salvar as configurações. Tente novamente.'));
       posAudio.error();
     } finally {
       setSavingFiscal(false);
@@ -235,25 +237,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       posAudio.chime();
       setSuccessMessage(`Filial "${newBranch.name}" salva com sucesso.`);
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Erro ao salvar filial.');
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível salvar a filial. Tente novamente.'));
       posAudio.error();
     } finally {
       setSavingBranch(false);
     }
   };
 
-  const handleDeleteBranch = (id: string) => {
+  const [confirmDeleteBranch, setConfirmDeleteBranch] = useState<StoreBranch | null>(null);
+  const handleConfirmDeleteBranch = () => {
+    const branch = confirmDeleteBranch;
+    if (!branch) return;
+    setConfirmDeleteBranch(null);
     if (branches.length <= 1) {
       setErrorMessage('O sistema precisa de pelo menos 1 filial cadastrada.');
       return;
     }
-    if (!confirm('Tem certeza que deseja excluir esta filial?')) return;
     try {
-      storageService.deleteBranch(id);
+      storageService.deleteBranch(branch.id);
       posAudio.chime();
       setSuccessMessage('Filial excluída.');
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Erro ao excluir filial.');
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível excluir a filial. Tente novamente.'));
       posAudio.error();
     }
   };
@@ -346,26 +351,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       posAudio.chime();
       setSuccessMessage(`Usuário "${newUser.name}" salvo com sucesso.`);
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Erro ao salvar usuário.');
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível salvar o usuário. Tente novamente.'));
       posAudio.error();
     } finally {
       setSavingUser(false);
     }
   };
 
-  const handleDeleteUser = (id: string) => {
-    if (id === user.id) {
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState<UserProfile | null>(null);
+  const handleConfirmDeleteUser = () => {
+    const target = confirmDeleteUser;
+    if (!target) return;
+    setConfirmDeleteUser(null);
+    if (target.id === user.id) {
       setErrorMessage('Você não pode excluir sua própria conta atualmente logada.');
       return;
     }
-    if (!confirm('Tem certeza que deseja excluir este colaborador da empresa?')) return;
     try {
-      storageService.deleteUser(id);
+      storageService.deleteUser(target.id);
       refreshUsersList();
       posAudio.chime();
       setSuccessMessage('Usuário excluído.');
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Erro ao excluir usuário.');
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível excluir o usuário. Tente novamente.'));
       posAudio.error();
     }
   };
@@ -415,7 +423,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       posAudio.chime();
       setTimeout(() => setPaymentSuccessAlert(false), 8000);
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Erro ao renovar assinatura.');
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível renovar a assinatura. Verifique sua conexão.'));
       posAudio.error();
     } finally {
       setIsProcessingStripe(false);
@@ -434,7 +442,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       posAudio.chime();
       setSuccessMessage('Configurações da TV salvas!');
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Erro ao salvar configurações da TV.');
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível salvar as configurações da TV.'));
       posAudio.error();
     } finally {
       setSavingTv(false);
@@ -765,7 +773,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                     </button>
                     {isAdmin && (
                       <button
-                        onClick={() => handleDeleteBranch(b.id)}
+                        onClick={() => setConfirmDeleteBranch(b)}
                         className="min-h-[44px] min-w-[44px] p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors"
                         title="Excluir Filial"
                       >
@@ -908,7 +916,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                             </button>
                             {isAdmin && (
                               <button
-                                onClick={() => handleDeleteUser(u.id)}
+                                onClick={() => setConfirmDeleteUser(u)}
                                 className="min-h-[44px] min-w-[44px] p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors"
                                 title="Excluir Colaborador"
                               >
@@ -1006,7 +1014,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                     </button>
                     {isAdmin && (
                       <button
-                        onClick={() => handleDeleteUser(u.id)}
+                        onClick={() => setConfirmDeleteUser(u)}
                         className="flex-1 min-h-[44px] flex items-center justify-center gap-1.5 p-2 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors text-[11px] font-bold"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -1954,6 +1962,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           </div>
         </div>
       )}
+
+      {/* Confirm: excluir filial */}
+      <ConfirmDialog
+        isOpen={confirmDeleteBranch !== null}
+        title="Excluir filial?"
+        message="A filial e seus dados vinculados serão removidos."
+        itemName={confirmDeleteBranch?.name}
+        confirmLabel="Excluir"
+        onConfirm={handleConfirmDeleteBranch}
+        onCancel={() => setConfirmDeleteBranch(null)}
+      />
+
+      {/* Confirm: excluir colaborador */}
+      <ConfirmDialog
+        isOpen={confirmDeleteUser !== null}
+        title="Excluir colaborador?"
+        message="O colaborador perderá o acesso ao sistema."
+        itemName={confirmDeleteUser?.name}
+        confirmLabel="Excluir"
+        onConfirm={handleConfirmDeleteUser}
+        onCancel={() => setConfirmDeleteUser(null)}
+      />
     </div>
   );
 };

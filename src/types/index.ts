@@ -60,6 +60,12 @@ export interface Product {
   showOnTV?: boolean;
   tvPromoPrice?: number;
   tvHighlightTag?: string; // e.g. "COMBO DO DIA", "OFERTA TV", "LEVE 3 PAGUE 2"
+  // Atributos de adega (vinhos)
+  vintage?: string; // safra, ex: "2019"
+  country?: string; // país de origem, ex: "Chile"
+  grape?: string; // uva, ex: "Cabernet Sauvignon"
+  alcoholContent?: string; // teor alcoólico, ex: "13,5%"
+  bottleVolume?: string; // volume da garrafa, ex: "750ml"
   organizationId?: string; // multi-tenant: qual organização este produto pertence
 }
 

@@ -15,6 +15,9 @@ import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
 import { useToast } from '../shared/Toast';
+import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { friendlyErrorMessage } from '../../lib/friendlyError';
 
 interface CaixaModalProps {
   isOpen: boolean;
@@ -34,7 +37,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
   const [loading, setLoading] = useState(false);
 
   // Forms state
-  const [initialCashInput, setInitialCashInput] = useState<number>(250);
+  const [initialCashInput, setInitialCashInput] = useState<string>('250');
   const [openingNotes, setOpeningNotes] = useState<string>('Troco padrão de abertura.');
 
   const [suprimentoAmount, setSuprimentoAmount] = useState<string>('');
@@ -44,6 +47,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
   const [sangriaReason, setSangriaReason] = useState<string>('');
 
   const [closeNotes, setCloseNotes] = useState<string>('');
+  const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'resumo' | 'suprimento' | 'sangria' | 'fechar'>('resumo');
 
@@ -71,24 +75,25 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
   const handleOpenCaixa = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (initialCashInput <= 0) {
+    const initialCash = parseBrlToNumber(initialCashInput);
+    if (initialCash <= 0) {
       addToast('error', 'O valor inicial do caixa precisa ser maior que zero.');
       return;
     }
     setLoading(true);
     try {
-      const session = await storageService.openNewCaixaSession(user.id, user.name, initialCashInput, openingNotes);
+      const session = await storageService.openNewCaixaSession(user.id, user.name, initialCash, openingNotes);
       if (session.status === 'open') {
         if (session.operatorId !== user.id) {
           addToast('info', `Caixa já estava aberto na filial — operando caixa de ${session.operatorName} (R$ ${session.currentCashBalance.toFixed(2)}).`);
         } else {
-          addToast('success', `Caixa aberto com R$ ${initialCashInput.toFixed(2)}.`);
+          addToast('success', `Caixa aberto com R$ ${initialCash.toFixed(2)}.`);
         }
       }
       posAudio.chime();
       onClose();
     } catch (err: any) {
-      addToast('error', err?.message || 'Erro ao abrir caixa.');
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível abrir o caixa. Verifique sua conexão.'));
       posAudio.error();
     } finally {
       setLoading(false);
@@ -97,8 +102,8 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
   const handleSuprimento = async (e: React.FormEvent) => {
     e.preventDefault();
-    const val = parseFloat(suprimentoAmount);
-    if (isNaN(val) || val <= 0) {
+    const val = parseBrlToNumber(suprimentoAmount);
+    if (val <= 0) {
       addToast('error', 'Informe um valor de suprimento válido (maior que zero).');
       return;
     }
@@ -111,7 +116,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
       setActiveTab('resumo');
       addToast('success', `Suprimento de R$ ${val.toFixed(2)} registrado.`);
     } catch (err: any) {
-      addToast('error', err?.message || 'Erro ao registrar suprimento.');
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível registrar o suprimento. Tente novamente.'));
       posAudio.error();
     } finally {
       setLoading(false);
@@ -120,8 +125,8 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
   const handleSangria = async (e: React.FormEvent) => {
     e.preventDefault();
-    const val = parseFloat(sangriaAmount);
-    if (isNaN(val) || val <= 0) {
+    const val = parseBrlToNumber(sangriaAmount);
+    if (val <= 0) {
       addToast('error', 'Informe um valor de sangria válido (maior que zero).');
       return;
     }
@@ -138,25 +143,22 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
       setActiveTab('resumo');
       addToast('success', `Sangria de R$ ${val.toFixed(2)} registrada.`);
     } catch (err: any) {
-      addToast('error', err?.message || 'Erro ao registrar sangria.');
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível registrar a sangria. Tente novamente.'));
       posAudio.error();
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCloseCaixa = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!confirm('Tem certeza que deseja fechar o caixa? Esta ação não pode ser desfeita.')) {
-      return;
-    }
+  const handleCloseCaixa = async () => {
+    setIsCloseConfirmOpen(false);
     setLoading(true);
     try {
       storageService.closeCaixaSession(closeNotes || 'Caixa encerrado no horário.');
       posAudio.chime();
       onClose();
     } catch (err: any) {
-      addToast('error', err?.message || 'Erro ao fechar caixa.');
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível fechar o caixa. Verifique sua conexão e tente novamente.'));
       posAudio.error();
     } finally {
       setLoading(false);
@@ -214,13 +216,11 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-2.5 text-sm font-bold text-slate-400">R$</span>
-                  <input
+                  <MoneyInput
                     ref={firstInputRef}
-                    type="number"
-                    step="0.01"
                     required
                     value={initialCashInput}
-                    onChange={(e) => setInitialCashInput(parseFloat(e.target.value) || 0)}
+                    onChange={setInitialCashInput}
                     className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold text-base focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
@@ -364,14 +364,12 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       Valor do Suprimento (R$)
                     </label>
-                    <input
+                    <MoneyInput
                       ref={suprimentoRef}
-                      type="number"
-                      step="0.01"
                       required
                       placeholder="0,00"
                       value={suprimentoAmount}
-                      onChange={(e) => setSuprimentoAmount(e.target.value)}
+                      onChange={setSuprimentoAmount}
                       className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold text-base focus:ring-2 focus:ring-emerald-500 outline-none"
                     />
                   </div>
@@ -412,14 +410,12 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       Valor da Sangria (R$)
                     </label>
-                    <input
+                    <MoneyInput
                       ref={sangriaRef}
-                      type="number"
-                      step="0.01"
                       required
                       placeholder="0,00"
                       value={sangriaAmount}
-                      onChange={(e) => setSangriaAmount(e.target.value)}
+                      onChange={setSangriaAmount}
                       className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-bold text-base focus:ring-2 focus:ring-amber-500 outline-none"
                     />
                   </div>
@@ -451,7 +447,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 
               {/* TAB 4: FECHAR CAIXA */}
               {activeTab === 'fechar' && (
-                <form onSubmit={handleCloseCaixa} className="space-y-4">
+                <form onSubmit={(e) => { e.preventDefault(); setIsCloseConfirmOpen(true); }} className="space-y-4">
                   <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-900 dark:text-rose-300 text-xs leading-relaxed">
                     Ao fechar o caixa, o sistema gerará o relatório cego de conferência das vendas do turno.
                   </div>
@@ -490,6 +486,18 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Confirmação de fechamento do caixa */}
+      <ConfirmDialog
+        isOpen={isCloseConfirmOpen}
+        title="Fechar o Caixa?"
+        message="Isso encerra o turno e gera o relatório de conferência. Ação não pode ser desfeita."
+        itemName={`Saldo em dinheiro: R$ ${caixaSession.currentCashBalance.toFixed(2)}`}
+        confirmLabel="Fechar Caixa"
+        danger
+        onConfirm={handleCloseCaixa}
+        onCancel={() => setIsCloseConfirmOpen(false)}
+      />
     </div>
   );
 };

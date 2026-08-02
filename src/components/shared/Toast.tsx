@@ -8,10 +8,19 @@ interface Toast {
   type: ToastType;
   message: string;
   duration?: number;
+  /** Ação opcional exibida como botão no toast (ex.: "Desfazer") */
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 interface ToastContextValue {
-  addToast: (type: ToastType, message: string, duration?: number) => void;
+  addToast: (
+    type: ToastType,
+    message: string,
+    duration?: number,
+    actionLabel?: string,
+    onAction?: () => void
+  ) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -49,9 +58,9 @@ const BG_COLORS: Record<ToastType, string> = {
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((type: ToastType, message: string, duration = 4000) => {
+  const addToast = useCallback((type: ToastType, message: string, duration = 4000, actionLabel?: string, onAction?: () => void) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    setToasts((prev) => [...prev, { id, type, message, duration }]);
+    setToasts((prev) => [...prev, { id, type, message, duration, actionLabel, onAction }]);
   }, []);
 
   const removeToast = useCallback((id: string) => {
@@ -107,6 +116,17 @@ const ToastItem: React.FC<{ toast: Toast; onRemove: (id: string) => void }> = ({
         <p className="flex-1 text-xs font-medium text-slate-800 dark:text-slate-200 leading-relaxed">
           {toast.message}
         </p>
+        {toast.actionLabel && toast.onAction && (
+          <button
+            onClick={() => {
+              toast.onAction?.();
+              handleClose();
+            }}
+            className="shrink-0 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold transition-colors"
+          >
+            {toast.actionLabel}
+          </button>
+        )}
         <button
           onClick={handleClose}
           className="shrink-0 p-0.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"

@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Package,
+  Wine,
 } from 'lucide-react';
 import {
   Product,
@@ -36,8 +37,11 @@ import {
 } from '../../types';
 import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
+import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
 import { PaymentModal } from './PaymentModal';
 import { ThermalReceiptModal } from './ThermalReceiptModal';
+import { QuickProductModal } from './QuickProductModal';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 interface PDVViewProps {
   products: Product[];
@@ -76,6 +80,9 @@ export const PDVView: React.FC<PDVViewProps> = ({
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [stockAlert, setStockAlert] = useState<{ product: Product; currentQty: number } | null>(null);
+
+  // Quick product registration (barcode not found → create inline)
+  const [quickProductBarcode, setQuickProductBarcode] = useState<string | null>(null);
 
   // Camera Scanner state
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -230,7 +237,10 @@ export const PDVView: React.FC<PDVViewProps> = ({
       handleAddToCart(filteredProducts[0]);
       setSearchTerm('');
     } else if (filteredProducts.length === 0) {
-      addToast('warning', `Nenhum produto encontrado para "${searchTerm}".`);
+      // Código digitado não existe no estoque → oferece cadastro rápido
+      posAudio.error();
+      setQuickProductBarcode(searchTerm.trim());
+      addToast('warning', `Nenhum produto encontrado para "${searchTerm.trim()}".`);
     } else {
       addToast('info', `${filteredProducts.length} produtos encontrados. Selecione um na lista.`);
     }
@@ -268,24 +278,18 @@ export const PDVView: React.FC<PDVViewProps> = ({
   };
 
   // Remove Item
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null); // productId
   const handleRemoveItem = (productId: string) => {
     const item = cart.find((i) => i.product.id === productId);
     if (!item) return;
-    if (confirm(`Remover "${item.product.name}" do carrinho?`)) {
-      setCart((prev) => prev.filter((item) => item.product.id !== productId));
-      posAudio.click();
-    }
+    setConfirmRemove(productId);
   };
 
   // Clear Cart
+  const [confirmClearCart, setConfirmClearCart] = useState(false);
   const handleClearCart = () => {
     if (cart.length === 0) return;
-    if (confirm('Deseja limpar todo o carrinho de compras?')) {
-      setCart([]);
-      setSelectedCustomer(null);
-      setDiscountAmount(0);
-      posAudio.click();
-    }
+    setConfirmClearCart(true);
   };
 
   // ---- Camera Barcode Scanner ----
@@ -585,6 +589,12 @@ export const PDVView: React.FC<PDVViewProps> = ({
                     {p.name}
                   </p>
                   <p className="text-[10px] text-slate-400 dark:text-[#71717a] font-mono mt-0.5">EAN: {p.barcode}</p>
+                  {(p.vintage || p.country || p.grape) && (
+                    <p className="text-[10px] text-purple-500 dark:text-purple-400 font-semibold mt-0.5 line-clamp-1">
+                      <Wine className="inline w-2.5 h-2.5 mr-0.5 -mt-0.5" />
+                      {[p.vintage, p.country, p.grape].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                 </div>
 
                 <div className="mt-2 pt-2 border-t border-slate-100 dark:border-[#27272a] flex items-center justify-between">
@@ -730,15 +740,12 @@ export const PDVView: React.FC<PDVViewProps> = ({
               <Tag className="w-3.5 h-3.5 text-indigo-500" />
               Desconto (R$):
             </span>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={discountAmount || ''}
-              onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
-              placeholder="0,00"
-              className="w-24 px-2 py-1 bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-lg text-xs font-bold text-slate-900 dark:text-white text-right outline-none"
-            />
+              <MoneyInput
+                value={discountAmount ? String(discountAmount).replace('.', ',') : ''}
+                onChange={(raw) => setDiscountAmount(parseBrlToNumber(raw))}
+                placeholder="0,00"
+                className="w-24 px-2 py-1 bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-lg text-xs font-bold text-slate-900 dark:text-white text-right outline-none"
+              />
           </div>
 
           <div className="space-y-1 text-xs">
@@ -804,6 +811,21 @@ export const PDVView: React.FC<PDVViewProps> = ({
         onNewSale={() => {
           setIsReceiptOpen(false);
           setCart([]);
+          searchInputRef.current?.focus();
+        }}
+      />
+
+      {/* Quick Product Registration Modal — barcode not found in stock */}
+      <QuickProductModal
+        isOpen={quickProductBarcode !== null}
+        barcode={quickProductBarcode ?? ''}
+        categories={categories}
+        user={user}
+        onClose={() => setQuickProductBarcode(null)}
+        onSaved={(product) => {
+          setQuickProductBarcode(null);
+          setSearchTerm('');
+          handleAddToCart(product);
           searchInputRef.current?.focus();
         }}
       />
@@ -929,6 +951,19 @@ export const PDVView: React.FC<PDVViewProps> = ({
                   </button>
                   <button
                     onClick={() => {
+                      stopScanner();
+                      setQuickProductBarcode(scannedBarcode);
+                    }}
+                    className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+                    title="Cadastro rápido sem sair do PDV"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    Cadastro Rápido
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
                       setScannerStatus('scanning');
                       setScannedBarcode('');
                       setScannedProduct(null);
@@ -1046,6 +1081,39 @@ export const PDVView: React.FC<PDVViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Confirm: remover item do carrinho */}
+      <ConfirmDialog
+        isOpen={confirmRemove !== null}
+        title="Remover item do carrinho?"
+        message="O item será removido da venda atual."
+        itemName={cart.find((i) => i.product.id === confirmRemove)?.product.name}
+        confirmLabel="Remover"
+        onConfirm={() => {
+          if (confirmRemove) {
+            setCart((prev) => prev.filter((item) => item.product.id !== confirmRemove));
+            posAudio.click();
+          }
+          setConfirmRemove(null);
+        }}
+        onCancel={() => setConfirmRemove(null)}
+      />
+
+      {/* Confirm: limpar carrinho */}
+      <ConfirmDialog
+        isOpen={confirmClearCart}
+        title="Limpar carrinho?"
+        message="Todos os itens e o cliente selecionado serão removidos da venda atual."
+        confirmLabel="Limpar tudo"
+        onConfirm={() => {
+          setCart([]);
+          setSelectedCustomer(null);
+          setDiscountAmount(0);
+          posAudio.click();
+          setConfirmClearCart(false);
+        }}
+        onCancel={() => setConfirmClearCart(false)}
+      />
     </div>
   );
 };

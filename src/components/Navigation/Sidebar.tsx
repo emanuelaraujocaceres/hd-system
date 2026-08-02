@@ -9,13 +9,13 @@ import {
   Building2,
   Lock,
   Unlock,
-  RefreshCw,
   LogOut,
   Receipt,
   FileText,
   Tv,
 } from 'lucide-react';
 import { StoreBranch, UserProfile, CashRegisterSession } from '../../types';
+import { ResetDataButton } from '../shared/ResetDataButton';
 
 interface SidebarProps {
   currentTab: string;
@@ -26,7 +26,6 @@ interface SidebarProps {
   user: UserProfile;
   caixaSession: CashRegisterSession;
   onOpenCaixaModal: () => void;
-  onResetDemo: () => void;
   onLogout: () => void;
   onOpenProfile: () => void;
   isMobileOpen?: boolean;
@@ -43,7 +42,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   user,
   caixaSession,
   onOpenCaixaModal,
-  onResetDemo,
   onLogout,
   onOpenProfile,
   isMobileOpen,
@@ -213,14 +211,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        <button
-          onClick={onResetDemo}
-          title="Restaurar dados iniciais de demonstração"
-          className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs lg:text-[11px] font-medium text-slate-400 dark:text-[#71717a] hover:text-slate-200 dark:hover:text-white hover:bg-slate-800/60 dark:hover:bg-[#18181b] border border-slate-800/60 dark:border-[#27272a] transition-colors min-h-[44px]"
-        >
-          <RefreshCw className="w-3 h-3" />
-          <span>Resetar Dados Demo</span>
-        </button>
+        <ResetDataButton />
       </div>
     </aside>
   );

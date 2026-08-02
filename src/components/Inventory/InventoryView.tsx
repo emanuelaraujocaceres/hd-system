@@ -21,6 +21,7 @@ import {
   Sparkles,
   RefreshCw,
   Tv,
+  Wine,
 } from 'lucide-react';
 import { Product, Category, Supplier, StockMovement, UserProfile, SystemSettings } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -31,6 +32,10 @@ import { CategoryManagerModal } from './CategoryManagerModal';
 import { StockCameraScannerModal } from './StockCameraScannerModal';
 import { Skeleton, TableSkeleton } from '../shared/Skeleton';
 import { BottomSheet } from '../shared/BottomSheet';
+import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
+import { friendlyErrorMessage } from '../../lib/friendlyError';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { undoManager } from '../../lib/undoManager';
 
 interface InventoryViewProps {
   products: Product[];
@@ -97,6 +102,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formShowOnTV, setFormShowOnTV] = useState(false);
   const [formTvPromoPrice, setFormTvPromoPrice] = useState('');
   const [formTvHighlightTag, setFormTvHighlightTag] = useState('');
+  const [formVintage, setFormVintage] = useState('');
+  const [formCountry, setFormCountry] = useState('');
+  const [formGrape, setFormGrape] = useState('');
+  const [formAlcoholContent, setFormAlcoholContent] = useState('');
+  const [formBottleVolume, setFormBottleVolume] = useState('');
 
   // ============================================================
   // 2. TODOS OS useRef
@@ -151,6 +161,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setFormShowOnTV(false);
       setFormTvPromoPrice('');
       setFormTvHighlightTag('');
+      setFormVintage('');
+      setFormCountry('');
+      setFormGrape('');
+      setFormAlcoholContent('');
+      setFormBottleVolume('');
       setImageSuggestions([]);
       setIsSearchingImages(false);
       setIsProductModalOpen(true);
@@ -308,6 +323,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormShowOnTV(false);
     setFormTvPromoPrice('');
     setFormTvHighlightTag('');
+    setFormVintage('');
+    setFormCountry('');
+    setFormGrape('');
+    setFormAlcoholContent('');
+    setFormBottleVolume('');
     setImageSuggestions([]);
     setIsSearchingImages(false);
   };
@@ -332,6 +352,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormShowOnTV(product.showOnTV || false);
     setFormTvPromoPrice(String(product.tvPromoPrice || ''));
     setFormTvHighlightTag(product.tvHighlightTag || '');
+    setFormVintage(product.vintage || '');
+    setFormCountry(product.country || '');
+    setFormGrape(product.grape || '');
+    setFormAlcoholContent(product.alcoholContent || '');
+    setFormBottleVolume(product.bottleVolume || '');
     setIsProductModalOpen(true);
   };
 
@@ -339,8 +364,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    const costPrice = parseFloat(formCostPrice) || 0;
-    const salePrice = parseFloat(formSalePrice) || 0;
+    const costPrice = parseBrlToNumber(formCostPrice);
+    const salePrice = parseBrlToNumber(formSalePrice);
     if (salePrice <= 0) {
       addToast('error', 'O preço de venda deve ser maior que zero.');
       return;
@@ -367,8 +392,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         updatedAt: new Date().toISOString(),
         storeBranchId: user.storeBranchId,
         showOnTV: formShowOnTV,
-        tvPromoPrice: formTvPromoPrice ? parseFloat(formTvPromoPrice) || undefined : undefined,
+        tvPromoPrice: formTvPromoPrice ? parseBrlToNumber(formTvPromoPrice) || undefined : undefined,
         tvHighlightTag: formTvHighlightTag || undefined,
+        vintage: formVintage.trim() || undefined,
+        country: formCountry.trim() || undefined,
+        grape: formGrape.trim() || undefined,
+        alcoholContent: formAlcoholContent.trim() || undefined,
+        bottleVolume: formBottleVolume.trim() || undefined,
       };
 
       storageService.saveProduct(newProd);
@@ -378,17 +408,33 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setIsProductModalOpen(false);
       addToast('success', `Produto "${newProd.name}" salvo com sucesso.`);
     } catch (err: any) {
-      addToast('error', err?.message || 'Erro ao salvar produto.');
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível salvar o produto. Tente novamente.'));
       posAudio.error();
     } finally {
       setSavingProduct(false);
     }
   };
 
-  const handleDeleteProduct = (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este produto do estoque?')) {
-      storageService.deleteProduct(id);
+  const [confirmDeleteProduct, setConfirmDeleteProduct] = useState<Product | null>(null);
+
+  const handleConfirmDeleteProduct = () => {
+    const product = confirmDeleteProduct;
+    if (!product) return;
+    setConfirmDeleteProduct(null);
+    try {
+      storageService.deleteProduct(product.id);
       posAudio.click();
+      const action = undoManager.peek();
+      addToast(
+        'success',
+        `Produto "${product.name}" excluído.`,
+        6000,
+        action ? 'Desfazer' : undefined,
+        action ? () => undoManager.undo() : undefined
+      );
+    } catch (err: any) {
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível excluir o produto. Tente novamente.'));
+      posAudio.error();
     }
   };
 
@@ -408,7 +454,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setIsStockModalOpen(false);
       addToast('success', `Estoque de "${stockTargetProduct.name}" ajustado em ${stockDelta > 0 ? '+' : ''}${stockDelta} ${stockTargetProduct.unit}.`);
     } catch (err: any) {
-      addToast('error', err?.message || 'Erro ao ajustar estoque.');
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível ajustar o estoque. Tente novamente.'));
       posAudio.error();
     } finally {
       setSavingStock(false);
@@ -686,7 +732,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleDeleteProduct(p.id)}
+                            onClick={() => setConfirmDeleteProduct(p)}
                             className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors min-h-[44px] min-w-[44px]"
                             title="Excluir Produto"
                           >
@@ -792,7 +838,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     Editar
                   </button>
                   <button
-                    onClick={() => handleDeleteProduct(p.id)}
+                    onClick={() => setConfirmDeleteProduct(p)}
                     className="py-2 px-3 rounded-xl text-rose-500 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 transition-colors flex items-center justify-center min-h-[44px] min-w-[44px]"
                     title="Excluir Produto"
                   >
@@ -889,13 +935,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
                     Preço de Custo (R$)
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
+                  <MoneyInput
                     required
                     value={formCostPrice}
-                    onChange={(e) => setFormCostPrice(e.target.value)}
-                    placeholder="Ex: 5.90"
+                    onChange={setFormCostPrice}
+                    placeholder="Ex: 5,90"
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none placeholder:text-slate-300 dark:placeholder:text-[#3f3f46]"
                   />
                 </div>
@@ -904,13 +948,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
                     Preço de Venda (R$)
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
+                  <MoneyInput
                     required
                     value={formSalePrice}
-                    onChange={(e) => setFormSalePrice(e.target.value)}
-                    placeholder="Ex: 9.90"
+                    onChange={setFormSalePrice}
+                    placeholder="Ex: 9,90"
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-emerald-600 dark:text-emerald-400 outline-none placeholder:text-slate-300 dark:placeholder:text-[#3f3f46]"
                   />
                 </div>
@@ -1063,6 +1105,92 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 )}
               </div>
 
+              {/* ─── INFORMAÇÕES DO VINHO (adega) ─── */}
+              {(() => {
+                const isWineCategory = /vinho|adega/i.test(formCategory);
+                const hasWineData = Boolean(
+                  formVintage || formCountry || formGrape || formAlcoholContent || formBottleVolume
+                );
+                if (!isWineCategory && !hasWineData) return null;
+                return (
+                  <div className="pt-3 border-t border-slate-200 dark:border-[#27272a] space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded bg-purple-500/20 flex items-center justify-center">
+                        <Wine className="w-3 h-3 text-purple-500" />
+                      </div>
+                      <h4 className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a]">
+                        Informações do Vinho
+                      </h4>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                          Safra (ano)
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={4}
+                          value={formVintage}
+                          onChange={(e) => setFormVintage(e.target.value)}
+                          className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                          placeholder="Ex: 2019"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                          País de Origem
+                        </label>
+                        <input
+                          type="text"
+                          value={formCountry}
+                          onChange={(e) => setFormCountry(e.target.value)}
+                          className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                          placeholder="Ex: Chile"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                          Uva
+                        </label>
+                        <input
+                          type="text"
+                          value={formGrape}
+                          onChange={(e) => setFormGrape(e.target.value)}
+                          className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                          placeholder="Ex: Cabernet Sauvignon"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                          Teor Alcoólico
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={formAlcoholContent}
+                          onChange={(e) => setFormAlcoholContent(e.target.value)}
+                          className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                          placeholder="Ex: 13,5%"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                          Volume da Garrafa
+                        </label>
+                        <input
+                          type="text"
+                          value={formBottleVolume}
+                          onChange={(e) => setFormBottleVolume(e.target.value)}
+                          className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-purple-500"
+                          placeholder="Ex: 750ml"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* ─── OFERTAS / TV ─── */}
               <div className="pt-3 border-t border-slate-200 dark:border-[#27272a] space-y-3">
                 <div className="flex items-center gap-2">
@@ -1102,19 +1230,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500">R$</span>
-                        <input
-                          type="number"
-                          step="0.01"
+                        <MoneyInput
                           value={formTvPromoPrice}
-                          onChange={(e) => setFormTvPromoPrice(e.target.value)}
+                          onChange={setFormTvPromoPrice}
                           className="w-full pl-10 pr-3 py-2 bg-white dark:bg-[#18181b] border border-amber-500/30 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
-                          placeholder="0.00"
+                          placeholder="0,00"
                         />
                       </div>
-                      {parseFloat(formTvPromoPrice) > 0 && parseFloat(formSalePrice) > 0 && parseFloat(formTvPromoPrice) < parseFloat(formSalePrice) && (
+                      {parseBrlToNumber(formTvPromoPrice) > 0 && parseBrlToNumber(formSalePrice) > 0 && parseBrlToNumber(formTvPromoPrice) < parseBrlToNumber(formSalePrice) && (
                         <p className="mt-1 text-[10px] font-bold text-emerald-500 flex items-center gap-1">
                           <Sparkles className="w-3 h-3" />
-                          Economia de R$ {(parseFloat(formSalePrice) - parseFloat(formTvPromoPrice)).toFixed(2)} ({Math.round(((parseFloat(formSalePrice) - parseFloat(formTvPromoPrice)) / parseFloat(formSalePrice)) * 100)}% OFF)
+                          Economia de R$ {(parseBrlToNumber(formSalePrice) - parseBrlToNumber(formTvPromoPrice)).toFixed(2)} ({Math.round(((parseBrlToNumber(formSalePrice) - parseBrlToNumber(formTvPromoPrice)) / parseBrlToNumber(formSalePrice)) * 100)}% OFF)
                         </p>
                       )}
                     </div>
@@ -1376,6 +1502,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </div>
         </div>
       </BottomSheet>
+
+      {/* Confirm: excluir produto */}
+      <ConfirmDialog
+        isOpen={confirmDeleteProduct !== null}
+        title="Excluir produto?"
+        message="O produto será removido do estoque. Você poderá desfazer logo em seguida."
+        itemName={confirmDeleteProduct?.name}
+        confirmLabel="Excluir"
+        onConfirm={handleConfirmDeleteProduct}
+        onCancel={() => setConfirmDeleteProduct(null)}
+      />
     </div>
   );
 };

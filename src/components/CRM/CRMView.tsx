@@ -17,6 +17,9 @@ import { Customer, Supplier, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
+import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
+import { friendlyErrorMessage } from '../../lib/friendlyError';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 interface CRMViewProps {
   customers: Customer[];
@@ -39,7 +42,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
   const [custCpfCnpj, setCustCpfCnpj] = useState('');
   const [custEmail, setCustEmail] = useState('');
   const [custPhone, setCustPhone] = useState('');
-  const [custLimit, setCustLimit] = useState<number>(1000);
+  const [custLimit, setCustLimit] = useState<string>('1000');
 
   // Supplier Modal state
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
@@ -58,14 +61,14 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
       setCustCpfCnpj(customer.cpfCnpj);
       setCustEmail(customer.email);
       setCustPhone(customer.phone);
-      setCustLimit(customer.creditLimit);
+      setCustLimit(customer.creditLimit ? String(customer.creditLimit).replace('.', ',') : '');
     } else {
       setEditingCustomer(null);
       setCustName('');
       setCustCpfCnpj('');
       setCustEmail('');
       setCustPhone('');
-      setCustLimit(1000);
+      setCustLimit('1000');
     }
     setIsCustomerModalOpen(true);
   };
@@ -80,7 +83,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
       addToast('error', 'CPF/CNPJ é obrigatório.');
       return;
     }
-    if (custLimit < 0) {
+    if (parseBrlToNumber(custLimit) < 0) {
       addToast('error', 'Limite de crédito não pode ser negativo.');
       return;
     }
@@ -93,7 +96,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
         cpfCnpj: custCpfCnpj.trim(),
         email: custEmail.trim(),
         phone: custPhone.trim(),
-        creditLimit: custLimit,
+        creditLimit: parseBrlToNumber(custLimit),
         currentBalance: editingCustomer?.currentBalance || 0,
         loyaltyPoints: editingCustomer?.loyaltyPoints || 50,
         city: editingCustomer?.city || 'São Paulo',
@@ -106,7 +109,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
       addToast('success', `Cliente "${updatedCust.name}" salvo com sucesso.`);
       setIsCustomerModalOpen(false);
     } catch (err: any) {
-      addToast('error', err?.message || 'Erro ao salvar cliente.');
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível salvar o cliente. Tente novamente.'));
       posAudio.error();
     } finally {
       setSavingCustomer(false);
@@ -162,33 +165,39 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
       addToast('success', `Fornecedor "${updatedSup.tradeName || updatedSup.companyName}" salvo com sucesso.`);
       setIsSupplierModalOpen(false);
     } catch (err: any) {
-      addToast('error', err?.message || 'Erro ao salvar fornecedor.');
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível salvar o fornecedor. Tente novamente.'));
       posAudio.error();
     } finally {
       setSavingSupplier(false);
     }
   };
 
-  const handleDeleteCustomer = (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este cliente?')) return;
+  const [confirmDeleteCustomer, setConfirmDeleteCustomer] = useState<Customer | null>(null);
+  const handleConfirmDeleteCustomer = () => {
+    const target = confirmDeleteCustomer;
+    if (!target) return;
+    setConfirmDeleteCustomer(null);
     try {
-      storageService.deleteCustomer(id);
+      storageService.deleteCustomer(target.id);
       posAudio.chime();
       addToast('success', 'Cliente excluído.');
     } catch (err: any) {
-      addToast('error', err?.message || 'Erro ao excluir cliente.');
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível excluir o cliente. Tente novamente.'));
       posAudio.error();
     }
   };
 
-  const handleDeleteSupplier = (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este fornecedor?')) return;
+  const [confirmDeleteSupplier, setConfirmDeleteSupplier] = useState<Supplier | null>(null);
+  const handleConfirmDeleteSupplier = () => {
+    const target = confirmDeleteSupplier;
+    if (!target) return;
+    setConfirmDeleteSupplier(null);
     try {
-      storageService.deleteSupplier(id);
+      storageService.deleteSupplier(target.id);
       posAudio.chime();
       addToast('success', 'Fornecedor excluído.');
     } catch (err: any) {
-      addToast('error', err?.message || 'Erro ao excluir fornecedor.');
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível excluir o fornecedor. Tente novamente.'));
       posAudio.error();
     }
   };
@@ -321,7 +330,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
                       </button>
                       {isAdmin && (
                         <button
-                          onClick={() => handleDeleteCustomer(c.id)}
+                          onClick={() => setConfirmDeleteCustomer(c)}
                           className="p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors"
                           title="Excluir Cliente"
                         >
@@ -378,7 +387,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
                       </button>
                       {isAdmin && (
                         <button
-                          onClick={() => handleDeleteSupplier(s.id)}
+                          onClick={() => setConfirmDeleteSupplier(s)}
                           className="p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors"
                           title="Excluir Fornecedor"
                         >
@@ -442,12 +451,11 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
 
                 <div>
                   <label className="block font-bold mb-1">Limite Crédito Fiado (R$)</label>
-                  <input
-                    type="number"
-                    step="0.01"
+                  <MoneyInput
                     required
                     value={custLimit}
-                    onChange={(e) => setCustLimit(parseFloat(e.target.value) || 0)}
+                    onChange={setCustLimit}
+                    placeholder="0,00"
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl font-bold"
                   />
                 </div>
@@ -586,6 +594,28 @@ export const CRMView: React.FC<CRMViewProps> = ({ customers, suppliers, user }) 
           </div>
         </div>
       )}
+
+      {/* Confirm: excluir cliente */}
+      <ConfirmDialog
+        isOpen={confirmDeleteCustomer !== null}
+        title="Excluir cliente?"
+        message="O cliente será removido do cadastro de clientes."
+        itemName={confirmDeleteCustomer?.name}
+        confirmLabel="Excluir"
+        onConfirm={handleConfirmDeleteCustomer}
+        onCancel={() => setConfirmDeleteCustomer(null)}
+      />
+
+      {/* Confirm: excluir fornecedor */}
+      <ConfirmDialog
+        isOpen={confirmDeleteSupplier !== null}
+        title="Excluir fornecedor?"
+        message="O fornecedor será removido do cadastro de fornecedores."
+        itemName={confirmDeleteSupplier ? (confirmDeleteSupplier.tradeName || confirmDeleteSupplier.companyName) : undefined}
+        confirmLabel="Excluir"
+        onConfirm={handleConfirmDeleteSupplier}
+        onCancel={() => setConfirmDeleteSupplier(null)}
+      />
     </div>
   );
 };

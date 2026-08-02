@@ -20,6 +20,9 @@ import { Sale, Customer, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
+import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
+import { friendlyErrorMessage } from '../../lib/friendlyError';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 // ─── Local types ────────────────────────────────────────────────
 interface CreditPayment {
@@ -195,7 +198,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
   // ── Payment handler (FIFO) ─────────────────────────────────────
   const handleRegisterPayment = useCallback(
     (customerId: string, saleIds: string[]) => {
-      const amount = parseFloat(paymentAmount);
+      const amount = parseBrlToNumber(paymentAmount);
       if (!amount || amount <= 0) {
         addToast('error', 'Informe um valor de pagamento válido.');
         return;
@@ -276,7 +279,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
           posAudio.error();
         }
       } catch (err: any) {
-        addToast('error', err?.message || 'Erro ao registrar pagamento.');
+        addToast('error', friendlyErrorMessage(err, 'Não foi possível registrar o pagamento. Tente novamente.'));
         posAudio.error();
       } finally {
         setRegisteringPayment(false);
@@ -288,22 +291,22 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
   );
 
   // ── Delete credit payment handler (admin only) ──────────────────
-  const handleDeleteCreditPayment = useCallback(
-    (paymentId: string) => {
-      if (!confirm('Tem certeza que deseja excluir este registro de pagamento?')) return;
-      try {
-        const updated = creditPayments.filter((cp) => cp.id !== paymentId);
-        setCreditPayments(updated);
-        storageService.saveCreditPayments(updated);
-        posAudio.chime();
-        addToast('success', 'Pagamento excluído.');
-      } catch (err: any) {
-        addToast('error', err?.message || 'Erro ao excluir pagamento.');
-        posAudio.error();
-      }
-    },
-    [creditPayments, addToast]
-  );
+  const [confirmDeletePayment, setConfirmDeletePayment] = useState<CreditPayment | null>(null);
+  const handleConfirmDeletePayment = useCallback(() => {
+    if (!confirmDeletePayment) return;
+    const paymentId = confirmDeletePayment.id;
+    setConfirmDeletePayment(null);
+    try {
+      const updated = creditPayments.filter((cp) => cp.id !== paymentId);
+      setCreditPayments(updated);
+      storageService.saveCreditPayments(updated);
+      posAudio.chime();
+      addToast('success', 'Pagamento excluído.');
+    } catch (err: any) {
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível excluir o pagamento. Tente novamente.'));
+      posAudio.error();
+    }
+  }, [confirmDeletePayment, creditPayments, addToast]);
 
   // ── Helpers ────────────────────────────────────────────────────
   const formatCurrency = (v: number) =>
@@ -591,7 +594,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
                               </span>
                             </div>
                             <button
-                              onClick={() => handleDeleteCreditPayment(cp.id)}
+                              onClick={() => setConfirmDeletePayment(cp)}
                               className="p-1 rounded-lg hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition-colors"
                               title="Excluir Pagamento"
                             >
@@ -674,12 +677,9 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
               <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
                 Valor do Pagamento (R$)
               </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
+              <MoneyInput
                 value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
+                onChange={setPaymentAmount}
                 placeholder="0,00"
                 autoFocus
                 className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
@@ -739,7 +739,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
                     );
                   }
                 }}
-                disabled={registeringPayment || !paymentAmount || parseFloat(paymentAmount) <= 0}
+                disabled={registeringPayment || !paymentAmount || parseBrlToNumber(paymentAmount) <= 0}
                 className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
               >
                 <CheckCircle2 className="w-4 h-4" />
@@ -749,6 +749,17 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
           </div>
         </div>
       )}
+
+      {/* Confirm: excluir pagamento */}
+      <ConfirmDialog
+        isOpen={confirmDeletePayment !== null}
+        title="Excluir pagamento?"
+        message="O registro de pagamento será removido do histórico de fiado."
+        itemName={confirmDeletePayment ? `R$ ${(confirmDeletePayment.amount || 0).toFixed(2)}` : undefined}
+        confirmLabel="Excluir"
+        onConfirm={handleConfirmDeletePayment}
+        onCancel={() => setConfirmDeletePayment(null)}
+      />
     </div>
   );
 };

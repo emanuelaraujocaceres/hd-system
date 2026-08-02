@@ -14,6 +14,11 @@ import {
 import { Product, Sale, UserProfile, FinancialAccount, CashRegisterSession } from '../../types';
 import { storageService } from '../../services/storageService';
 import { CollaboratorPerformance } from './CollaboratorPerformance';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { useToast } from '../shared/Toast';
+import { undoManager } from '../../lib/undoManager';
+import { posAudio } from '../../services/audioService';
+import { friendlyErrorMessage } from '../../lib/friendlyError';
 
 interface DashboardViewProps {
   sales: Sale[];
@@ -39,6 +44,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const isAdmin = user.role === 'admin';
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [confirmDeleteSale, setConfirmDeleteSale] = useState<Sale | null>(null);
+  const { addToast } = useToast();
 
   // Calculate today vs yesterday sales for Day Summary
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -71,6 +78,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const caixaPeriodTicket = caixaPeriodCount > 0 ? caixaPeriodRevenue / caixaPeriodCount : 0;
 
   const lowStockCount = products.filter((p) => p.currentStock <= p.minStock).length;
+
+  // Delete venda — handler único (usado no desktop e no mobile), com
+  // confirmação, tratamento de erro amigável e botão "Desfazer" no toast.
+  const handleConfirmDeleteSale = () => {
+    const sale = confirmDeleteSale;
+    if (!sale) return;
+    setConfirmDeleteSale(null);
+    try {
+      storageService.deleteSale(sale.id);
+      setExpandedSaleId(null);
+      posAudio.click();
+      const action = undoManager.peek();
+      addToast(
+        'success',
+        `Venda ${sale.code || ''} excluída.`,
+        6000,
+        action ? 'Desfazer' : undefined,
+        action ? () => undoManager.undo() : undefined
+      );
+    } catch (err: any) {
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível excluir a venda. Tente novamente.'));
+      posAudio.error();
+    }
+  };
 
   // Day Summary calculations
   const yesterdaySales = sales.filter((s) => {
@@ -337,10 +368,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (confirm('Tem certeza que deseja excluir esta venda?')) {
-                                      storageService.deleteSale(sale.id);
-                                      setExpandedSaleId(null);
-                                    }
+                                    setConfirmDeleteSale(sale);
                                   }}
                                   className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-[10px] font-bold transition-colors flex items-center gap-1.5"
                                 >
@@ -429,10 +457,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (confirm('Tem certeza que deseja excluir esta venda?')) {
-                                storageService.deleteSale(sale.id);
-                                setExpandedSaleId(null);
-                              }
+                              setConfirmDeleteSale(sale);
                             }}
                             className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-[10px] font-bold transition-colors flex items-center gap-1.5"
                           >
@@ -541,6 +566,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Confirm: excluir venda */}
+      <ConfirmDialog
+        isOpen={confirmDeleteSale !== null}
+        title="Excluir venda?"
+        message="A venda será removida do relatório e do financeiro. Você poderá desfazer logo em seguida."
+        itemName={confirmDeleteSale ? `Venda ${confirmDeleteSale.code || confirmDeleteSale.id}` : undefined}
+        confirmLabel="Excluir"
+        onConfirm={handleConfirmDeleteSale}
+        onCancel={() => setConfirmDeleteSale(null)}
+      />
     </div>
   );
 };

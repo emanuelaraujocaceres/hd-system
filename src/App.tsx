@@ -653,7 +653,6 @@ export const App: React.FC = () => {
         user={user}
         caixaSession={caixaSession}
         onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
-        onResetDemo={() => storageService.resetDemoData()}
         onLogout={handleLogout}
         onOpenProfile={() => setIsProfileModalOpen(true)}
         isMobileOpen={isMobileOpen}

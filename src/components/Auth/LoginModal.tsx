@@ -4,6 +4,7 @@ import { UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { supabase } from '../../lib/supabase';
 import { syncQueue } from '../../services/syncQueueService';
+import { friendlyErrorMessage } from '../../lib/friendlyError';
 
 interface LoginModalProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -152,7 +153,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
 
     } catch (err: any) {
       setIsLoading(false);
-      setErrorMessage(err?.message || 'Erro ao realizar login.');
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível fazer login. Verifique sua conexão e tente novamente.'));
     }
   };
 

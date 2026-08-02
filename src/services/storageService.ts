@@ -1515,6 +1515,21 @@ class StorageService {
     const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
     const filtered = existingItems.filter((i: any) => i.sale_id !== id);
     this.set(KEYS.SALE_ITEMS, filtered);
+    if (saleToDelete) {
+      undoManager.push({
+        type: 'delete-sale',
+        description: `Excluir venda ${saleToDelete.code || saleToDelete.id}`,
+        undo: () => {
+          const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
+          if (!sales.some((s) => s.id === saleToDelete.id)) {
+            sales.push(saleToDelete);
+            this.set(KEYS.SALES, sales);
+            syncService.upsertRow('sales', saleToDelete);
+          }
+        },
+        timestamp: Date.now(),
+      });
+    }
   }
 
   async updateStock(productId: string, quantityDelta: number, reason: string, operatorName: string) {
@@ -2365,25 +2380,83 @@ class StorageService {
   }
 
   // --- RESET DEMO DATA ---
-  resetDemoData() {
-    const dataKeys = [
-      KEYS.PRODUCTS, KEYS.CATEGORIES, KEYS.CUSTOMERS, KEYS.SUPPLIERS,
-      KEYS.SALES, KEYS.SALE_ITEMS, KEYS.CAIXA, KEYS.CAIXA_HISTORY,
-      KEYS.FINANCIAL, KEYS.MOVEMENTS, KEYS.BRANCHES, KEYS.USERS_LIST,
-      KEYS.SETTINGS, KEYS.SUBSCRIPTION, KEYS.CREDIT_PAYMENTS,
-    ];
-    // Remove chaves globais + chaves particionadas por org
-    const orgId = this.getCurrentOrgId();
-    for (const key of dataKeys) {
-      localStorage.removeItem(key); // chave global (legado)
-      localStorage.removeItem(`${key}_${orgId}`); // chave particionada
+  // Faz backup completo do localStorage (JSON) antes de apagar, para recuperação
+  resetDemoData(): { backupKey: string } | null {
+    // Backup em JSON de todas as chaves hd_system_*
+    let backupCount = 0;
+    try {
+      const backup: Record<string, string> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('hd_system_')) {
+          backup[key] = localStorage.getItem(key) || '';
+          backupCount++;
+        }
+      }
+      if (backupCount > 0) {
+        const backupKey = `hd_system_backup_${Date.now()}`;
+        localStorage.setItem(backupKey, JSON.stringify(backup));
+        // Mantém só os 3 backups mais recentes
+        const backupKeys: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('hd_system_backup_')) backupKeys.push(key);
+        }
+        backupKeys.sort().reverse();
+        for (const oldKey of backupKeys.slice(3)) localStorage.removeItem(oldKey);
+
+        const dataKeys = [
+          KEYS.PRODUCTS, KEYS.CATEGORIES, KEYS.CUSTOMERS, KEYS.SUPPLIERS,
+          KEYS.SALES, KEYS.SALE_ITEMS, KEYS.CAIXA, KEYS.CAIXA_HISTORY,
+          KEYS.FINANCIAL, KEYS.MOVEMENTS, KEYS.BRANCHES, KEYS.USERS_LIST,
+          KEYS.SETTINGS, KEYS.SUBSCRIPTION, KEYS.CREDIT_PAYMENTS,
+        ];
+        // Remove chaves globais + chaves particionadas por org
+        const orgId = this.getCurrentOrgId();
+        for (const key of dataKeys) {
+          localStorage.removeItem(key); // chave global (legado)
+          localStorage.removeItem(`${key}_${orgId}`); // chave particionada
+        }
+        // Chaves que são sempre globais (não particionadas)
+        localStorage.removeItem(KEYS.USER);
+        localStorage.removeItem(KEYS.LOGGED_IN_EMAIL);
+        localStorage.removeItem(StorageService.MIGRATION_KEY);
+        this.migrated = false;
+        this.notify();
+        return { backupKey };
+      }
+    } catch (err) {
+      console.error('[Storage] Backup before reset failed', err);
     }
-    // Chaves que são sempre globais (não particionadas)
-    localStorage.removeItem(KEYS.USER);
-    localStorage.removeItem(KEYS.LOGGED_IN_EMAIL);
-    localStorage.removeItem(StorageService.MIGRATION_KEY);
-    this.migrated = false;
-    this.notify();
+    return null;
+  }
+
+  // Restaura um backup hd_system_backup_* salvo anteriormente
+  restoreBackup(backupKey: string): boolean {
+    try {
+      const raw = localStorage.getItem(backupKey);
+      if (!raw) return false;
+      const backup: Record<string, string> = JSON.parse(raw);
+      for (const [key, value] of Object.entries(backup)) {
+        if (key.startsWith('hd_system_')) localStorage.setItem(key, value);
+      }
+      this.migrated = false;
+      this.notify();
+      return true;
+    } catch (err) {
+      console.error('[Storage] Restore backup failed', err);
+      return false;
+    }
+  }
+
+  // Lista backups disponíveis (mais recente primeiro)
+  listBackups(): string[] {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('hd_system_backup_')) keys.push(key);
+    }
+    return keys.sort().reverse();
   }
 }
 

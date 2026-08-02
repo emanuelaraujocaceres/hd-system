@@ -3,6 +3,7 @@ import { X, Plus, Edit2, Trash2, Tag, Check, AlertCircle } from 'lucide-react';
 import { Category } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 
 interface CategoryManagerModalProps {
   isOpen: boolean;
@@ -20,12 +21,26 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [editingDesc, setEditingDesc] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [confirmDeleteCat, setConfirmDeleteCat] = useState<Category | null>(null);
 
   if (!isOpen) return null;
+
+  const isDuplicateName = (name: string, ignoreId?: string) =>
+    categories.some(
+      (c) => c.name.trim().toLowerCase() === name.trim().toLowerCase() && c.id !== ignoreId
+    );
 
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
+    // Dedupe: impede categoria duplicada (case-insensitive) e duplo toque no botão
+    if (isDuplicateName(newCatName)) {
+      posAudio.error();
+      return;
+    }
+    if (isCreating) return;
+    setIsCreating(true);
 
     const newCategory: Category = {
       id: `cat-${Date.now()}`,
@@ -37,6 +52,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
     posAudio.chime();
     setNewCatName('');
     setNewCatDesc('');
+    setIsCreating(false);
   };
 
   const handleStartEdit = (cat: Category) => {
@@ -47,6 +63,11 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
   const handleSaveEdit = (catId: string) => {
     if (!editingName.trim()) return;
+    // Dedupe: impede renomear para um nome que já existe
+    if (isDuplicateName(editingName, catId)) {
+      posAudio.error();
+      return;
+    }
 
     const updated: Category = {
       id: catId,
@@ -59,11 +80,12 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
     setEditingId(null);
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`Tem certeza que deseja excluir a categoria "${name}"?`)) {
-      storageService.deleteCategory(id);
-      posAudio.click();
-    }
+  const handleConfirmDeleteCategory = () => {
+    const cat = confirmDeleteCat;
+    if (!cat) return;
+    setConfirmDeleteCat(null);
+    storageService.deleteCategory(cat.id);
+    posAudio.click();
   };
 
   return (
@@ -116,10 +138,11 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
             </div>
             <button
               type="submit"
-              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-1.5"
+              disabled={isCreating}
+              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
-              <span>Cadastrar Categoria</span>
+              <span>{isCreating ? 'Cadastrando...' : 'Cadastrar Categoria'}</span>
             </button>
           </form>
 
@@ -185,7 +208,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => handleDelete(cat.id, cat.name)}
+                            onClick={() => setConfirmDeleteCat(cat)}
                             className="p-1.5 text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors"
                             title="Excluir Categoria"
                           >
@@ -210,6 +233,17 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
             Concluir
           </button>
         </div>
+
+        {/* Confirm: excluir categoria */}
+        <ConfirmDialog
+          isOpen={confirmDeleteCat !== null}
+          title="Excluir categoria?"
+          message="Os produtos desta categoria não serão apagados, apenas a categoria."
+          itemName={confirmDeleteCat?.name}
+          confirmLabel="Excluir"
+          onConfirm={handleConfirmDeleteCategory}
+          onCancel={() => setConfirmDeleteCat(null)}
+        />
       </div>
     </div>
   );

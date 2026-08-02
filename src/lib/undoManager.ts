@@ -30,6 +30,19 @@ class UndoManager {
     return action;
   }
 
+  /** Executa a última ação desfeita (pop + callback) */
+  undo(): boolean {
+    const action = this.stack.pop();
+    if (!action) return false;
+    try {
+      action.undo();
+    } catch (err) {
+      console.warn('[UndoManager] Falha ao desfazer ação:', err);
+    }
+    this.notify();
+    return true;
+  }
+
   peek(): UndoAction | null {
     return this.stack[this.stack.length - 1] || null;
   }

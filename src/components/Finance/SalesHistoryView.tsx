@@ -14,6 +14,10 @@ import {
 import { Sale, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { useToast } from '../shared/Toast';
+import { undoManager } from '../../lib/undoManager';
+import { friendlyErrorMessage } from '../../lib/friendlyError';
 
 interface SalesHistoryViewProps {
   sales: Sale[];
@@ -36,6 +40,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
+  const { addToast } = useToast();
 
   // Defensive: compute total from items when sale.total is 0 (R$0.00 bug fallback)
   const getSaleTotal = (s: Sale) => {
@@ -75,11 +80,26 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
     setExpandedSaleId(expandedSaleId === saleId ? null : saleId);
   };
 
-  const handleDelete = (sale: Sale) => {
-    if (confirm(`Tem certeza que deseja excluir a venda ${sale.code}?`)) {
+  const [confirmDeleteSale, setConfirmDeleteSale] = useState<Sale | null>(null);
+  const handleConfirmDeleteSale = () => {
+    const sale = confirmDeleteSale;
+    if (!sale) return;
+    setConfirmDeleteSale(null);
+    try {
       storageService.deleteSale(sale.id);
       posAudio.click();
       setExpandedSaleId(null);
+      const action = undoManager.peek();
+      addToast(
+        'success',
+        `Venda ${sale.code} excluída.`,
+        6000,
+        action ? 'Desfazer' : undefined,
+        action ? () => undoManager.undo() : undefined
+      );
+    } catch (err: any) {
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível excluir a venda. Tente novamente.'));
+      posAudio.error();
     }
   };
 
@@ -198,7 +218,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDelete(sale);
+                              setConfirmDeleteSale(sale);
                             }}
                             className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
                             title="Excluir venda"
@@ -328,7 +348,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
                               {/* Admin delete button at bottom */}
                               {user.role === 'admin' && (
                                 <button
-                                  onClick={() => handleDelete(sale)}
+                                  onClick={() => setConfirmDeleteSale(sale)}
                                   className="w-full mt-2 px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 font-bold text-xs hover:bg-rose-500/20 transition-colors flex items-center justify-center gap-2"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -362,6 +382,17 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Confirm: excluir venda */}
+      <ConfirmDialog
+        isOpen={confirmDeleteSale !== null}
+        title="Excluir venda?"
+        message="A venda será removida do histórico. Você poderá desfazer logo em seguida."
+        itemName={confirmDeleteSale ? `Venda ${confirmDeleteSale.code}` : undefined}
+        confirmLabel="Excluir"
+        onConfirm={handleConfirmDeleteSale}
+        onCancel={() => setConfirmDeleteSale(null)}
+      />
     </div>
   );
 };
