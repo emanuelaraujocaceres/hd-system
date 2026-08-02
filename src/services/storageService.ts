@@ -406,7 +406,7 @@ class StorageService {
         id: s.id,
         organization_id: this.getCurrentOrgId(),
         store_branch_id: branchUuid,
-      user_id: s.operatorId || null,
+        user_id: s.operatorId && StorageService.UUID_RE.test(s.operatorId) ? s.operatorId : null,
         customer_id: s.customerId || null,
         code: s.code,
         created_at: s.date,                    // timestamp do momento da finalização
@@ -992,19 +992,27 @@ class StorageService {
 
   async hydrateFromCloud(branchId?: string): Promise<boolean> {
     try {
+      // Resolve branchId to UUID — could be a short code (e.g. "br-01")
+      let resolvedBranchId: string | undefined = branchId;
+      if (resolvedBranchId && !StorageService.UUID_RE.test(resolvedBranchId)) {
+        const branches = this.getBranches();
+        const matched = branches.find((b) => b.id === resolvedBranchId || b.code === resolvedBranchId);
+        resolvedBranchId = matched ? matched.id : undefined;
+      }
+
       const [products, categories, customers, suppliers, sales, branches, financial, settings, users, movements, caixa, saleItems] =
         await Promise.all([
-          syncService.fetchRows('products', branchId),
-          syncService.fetchRows('categories', branchId),
-          syncService.fetchRows('customers', branchId),
-          syncService.fetchRows('suppliers', branchId),
-          syncService.fetchRows('sales', branchId),
+          syncService.fetchRows('products', resolvedBranchId),
+          syncService.fetchRows('categories', resolvedBranchId),
+          syncService.fetchRows('customers', resolvedBranchId),
+          syncService.fetchRows('suppliers', resolvedBranchId),
+          syncService.fetchRows('sales', resolvedBranchId),
           syncService.fetchRows('store_branches'),
-          syncService.fetchRows('financial_transactions', branchId),
+          syncService.fetchRows('financial_transactions', resolvedBranchId),
           syncService.fetchRows('system_settings'),
-          syncService.fetchRows('system_users', branchId),
-          syncService.fetchRows('stock_movements', branchId),
-          syncService.fetchRows('cash_sessions', branchId),
+          syncService.fetchRows('system_users', resolvedBranchId),
+          syncService.fetchRows('stock_movements', resolvedBranchId),
+          syncService.fetchRows('cash_sessions', resolvedBranchId),
           syncService.fetchRows('sale_items'),
         ]);
 

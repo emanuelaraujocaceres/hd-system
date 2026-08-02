@@ -539,6 +539,24 @@ Retorne ESTRITAMENTE um objeto JSON válido sem Markdown:
     });
   }
 
+  // ─── REPROCESSAR DLQ NO STARTUP ──────────────────────────────
+  // Ao iniciar o servidor, tenta reprocessar falhas pendentes na
+  // tabela movimentacoes_falhas. Usa service_role (byepassa RLS).
+  if (supabaseAdmin) {
+    try {
+      const { data, error } = await supabaseAdmin.rpc("reprocessar_movimentacoes_falhas");
+      if (error) {
+        console.warn("[DLQ] Erro ao reprocessar falhas no startup:", error.message);
+      } else {
+        console.log(`[DLQ] Reprocessamento no startup: ${JSON.stringify(data)}`);
+      }
+    } catch (e: any) {
+      console.warn("[DLQ] Exceção ao reprocessar falhas no startup:", e?.message);
+    }
+  } else {
+    console.warn("[DLQ] SUPABASE_SERVICE_ROLE_KEY não configurada — reprocessamento automático desativado");
+  }
+
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`[HD-System ERP] Server running on http://0.0.0.0:${PORT}`);
   });
