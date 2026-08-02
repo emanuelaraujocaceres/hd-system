@@ -7,7 +7,6 @@ export async function onRequestGet(context: any) {
   return new Response(JSON.stringify({
     status: 'ok',
     appName: 'HD-System ERP',
-    stripeConfigured: !!env.STRIPE_SECRET_KEY,
     platform: 'cloudflare-pages',
   }), {
     status: 200,

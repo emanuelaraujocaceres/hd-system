@@ -10,7 +10,6 @@ import {
   SystemSettings,
   UserProfile,
   StockMovement,
-  SubscriptionInfo,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -24,7 +23,6 @@ import {
   INITIAL_USER,
   INITIAL_USERS,
   INITIAL_SETTINGS,
-  INITIAL_SUBSCRIPTION,
   DEFAULT_ORG_ID,
   BRANCH_UUIDS,
   PRODUCT_UUIDS,
@@ -57,7 +55,6 @@ const KEYS = {
   USERS_LIST: 'hd_system_users_list',
   LOGGED_IN_EMAIL: 'hd_system_logged_in_email',
   SETTINGS: 'hd_system_settings',
-  SUBSCRIPTION: 'hd_system_subscription',
   CREDIT_PAYMENTS: 'hd_system_credit_payments',
   VIEWING_ORG: 'hd_system_viewing_org',
 };
@@ -2385,59 +2382,6 @@ class StorageService {
     this.syncSettings(settings);
   }
 
-  // --- SUBSCRIPTION & STRIPE ---
-  getSubscription(): SubscriptionInfo {
-    const sub = this.get<SubscriptionInfo>(KEYS.SUBSCRIPTION, INITIAL_SUBSCRIPTION);
-    
-    // Calculate dynamic days remaining
-    if (sub.nextBillingDate) {
-      const target = new Date(sub.nextBillingDate).getTime();
-      const now = new Date().getTime();
-      const diff = Math.ceil((target - now) / (1000 * 60 * 60 * 24));
-      sub.daysRemaining = diff > 0 ? diff : 0;
-      if (diff <= 0) {
-        sub.status = 'past_due';
-      }
-    }
-    return sub;
-  }
-
-  saveSubscription(sub: SubscriptionInfo) {
-    this.set(KEYS.SUBSCRIPTION, sub);
-  }
-
-  renewSubscriptionViaStripe(paymentMethodDesc: string = 'Cartão de Crédito (Stripe)'): SubscriptionInfo {
-    const sub = this.getSubscription();
-    
-    // Extend next billing date by 30 days
-    const nextDate = new Date();
-    nextDate.setDate(nextDate.getDate() + 30);
-    const nextDateIso = nextDate.toISOString().split('T')[0];
-
-    const todayIso = new Date().toISOString().split('T')[0];
-    const newInvoice = {
-      id: `INV-${Date.now().toString().slice(-6)}`,
-      date: todayIso,
-      amount: sub.priceMonthly || 199.00,
-      status: 'paid' as const,
-      paymentMethod: paymentMethodDesc,
-      invoiceUrl: '#',
-    };
-
-    const updatedSub: SubscriptionInfo = {
-      ...sub,
-      status: 'active',
-      currentPeriodStart: todayIso,
-      currentPeriodEnd: nextDateIso,
-      nextBillingDate: nextDateIso,
-      daysRemaining: 30,
-      invoices: [newInvoice, ...(sub.invoices || [])],
-    };
-
-    this.saveSubscription(updatedSub);
-    return updatedSub;
-  }
-
   // --- MULTI-BRANCH METRICS & OVERVIEW ---
   getBranchMetrics(branchId: string) {
     const branch = this.getBranches().find((b) => b.id === branchId);
@@ -2537,7 +2481,7 @@ class StorageService {
           KEYS.PRODUCTS, KEYS.CATEGORIES, KEYS.CUSTOMERS, KEYS.SUPPLIERS,
           KEYS.SALES, KEYS.SALE_ITEMS, KEYS.CAIXA, KEYS.CAIXA_HISTORY,
           KEYS.FINANCIAL, KEYS.MOVEMENTS, KEYS.BRANCHES, KEYS.USERS_LIST,
-          KEYS.SETTINGS, KEYS.SUBSCRIPTION, KEYS.CREDIT_PAYMENTS,
+          KEYS.SETTINGS, KEYS.CREDIT_PAYMENTS,
         ];
         // Remove chaves globais + chaves particionadas por org
         const orgId = this.getCurrentOrgId();

@@ -193,6 +193,11 @@ export const PDVView: React.FC<PDVViewProps> = ({
     return matchesCategory && matchesSearch && p.active;
   });
 
+  // Preço efetivo: usa o preço promocional da TV sempre que a oferta estiver
+  // ativa (showOnTV) e o valor promocional for definido e maior que zero
+  const getEffectivePrice = (p: Product) =>
+    p.showOnTV && p.tvPromoPrice != null && p.tvPromoPrice > 0 ? p.tvPromoPrice : p.salePrice;
+
   // Add Product to Cart
   const handleAddToCart = (product: Product) => {
     if (!isCaixaOpen) {
@@ -231,12 +236,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
         );
       } else {
         // Usa preço promocional da TV se o produto estiver em oferta ativa
-        const effectivePrice =
-          product.showOnTV &&
-          product.tvPromoPrice != null &&
-          product.tvPromoPrice !== product.salePrice
-            ? product.tvPromoPrice
-            : product.salePrice;
+        const effectivePrice = getEffectivePrice(product);
         return [
           ...prev,
           {
@@ -625,9 +625,21 @@ export const PDVView: React.FC<PDVViewProps> = ({
 
                 <div className="mt-2 pt-2 border-t border-slate-100 dark:border-[#27272a] flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
-                      R$ {p.salePrice.toFixed(2)}
-                    </p>
+                    {p.showOnTV && p.tvPromoPrice != null && p.tvPromoPrice > 0 && p.tvPromoPrice !== p.salePrice ? (
+                      <>
+                        <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wide">Oferta TV</p>
+                        <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+                          R$ {getEffectivePrice(p).toFixed(2)}
+                        </p>
+                        <p className="text-[10px] text-slate-400 line-through">
+                          R$ {p.salePrice.toFixed(2)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+                        R$ {getEffectivePrice(p).toFixed(2)}
+                      </p>
+                    )}
                     <p className={`text-[10px] font-semibold ${isLowStock ? 'text-amber-500 font-bold' : 'text-slate-400 dark:text-[#71717a]'}`}>
                       Estoque: {p.currentStock} {p.unit}
                     </p>
@@ -756,9 +768,18 @@ export const PDVView: React.FC<PDVViewProps> = ({
                   <img src={p.imageUrl} alt={p.name} className="w-full h-12 object-cover" />
                   <div className="p-1.5">
                     <p className="text-[9px] font-bold text-slate-900 dark:text-white truncate leading-tight">{p.name}</p>
-                    <p className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400">
-                      R$ {p.salePrice.toFixed(2)}
-                    </p>
+                    {p.showOnTV && p.tvPromoPrice != null && p.tvPromoPrice > 0 && p.tvPromoPrice !== p.salePrice ? (
+                      <>
+                        <p className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400">
+                          R$ {getEffectivePrice(p).toFixed(2)}
+                        </p>
+                        <p className="text-[8px] text-slate-400 line-through">R$ {p.salePrice.toFixed(2)}</p>
+                      </>
+                    ) : (
+                      <p className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400">
+                        R$ {getEffectivePrice(p).toFixed(2)}
+                      </p>
+                    )}
                   </div>
                 </button>
               ))}

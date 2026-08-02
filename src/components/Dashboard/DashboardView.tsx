@@ -28,7 +28,6 @@ interface DashboardViewProps {
   caixaSession: CashRegisterSession;
   onNavigateTab: (tab: string) => void;
   onOpenCaixaModal: () => void;
-  onOpenSubscriptionTab: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -39,7 +38,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   caixaSession,
   onNavigateTab,
   onOpenCaixaModal,
-  onOpenSubscriptionTab,
 }) => {
   const isAdmin = user.role === 'admin';
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
@@ -228,7 +226,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* KPI METRIC CARDS GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
         {/* Card 1: Faturamento Hoje / Período do Caixa */}
         <button onClick={() => onNavigateTab('finance')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
           <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">
@@ -267,15 +265,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="mt-3 sm:mt-4 text-xs text-amber-500 flex items-center gap-1 font-medium">
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>! Alerta</span> <span className="text-slate-400 dark:text-[#71717a]">Reposição necessária</span>
-          </div>
-        </button>
-
-        {/* Card 4: Assinatura Pro / Status SaaS */}
-        <button onClick={onOpenSubscriptionTab} className="p-4 sm:p-6 rounded-2xl bg-indigo-600 text-white shadow-md cursor-pointer hover:shadow-lg hover:scale-[1.01] transition-all text-left w-full">
-          <p className="text-[10px] uppercase tracking-wider opacity-80 font-bold">Assinatura Pro</p>
-          <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter font-serif-italic">Ativa</p>
-          <div className="mt-3 sm:mt-4 text-xs opacity-80 font-medium">
-            Próximo faturamento: 12 Out
           </div>
         </button>
       </div>

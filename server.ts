@@ -2,7 +2,6 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, ApiError } from "@google/genai";
-import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 
@@ -18,18 +17,6 @@ const supabaseAdmin = SUPABASE_SERVICE_KEY
       auth: { autoRefreshToken: false, persistSession: false },
     })
   : null;
-
-// Lazy Stripe client initialization function
-let stripeClient: Stripe | null = null;
-function getStripe(): Stripe | null {
-  if (!stripeClient) {
-    const key = process.env.STRIPE_SECRET_KEY;
-    if (key) {
-      stripeClient = new Stripe(key);
-    }
-  }
-  return stripeClient;
-}
 
 async function startServer() {
   const app = express();
@@ -50,81 +37,11 @@ async function startServer() {
       })
     : null;
 
-  // API Route: Stripe Create Checkout Session
-  app.post("/api/stripe/create-checkout-session", async (req, res) => {
-    try {
-      const { planCode, userEmail, successUrl, cancelUrl } = req.body;
-      const stripe = getStripe();
-
-      if (stripe && process.env.STRIPE_SECRET_KEY) {
-        const priceId = process.env.STRIPE_PRICE_ID || "price_HDSYSTEM_PRO";
-        const session = await stripe.checkout.sessions.create({
-          payment_method_types: ["card"],
-          customer_email: userEmail || "admin@hd-system.com.br",
-          line_items: [
-            {
-              price_data: {
-                currency: "brl",
-                product_data: {
-                  name: "HD-System Enterprise PRO - Assinatura Mensal",
-                  description: "Acesso completo aos módulos ERP, PDV, Filiais, CRM e IA Copilot.",
-                },
-                unit_amount: 19900, // R$ 199,00
-                recurring: { interval: "month" },
-              },
-              quantity: 1,
-            },
-          ],
-          mode: "subscription",
-          success_url: successUrl || "http://localhost:3000/?stripe_payment=success",
-          cancel_url: cancelUrl || "http://localhost:3000/?stripe_payment=cancelled",
-        });
-
-        return res.json({ checkoutUrl: session.url, simulated: false });
-      }
-
-      // Return simulated checkout payload if STRIPE_SECRET_KEY is not configured
-      return res.json({
-        checkoutUrl: null,
-        simulated: true,
-        message: "Chave STRIPE_SECRET_KEY não detectada. Modo de pagamento instantâneo em teste ativado.",
-      });
-    } catch (error: any) {
-      console.error("Erro ao criar sessão no Stripe:", error);
-      return res.status(500).json({ error: error.message || "Erro no Stripe" });
-    }
-  });
-
-  // API Route: Stripe Webhook Listener
-  app.post("/api/stripe/webhook", (req, res) => {
-    const signature = req.headers["stripe-signature"];
-    console.log("Recebido evento de Webhook Stripe. Signature:", signature ? "presente" : "ausente");
-
-    const event = req.body;
-
-    switch (event?.type) {
-      case "checkout.session.completed":
-        console.log("[HD-System Stripe] Pagamento de Assinatura recebido com sucesso:", event.data?.object?.id);
-        break;
-      case "customer.subscription.updated":
-        console.log("[HD-System Stripe] Assinatura atualizada no Stripe:", event.data?.object?.id);
-        break;
-      case "customer.subscription.deleted":
-        console.log("[HD-System Stripe] Assinatura cancelada no Stripe:", event.data?.object?.id);
-        break;
-      default:
-        console.log(`[HD-System Stripe] Evento de Webhook recebido: ${event?.type}`);
-    }
-
-    return res.json({ received: true, status: "success" });
-  });
-
   // API Route: Health check
   app.get("/api/health", (_req, res) => {
     res.json({
       status: "ok",
       appName: "HD-System ERP",
-      stripeConfigured: !!process.env.STRIPE_SECRET_KEY,
       supabaseAdminConfigured: !!supabaseAdmin,
     });
   });

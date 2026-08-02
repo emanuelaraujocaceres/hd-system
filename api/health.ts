@@ -11,6 +11,5 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   res.end(JSON.stringify({
     status: 'ok',
     appName: 'HD-System ERP',
-    stripeConfigured: !!process.env.STRIPE_SECRET_KEY,
   }));
 }

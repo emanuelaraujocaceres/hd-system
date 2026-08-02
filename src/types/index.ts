@@ -195,31 +195,6 @@ export interface FinancialAccount {
   organizationId?: string; // multi-tenant
 }
 
-export interface SubscriptionInvoice {
-  id: string;
-  date: string;
-  amount: number;
-  status: 'paid' | 'pending' | 'failed';
-  paymentMethod: string;
-  invoiceUrl?: string;
-}
-
-export interface SubscriptionInfo {
-  status: 'active' | 'trial' | 'past_due' | 'canceled';
-  planName: string;
-  planCode: string;
-  priceMonthly: number;
-  billingCycle: 'monthly' | 'yearly';
-  currentPeriodStart: string;
-  currentPeriodEnd: string;
-  nextBillingDate: string;
-  daysRemaining: number;
-  autoRenew: boolean;
-  stripeCustomerId?: string;
-  stripeSubscriptionId?: string;
-  invoices: SubscriptionInvoice[];
-}
-
 export interface SystemSettings {
   companyName: string;
   tradeName: string;

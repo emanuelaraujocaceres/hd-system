@@ -17,6 +17,7 @@ import {
 import { StoreBranch, UserProfile, CashRegisterSession } from '../../types';
 import { ResetDataButton } from '../shared/ResetDataButton';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { useToast } from '../shared/Toast';
 
 interface SidebarProps {
   currentTab: string;
@@ -52,6 +53,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
   const isAdmin = user.role === 'admin';
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [pendingBranch, setPendingBranch] = useState<StoreBranch | null>(null);
+  const { addToast } = useToast();
+
+  // Matriz (isHeadquarters) sempre primeiro, demais seguem a ordem original
+  const sortedBranches = [...branches].sort((a, b) => {
+    if (a.isHeadquarters && !b.isHeadquarters) return -1;
+    if (!a.isHeadquarters && b.isHeadquarters) return 1;
+    return 0;
+  });
   const perms = user.permissions || {
     pdv: true,
     inventory: true,
@@ -117,14 +127,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <select
               value={currentBranch.id}
               onChange={(e) => {
-                const b = branches.find((branch) => branch.id === e.target.value);
-                if (b) onSelectBranch(b);
+                const b = sortedBranches.find((branch) => branch.id === e.target.value);
+                if (b && b.id !== currentBranch.id) setPendingBranch(b);
               }}
               className="w-full text-xs font-medium bg-slate-800/90 dark:bg-[#18181b] text-slate-200 dark:text-[#a1a1aa] border border-slate-700/80 dark:border-[#27272a] rounded-lg px-3 py-2 pr-8 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
             >
-              {branches.map((b) => (
+              {sortedBranches.map((b) => (
                 <option key={b.id} value={b.id} className="bg-slate-900 dark:bg-[#09090b] text-slate-200">
-                  {b.name} ({b.city})
+                  {b.isHeadquarters ? '(Matriz) ' : ''}{b.name} ({b.city})
                 </option>
               ))}
             </select>
@@ -214,6 +224,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <ResetDataButton />
+
+        {/* Confirm: trocar de filial */}
+        <ConfirmDialog
+          isOpen={!!pendingBranch}
+          title="Trocar de filial?"
+          message={
+            pendingBranch
+              ? `Deseja mudar o contexto para "${pendingBranch.name} (${pendingBranch.city})"? O estoque, vendas e financeiro passarão a exibir os dados desta filial.`
+              : ''
+          }
+          confirmLabel="Trocar"
+          onConfirm={() => {
+            if (pendingBranch) {
+              onSelectBranch(pendingBranch);
+              addToast('success', `Filial alterada para "${pendingBranch.name}".`);
+            }
+            setPendingBranch(null);
+          }}
+          onCancel={() => setPendingBranch(null)}
+        />
 
         {/* Confirm: sair da conta */}
         <ConfirmDialog

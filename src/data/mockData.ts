@@ -9,7 +9,6 @@ import {
   StoreBranch,
   SystemSettings,
   UserProfile,
-  SubscriptionInfo,
 } from '../types';
 
 // ============================================================================
@@ -456,45 +455,4 @@ export const INITIAL_SETTINGS: SystemSettings = {
   soundEffectsEnabled: true,
   receiptHeaderMsg: 'Obrigado pela preferência! Volte Sempre ao HD-System.',
   receiptFooterMsg: 'HD-System ERP PDV - www.hd-system.com.br',
-};
-
-export const INITIAL_SUBSCRIPTION: SubscriptionInfo = {
-  status: 'active',
-  planName: 'HD-System Enterprise PRO',
-  planCode: 'hd_pro_monthly',
-  priceMonthly: 199.00,
-  billingCycle: 'monthly',
-  currentPeriodStart: '2026-07-01',
-  currentPeriodEnd: '2026-08-01',
-  nextBillingDate: '2026-08-01',
-  daysRemaining: 8,
-  autoRenew: true,
-  stripeCustomerId: 'cus_HDSystem99120',
-  stripeSubscriptionId: 'sub_StripeEnterprisePRO',
-  invoices: [
-    {
-      id: 'INV-2026-07',
-      date: '2026-07-01',
-      amount: 199.00,
-      status: 'paid',
-      paymentMethod: 'Cartão de Crédito (Stripe) **** 4242',
-      invoiceUrl: '#',
-    },
-    {
-      id: 'INV-2026-06',
-      date: '2026-06-01',
-      amount: 199.00,
-      status: 'paid',
-      paymentMethod: 'Cartão de Crédito (Stripe) **** 4242',
-      invoiceUrl: '#',
-    },
-    {
-      id: 'INV-2026-05',
-      date: '2026-05-01',
-      amount: 199.00,
-      status: 'paid',
-      paymentMethod: 'PIX QrCode (Stripe)',
-      invoiceUrl: '#',
-    },
-  ],
 };

@@ -60,9 +60,6 @@ export const App: React.FC = () => {
   const [navHistory, setNavHistory] = useState<string[]>(['pdv']);
   const [initialBarcodeForNewProduct, setInitialBarcodeForNewProduct] = useState<string | null>(null);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
-  // Aba inicial das Configurações quando navegadas a partir do Dashboard
-  // (ex.: card "Assinatura Pro" deve abrir direto na aba de assinatura)
-  const [settingsInitialSubTab, setSettingsInitialSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'subscription' | 'tv'>('fiscal');
 
   // Handle mobile back button - navigate to previous page instead of closing app
   useEffect(() => {
@@ -92,21 +89,6 @@ export const App: React.FC = () => {
     }
     setIsMobileOpen(false);
   };
-
-  // Abre Configurações diretamente na aba de assinatura (usado pelo card
-  // "Assinatura Pro" do Dashboard, que hoje caía na aba padrão "fiscal")
-  const handleOpenSubscriptionTab = () => {
-    setSettingsInitialSubTab('subscription');
-    handleTabChange('settings');
-  };
-
-  // Ao sair das Configurações, reseta a aba inicial pendente — a navegação
-  // normal volta a abrir Configurações na aba padrão ("fiscal")
-  useEffect(() => {
-    if (activeTab !== 'settings' && settingsInitialSubTab !== 'fiscal') {
-      setSettingsInitialSubTab('fiscal');
-    }
-  }, [activeTab, settingsInitialSubTab]);
 
   const handleNavigateToNewProduct = (barcode: string) => {
     setInitialBarcodeForNewProduct(barcode);
@@ -837,7 +819,6 @@ export const App: React.FC = () => {
                   caixaSession={caixaSession}
                   onNavigateTab={handleTabChange}
                   onOpenCaixaModal={() => setIsCaixaModalOpen(true)}
-                  onOpenSubscriptionTab={handleOpenSubscriptionTab}
                 />
               )}
 
@@ -892,7 +873,7 @@ export const App: React.FC = () => {
               )}
 
               {activeTab === 'settings' && (
-                <SettingsView settings={settings} branches={userBranches} user={user} initialSubTab={settingsInitialSubTab} />
+                <SettingsView settings={settings} branches={userBranches} user={user} />
               )}
 
               {activeTab === 'tv-showcase' && (
