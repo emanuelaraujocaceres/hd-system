@@ -86,8 +86,14 @@ class SupabaseSyncService {
   /**
    * Subscribe to real-time changes from Supabase.
    * When another device writes data, this fires callbacks.
+   *
+   * @param orgId Organização do usuário atual — quando informada (usuário
+   *   comum), o canal filtra server-side por organization_id, evitando que
+   *   payloads de OUTRAS organizações trafeguem para este cliente.
+   *   Superadmin (orgId vazio) recebe de todas — o filtro client-side no
+   *   App.tsx continua como defense-in-depth.
    */
-  subscribeRealtime(onChange: SyncChangeCallback) {
+  subscribeRealtime(onChange: SyncChangeCallback, orgId?: string) {
     this.changeCallbacks.add(onChange);
 
     if (this.channel) {
@@ -120,6 +126,9 @@ class SupabaseSyncService {
           event: '*', // INSERT, UPDATE, DELETE
           schema: 'public',
           table: table,
+          // Filtro server-side: usuário comum só recebe mudanças da sua org.
+          // (PostgREST: organization_id=eq.<uuid>)
+          ...(orgId ? { filter: `organization_id=eq.${orgId}` } : {}),
         },
         (payload) => {
           this._connected = true;

@@ -130,7 +130,7 @@ class StorageService {
   }
 
   // Retorna a organização que o superadmin está visualizando, ou null
-  private getSuperadminViewingOrg(): string | null {
+  getSuperadminViewingOrg(): string | null {
     if (!this.isSuperAdmin()) return null;
     return localStorage.getItem(KEYS.VIEWING_ORG);
   }

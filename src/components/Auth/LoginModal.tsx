@@ -145,6 +145,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
 
       // TENTATIVA 2: Local storage (offline ou Supabase Auth indisponível)
       if (tryLocalLogin()) { setIsLoading(false); return; }
+      // Se o login local também falhou (senha errada / sem senha local),
+      // resetar o loading — antes o botão ficava "Verificando..." para sempre
+      // porque o fluxo saía do try sem return nem throw.
+      setIsLoading(false);
 
     } catch (err: any) {
       setIsLoading(false);

@@ -162,9 +162,6 @@ export const App: React.FC = () => {
     refreshState();
     const unsubscribe = storageService.subscribe(refreshState);
 
-    // Dynamic import to make syncTest.ts available from console as window.__syncTest
-    import('./services/syncTest').catch(() => {});
-
     return () => { unsubscribe(); };
   }, []);
 
@@ -397,8 +394,13 @@ export const App: React.FC = () => {
       setLastSyncTime(new Date());
     };
 
-    // Subscribe to Realtime
-    syncService.subscribeRealtime(handleRemoteChange);
+    // Subscribe to Realtime — filtra server-side pela org atual do usuário.
+    // Superadmin sem override recebe de todas as orgs (o filtro client-side
+    // abaixo continua como defense-in-depth).
+    const realtimeOrgId = storageService.isSuperAdmin()
+      ? (storageService.getSuperadminViewingOrg() || undefined)
+      : (storageService.getCurrentOrgId() || undefined);
+    syncService.subscribeRealtime(handleRemoteChange, realtimeOrgId);
 
     // Check connection health periodically (use refs to avoid stale closures)
     const checkConnection = async () => {
@@ -851,7 +853,12 @@ export const App: React.FC = () => {
                 <OrganizationsView
                   user={user}
                   onEnterOrg={(orgId) => {
+                    // Trocou a org em visualização (superadmin): re-hidratar do
+                    // cloud para a nova org. Antes era só visual — as partições
+                    // da nova org ficavam vazias e o fallback global exibia
+                    // dados stale da org anterior até o F5.
                     handleTabChange('dashboard');
+                    setTimeout(() => runHydration(), 50);
                   }}
                 />
               )}
