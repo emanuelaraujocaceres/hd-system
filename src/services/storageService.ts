@@ -444,6 +444,14 @@ class StorageService {
       const orgId = this.getCurrentOrgId();
       if (!orgId) return;
 
+      // Resolver código curto (ex.: "br-01") para UUID
+      let resolvedBranchUuid = branchUuid;
+      if (resolvedBranchUuid && !StorageService.UUID_RE.test(resolvedBranchUuid)) {
+        const branches = this.getBranches();
+        const matched = branches.find(b => b.code === resolvedBranchUuid || b.id === resolvedBranchUuid);
+        if (matched) resolvedBranchUuid = matched.id;
+      }
+
       // Buscar a sessão de caixa ativa da filial
       // Se branchUuid for vazio, não filtrar por store_branch_id
       let query = supabase
@@ -452,8 +460,8 @@ class StorageService {
         .eq('organization_id', orgId)
         .eq('status', 'open');
 
-      if (branchUuid) {
-        query = query.eq('store_branch_id', branchUuid);
+      if (resolvedBranchUuid) {
+        query = query.eq('store_branch_id', resolvedBranchUuid);
       }
 
       const { data: activeSession, error: sessionError } = await query.maybeSingle();
