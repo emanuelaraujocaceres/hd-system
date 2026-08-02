@@ -578,9 +578,8 @@ export const PDVView: React.FC<PDVViewProps> = ({
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       onError={(e) => {
                         const img = e.target as HTMLImageElement;
-                        if (!img.src.includes('photo-1584308666744')) {
-                          img.src = 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&auto=format&fit=crop&q=80';
-                        }
+                        // Fallback para placeholder local via SVG data URL
+                        img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iI2YwZjhmOCIvPgogIDxjaXJjbGUgY3g9IjYwIiBjeT0iNDUiIHI9IjE4IiBmaWxsPSIjOGM5NGYwIi8+CiAgPHJlY3QgeD0iMjUiIHk9IjgwIiB3aWR0aD0iNzAiIGhlaWdodD0iNDAiIGZpbGw9IiM5Yzk0ZjAiLz4KICA8cGF0aCBkPSJNNDQuNSAyNGwxNS40IDE1LjRoLSYuNGwtOC41IDguNUwzNC4xIDQyLjVsLTEuNC0xLjRTNDIuNSAzNC41IDM4LjUgMzAuNWwzLjAtMmwtLjItLjN6IiBmaWxsPSIjZmZmIi8+Cjwvc3ZnPg==';
                       }}
                     />
                     <span className="absolute top-1.5 right-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/60 text-white backdrop-blur-sm">
