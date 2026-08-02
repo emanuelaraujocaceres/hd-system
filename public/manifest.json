@@ -3,6 +3,11 @@
   "name": "HD-System ERP & PDV SaaS",
   "icons": [
     {
+      "src": "/logo-hd-system/android-chrome-96x96.png",
+      "type": "image/png",
+      "sizes": "96x96"
+    },
+    {
       "src": "/logo-hd-system/android-chrome-192x192.png",
       "type": "image/png",
       "sizes": "192x192"

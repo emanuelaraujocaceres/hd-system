@@ -3,9 +3,11 @@ const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
   "/manifest.json",
+  "/logo-hd-system/android-chrome-96x96.png",
   "/logo-hd-system/android-chrome-192x192.png",
   "/logo-hd-system/android-chrome-512x512.png",
   "/logo-hd-system/favicon.ico",
+  "/logo-hd-system/favicon-16x16.png",
   "/logo-hd-system/favicon-32x32.png",
   "/logo-hd-system/apple-touch-icon.png",
   "/logo-hd-system/logo-og.png"
