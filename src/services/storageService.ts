@@ -848,10 +848,19 @@ class StorageService {
 
   updateCaixaFromRemote(row: any) {
     // Branch isolation: não sobrescrever caixa local se o evento é de outra filial
-    const currentBranchId = this.getSelectedBranchId();
-    if (currentBranchId && row.store_branch_id && row.store_branch_id !== currentBranchId) {
-      console.log(`[HD-Sync] Ignoring caixa remote de outra filial (remote: ${row.store_branch_id}, current: ${currentBranchId})`);
-      return;
+    // Usar getRawBranchId() + resolver UUID para comparação correta
+    const rawBranchId = this.getRawBranchId();
+    if (rawBranchId && row.store_branch_id) {
+      let resolvedBranchId = rawBranchId;
+      if (!StorageService.UUID_RE.test(resolvedBranchId)) {
+        const branches = this.getBranches();
+        const matched = branches.find((b) => b.id === resolvedBranchId || b.code === resolvedBranchId);
+        if (matched) resolvedBranchId = matched.id;
+      }
+      if (row.store_branch_id !== resolvedBranchId) {
+        console.log(`[HD-Sync] Ignoring caixa remote de outra filial (remote: ${row.store_branch_id}, current: ${resolvedBranchId})`);
+        return;
+      }
     }
 
     const localSession = this.getActiveCaixaSession();
@@ -1018,7 +1027,7 @@ class StorageService {
   // ─── INITIAL LOAD FROM SUPABASE ──────────────────────────────────
   // Called once on app startup to hydrate localStorage from cloud.
 
-  async hydrateFromCloud(branchId?: string): Promise<boolean> {
+  async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranchId?: string }> {
     try {
       // PASSO 1: Buscar branches do Supabase PRIMEIRO para poder resolver
       // short codes (e.g. "br-01") → UUID. Antes, a resolução usava
@@ -1558,10 +1567,10 @@ class StorageService {
         this.notifyTimer = null;
       }
       this.listeners.forEach((fn) => { try { fn(); } catch {} });
-      return true;
+      return { ok: true, resolvedBranchId };
     } catch (e) {
       console.warn('[HD-Sync] Cloud hydration failed, using localStorage', e);
-      return false;
+      return { ok: false };
     }
   }
 
@@ -2432,6 +2441,16 @@ class StorageService {
     const branches = this.getBranches();
     const found = branches.find((b) => b.id === savedId || b.code === savedId);
     return found ? found.id : '';
+  }
+
+  /**
+   * Retorna o branch ID salvo no localStorage SEM validação.
+   * Usado no runHydration() ANTES das branches serem carregadas do cloud.
+   * getSelectedBranchId() valida contra getBranches() que pode estar vazio
+   * antes da hidratação — causando "branch: ALL" mesmo com filial selecionada.
+   */
+  getRawBranchId(): string {
+    return localStorage.getItem('hd_system_selected_branch_id') || '';
   }
 
   setSelectedBranchId(id: string) {

@@ -169,8 +169,10 @@ export const App: React.FC = () => {
     // Re-hidratar dados do cloud com a nova filial para garantir isolamento
     // Completo (limpa dados da filial anterior, carrega dados da nova filial)
     const resolvedBranchId = storageService.resolveBranchId(branch.id);
-    storageService.hydrateFromCloud(resolvedBranchId).then((ok) => {
-      if (ok) {
+    storageService.hydrateFromCloud(resolvedBranchId).then((result) => {
+      if (result.ok) {
+        // Armazenar branch resolvido para defense-in-depth no Realtime handler
+        resolvedBranchIdRef.current = result.resolvedBranchId;
         // Forçar refresh imediato do React state após hidratação
         setProducts(storageService.getProducts());
         setCategories(storageService.getCategories());
@@ -184,6 +186,13 @@ export const App: React.FC = () => {
         setCurrentBranch(storageService.getSelectedBranch());
         setUser(storageService.getUserProfile());
         console.log(`[Branch] ✅ Dados re-carregados para filial: ${branch.name}`);
+
+        // Re-subscribe Realtime com a nova filial para receber apenas eventos dela
+        if (result.resolvedBranchId) {
+          const orgId = storageService.getCurrentOrgId() || undefined;
+          syncService.resubscribeRealtime(orgId, result.resolvedBranchId);
+          console.log(`[Branch] Realtime re-subscribed for branch: ${branch.name}`);
+        }
       }
     }).catch(() => {
       // Fallback: refresh local mesmo se cloud falhar
@@ -227,6 +236,9 @@ export const App: React.FC = () => {
   // Refs to avoid stale closures in intervals
   const isOnlineRef = useRef(isOnline);
   const syncPendingCountRef = useRef(syncPendingCount);
+  // Resolved branch UUID — set after hydrateFromCloud resolves short codes.
+  // Used by handleRemoteChange for branch isolation (defense-in-depth).
+  const resolvedBranchIdRef = useRef<string | undefined>(undefined);
 
   // Keep refs in sync
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
@@ -279,9 +291,14 @@ export const App: React.FC = () => {
   // dados após F5, porque a hidratação rodava uma única vez no mount, antes de
   // o perfil/organização do usuário estar disponível.
   const runHydration = useCallback(async () => {
-    const branchId = storageService.getSelectedBranchId();
-    const ok = await storageService.hydrateFromCloud(branchId || undefined);
-    if (ok) {
+    // Ler branch ID direto do localStorage (sem validação) — antes das branches
+    // serem carregadas, getSelectedBranchId() retornaria '' porque getBranches()
+    // ainda está vazio, causando "branch: ALL" mesmo com filial selecionada.
+    const rawBranchId = storageService.getRawBranchId();
+    const result = await storageService.hydrateFromCloud(rawBranchId || undefined);
+    // Armazenar o branch UUID resolvido para use no Realtime e defense-in-depth
+    resolvedBranchIdRef.current = result.resolvedBranchId;
+    if (result.ok) {
       console.log('[HD-Sync] Cloud hydration OK');
       setIsSyncConnected(true);
       setIsOnline(true);
@@ -300,6 +317,14 @@ export const App: React.FC = () => {
       setBranches(storageService.getBranches());
       setCurrentBranch(storageService.getSelectedBranch());
       setUser(storageService.getUserProfile());
+
+      // Re-subscribe Realtime com o branch UUID resolvido.
+      // O useEffect inicial pode ter subscrito com '' (antes da hidratação).
+      if (result.resolvedBranchId) {
+        const orgId = storageService.getCurrentOrgId() || undefined;
+        syncService.resubscribeRealtime(orgId, result.resolvedBranchId);
+        console.log(`[HD-Sync] Realtime re-subscribed with branch: ${result.resolvedBranchId}`);
+      }
     } else {
       // Hydration failed — we might be offline on first load
       console.log('[HD-Sync] Cloud hydration skipped — using local data');
@@ -335,7 +360,9 @@ export const App: React.FC = () => {
         }
       }
       // Branch isolation: only accept changes that belong to current branch (or have no branch)
-      const currentBranchId = storageService.getSelectedBranchId();
+      // Use resolvedBranchIdRef (UUID after hydration) instead of getSelectedBranchId()
+      // which may return '' or a short code that doesn't match the UUID in the payload.
+      const currentBranchId = resolvedBranchIdRef.current || storageService.getSelectedBranchId();
       if (currentBranchId && row?.store_branch_id) {
         // Resolve short codes (e.g. "br-01") to their UUID for comparison,
         // since Supabase now stores UUIDs but localStorage may still have short codes

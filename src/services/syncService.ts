@@ -240,6 +240,31 @@ class SupabaseSyncService {
     }
   }
 
+  /**
+   * Force re-subscribe with new orgId/branchId.
+   * Used when the user switches branches — destroys the current channel
+   * and creates a new one with the correct server-side filters.
+   * Unlike unsubscribeRealtime(), this keeps existing callbacks registered.
+   */
+  resubscribeRealtime(orgId?: string, branchId?: string) {
+    // Cancel any pending reconnect
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    // Destroy current channel
+    if (this.channel) {
+      supabase.removeChannel(this.channel);
+      this.channel = null;
+    }
+    // Update reconnect state
+    this._reconnectOrgId = orgId;
+    this._reconnectBranchId = branchId;
+    this._reconnectAttempts = 0;
+    // Re-create channel (callbacks are still registered)
+    this._doSubscribe(orgId, branchId);
+  }
+
   // ─── GENERIC CRUD OPERATIONS (OFFLINE-FIRST) ───────────────────
 
   /**
