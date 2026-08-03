@@ -13,7 +13,6 @@ import {
   Plus,
   Minus,
 } from 'lucide-react';
-import QRCode from 'qrcode';
 import {
   CartItem,
   Customer,
@@ -24,6 +23,8 @@ import {
   UserProfile,
 } from '../../types';
 import { storageService } from '../../services/storageService';
+import { pixConfigService } from '../../services/pixConfigService';
+import { generatePixPayload, generatePixQrCode } from '../../lib/pix';
 import { posAudio } from '../../services/audioService';
 import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
 import { LoadingButton } from '../shared/LoadingButton';
@@ -41,48 +42,6 @@ interface PaymentModalProps {
   settings: SystemSettings;
   user: UserProfile;
   onSaleSuccess: (sale: Sale) => void;
-}
-
-function crc16Ccitt(str: string): string {
-  let crc = 0xFFFF;
-  for (let i = 0; i < str.length; i++) {
-    crc ^= str.charCodeAt(i) << 8;
-    for (let j = 0; j < 8; j++) {
-      if (crc & 0x8000) crc = (crc << 1) ^ 0x1021;
-      else crc <<= 1;
-      crc &= 0xFFFF;
-    }
-  }
-  return crc.toString(16).toUpperCase().padStart(4, '0');
-}
-
-/** Strip non-ASCII chars — PIX/BRCode uses ISO-8859-1 (Latin-1) */
-function stripAscii(str: string): string {
-  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '').trim();
-}
-
-function buildPixPayload(pixKey: string, amount: number, merchantName: string, merchantCity: string): string {
-  const tlv = (tag: string, value: string) => `${tag}${value.length.toString().padStart(2, '0')}${value}`;
-
-  const merchantNameClean = stripAscii((merchantName || 'HD-SYSTEM')).slice(0, 25);
-  const merchantCityClean = stripAscii((merchantCity || 'SAO PAULO')).slice(0, 15);
-  const amountStr = amount > 0 ? amount.toFixed(2) : '';
-
-  let payload = '';
-  payload += tlv('00', '01');  // Payload Format Indicator
-  payload += tlv('26', tlv('00', 'br.gov.bcb.pix') + tlv('01', pixKey));  // Merchant Account Info
-  payload += tlv('52', '0000');  // Merchant Category Code
-  payload += tlv('53', '986');  // Transaction Currency (BRL)
-  if (amount > 0) payload += tlv('54', amountStr);  // Transaction Amount
-  payload += tlv('58', 'BR');  // Country Code
-  payload += tlv('59', merchantNameClean);  // Merchant Name
-  payload += tlv('60', merchantCityClean);  // Merchant City
-  payload += tlv('62', tlv('05', '***'));  // Additional Data
-
-  const crcBase = payload + '6304';
-  const crc = crc16Ccitt(crcBase);
-
-  return crcBase + crc;
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
@@ -131,23 +90,48 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   // QR Code data URL for PIX (generated async)
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [pixPayload, setPixPayload] = useState<string>('');
+
+  // Resolve effective PIX config per branch (pixConfigService > settings.pixKey)
+  const branchId = storageService.getSelectedBranchId();
+  const effectivePixKey = pixConfigService.getEffectivePixKey(branchId, settings.pixKey) || '';
+  const effectiveTitle = pixConfigService.getEffectiveTitle(branchId, settings.tradeName);
+  const effectiveCity = pixConfigService.getEffectiveCity(branchId, settings.city);
 
   // Generate QR code data URL whenever PIX details change
   const generateQr = useCallback(async () => {
+    if (!effectivePixKey) {
+      setQrDataUrl('');
+      setPixPayload('');
+      return;
+    }
     try {
-      const pixPayload = buildPixPayload(settings.pixKey, totalAmount, settings.tradeName, settings.city);
-      const dataUrl = await QRCode.toDataURL(pixPayload, {
-        errorCorrectionLevel: 'M',
-        margin: 1,
+      const identificador = `VEN-${Date.now()}`;
+      const payload = generatePixPayload({
+        chavePix: effectivePixKey,
+        valor: totalAmount,
+        nomeTitular: effectiveTitle,
+        cidade: effectiveCity,
+        identificador,
+      });
+      setPixPayload(payload);
+
+      const dataUrl = await generatePixQrCode({
+        chavePix: effectivePixKey,
+        valor: totalAmount,
+        nomeTitular: effectiveTitle,
+        cidade: effectiveCity,
+        identificador,
         width: 250,
-        color: { dark: '#000000', light: '#FFFFFF' },
+        margin: 1,
       });
       setQrDataUrl(dataUrl);
     } catch (e) {
       console.error('[HD-Sync] QR code generation failed:', e);
       setQrDataUrl('');
+      setPixPayload('');
     }
-  }, [settings.pixKey, totalAmount, settings.tradeName, settings.city]);
+  }, [effectivePixKey, effectiveTitle, effectiveCity, totalAmount]);
 
   useEffect(() => {
     if (method === 'pix' && isOpen) {
@@ -224,7 +208,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const changeDue = Math.max(0, cashGiven - totalAmount);
 
   const handleCopyPix = () => {
-    const pixPayload = buildPixPayload(settings.pixKey, totalAmount, settings.tradeName, settings.city);
+    if (!pixPayload) return;
     navigator.clipboard.writeText(pixPayload);
     setPixCopied(true);
     posAudio.click();
@@ -619,14 +603,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
                 {/* METHOD: PIX */}
                 {method === 'pix' && (() => {
-                  const activePixKey = settings.pixKey || 'Nenhuma chave configurada';
+                  const activePixKey = effectivePixKey || 'Nenhuma chave configurada';
+                  const hasPixConfig = !!effectivePixKey;
 
                   return (
                     <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/20 flex flex-col sm:flex-row items-center gap-4">
                       {/* Dynamic QR Code Box */}
                       <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex flex-col items-center shrink-0 w-44 text-center">
                         <div className="w-36 h-36 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center overflow-hidden p-1 relative">
-                          {qrDataUrl ? (
+                          {!hasPixConfig ? (
+                            <div className="text-xs text-red-400 text-center px-2">
+                              <AlertCircle className="w-6 h-6 mx-auto mb-1 text-red-400" />
+                              Chave PIX não configurada
+                            </div>
+                          ) : qrDataUrl ? (
                             <img
                               src={qrDataUrl}
                               alt="QR Code PIX"

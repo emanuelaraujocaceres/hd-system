@@ -17,9 +17,11 @@ import {
   Mail,
   UserPlus,
   Tv,
+  QrCode,
 } from 'lucide-react';
 import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions } from '../../types';
 import { storageService } from '../../services/storageService';
+import { pixConfigService, PixBranchConfig, PixKeyType } from '../../services/pixConfigService';
 import { posAudio } from '../../services/audioService';
 import { supabase } from '../../lib/supabase';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
@@ -74,6 +76,68 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   // TV Showcase Settings State
   const [tvSlideSpeed, setTvSlideSpeed] = useState(settings.tvSlideSpeed || 6);
   const [tvDisplayMode, setTvDisplayMode] = useState<'single' | 'grid'>(settings.tvDisplayMode || 'single');
+
+  // ── PIX Config per branch ───────────────────────────────────
+  const currentBranchId = storageService.getSelectedBranchId();
+  const [pixTipoChave, setPixTipoChave] = useState<PixKeyType>('cpf');
+  const [pixChave, setPixChave] = useState('');
+  const [pixNomeTitular, setPixNomeTitular] = useState('');
+  const [pixCidade, setPxCidade] = useState('');
+  const [pixAtivo, setPixAtivo] = useState(true);
+  const [savingPix, setSavingPix] = useState(false);
+
+  // Load PIX config for current branch
+  useEffect(() => {
+    if (currentBranchId) {
+      const config = pixConfigService.getConfig(currentBranchId);
+      if (config) {
+        setPixTipoChave(config.tipoChave);
+        setPixChave(config.chavePix);
+        setPixNomeTitular(config.nomeTitular);
+        setPxCidade(config.cidade);
+        setPixAtivo(config.ativo);
+      } else {
+        // Defaults from global settings
+        setPixTipoChave('cpf');
+        setPixChave(settings.pixKey || '');
+        setPixNomeTitular(settings.tradeName || '');
+        setPxCidade(settings.city || '');
+        setPixAtivo(true);
+      }
+    }
+  }, [currentBranchId, settings]);
+
+  const handleSavePix = async () => {
+    if (!currentBranchId) {
+      setErrorMessage('Nenhuma filial selecionada.');
+      return;
+    }
+    if (!pixChave.trim()) {
+      setErrorMessage('Informe a chave PIX.');
+      return;
+    }
+    if (!pixConfigService.validateChavePix(pixChave, pixTipoChave)) {
+      setErrorMessage('Chave PIX inválida para o tipo selecionado.');
+      return;
+    }
+    setSavingPix(true);
+    try {
+      const config: PixBranchConfig = {
+        chavePix: pixChave.trim(),
+        tipoChave: pixTipoChave,
+        nomeTitular: pixNomeTitular.trim() || settings.tradeName,
+        cidade: pixCidade.trim() || settings.city || 'SAO PAULO',
+        ativo: pixAtivo,
+      };
+      pixConfigService.saveConfig(currentBranchId, config);
+      posAudio.chime();
+      setSuccessMessage('Configuração PIX salva com sucesso!');
+    } catch (err) {
+      setErrorMessage(friendlyErrorMessage(err, 'Erro ao salvar configuração PIX.'));
+    } finally {
+      setSavingPix(false);
+    }
+  };
 
   // Branch Modal / Edit State
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
@@ -552,23 +616,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           <div className="p-6 rounded-3xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm space-y-4">
             <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-[#27272a] pb-3">
               <Printer className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <span>Chave PIX & Impressão de Comprovantes</span>
+              <span>Impressão de Comprovantes</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                  Chave PIX Principal para QR Code
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={pixKey}
-                  onChange={(e) => setPixKey(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-mono text-slate-900 dark:text-white"
-                />
-              </div>
-
               <div>
                 <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
                   Largura do Papel da Impressora Térmica
@@ -596,6 +647,117 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 Abrir modal de comprovante automaticamente ao finalizar venda
               </label>
             </div>
+          </div>
+
+          {/* ── PIX CONFIG PER BRANCH ──────────────────────────── */}
+          <div className="p-6 rounded-3xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm space-y-4">
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-[#27272a] pb-3">
+              <QrCode className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <span>Chave PIX por Filial</span>
+              {currentBranchId && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 ml-auto">
+                  Filial Ativa
+                </span>
+              )}
+            </div>
+
+            {!currentBranchId ? (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>Selecione uma filial no menu lateral para configurar a chave PIX.</span>
+              </div>
+            ) : (
+              <div className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                      Tipo da Chave PIX
+                    </label>
+                    <select
+                      value={pixTipoChave}
+                      onChange={(e) => setPixTipoChave(e.target.value as PixKeyType)}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
+                    >
+                      <option value="cpf">CPF</option>
+                      <option value="cnpj">CNPJ</option>
+                      <option value="telefone">Telefone</option>
+                      <option value="email">E-mail</option>
+                      <option value="aleatoria">Chave Aleatoria</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                      Chave PIX
+                    </label>
+                    <input
+                      type="text"
+                      value={pixChave}
+                      onChange={(e) => setPixChave(e.target.value)}
+                      placeholder={pixConfigService.getPlaceholder(pixTipoChave)}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-mono text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                      Nome do Titular
+                    </label>
+                    <input
+                      type="text"
+                      value={pixNomeTitular}
+                      onChange={(e) => setPixNomeTitular(e.target.value)}
+                      placeholder={settings.tradeName || 'Nome do titular'}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                      Cidade
+                    </label>
+                    <input
+                      type="text"
+                      value={pixCidade}
+                      onChange={(e) => setPxCidade(e.target.value)}
+                      placeholder={settings.city || 'SAO PAULO'}
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="pixAtivo"
+                    checked={pixAtivo}
+                    onChange={(e) => setPixAtivo(e.target.checked)}
+                    className="w-4 h-4 rounded text-indigo-600 cursor-pointer"
+                  />
+                  <label htmlFor="pixAtivo" className="text-xs font-semibold text-slate-700 dark:text-[#a1a1aa] cursor-pointer">
+                    Ativar pagamento PIX para esta filial
+                  </label>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={handleSavePix}
+                    disabled={savingPix}
+                    className="min-h-[44px] px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{savingPix ? 'Salvando...' : 'Salvar Config PIX'}</span>
+                  </button>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-[11px] text-slate-500 dark:text-[#71717a]">
+                  <strong>Como funciona:</strong> O QR Code PIX no PDV usa a chave configurada acima para a filial atual.
+                  Se nao houver chave configurada, usa a chave global (campo acima).
+                  O cliente escaneia o QR Code, paga, e voce clica em "Recebido" para finalizar.
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end">
