@@ -176,7 +176,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
           
           <div className="flex justify-center">
             <img
-              src="/logo-hd-system/logo-login.png"
+              src="/logo-hd-system/logo-login.png?v=2"
               alt="HD-System"
               className="w-80 h-80 max-w-full object-contain rounded-3xl border-2 border-white/20 backdrop-blur-md mb-5 shadow-xl"
             />
