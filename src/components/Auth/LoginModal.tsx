@@ -171,21 +171,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
       <div className="w-full max-w-md bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
         {/* Top Header Banner */}
-        <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-black p-10 pb-6 text-white text-center relative overflow-hidden">
+        <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-black p-12 pb-8 text-white text-center relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.2),transparent_50%)] pointer-events-none" />
           
           <div className="flex justify-center">
             <img
               src="/logo-hd-system/android-chrome-192x192.png"
               alt="HD-System"
-              className="w-40 h-40 rounded-3xl object-contain border-2 border-white/20 backdrop-blur-md mb-4 shadow-xl"
+              className="w-72 h-72 max-w-full object-contain rounded-3xl border-2 border-white/20 backdrop-blur-md mb-5 shadow-xl"
             />
           </div>
 
           <h2 className="text-xl font-bold tracking-tight text-white">
             Acesso ao Sistema
           </h2>
-          <p className="text-xs text-slate-300 mt-1 max-w-xs mx-auto">
+          <p className="text-xs text-slate-300 mt-2 max-w-xs mx-auto">
             Entre com sua conta cadastrada
           </p>
 
