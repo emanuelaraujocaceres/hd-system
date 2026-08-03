@@ -78,7 +78,7 @@ export const QuickProductModal: React.FC<QuickProductModalProps> = ({
           'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80',
         active: true,
         updatedAt: new Date().toISOString(),
-        storeBranchId: user?.storeBranchId,
+        storeBranchId: storageService.getSelectedBranchId() || user?.storeBranchId,
       };
       storageService.saveProduct(newProd);
       posAudio.chime();

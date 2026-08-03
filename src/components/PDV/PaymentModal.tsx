@@ -284,7 +284,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         operatorName: user.name,
         customerId: selectedCustomer?.id,
         customerName: selectedCustomer?.name || 'Cliente Não Identificado',
-        storeBranchId: user.storeBranchId,
+        storeBranchId: branchId,
         items: cartItems.map((ci) => ({
           productId: ci.product.id,
           productName: ci.product.name,

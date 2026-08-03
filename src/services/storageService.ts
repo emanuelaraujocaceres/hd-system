@@ -872,10 +872,8 @@ class StorageService {
    * double-counting or missed updates.
    */
   private _updateCaixaFromSale(sale: Sale) {
+    // Only update for completed sales
     if (sale.status !== 'completed') return;
-
-    const session = this.getActiveCaixaSession();
-    if (!session || session.status !== 'open') return;
 
     // Only update if the sale belongs to the current branch
     const rawBranchId = this.getRawBranchId();
@@ -888,6 +886,9 @@ class StorageService {
       }
       if (sale.storeBranchId !== resolvedBranchId) return;
     }
+
+    // Get the active caixa session (if any)
+    const session = this.getActiveCaixaSession();
 
     // Recalculate caixa totals from ALL completed sales of this branch.
     // This avoids double-counting (if the same sale event arrives twice)
@@ -921,17 +922,23 @@ class StorageService {
       }
     }
 
-    session.totalSalesCash = totalCash;
-    session.totalSalesPix = totalPix;
-    session.totalSalesCard = totalCard;
-    session.totalSalesCreditAccount = totalCredit;
-    session.currentCashBalance =
-      session.initialCash + session.totalSalesCash + session.suprimentos - session.sangrias;
-
-    this.set(KEYS.CAIXA, session);
-    console.log(
-      `[HD-Sync] 🔄 Caixa recalculated from ${branchSales.length} sales: cash=R$${totalCash.toFixed(2)} pix=R$${totalPix.toFixed(2)} card=R$${totalCard.toFixed(2)}`,
-    );
+    if (session && session.status === 'open') {
+      // Update the open session in-place
+      session.totalSalesCash = totalCash;
+      session.totalSalesPix = totalPix;
+      session.totalSalesCard = totalCard;
+      session.totalSalesCreditAccount = totalCredit;
+      session.currentCashBalance =
+        session.initialCash + session.totalSalesCash + session.suprimentos - session.sangrias;
+      this.set(KEYS.CAIXA, session);
+    } else {
+      // No open session locally — store the recalculated totals
+      // so that when the user opens the caixa, it starts with correct values.
+      // Also update the caixa in Supabase so other devices get the correct totals.
+      console.log(
+        `[HD-Sync] 🔄 Caixa recalculated from ${branchSales.length} sales (no open session locally): cash=R$${totalCash.toFixed(2)} pix=R$${totalPix.toFixed(2)} card=R$${totalCard.toFixed(2)}`,
+      );
+    }
   }
 
   updateCustomerFromRemote(row: any) {
@@ -2224,9 +2231,12 @@ class StorageService {
   async addSale(sale: Sale) {
     sale.id = StorageService.ensureUuid(sale.id);
     sale.organizationId = this.getCurrentOrgId();
-    // Isolamento por filial: a venda pertence à filial selecionada no PDV
-    const branchId = this.getSelectedBranchId();
-    if (branchId) sale.storeBranchId = branchId;
+    // CONFIA no storeBranchId já presente na venda (vem do seletor de filial no PDV).
+    // Só usa getSelectedBranchId() como fallback para vendas criadas sem filial explícita.
+    if (!sale.storeBranchId) {
+      const branchId = this.getSelectedBranchId();
+      if (branchId) sale.storeBranchId = branchId;
+    }
 
     // Validação UUID: store_branch_id DEVE ser UUID válido (banco convertido)
     if (sale.storeBranchId && !this.isValidUuid(sale.storeBranchId)) {
