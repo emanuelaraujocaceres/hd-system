@@ -122,10 +122,12 @@ class SupabaseSyncService {
    * Separated from subscribeRealtime() to allow reconnection.
    */
   private _doSubscribe(orgId?: string, branchId?: string) {
-    // Tabelas que possuem store_branch_id no banco (filtradas por filial)
+    // TODAS as tabelas agora possuem store_branch_id NOT NULL (banco convertido).
+    // Todas são filtradas por filial no Realtime.
     const branchScopedTables: TableName[] = [
-      'products', 'customers', 'suppliers', 'sales',
-      'financial_transactions', 'cash_sessions', 'stock_movements', 'system_users',
+      'products', 'categories', 'customers', 'suppliers',
+      'sales', 'sale_items', 'financial_transactions', 'cash_sessions',
+      'stock_movements', 'store_branches', 'system_users', 'system_settings',
     ];
 
     const tables: TableName[] = [

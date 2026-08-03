@@ -57,6 +57,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
       }
       const res = storageService.loginWithGoogle(email, password);
       if (res.success && res.user) {
+        // Auto-selecionar filial do usuário no login local
+        if (res.user.storeBranchId) {
+          storageService.setSelectedBranchId(res.user.storeBranchId);
+        }
         syncQueue.clearQueue(); // Limpa operações pendentes de sessão anterior
         setIsLoading(false);
         onLoginSuccess(res.user);
@@ -130,6 +134,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
               password: undefined,
             };
             storageService.saveUserProfile(userProfile);
+            // Auto-selecionar filial do usuário no login
+            if (userProfile.storeBranchId) {
+              storageService.setSelectedBranchId(userProfile.storeBranchId);
+            }
             syncQueue.clearQueue(); // Limpa fila de sessão anterior (org diferente)
             setIsLoading(false);
             onLoginSuccess(userProfile);

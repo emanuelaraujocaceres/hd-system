@@ -368,7 +368,7 @@ class StorageService {
       organization_id: this.getCurrentOrgId(),
       name: c.name,
       color: c.color || '#6366f1',
-      store_branch_id: (c as any).storeBranchId || null,
+      store_branch_id: c.storeBranchId || this.getSelectedBranchId() || null,
     });
   }
 
@@ -606,6 +606,7 @@ class StorageService {
       organization_id: this.getCurrentOrgId(),
       settings: s,
       updated_at: new Date().toISOString(),
+      store_branch_id: this.getSelectedBranchId() || null,
     });
   }
 
@@ -1060,6 +1061,8 @@ class StorageService {
       console.log(`[HD-Sync] 🔄 Hydrating with branch: ${resolvedBranchId || 'ALL (no branch filter)'}`);
 
       // PASSO 3: Buscar todos os dados filtrados pela filial
+      // Todas as tabelas agora têm store_branch_id NOT NULL (banco convertido).
+      // store_branches: já buscado no PASSO 1 (precisamos de TODAS para o seletor)
       const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems] =
         await Promise.all([
           syncService.fetchRows('products', resolvedBranchId),
@@ -1068,11 +1071,11 @@ class StorageService {
           syncService.fetchRows('suppliers', resolvedBranchId),
           syncService.fetchRows('sales', resolvedBranchId),
           syncService.fetchRows('financial_transactions', resolvedBranchId),
-          syncService.fetchRows('system_settings'),
+          syncService.fetchRows('system_settings', resolvedBranchId),
           syncService.fetchRows('system_users', resolvedBranchId),
           syncService.fetchRows('stock_movements', resolvedBranchId),
           syncService.fetchRows('cash_sessions', resolvedBranchId),
-          syncService.fetchRows('sale_items'),
+          syncService.fetchRows('sale_items', resolvedBranchId),
         ]);
 
       // ── HELPER: merge cloud rows into local data by ID ──────────
@@ -1859,12 +1862,16 @@ class StorageService {
   getCategories(): Category[] {
     const fallback = this.isDefaultOrg() ? INITIAL_CATEGORIES : [];
     const all = this.get<Category[]>(KEYS.CATEGORIES, fallback);
-    return this.filterByOrg<Category>(all);
+    // categories agora tem store_branch_id NOT NULL — filtrar por filial
+    return this.filterBySelectedBranch<Category>(this.filterByOrg<Category>(all));
   }
 
   saveCategory(category: Category) {
     category.id = StorageService.ensureUuid(category.id);
     category.organizationId = this.getCurrentOrgId();
+    // store_branch_id agora é NOT NULL no banco
+    const branchId = this.getSelectedBranchId();
+    if (branchId) category.storeBranchId = branchId;
     const categories = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []);
     const idx = categories.findIndex((c) => c.id === category.id);
     if (idx >= 0) {

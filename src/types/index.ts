@@ -69,6 +69,7 @@ export interface Category {
   icon?: string;
   color?: string;
   description?: string;
+  storeBranchId?: string; // isolamento por filial
   organizationId?: string; // multi-tenant
 }
 
