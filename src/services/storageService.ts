@@ -1031,9 +1031,9 @@ class StorageService {
 
     const localSession = this.getActiveCaixaSession();
 
-    // Same session, both open → MERGE counters (don't ignore remote)
-    // Remote may have sales from other devices that local doesn't know about yet.
-    // We take the MAX of each counter to avoid losing data from either device.
+    // Same session, both open → adopt remote counters (cloud is authoritative).
+    // Using Math.max previously kept stale local values (e.g., R$ 54,00 from
+    // old data) instead of the correct cloud totals (R$ 23,00).
     if (localSession && localSession.id === row.id && localSession.status === 'open') {
       const remoteCash = parseFloat(row.total_sales_cash) || 0;
       const remotePix = parseFloat(row.total_sales_pix) || 0;
@@ -1042,19 +1042,18 @@ class StorageService {
       const remoteSuprimentos = parseFloat(row.suprimentos) || 0;
       const remoteSangrias = parseFloat(row.sangrias) || 0;
 
-      const merged = {
+      const adopted = {
         ...localSession,
-        totalSalesCash: Math.max(localSession.totalSalesCash, remoteCash),
-        totalSalesPix: Math.max(localSession.totalSalesPix, remotePix),
-        totalSalesCard: Math.max(localSession.totalSalesCard, remoteCard),
-        totalSalesCreditAccount: Math.max(localSession.totalSalesCreditAccount, remoteCredit),
-        suprimentos: Math.max(localSession.suprimentos, remoteSuprimentos),
-        sangrias: Math.max(localSession.sangrias, remoteSangrias),
+        totalSalesCash: remoteCash,
+        totalSalesPix: remotePix,
+        totalSalesCard: remoteCard,
+        totalSalesCreditAccount: remoteCredit,
+        suprimentos: remoteSuprimentos,
+        sangrias: remoteSangrias,
       };
-      // Recalculate balance with merged values
-      merged.currentCashBalance = merged.initialCash + merged.totalSalesCash + merged.suprimentos - merged.sangrias;
-      this.set(KEYS.CAIXA, merged);
-      console.log(`[HD-Sync] 🔄 Caixa merged: cash=R$${merged.totalSalesCash.toFixed(2)} pix=R$${merged.totalSalesPix.toFixed(2)} card=R$${merged.totalSalesCard.toFixed(2)}`);
+      adopted.currentCashBalance = adopted.initialCash + adopted.totalSalesCash + adopted.suprimentos - adopted.sangrias;
+      this.set(KEYS.CAIXA, adopted);
+      console.log(`[HD-Sync] 🔄 Caixa adotado do cloud: cash=R$${adopted.totalSalesCash.toFixed(2)} pix=R$${adopted.totalSalesPix.toFixed(2)} card=R$${adopted.totalSalesCard.toFixed(2)}`);
       return;
     }
 
