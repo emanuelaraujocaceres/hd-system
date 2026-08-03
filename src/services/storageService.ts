@@ -191,6 +191,23 @@ class StorageService {
     return items.filter((i) => i.storeBranchId === branchId);
   }
 
+  /**
+   * Verifica se um registro remoto pertence à filial atual.
+   * Usado nos *FromRemote() como defense-in-depth (o filtro primário
+   * é o Realtime no App.tsx, mas se um evento passar, este check bloqueia).
+   */
+  private isRemoteFromCurrentBranch(row: any): boolean {
+    const rawBranchId = this.getRawBranchId();
+    if (!rawBranchId || !row?.store_branch_id) return true; // sem filtro: aceitar
+    let resolved = rawBranchId;
+    if (!StorageService.UUID_RE.test(resolved)) {
+      const branches = this.getBranches();
+      const matched = branches.find((b) => b.id === resolved || b.code === resolved);
+      if (matched) resolved = matched.id;
+    }
+    return row.store_branch_id === resolved;
+  }
+
   // ─── MIGRAÇÃO LEGACY: TEXT → UUID (uma única vez) ─────────────────────
   private static MIGRATION_KEY = 'hd_system_uuid_migration_done_v2';
 
@@ -615,6 +632,12 @@ class StorageService {
   // These convert Supabase row format back to our app types and update localStorage.
 
   updateProductFromRemote(row: any) {
+    // Branch isolation: reject remote products from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote product from other branch: ${row.store_branch_id}`);
+      return;
+    }
+
     const products = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
     const mapped: Product = {
       id: row.id,
@@ -697,6 +720,12 @@ class StorageService {
   }
 
   updateSaleFromRemote(row: any) {
+    // Branch isolation: reject remote sales from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote sale from other branch: ${row.store_branch_id}`);
+      return;
+    }
+
     const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
     const existing = sales.find((s) => s.id === row.id);
     console.log(`[HD-Sync] 🔄 updateSaleFromRemote: id=${row.id}, exists=${!!existing}, row.customer_name=${row.customer_name}, row.notes=${row.notes}`);
@@ -949,6 +978,12 @@ class StorageService {
   }
 
   updateStockMovementFromRemote(row: any) {
+    // Branch isolation: reject remote movements from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote stock movement from other branch: ${row.store_branch_id}`);
+      return;
+    }
+
     const movements = this.getMovements();
     const mapped: StockMovement = {
       id: row.id,
@@ -1093,7 +1128,7 @@ class StorageService {
       // Keeps ALL local records. Cloud records override matching by ID.
       // Also syncs local-only records to Supabase so they aren't lost on future hydrations.
       // Returns null when neither local nor cloud has real data (prevents INITIAL_* from being written).
-      const mergeBy = <T>(
+      const mergeBy = <T extends { storeBranchId?: string }>(
         key: string,
         local: T[],
         cloud: any[],
@@ -1139,9 +1174,15 @@ class StorageService {
           return extraMerge ? extraMerge(loc, cm) : cm;
         });
 
-        // Add local-only records not in cloud
+        // CRITICAL: Add local-only records not in cloud, but ONLY if they
+        // belong to the current branch. Prevents cross-branch data leaks
+        // (e.g. customers from Campinas appearing in São Paulo).
         for (const item of local) {
           if (!cloudIds.has(getId(item))) {
+            // If resolved branch is set, only keep local items from this branch
+            if (resolvedBranchId && item.storeBranchId && item.storeBranchId !== resolvedBranchId) {
+              continue; // skip cross-branch local-only items
+            }
             merged.push(item);
           }
         }
@@ -1331,9 +1372,18 @@ class StorageService {
               updatedAt: r.updated_at || new Date().toISOString(),
             };
           });
+          // CRITICAL: Filter local-only sales by resolved branch to prevent
+          // cross-branch data leaks (e.g. Campinas sales appearing in São Paulo).
+          // Without this, switching branches leaves old sales in localStorage
+          // that get merged into the new branch's view.
           const mergedSales = [
             ...cloudMapped,
-            ...localSales.filter((s) => !cloudSaleIds.has(s.id)),
+            ...localSales.filter((s) => {
+              if (cloudSaleIds.has(s.id)) return false; // already in cloud
+              // If we have a resolved branch, only keep local sales from THIS branch
+              if (resolvedBranchId) return s.storeBranchId === resolvedBranchId;
+              return true; // no branch filter: keep all (edge case)
+            }),
           ];
           // Sort: newest first by date (defensive — cloud ORDER BY + local safety net)
           mergedSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
