@@ -5,6 +5,17 @@
 -- Execute este SQL no Supabase SQL Editor para aplicar.
 -- ============================================================
 
+-- ─── FUNÇÃO AUXILIAR: retorna organization_id do usuário ──
+CREATE OR REPLACE FUNCTION public.get_auth_user_org_id()
+RETURNS UUID
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT organization_id FROM system_users WHERE id = auth.uid() LIMIT 1;
+$$;
+
 -- ─── FUNÇÃO: retorna o nível de acesso do usuário autenticado ──
 -- 0 = Desenvolvedor (superadmin), 1 = Admin, 2 = Colaborador
 CREATE OR REPLACE FUNCTION public.get_user_access_level()
@@ -79,7 +90,7 @@ AS $$
 $$;
 
 -- ─── FUNÇÃO: verifica se o usuário pode acessar uma filial ─────
--- Parâmetros: target_branch_id
+-- Parâmetros: target_branch_id (UUID ou TEXT)
 -- Retorna: true se o usuário pode ver dados daquela filial
 CREATE OR REPLACE FUNCTION public.can_access_branch(target_branch_id UUID)
 RETURNS BOOLEAN
@@ -103,7 +114,7 @@ AS $$
       EXISTS (
         SELECT 1 FROM system_users su
         WHERE su.id = auth.uid()
-          AND su.store_branch_id = target_branch_id
+          AND su.store_branch_id::TEXT = target_branch_id::TEXT  -- 🔥 CAST FIX
       )
     ELSE FALSE
   END;
@@ -132,6 +143,7 @@ GRANT EXECUTE ON FUNCTION public.can_access_module(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.can_perform_action(TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.can_access_branch(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_access_level_label() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_auth_user_org_id() TO authenticated;
 
 -- ============================================================
 -- FIM DA MIGRAÇÃO IAM
