@@ -1014,22 +1014,54 @@ class StorageService {
 
   async hydrateFromCloud(branchId?: string): Promise<boolean> {
     try {
-      // Resolve branchId to UUID — could be a short code (e.g. "br-01")
+      // PASSO 1: Buscar branches do Supabase PRIMEIRO para poder resolver
+      // short codes (e.g. "br-01") → UUID. Antes, a resolução usava
+      // getBranches() do localStorage que podia estar vazio (org não-default).
+      const cloudBranches = await syncService.fetchRows('store_branches');
+
+      // Merge branches into localStorage para que getBranches() retorne dados atualizados
+      if (cloudBranches.length > 0) {
+        const localBranches = this.get<StoreBranch[]>(KEYS.BRANCHES, this.isDefaultOrg() ? INITIAL_BRANCHES : []);
+        const merged = [...localBranches];
+        for (const row of cloudBranches) {
+          const mapped: StoreBranch = {
+            id: row.id, name: row.name, code: row.code,
+            cnpj: row.cnpj || '', city: row.city || '', state: row.state || '',
+            address: row.address || '', phone: row.phone || '',
+            isHeadquarters: row.is_headquarters || false,
+            active: row.active !== false,
+            organizationId: row.organization_id || undefined,
+          };
+          const idx = merged.findIndex((b) => b.id === mapped.id);
+          if (idx >= 0) merged[idx] = mapped;
+          else merged.push(mapped);
+        }
+        this.set(KEYS.BRANCHES, merged);
+      }
+
+      // PASSO 2: Agora resolver o branchId com branches disponíveis
       let resolvedBranchId: string | undefined = branchId;
       if (resolvedBranchId && !StorageService.UUID_RE.test(resolvedBranchId)) {
         const branches = this.getBranches();
         const matched = branches.find((b) => b.id === resolvedBranchId || b.code === resolvedBranchId);
         resolvedBranchId = matched ? matched.id : undefined;
       }
+      // Se branchId era short code mas não resolveu, tentar com as branches do cloud
+      if (branchId && !resolvedBranchId && cloudBranches.length > 0) {
+        const matched = cloudBranches.find((b: any) => b.id === branchId || b.code === branchId);
+        if (matched) resolvedBranchId = matched.id;
+      }
 
-      const [products, categories, customers, suppliers, sales, branches, financial, settings, users, movements, caixa, saleItems] =
+      console.log(`[HD-Sync] 🔄 Hydrating with branch: ${resolvedBranchId || 'ALL (no branch filter)'}`);
+
+      // PASSO 3: Buscar todos os dados filtrados pela filial
+      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems] =
         await Promise.all([
           syncService.fetchRows('products', resolvedBranchId),
           syncService.fetchRows('categories', resolvedBranchId),
           syncService.fetchRows('customers', resolvedBranchId),
           syncService.fetchRows('suppliers', resolvedBranchId),
           syncService.fetchRows('sales', resolvedBranchId),
-          syncService.fetchRows('store_branches'),
           syncService.fetchRows('financial_transactions', resolvedBranchId),
           syncService.fetchRows('system_settings'),
           syncService.fetchRows('system_users', resolvedBranchId),
@@ -1297,21 +1329,11 @@ class StorageService {
         }
       }
 
-      // ── BRANCHES ──────────────────────────────────────────────────
-      {
-         const local = this.get<StoreBranch[]>(KEYS.BRANCHES, this.isDefaultOrg() ? INITIAL_BRANCHES : []);
-         const merged = mergeBy(KEYS.BRANCHES, local, branches,
-          (r: any) => ({
-            id: r.id, name: r.name, code: r.code, cnpj: r.cnpj || '',
-            city: r.city || '', state: r.state || '', address: r.address || '',
-            phone: r.phone || '', isHeadquarters: r.is_headquarters || false,
-            active: r.active !== false,
-            organizationId: r.organization_id || this.getCurrentOrgId(),
-          }),
-          (b) => this.syncBranch(b),
-        );
-        if (merged !== null) this.set(KEYS.BRANCHES, merged);
-      }
+      // ── BRANCHES (já mergeadas no início do hydrateFromCloud) ──────
+      // Branches são carregadas PRIMEIRO para resolver short codes → UUID.
+      // O merge já foi feito no PASSO 1. Esta seção está aqui apenas para
+      // compatibilidade com o mergeBy existente — não sobrescreve o que já foi salvo.
+      // (removido: branches já foram merged no início)
 
       // ── FINANCIAL ACCOUNTS ────────────────────────────────────────
       {

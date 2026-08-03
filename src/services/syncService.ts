@@ -396,8 +396,10 @@ class SupabaseSyncService {
       while (hasMore) {
         let query = supabase.from(table).select('*');
         if (branchId) {
-          // Fetch rows where store_branch_id matches OR is null (shared data)
-          query = query.or(`store_branch_id.eq.${branchId},store_branch_id.is.null`);
+          // Filtrar APENAS pela filial especificada.
+          // Antes: .or('store_branch_id.eq.X,store_branch_id.is.null') trazia
+          // dados legados de OUTRAS filiais. Agora: filtro EXATO por branch.
+          query = query.eq('store_branch_id', branchId);
         }
         // Order by created_at DESC only for tables that have this column
         const tablesWithCreatedAt: TableName[] = ['sales', 'stock_movements', 'customers', 'system_users'];
@@ -422,7 +424,7 @@ class SupabaseSyncService {
       }
 
       if (allRows.length > 0) {
-        console.log(`[HD-Sync] Fetched ${allRows.length} rows from ${table}`);
+        console.log(`[HD-Sync] Fetched ${allRows.length} rows from ${table} (branch: ${branchId || 'ALL'})`);
       }
       return allRows;
     } catch (e) {
