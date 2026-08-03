@@ -194,6 +194,12 @@ export interface FinancialAccount {
   notes?: string;
   storeBranchId?: string;
   organizationId?: string; // multi-tenant
+  // Recorrência
+  isRecurring?: boolean;
+  recurrenceType?: 'monthly' | 'weekly' | 'biweekly';
+  recurrenceCount?: number;
+  recurrenceParentId?: string; // ID da parcela "mãe" (para agrupar parcelas)
+  installmentNumber?: number;  // Número desta parcela (1, 2, 3...)
 }
 
 export interface SystemSettings {

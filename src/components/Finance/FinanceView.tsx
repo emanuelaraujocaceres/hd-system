@@ -56,10 +56,35 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [formDueDate, setFormDueDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [formRecipient, setFormRecipient] = useState('');
   const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
+  // Recorrência
+  const [formIsRecurring, setFormIsRecurring] = useState(false);
+  const [formRecurrenceType, setFormRecurrenceType] = useState<'monthly' | 'weekly' | 'biweekly'>('monthly');
+  const [formRecurrenceCount, setFormRecurrenceCount] = useState<string>('');
   const [expandedDreRow, setExpandedDreRow] = useState<string | null>(null);
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
+
+  // ── Recorrência: parse do número de parcelas ─────────────────
+  const recurrenceCount = parseInt(formRecurrenceCount, 10) || 0;
+
+  // ── Helper: calcular data de vencimento de cada parcela ──────
+  const computeInstallmentDate = (baseDate: string, type: string, index: number): string => {
+    const d = new Date(baseDate + 'T12:00:00');
+    switch (type) {
+      case 'weekly':
+        d.setDate(d.getDate() + index * 7);
+        break;
+      case 'biweekly':
+        d.setDate(d.getDate() + index * 14);
+        break;
+      case 'monthly':
+      default:
+        d.setMonth(d.getMonth() + index);
+        break;
+    }
+    return d.toISOString().slice(0, 10);
+  };
 
   const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,23 +99,66 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     }
     setIsSaving(true);
     try {
-      const newAcc: FinancialAccount = {
-        id: editingAccount ? editingAccount.id : `fin-${Date.now()}`,
-        title: formTitle.trim(),
-        type: formType,
-        category: formCategory,
-        amount: amountValue,
-        dueDate: formDueDate,
-        status: editingAccount ? editingAccount.status : 'pending',
-        paidDate: editingAccount?.paidDate,
-        recipientOrPayer: formRecipient.trim(),
-      };
-
-      storageService.saveFinancialAccount(newAcc);
-      posAudio.chime();
-      setIsModalOpen(false);
-      setEditingAccount(null);
-      addToast('success', `Conta "${newAcc.title}" salva com sucesso.`);
+      if (editingAccount) {
+        // Editar conta existente (sem suporte a recorrência na edição)
+        const newAcc: FinancialAccount = {
+          ...editingAccount,
+          title: formTitle.trim(),
+          type: formType,
+          category: formCategory,
+          amount: amountValue,
+          dueDate: formDueDate,
+          recipientOrPayer: formRecipient.trim(),
+        };
+        storageService.saveFinancialAccount(newAcc);
+        posAudio.chime();
+        setIsModalOpen(false);
+        setEditingAccount(null);
+        addToast('success', `Conta "${newAcc.title}" atualizada com sucesso.`);
+      } else if (formIsRecurring && recurrenceCount > 0) {
+        // Criar parcelas recorrentes
+        const parentId = `fin-${Date.now()}`;
+        const branchId = storageService.getSelectedBranchId() || undefined;
+        for (let i = 0; i < recurrenceCount; i++) {
+          const dueDate = computeInstallmentDate(formDueDate, formRecurrenceType, i);
+          const installment: FinancialAccount = {
+            id: i === 0 ? parentId : `fin-${Date.now()}-${i}`,
+            title: `${formTitle.trim()} (${i + 1}/${recurrenceCount})`,
+            type: formType,
+            category: formCategory,
+            amount: amountValue,
+            dueDate,
+            status: 'pending',
+            recipientOrPayer: formRecipient.trim(),
+            storeBranchId: branchId,
+            isRecurring: true,
+            recurrenceType: formRecurrenceType,
+            recurrenceCount,
+            recurrenceParentId: parentId,
+            installmentNumber: i + 1,
+          };
+          storageService.saveFinancialAccount(installment);
+        }
+        posAudio.chime();
+        setIsModalOpen(false);
+        addToast('success', `${recurrenceCount} parcelas criadas para "${formTitle.trim()}".`);
+      } else {
+        // Conta única (sem recorrência)
+        const newAcc: FinancialAccount = {
+          id: `fin-${Date.now()}`,
+          title: formTitle.trim(),
+          type: formType,
+          category: formCategory,
+          amount: amountValue,
+          dueDate: formDueDate,
+          status: 'pending',
+          recipientOrPayer: formRecipient.trim(),
+        };
+        storageService.saveFinancialAccount(newAcc);
+        posAudio.chime();
+        setIsModalOpen(false);
+        addToast('success', `Conta "${newAcc.title}" salva com sucesso.`);
+      }
     } catch (err: any) {
       addToast('error', friendlyErrorMessage(err, 'Não foi possível salvar a conta. Tente novamente.'));
       posAudio.error();
@@ -135,6 +203,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     setFormAmount('');
     setFormDueDate(new Date().toISOString().slice(0, 10));
     setFormRecipient('');
+    setFormIsRecurring(false);
+    setFormRecurrenceType('monthly');
+    setFormRecurrenceCount('');
     setIsModalOpen(true);
   };
 
@@ -1027,6 +1098,50 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 />
               </div>
 
+              {/* ── RECORRÊNCIA (apenas para contas novas) ──── */}
+              {!editingAccount && (
+                <div className="border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-3 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formIsRecurring}
+                      onChange={(e) => setFormIsRecurring(e.target.checked)}
+                      className="rounded border-slate-300"
+                    />
+                    <span className="font-bold text-xs">Conta Recorrente?</span>
+                  </label>
+                  {formIsRecurring && (
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <div>
+                        <label className="block font-bold mb-1 text-[10px]">Frequência</label>
+                        <select
+                          value={formRecurrenceType}
+                          onChange={(e) => setFormRecurrenceType(e.target.value as any)}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl text-xs"
+                        >
+                          <option value="monthly">Mensal</option>
+                          <option value="biweekly">Quinzenal</option>
+                          <option value="weekly">Semanal</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block font-bold mb-1 text-[10px]">Nº de Parcelas</label>
+                        <input
+                          type="number"
+                          min="2"
+                          max="60"
+                          required
+                          placeholder="Ex: 12"
+                          value={formRecurrenceCount}
+                          onChange={(e) => setFormRecurrenceCount(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="block font-bold mb-1">Fornecedor / Favorecido</label>
                 <input
@@ -1052,7 +1167,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   disabled={isSaving}
                   className="px-5 py-2 rounded-xl bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold min-h-[44px]"
                 >
-                  {isSaving ? 'Salvando...' : 'Salvar Conta'}
+                  {isSaving ? 'Salvando...' : (formIsRecurring && recurrenceCount > 0 ? `Criar ${recurrenceCount} Parcelas` : 'Salvar Conta')}
                 </button>
               </div>
             </form>

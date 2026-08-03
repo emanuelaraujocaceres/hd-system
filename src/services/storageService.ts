@@ -784,6 +784,7 @@ class StorageService {
       city: '',
       state: '',
       createdAt: row.created_at || new Date().toISOString(),
+      storeBranchId: row.store_branch_id || undefined,
       organizationId: row.organization_id || undefined,
     };
     const idx = customers.findIndex((c) => c.id === mapped.id);
@@ -807,6 +808,7 @@ class StorageService {
       contactName: row.contact_person || '',
       email: row.email || '',
       phone: row.phone || '',
+      storeBranchId: row.store_branch_id || undefined,
       organizationId: row.organization_id || undefined,
     };
     const idx = suppliers.findIndex((s) => s.id === mapped.id);
@@ -1207,6 +1209,7 @@ class StorageService {
             id: r.id, name: r.name, cpfCnpj: r.cpf_cnpj || '', email: r.email || '', phone: r.phone || '',
             creditLimit: parseFloat(r.credit_limit) || 0, currentBalance: 0, loyaltyPoints: 0,
             city: '', state: '', createdAt: r.created_at || new Date().toISOString(),
+            storeBranchId: r.store_branch_id || undefined,
             organizationId: r.organization_id || this.getCurrentOrgId(),
           }),
           (c) => this.syncCustomer(c),
@@ -1221,6 +1224,7 @@ class StorageService {
           (r: any) => ({
             id: r.id, companyName: r.corporate_name || '', tradeName: r.trade_name || '',
             cnpj: r.cnpj || '', contactName: r.contact_person || '', email: r.email || '', phone: r.phone || '',
+            storeBranchId: r.store_branch_id || undefined,
             organizationId: r.organization_id || this.getCurrentOrgId(),
           }),
           (s) => this.syncSupplier(s),

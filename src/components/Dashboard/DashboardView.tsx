@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Skeleton, TableSkeleton } from '../shared/Skeleton';
 import {
   ShoppingCart,
@@ -76,6 +76,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const caixaPeriodTicket = caixaPeriodCount > 0 ? caixaPeriodRevenue / caixaPeriodCount : 0;
 
   const lowStockCount = products.filter((p) => p.currentStock <= p.minStock).length;
+
+  // ── TOP SELLING PRODUCTS THIS MONTH ────────────────────────────
+  // Agrega itens de vendas do mês atual, agrupa por produto, soma
+  // quantidades e retorna os TOP 3 mais vendidos.
+  const topSellingProducts = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    // Filtrar vendas do mês atual (apenas completadas)
+    const monthSales = sales.filter((s) => {
+      if (s.status !== 'completed') return false;
+      const d = new Date(s.date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+    // Agregar quantidades por productId
+    const qtyByProduct = new Map<string, { name: string; qty: number }>();
+    for (const sale of monthSales) {
+      for (const item of sale.items || []) {
+        const existing = qtyByProduct.get(item.productId);
+        if (existing) {
+          existing.qty += item.quantity;
+        } else {
+          qtyByProduct.set(item.productId, { name: item.productName, qty: item.quantity });
+        }
+      }
+    }
+    // Ordenar por quantidade desc e pegar TOP 3
+    return Array.from(qtyByProduct.values())
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 3);
+  }, [sales]);
 
   // Delete venda — handler único (usado no desktop e no mobile), com
   // confirmação, tratamento de erro amigável e botão "Desfazer" no toast.
@@ -505,13 +536,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* Highlight Product Widget */}
           <button onClick={() => onNavigateTab('inventory')} className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm cursor-pointer hover:shadow-md hover:border-slate-300 dark:hover:border-[#3f3f46] transition-all text-left w-full">
             <h3 className="text-xs uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a] mb-4">Destaque do Mês</h3>
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-xl shrink-0">📦</div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{products[0]?.name || 'Cerveja Artesanal IPA'}</p>
-                <p className="text-[10px] text-slate-500 dark:text-[#71717a]">412 unidades vendidas</p>
+            {topSellingProducts.length > 0 ? (
+              <div className="space-y-3">
+                {topSellingProducts.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-sm font-bold text-indigo-600 dark:text-indigo-400 shrink-0">
+                      {idx + 1}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.name}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-[#71717a]">{item.qty} unidades vendidas</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-xl shrink-0">📦</div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">Nenhum produto vendido</p>
+                  <p className="text-[10px] text-slate-500 dark:text-[#71717a]">este mês</p>
+                </div>
+              </div>
+            )}
           </button>
         </div>
       </div>
