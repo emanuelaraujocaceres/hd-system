@@ -36,6 +36,7 @@ import {
 } from './types';
 import { ToastProvider } from './components/shared/Toast';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { PermissionEngine } from './lib/iam';
 
 // Lazy-loaded views for code splitting (reduces TDZ risk from scope-hoisting)
 const InventoryView = lazy(() => import('./components/Inventory/InventoryView'));
@@ -112,17 +113,25 @@ export const App: React.FC = () => {
   const [currentBranch, setCurrentBranch] = useState<StoreBranch>(() => storageService.getSelectedBranch());
   const [user, setUser] = useState<UserProfile | null>(() => storageService.getUserProfile());
 
-  // Filtra filiais: superadmin vê todas (a menos que tenha override ativo),
-  // cada usuário vê só as da sua organização
+  // Filtra filiais usando PermissionEngine:
+  // - Developer (superadmin): vê todas as filiais (ou de uma org específica via override)
+  // - Admin: vê todas as filiais da sua organização
+  // - Collaborator: vê APENAS sua filial atribuída
   const userBranches = React.useMemo(() => {
     if (!user) return branches;
-    if (user.superadmin) {
+    const permEngine = new PermissionEngine(user);
+    if (permEngine.isDeveloper()) {
       const viewingOrg = localStorage.getItem('hd_system_viewing_org');
       if (viewingOrg) return branches.filter(b => b.organizationId === viewingOrg);
       return branches; // sem override → vê tudo
     }
-    const orgId = user.organizationId;
-    return branches.filter(b => !b.organizationId || b.organizationId === orgId);
+    if (permEngine.isAdmin()) {
+      // Admin: vê todas as filiais da sua organização
+      const orgId = user.organizationId;
+      return branches.filter(b => !b.organizationId || b.organizationId === orgId);
+    }
+    // Collaborator: vê APENAS sua filial
+    return branches.filter(b => b.id === user.storeBranchId);
   }, [branches, user]);
 
   // Load initial state and subscribe to reactive storage updates
@@ -535,20 +544,11 @@ export const App: React.FC = () => {
     // não-default (ex.: Plantão da Cerveja) que só carregavam dados após F5
     // (a hidratação do mount rodava antes do perfil existir).
     runHydration();
-    // Redirect to the first permitted tab
-    if (loggedUser.role !== 'admin') {
+    // IAM: redirect to the first permitted tab using PermissionEngine
+    const permEngine = new PermissionEngine(loggedUser);
+    if (!permEngine.isDeveloper() && !permEngine.isAdmin()) {
       const allowedTabs = ['pdv', 'inventory', 'finance', 'crm', 'dashboard', 'settings'] as const;
-      const perms = loggedUser.permissions;
-      const hasAccess = (tab: string): boolean => {
-        if (tab === 'pdv') return !!perms?.pdv;
-        if (tab === 'inventory') return !!perms?.inventory;
-        if (tab === 'finance') return !!perms?.finance;
-        if (tab === 'crm') return !!perms?.crm;
-        if (tab === 'dashboard') return !!perms?.dashboard;
-        if (tab === 'settings') return !!perms?.settings;
-        return false;
-      };
-      const firstAllowed = allowedTabs.find(t => hasAccess(t));
+      const firstAllowed = allowedTabs.find(t => permEngine.canAccessTab(t));
       if (firstAllowed) {
         setActiveTab(firstAllowed);
       }
@@ -557,14 +557,10 @@ export const App: React.FC = () => {
 
   // Keyboard shortcuts
   const shortcuts = useMemo(() => {
+    const permEngine = user ? new PermissionEngine(user) : null;
     const canAccess = (tab: string): boolean => {
-      if (user.role === 'admin') return true;
-      const p = user.permissions;
-      if (tab === 'pdv') return !!p?.pdv;
-      if (tab === 'inventory') return !!p?.inventory;
-      if (tab === 'finance') return !!p?.finance;
-      if (tab === 'crm') return !!p?.crm;
-      return false;
+      if (!permEngine) return false;
+      return permEngine.canAccessTab(tab);
     };
     // Navega para uma aba e foca a busca assim que a tela montar
     const goto = (tab: string) => {

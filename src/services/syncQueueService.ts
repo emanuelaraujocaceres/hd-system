@@ -49,6 +49,7 @@ const STORAGE_KEY = 'hd_system_sync_queue';
 class SyncQueueService {
   private listeners: Set<QueueListener> = new Set();
   private processing = false;
+  private _pendingAfterProcessing = false; // VULN-03 fix: re-schedule flag
 
   subscribe(listener: QueueListener) {
     this.listeners.add(listener);
@@ -83,6 +84,23 @@ class SyncQueueService {
   /** Add an operation to the pending queue */
   enqueue(table: TableName, action: QueueAction, payload: { data?: Record<string, any>; dataArray?: Record<string, any>[]; rowId?: string }) {
     const queue = this.getQueue();
+
+    // OFFLINE-02 fix: enforce maximum queue size to prevent localStorage overflow.
+    // When queue exceeds limit, drop oldest pending operations (keep failed ones).
+    const MAX_QUEUE_SIZE = 500;
+    if (queue.length >= MAX_QUEUE_SIZE) {
+      const pendingOps = queue.filter(op => op.status === 'pending');
+      if (pendingOps.length > 50) {
+        // Remove oldest 20% of pending operations
+        const toRemove = Math.ceil(pendingOps.length * 0.2);
+        const removeIds = new Set(pendingOps.slice(0, toRemove).map(op => op.id));
+        const trimmed = queue.filter(op => !removeIds.has(op.id));
+        this.saveQueue(trimmed);
+        console.warn(`[SyncQueue] ⚠️ Queue exceeded ${MAX_QUEUE_SIZE} — trimmed ${toRemove} oldest pending operations`);
+        return this.enqueue(table, action, payload); // Retry after trimming
+      }
+    }
+
     const op: PendingOperation = {
       id: `op-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       table,
@@ -144,7 +162,12 @@ class SyncQueueService {
 
   /** Process all pending operations in FIFO order */
   async processQueue(): Promise<{ processed: number; failed: number }> {
-    if (this.processing) return { processed: 0, failed: 0 };
+    if (this.processing) {
+      // VULN-03 fix: If already processing, mark that new items arrived
+      // so we re-process after the current cycle finishes.
+      this._pendingAfterProcessing = true;
+      return { processed: 0, failed: 0 };
+    }
     this.processing = true;
 
     let processed = 0;
@@ -217,6 +240,16 @@ class SyncQueueService {
     
     if (remaining === 0 && processed > 0) {
       console.log('[SyncQueue] 🎉 All operations synced successfully!');
+    }
+
+    // VULN-03 fix: If new items arrived during processing, re-process
+    if (this._pendingAfterProcessing) {
+      this._pendingAfterProcessing = false;
+      const newPending = this.getPendingCount();
+      if (newPending > 0) {
+        console.log(`[SyncQueue] 🔄 Re-processing ${newPending} items that arrived during previous cycle`);
+        setTimeout(() => this.processQueue(), 100); // Small delay to avoid tight loop
+      }
     }
 
     return { processed, failed };

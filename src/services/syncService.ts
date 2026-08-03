@@ -40,6 +40,11 @@ class SupabaseSyncService {
   private _online = navigator.onLine;
   private _syncingTables = new Set<TableName>();
   private _pendingCount = 0;
+  private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private _reconnectOrgId: string | undefined;
+  private _reconnectAttempts = 0;
+  private static MAX_RECONNECT_ATTEMPTS = 10;
+  private static RECONNECT_BASE_DELAY_MS = 2000;
 
   constructor() {
     // Listen for browser online/offline events
@@ -97,10 +102,21 @@ class SupabaseSyncService {
     this.changeCallbacks.add(onChange);
 
     if (this.channel) {
-      // Already subscribed
+      // Already subscribed — just register the new callback
       return;
     }
 
+    // Store orgId for auto-reconnect
+    this._reconnectOrgId = orgId;
+    this._reconnectAttempts = 0;
+    this._doSubscribe(orgId);
+  }
+
+  /**
+   * Internal: create the Realtime channel and subscribe.
+   * Separated from subscribeRealtime() to allow reconnection.
+   */
+  private _doSubscribe(orgId?: string) {
     const tables: TableName[] = [
       'products',
       'categories',
@@ -127,11 +143,13 @@ class SupabaseSyncService {
           schema: 'public',
           table: table,
           // Filtro server-side: usuário comum só recebe mudanças da sua org.
-          // (PostgREST: organization_id=eq.<uuid>)
-          ...(orgId ? { filter: `organization_id=eq.${orgId}` } : {}),
+          // sale_items e stock_change_log NÃO têm organization_id, então
+          // o filtro é aplicado APENAS nas tabelas que possuem essa coluna.
+          ...(orgId && table !== 'sale_items' ? { filter: `organization_id=eq.${orgId}` } : {}),
         },
         (payload) => {
           this._connected = true;
+          this._reconnectAttempts = 0; // Reset on successful message
           this.changeCallbacks.forEach((cb) => cb(table, payload));
         }
       );
@@ -140,20 +158,55 @@ class SupabaseSyncService {
     this.channel.subscribe((status) => {
       if (status === 'SUBSCRIBED') {
         this._connected = true;
+        this._reconnectAttempts = 0;
         console.log('[HD-Sync] Realtime connected');
       } else if (status === 'CHANNEL_ERROR') {
         this._connected = false;
-        console.warn('[HD-Sync] Realtime channel error — will retry');
+        console.warn('[HD-Sync] Realtime channel error — scheduling reconnect');
+        this._scheduleReconnect();
       } else if (status === 'TIMED_OUT') {
         this._connected = false;
-        console.warn('[HD-Sync] Realtime timed out — will retry');
+        console.warn('[HD-Sync] Realtime timed out — scheduling reconnect');
+        this._scheduleReconnect();
       }
     });
+  }
+
+  /**
+   * Schedule automatic reconnection with exponential backoff.
+   * Prevents the device from becoming "blind" to other devices' changes
+   * after a WebSocket drop (VULN-01 fix).
+   */
+  private _scheduleReconnect() {
+    if (this._reconnectTimer) return; // Already scheduled
+    if (this._reconnectAttempts >= SupabaseSyncService.MAX_RECONNECT_ATTEMPTS) {
+      console.error('[HD-Sync] Max reconnect attempts reached — manual re-login may be needed');
+      return;
+    }
+    const delay = Math.min(
+      SupabaseSyncService.RECONNECT_BASE_DELAY_MS * Math.pow(2, this._reconnectAttempts),
+      30000, // Cap at 30 seconds
+    );
+    this._reconnectAttempts++;
+    console.log(`[HD-Sync] Reconnect in ${delay}ms (attempt ${this._reconnectAttempts}/${SupabaseSyncService.MAX_RECONNECT_ATTEMPTS})`);
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      if (this.channel) {
+        supabase.removeChannel(this.channel);
+        this.channel = null;
+      }
+      this._doSubscribe(this._reconnectOrgId);
+    }, delay);
   }
 
   unsubscribeRealtime(onChange: SyncChangeCallback) {
     this.changeCallbacks.delete(onChange);
     if (this.changeCallbacks.size === 0 && this.channel) {
+      // Cancel any pending reconnect
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
       supabase.removeChannel(this.channel);
       this.channel = null;
       this._connected = false;
@@ -226,8 +279,13 @@ class SupabaseSyncService {
     }
   }
 
-  // Tables that have an 'updated_at' column — only these get the timestamp appended
-  private static TABLES_WITH_UPDATED_AT: TableName[] = ['products', 'system_settings', 'sales'];
+  // Tables that have an 'updated_at' column — only these get the timestamp appended.
+  // VULN-04 fix: added all tables that support updated_at for proper conflict resolution.
+  private static TABLES_WITH_UPDATED_AT: TableName[] = [
+    'products', 'categories', 'customers', 'suppliers',
+    'sales', 'financial_transactions', 'cash_sessions',
+    'stock_movements', 'store_branches', 'system_users', 'system_settings',
+  ];
 
   /**
    * Upsert a single row to Supabase.
@@ -325,25 +383,48 @@ class SupabaseSyncService {
 
   /**
    * Fetch all rows from a table, optionally filtered by store_branch_id.
+   * VULN-05 fix: uses pagination to handle large datasets without
+   * exceeding Supabase response limits or browser memory.
    */
   async fetchRows(table: TableName, branchId?: string): Promise<any[]> {
     try {
-      let query = supabase.from(table).select('*');
-      if (branchId) {
-        // Fetch rows where store_branch_id matches OR is null (shared data)
-        query = query.or(`store_branch_id.eq.${branchId},store_branch_id.is.null`);
+      const PAGE_SIZE = 500;
+      let allRows: any[] = [];
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        let query = supabase.from(table).select('*');
+        if (branchId) {
+          // Fetch rows where store_branch_id matches OR is null (shared data)
+          query = query.or(`store_branch_id.eq.${branchId},store_branch_id.is.null`);
+        }
+        // Order by created_at DESC only for tables that have this column
+        const tablesWithCreatedAt: TableName[] = ['sales', 'stock_movements', 'customers', 'system_users'];
+        if (tablesWithCreatedAt.includes(table)) {
+          query = query.order('created_at', { ascending: false });
+        }
+        // Pagination
+        query = query.range(offset, offset + PAGE_SIZE - 1);
+
+        const { data, error } = await query;
+        if (error) {
+          console.warn(`[HD-Sync] Fetch ${table} failed at offset ${offset}:`, error.message);
+          break;
+        }
+        const rows = data || [];
+        allRows = allRows.concat(rows);
+        if (rows.length < PAGE_SIZE) {
+          hasMore = false;
+        } else {
+          offset += PAGE_SIZE;
+        }
       }
-      // Order by created_at DESC only for tables that have this column
-      const tablesWithCreatedAt: TableName[] = ['sales', 'stock_movements', 'customers', 'system_users'];
-      if (tablesWithCreatedAt.includes(table)) {
-        query = query.order('created_at', { ascending: false });
+
+      if (allRows.length > 0) {
+        console.log(`[HD-Sync] Fetched ${allRows.length} rows from ${table}`);
       }
-      const { data, error } = await query;
-      if (error) {
-        console.warn(`[HD-Sync] Fetch ${table} failed:`, error.message);
-        return [];
-      }
-      return data || [];
+      return allRows;
     } catch (e) {
       console.warn(`[HD-Sync] Fetch ${table} exception:`, e);
       return [];

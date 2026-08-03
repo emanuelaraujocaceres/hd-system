@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ShoppingCart,
   LayoutDashboard,
@@ -18,6 +18,7 @@ import { StoreBranch, UserProfile, CashRegisterSession } from '../../types';
 import { ResetDataButton } from '../shared/ResetDataButton';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { useToast } from '../shared/Toast';
+import { PermissionEngine, AccessLevel } from '../../lib/iam';
 
 interface SidebarProps {
   currentTab: string;
@@ -51,10 +52,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isTvMode,
 }) => {
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
-  const isAdmin = user.role === 'admin';
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [pendingBranch, setPendingBranch] = useState<StoreBranch | null>(null);
   const { addToast } = useToast();
+
+  // IAM: use PermissionEngine for role-based access control
+  const permEngine = useMemo(() => new PermissionEngine(user), [user?.id, user?.role, user?.superadmin]);
+  const isDev = permEngine.isDeveloper();
+  const isAdmin = permEngine.isAdmin();
+  const accessLevel = permEngine.getAccessLevel();
 
   // Matriz (isHeadquarters) sempre primeiro, demais seguem a ordem original
   const sortedBranches = [...branches].sort((a, b) => {
@@ -73,24 +79,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const allMenuItems = [
-    { id: 'pdv', label: 'Caixa', icon: ShoppingCart, permKey: 'pdv' as const, badge: isCaixaOpen ? 'ABERTO' : 'FECHADO', badgeColor: isCaixaOpen ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20' },
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permKey: 'dashboard' as const },
-    { id: 'inventory', label: 'Estoque', icon: Package, permKey: 'inventory' as const },
-    { id: 'nf-history', label: 'Nota Fiscal', icon: FileText, permKey: 'inventory' as const },
-    { id: 'tv-showcase', label: 'Ofertas / TV', icon: Tv, permKey: 'tvShowcase' as const, badge: 'AO VIVO', badgeColor: 'bg-amber-500/10 text-amber-500 border-amber-500/20' },
-    { id: 'finance', label: 'Financeiro', icon: DollarSign, permKey: 'finance' as const },
-    { id: 'crm', label: 'Clientes/Fornecedores', icon: Users, permKey: 'crm' as const },
-    { id: 'fiados', label: 'Fiados', icon: Receipt, permKey: 'crm' as const },
-    { id: 'settings', label: 'Configurações', icon: Settings, permKey: 'settings' as const },
-    { id: 'organizations', label: 'Organizações', icon: Building2, permKey: 'settings' as const },
+    { id: 'pdv', label: 'Caixa', icon: ShoppingCart, module: 'pdv' as const, badge: isCaixaOpen ? 'ABERTO' : 'FECHADO', badgeColor: isCaixaOpen ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20' },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, module: 'dashboard' as const },
+    { id: 'inventory', label: 'Estoque', icon: Package, module: 'inventory' as const },
+    { id: 'nf-history', label: 'Nota Fiscal', icon: FileText, module: 'inventory' as const },
+    { id: 'tv-showcase', label: 'Ofertas / TV', icon: Tv, module: 'pdv' as const, badge: 'AO VIVO', badgeColor: 'bg-amber-500/10 text-amber-500 border-amber-500/20' },
+    { id: 'finance', label: 'Financeiro', icon: DollarSign, module: 'finance' as const },
+    { id: 'crm', label: 'Clientes/Fornecedores', icon: Users, module: 'crm' as const },
+    { id: 'fiados', label: 'Fiados', icon: Receipt, module: 'crm' as const },
+    { id: 'settings', label: 'Configurações', icon: Settings, module: 'settings' as const },
+    { id: 'organizations', label: 'Organizações', icon: Building2, module: 'organizations' as const },
   ];
 
+  // IAM: filter menu items using PermissionEngine
   const menuItems = allMenuItems.filter((item) => {
-    if (item.id === 'organizations') return !!user.superadmin;
-    if (isAdmin) return true;
-    if (item.id === 'settings') return perms.settings;
-    if (item.id === 'tv-showcase') return perms.tvShowcase !== false;
-    return perms[item.permKey];
+    // Organizations: developer only
+    if (item.id === 'organizations') return isDev;
+    // All other items: check module access via PermissionEngine
+    return permEngine.hasPermission(item.module, 'view');
   });
 
   const handleNavClick = (id: string) => {

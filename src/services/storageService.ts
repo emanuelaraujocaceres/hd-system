@@ -63,6 +63,7 @@ class StorageService {
   private listeners: Set<() => void> = new Set();
   private notifyTimer: ReturnType<typeof setTimeout> | null = null;
   private migrated = false;
+  private _saleUpdateVersions: Record<string, number> = {}; // CONSIST-03: race condition guard
 
   // ─── UUID HELPERS ──────────────────────────────────────────────────────
   // Gera um UUID v4 para novos registros (browser e Node 19+)
@@ -693,10 +694,22 @@ class StorageService {
     const existing = sales.find((s) => s.id === row.id);
     console.log(`[HD-Sync] 🔄 updateSaleFromRemote: id=${row.id}, exists=${!!existing}, row.customer_name=${row.customer_name}, row.notes=${row.notes}`);
 
+    // CONSIST-03 fix: capture a snapshot version to detect race conditions.
+    // If another update arrives before fetchItems() completes, we skip
+    // the stale result to prevent overwriting newer data.
+    const updateVersion = Date.now();
+    this._saleUpdateVersions = this._saleUpdateVersions || {};
+    this._saleUpdateVersions[row.id] = updateVersion;
+
     // Try to fetch sale items from Supabase
     const fetchItems = async () => {
       try {
         const { data } = await supabase.from('sale_items').select('*').eq('sale_id', row.id);
+        // CONSIST-03: check if a newer update arrived while we were fetching
+        if (this._saleUpdateVersions?.[row.id] !== updateVersion) {
+          console.log(`[HD-Sync] ⚠️ Stale fetchItems for sale ${row.id} — a newer update arrived, skipping`);
+          return null; // Signal to caller: don't apply
+        }
         if (data && data.length > 0) {
           return data.map((item: any) => ({
             productId: item.product_id,
@@ -738,6 +751,7 @@ class StorageService {
 
     // Fetch items async and update if we get data back
     fetchItems().then((items) => {
+      if (items === null) return; // CONSIST-03: stale fetch — skip
       if (items.length > 0) {
         const updated = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
         const found = updated.find((s) => s.id === row.id);
@@ -1552,9 +1566,43 @@ class StorageService {
     try {
       localStorage.setItem(this.getStorageKey(key), JSON.stringify(value));
       this.notify();
-    } catch (e) {
-      console.error('Error writing to localStorage:', e);
+    } catch (e: any) {
+      // OFFLINE-01 fix: handle QuotaExceededError gracefully
+      if (e?.name === 'QuotaExceededError' || e?.code === 22 || e?.code === 1014) {
+        console.error(`[Storage] ⚠️ localStorage QUOTA EXCEEDED writing key "${key}". Attempting emergency cleanup...`);
+        this._emergencyCleanup();
+        // Retry once after cleanup
+        try {
+          localStorage.setItem(this.getStorageKey(key), JSON.stringify(value));
+          this.notify();
+          console.log(`[Storage] ✅ Retry succeeded after cleanup for key "${key}"`);
+        } catch (retryErr) {
+          console.error(`[Storage] ❌ CRITICAL: localStorage still full after cleanup. Data for key "${key}" was NOT saved.`, retryErr);
+        }
+      } else {
+        console.error('Error writing to localStorage:', e);
+      }
     }
+  }
+
+  /**
+   * Emergency cleanup: remove old backups and non-essential data
+   * to free localStorage space when quota is exceeded.
+   */
+  private _emergencyCleanup() {
+    // 1. Remove old backups (keep only the most recent)
+    const backupKeys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('hd_system_backup_')) backupKeys.push(key);
+    }
+    backupKeys.sort().reverse();
+    for (const oldKey of backupKeys.slice(1)) localStorage.removeItem(oldKey);
+
+    // 2. Remove the sync queue (will be rebuilt on next sync)
+    localStorage.removeItem('hd_system_sync_queue');
+
+    console.log(`[Storage] 🧹 Emergency cleanup freed space. Removed ${backupKeys.length - 1} old backups + sync queue.`);
   }
 
   // --- PRODUCTS ---
@@ -1662,7 +1710,13 @@ class StorageService {
     }
   }
 
-  async updateStock(productId: string, quantityDelta: number, reason: string, operatorName: string) {
+  /**
+   * Deduct stock LOCALLY ONLY (no RPC call).
+   * Used by addSale() where process_sale_transaction RPC already handles
+   * server-side stock deduction — calling ajustar_estoque here would
+   * deduct stock TWICE (the "double deduction" bug CALC-02).
+   */
+  private deductStockLocal(productId: string, quantityDelta: number, reason: string, operatorName: string): void {
     const products = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
     const prod = products.find((p) => p.id === productId);
     if (!prod) return;
@@ -1691,6 +1745,16 @@ class StorageService {
     this.set(KEYS.MOVEMENTS, movements);
     this.syncProduct(prod);
     this.syncStockMovement(newMov);
+  }
+
+  /**
+   * Update stock with BOTH local update AND server-side RPC (ajustar_estoque).
+   * Used for manual stock adjustments from InventoryView (NOT from sales,
+   * which use process_sale_transaction instead).
+   */
+  async updateStock(productId: string, quantityDelta: number, reason: string, operatorName: string) {
+    // Local update for instant UI
+    this.deductStockLocal(productId, quantityDelta, reason, operatorName);
 
     // ─── RPC: ajustar_estoque (server-side atomic) ─────────────
     // Fire-and-forget: localStorage already updated for instant UI.
@@ -1900,9 +1964,12 @@ class StorageService {
     this.set(KEYS.SALES, sales);
     this.syncSale(sale);
 
-    // ─── Deduce stock locally (instant UI) ────────────────────
+    // ─── Deduce stock LOCALLY ONLY (instant UI) ────────────────
+    // Uses deductStockLocal() instead of updateStock() to avoid calling
+    // ajustar_estoque RPC — the process_sale_transaction RPC below
+    // already handles server-side stock deduction atomically.
     for (const item of sale.items || []) {
-      await this.updateStock(item.productId, -item.quantity, `Venda PDV #${sale.code}`, sale.operatorName);
+      this.deductStockLocal(item.productId, -item.quantity, `Venda PDV #${sale.code}`, sale.operatorName);
     }
 
     // ─── RPC: process_sale_transaction (server-side atomic) ───
