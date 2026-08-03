@@ -807,8 +807,9 @@ class StorageService {
 
   /**
    * Updates the active caixa session counters when a sale is synced
-   * from another device via Realtime. This ensures the caixa reflects
-   * the latest totals without waiting for a cash_sessions event.
+   * from another device via Realtime. Recalculates caixa totals
+   * from all completed sales of the current branch to avoid
+   * double-counting or missed updates.
    */
   private _updateCaixaFromSale(sale: Sale) {
     if (sale.status !== 'completed') return;
@@ -819,7 +820,6 @@ class StorageService {
     // Only update if the sale belongs to the current branch
     const rawBranchId = this.getRawBranchId();
     if (rawBranchId && sale.storeBranchId && sale.storeBranchId !== rawBranchId) {
-      // Resolve short codes for comparison
       let resolvedBranchId = rawBranchId;
       if (!StorageService.UUID_RE.test(resolvedBranchId)) {
         const branches = this.getBranches();
@@ -829,44 +829,48 @@ class StorageService {
       if (sale.storeBranchId !== resolvedBranchId) return;
     }
 
-    // Aggregate payment amounts from the sale
-    let cashDelta = 0;
-    let pixDelta = 0;
-    let cardDelta = 0;
-    let creditDelta = 0;
+    // Recalculate caixa totals from ALL completed sales of this branch.
+    // This avoids double-counting (if the same sale event arrives twice)
+    // and ensures accuracy even if events arrive out of order.
+    const allSales = this.getSales();
+    const branchSales = allSales.filter((s) => s.status === 'completed');
 
-    for (const payment of sale.payments || []) {
-      const amount = payment.amount || 0;
-      switch (payment.method) {
-        case 'cash':
-          cashDelta += amount;
-          break;
-        case 'pix':
-          pixDelta += amount;
-          break;
-        case 'credit_card':
-          cardDelta += amount;
-          break;
-        case 'debit_card':
-          cardDelta += amount;
-          break;
-        case 'credit_account':
-          creditDelta += amount;
-          break;
+    let totalCash = 0;
+    let totalPix = 0;
+    let totalCard = 0;
+    let totalCredit = 0;
+
+    for (const s of branchSales) {
+      for (const p of s.payments || []) {
+        const amount = p.amount || 0;
+        switch (p.method) {
+          case 'cash':
+            totalCash += amount;
+            break;
+          case 'pix':
+            totalPix += amount;
+            break;
+          case 'credit_card':
+          case 'debit_card':
+            totalCard += amount;
+            break;
+          case 'credit_account':
+            totalCredit += amount;
+            break;
+        }
       }
     }
 
-    // Update session counters (use MAX to avoid losing data from concurrent devices)
-    session.totalSalesCash = Math.max(session.totalSalesCash, cashDelta);
-    session.totalSalesPix = Math.max(session.totalSalesPix, pixDelta);
-    session.totalSalesCard = Math.max(session.totalSalesCard, cardDelta);
-    session.totalSalesCreditAccount = Math.max(session.totalSalesCreditAccount, creditDelta);
+    session.totalSalesCash = totalCash;
+    session.totalSalesPix = totalPix;
+    session.totalSalesCard = totalCard;
+    session.totalSalesCreditAccount = totalCredit;
     session.currentCashBalance =
       session.initialCash + session.totalSalesCash + session.suprimentos - session.sangrias;
 
     this.set(KEYS.CAIXA, session);
     console.log(
-      `[HD-Sync] 🔄 Caixa updated from sale ${sale.code}: cash=R$${cashDelta.toFixed(2)} pix=R$${pixDelta.toFixed(2)} card=R$${cardDelta.toFixed(2)}`,
+      `[HD-Sync] 🔄 Caixa recalculated from ${branchSales.length} sales: cash=R$${totalCash.toFixed(2)} pix=R$${totalPix.toFixed(2)} card=R$${totalCard.toFixed(2)}`,
     );
   }
 
