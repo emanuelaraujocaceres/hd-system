@@ -88,8 +88,8 @@ class StorageService {
   }
 
   // Retorna o organization_id do usuário logado.
-  // FAIL-CLOSED: se o perfil existe mas não tem organizationId, retorna ''
-  // (escrever fica bloqueado em vez de gravar na organização errada).
+  // Super Admin (developer) SEM organizationId: fail-OPEN — acesso global.
+  // Outros usuários sem org: fail-CLOSED — escrita bloqueada.
   // O fallback para DEFAULT_ORG_ID só ocorre sem perfil salvo (bootstrap/offline).
   getCurrentOrgId(): string {
     // Superadmin override (visualizando outra org)
@@ -99,6 +99,22 @@ class StorageService {
         // Se o override é DEFAULT_ORG_ID, não precisa logar warning
         return override;
       }
+      // Super Admin sem override: acesso global (organization_id = NULL no Supabase)
+      // Retornar '' para indicar "sem filtro de organização" — o superadmin vê tudo.
+      // Mas mantemos compatibilidade: se o perfil ainda tem organizationId salvo
+      // no localStorage (de um login anterior), usamos o valor salvo apenas
+      // para operações que exigem um org específico (como criar novos registros).
+      try {
+        const raw = localStorage.getItem('hd_system_user_profile');
+        if (raw) {
+          const profile = JSON.parse(raw);
+          if (profile?.organizationId) return profile.organizationId;
+        }
+      } catch {}
+      // Sem organizationId salvo: retornar '' para acesso global
+      // (o superadmin não precisa de filtragem por org no cliente)
+      console.log('[Storage] getCurrentOrgId() — superadmin sem organizationId: acesso global');
+      return '';
     }
     try {
       const raw = localStorage.getItem('hd_system_user_profile');

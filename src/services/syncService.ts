@@ -15,6 +15,15 @@ import { supabase } from '../lib/supabase';
 import { syncQueue } from './syncQueueService';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
+// Helper: detecta superadmin diretamente do localStorage (sem import circular)
+function isSuperAdmin(): boolean {
+  try {
+    const raw = localStorage.getItem('hd_system_user_profile');
+    if (raw) return JSON.parse(raw)?.superadmin === true;
+  } catch {}
+  return false;
+}
+
 export type TableName =
   | 'products'
   | 'categories'
@@ -358,12 +367,20 @@ class SupabaseSyncService {
    */
   async upsertRow(table: TableName, row: Record<string, any>) {
     // Validação defensiva: se a linha tem organization_id e está vazio/nulo,
-    // não envia nem enfileira — evitaria enviar dados sem org ou enfileirar lixo
+    // bloquear — a menos que seja um Super Admin (acesso global).
+    // Super Admin (organization_id = NULL no Supabase) precisa de acesso a
+    // todos os recursos sem restrição de organização.
+    // Outros usuários com orgId vazio: bloquear para evitar sujar outra org.
     if (row && typeof row === 'object' && 'organization_id' in row) {
       const orgId = (row as any).organization_id;
       if (!orgId || orgId === '' || orgId === 'undefined' || orgId === 'null') {
-        console.warn(`[HD-Sync] ⚠️ Skipping ${table} upsert — organization_id inválido (${orgId})`);
-        return false;
+        if (!isSuperAdmin()) {
+          console.warn(`[HD-Sync] ⚠️ Skipping ${table} upsert — organization_id inválido (${orgId})`);
+          return false;
+        }
+        // Super Admin sem org: remove organization_id para acesso global
+        // (o Supabase aceita NULL na maioria das tabelas)
+        row = { ...row, organization_id: null };
       }
     }
 
