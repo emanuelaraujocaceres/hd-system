@@ -76,16 +76,25 @@ class SupabaseSyncService {
     this.connectionListeners.forEach((fn) => fn(online));
   }
 
-  private handleOnlineChange(online: boolean) {
-    this._online = online;
-    console.log(`[HD-Sync] 🌐 Browser ${online ? 'ONLINE' : 'OFFLINE'}`);
-    this.notifyConnection(online);
+   private handleOnlineChange(online: boolean) {
+     this._online = online;
+     console.log(`[HD-Sync] 🌐 Browser ${online ? 'ONLINE' : 'OFFLINE'}`);
+     this.notifyConnection(online);
 
-    if (online) {
-      // When coming back online, process pending queue
-      this.processPendingQueue();
-    }
-  }
+     if (online) {
+       // When coming back online, re-establish Realtime channel AND process pending queue
+       this._reconnectAttempts = 0;
+       if (this.channel) {
+         // Channel might be dead after going offline — remove and recreate
+         try { supabase.removeChannel(this.channel); } catch {}
+         this.channel = null;
+       }
+       if (this._reconnectOrgId) {
+         this._doSubscribe(this._reconnectOrgId, this._reconnectBranchId);
+       }
+       this.processPendingQueue();
+     }
+   }
 
   // ─── REALTIME ──────────────────────────────────────────────────
 
@@ -102,20 +111,24 @@ class SupabaseSyncService {
    *   filtra server-side por store_branch_id, evitando que payloads de
    *   OUTRAS filiais trafeguem para este cliente.
    */
-  subscribeRealtime(onChange: SyncChangeCallback, orgId?: string, branchId?: string) {
-    this.changeCallbacks.add(onChange);
+   subscribeRealtime(onChange: SyncChangeCallback, orgId?: string, branchId?: string) {
+     this.changeCallbacks.add(onChange);
 
-    if (this.channel) {
-      // Already subscribed — just register the new callback
-      return;
-    }
+     // Store orgId + branchId for auto-reconnect
+     this._reconnectOrgId = orgId;
+     this._reconnectBranchId = branchId;
+     this._reconnectAttempts = 0;
 
-    // Store orgId + branchId for auto-reconnect
-    this._reconnectOrgId = orgId;
-    this._reconnectBranchId = branchId;
-    this._reconnectAttempts = 0;
-    this._doSubscribe(orgId, branchId);
-  }
+     if (this.channel) {
+       // Channel exists — check if it's still alive by re-subscribing.
+       // If the channel is dead (e.g., after max reconnect attempts or
+       // prolonged offline), remove it and create a fresh one.
+       try { supabase.removeChannel(this.channel); } catch {}
+       this.channel = null;
+     }
+
+     this._doSubscribe(orgId, branchId);
+   }
 
   /**
    * Internal: create the Realtime channel and subscribe.

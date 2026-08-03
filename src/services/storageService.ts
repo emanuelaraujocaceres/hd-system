@@ -2485,7 +2485,18 @@ class StorageService {
         return adopted;
       }
     } catch (e) {
-      console.warn('[HD-Caixa] Falha ao consultar caixa aberto no cloud — criando nova sessão local:', e);
+      // Cloud indisponível (offline) — verificar caixa local antes de criar novo
+      console.warn('[HD-Caixa] Falha ao consultar caixa aberto no cloud — verificando localStorage:', e);
+    }
+
+    // 🔥 Offline: verificar se já existe caixa aberto LOCAL para esta filial
+    // Evita criar sessão duplicada quando o dispositivo fica offline
+    if (branchId) {
+      const localSession = this.getActiveCaixaSession();
+      if (localSession && localSession.status === 'open' && localSession.storeBranchId === branchId) {
+        console.log(`[HD-Caixa] 🔄 Offline — reutilizando caixa local existente (id=${localSession.id}, saldo=R$ ${localSession.currentCashBalance.toFixed(2)})`);
+        return localSession;
+      }
     }
 
     const newSession: CashRegisterSession = {
