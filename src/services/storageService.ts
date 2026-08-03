@@ -187,7 +187,7 @@ class StorageService {
   // que dados de outra filial vazem para a filial atual.
   private filterBySelectedBranch<T extends { storeBranchId?: string }>(items: T[]): T[] {
     const branchId = this.getSelectedBranchId();
-    if (!branchId) return items;
+    if (!branchId) return [];
     return items.filter((i) => i.storeBranchId === branchId);
   }
 
