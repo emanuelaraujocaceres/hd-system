@@ -178,11 +178,12 @@ class StorageService {
 
   // Isolamento por filial: itens COM storeBranchId só aparecem na filial
   // selecionada no seletor. Itens SEM storeBranchId (legado / dados mock)
-  // são tratados como compartilhados da org e ficam visíveis em qualquer filial.
+  // NÃO aparecem quando uma filial específica está selecionada — evita
+  // que dados de outra filial vazem para a filial atual.
   private filterBySelectedBranch<T extends { storeBranchId?: string }>(items: T[]): T[] {
     const branchId = this.getSelectedBranchId();
     if (!branchId) return items;
-    return items.filter((i) => !i.storeBranchId || i.storeBranchId === branchId);
+    return items.filter((i) => i.storeBranchId === branchId);
   }
 
   // ─── MIGRAÇÃO LEGACY: TEXT → UUID (uma única vez) ─────────────────────
@@ -840,6 +841,13 @@ class StorageService {
   }
 
   updateCaixaFromRemote(row: any) {
+    // Branch isolation: não sobrescrever caixa local se o evento é de outra filial
+    const currentBranchId = this.getSelectedBranchId();
+    if (currentBranchId && row.store_branch_id && row.store_branch_id !== currentBranchId) {
+      console.log(`[HD-Sync] Ignoring caixa remote de outra filial (remote: ${row.store_branch_id}, current: ${currentBranchId})`);
+      return;
+    }
+
     const localSession = this.getActiveCaixaSession();
 
     // Same session, both open → MERGE counters (don't ignore remote)
@@ -1418,7 +1426,6 @@ class StorageService {
             if (branchId) {
               filtered = safeCaixa.filter((r: any) => r.store_branch_id === branchId);
             }
-            if (filtered.length === 0 && branchId) filtered = safeCaixa;
             const sorted = [...filtered].sort((a: any, b: any) => {
               if (a.status === 'open' && b.status !== 'open') return -1;
               if (a.status !== 'open' && b.status === 'open') return 1;
@@ -1633,11 +1640,17 @@ class StorageService {
   deleteProduct(id: string) {
     const allProducts = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
     const product = allProducts.find((p) => p.id === id);
-    // Defense-in-depth: só permite deletar se o produto pertence à org atual
+    // Defense-in-depth: só permite deletar se o produto pertence à org E filial atual
     if (product && !this.isSuperAdmin()) {
       const filtered = this.filterByOrg([product]);
       if (filtered.length === 0) {
         console.warn(`[Storage] Blocked delete of product ${id} from another org`);
+        return;
+      }
+      // Branch isolation: não permitir excluir produto de outra filial
+      const currentBranchId = this.getSelectedBranchId();
+      if (currentBranchId && product.storeBranchId && product.storeBranchId !== currentBranchId) {
+        console.warn(`[Storage] Blocked delete of product ${id} from another branch`);
         return;
       }
     }
@@ -1659,7 +1672,7 @@ class StorageService {
   deleteSale(id: string) {
     const allSales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
     const saleToDelete = allSales.find((s) => s.id === id);
-    // Defense-in-depth: só permite deletar se a venda pertence à org atual
+    // Defense-in-depth: só permite deletar se a venda pertence à org E filial atual
     if (saleToDelete && !this.isSuperAdmin()) {
       if (saleToDelete.organizationId && saleToDelete.organizationId !== this.getCurrentOrgId()) {
         console.warn(`[Storage] Blocked delete of sale ${id} from another org`);
@@ -1673,6 +1686,12 @@ class StorageService {
           console.warn(`[Storage] Blocked delete of sale ${id} from another org (branch check)`);
           return;
         }
+      }
+      // Branch isolation: não permitir excluir venda de outra filial
+      const currentBranchId = this.getSelectedBranchId();
+      if (currentBranchId && saleToDelete.storeBranchId && saleToDelete.storeBranchId !== currentBranchId) {
+        console.warn(`[Storage] Blocked delete of sale ${id} from another branch`);
+        return;
       }
     }
     const sales = allSales.filter((s) => s.id !== id);
@@ -2352,6 +2371,18 @@ class StorageService {
   setSelectedBranchId(id: string) {
     localStorage.setItem('hd_system_selected_branch_id', id);
     this.notify();
+  }
+
+  /**
+   * Resolve short code (e.g. "br-01") to UUID.
+   * Used when switching branches to ensure cloud queries use the correct UUID.
+   */
+  resolveBranchId(branchId: string): string | undefined {
+    if (!branchId) return undefined;
+    if (StorageService.UUID_RE.test(branchId)) return branchId;
+    const branches = this.getBranches();
+    const matched = branches.find((b) => b.id === branchId || b.code === branchId);
+    return matched ? matched.id : undefined;
   }
 
   // --- USERS & GOOGLE COLLABORATORS ---

@@ -165,6 +165,32 @@ export const App: React.FC = () => {
     storageService.setSelectedBranchId(branch.id);
     setCurrentBranch(branch);
     posAudio.click();
+
+    // Re-hidratar dados do cloud com a nova filial para garantir isolamento
+    // Completo (limpa dados da filial anterior, carrega dados da nova filial)
+    const resolvedBranchId = storageService.resolveBranchId(branch.id);
+    storageService.hydrateFromCloud(resolvedBranchId).then((ok) => {
+      if (ok) {
+        // Forçar refresh imediato do React state após hidratação
+        setProducts(storageService.getProducts());
+        setCategories(storageService.getCategories());
+        setCustomers(storageService.getCustomers());
+        setSuppliers(storageService.getSuppliers());
+        setSales(storageService.getSales());
+        setCaixaSession(storageService.getActiveCaixaSession());
+        setFinancialAccounts(storageService.getFinancialAccounts());
+        setSettings(storageService.getSettings());
+        setBranches(storageService.getBranches());
+        setCurrentBranch(storageService.getSelectedBranch());
+        setUser(storageService.getUserProfile());
+        console.log(`[Branch] ✅ Dados re-carregados para filial: ${branch.name}`);
+      }
+    }).catch(() => {
+      // Fallback: refresh local mesmo se cloud falhar
+      setProducts(storageService.getProducts());
+      setSales(storageService.getSales());
+      setCaixaSession(storageService.getActiveCaixaSession());
+    });
   };
 
   // Sync dark mode class on document element + persist to localStorage
