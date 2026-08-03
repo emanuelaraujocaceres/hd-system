@@ -785,6 +785,12 @@ class StorageService {
     else sales.unshift(mapped);
     this.set(KEYS.SALES, sales);
 
+    // ── Update caixa session in real-time ──────────────────
+    // When a sale is synced from another device, update the
+    // local caixa counters so the dashboard reflects the
+    // latest totals without waiting for a cash_sessions event.
+    this._updateCaixaFromSale(mapped);
+
     // Fetch items async and update if we get data back
     fetchItems().then((items) => {
       if (items === null) return; // CONSIST-03: stale fetch — skip
@@ -797,6 +803,71 @@ class StorageService {
         }
       }
     });
+  }
+
+  /**
+   * Updates the active caixa session counters when a sale is synced
+   * from another device via Realtime. This ensures the caixa reflects
+   * the latest totals without waiting for a cash_sessions event.
+   */
+  private _updateCaixaFromSale(sale: Sale) {
+    if (sale.status !== 'completed') return;
+
+    const session = this.getActiveCaixaSession();
+    if (!session || session.status !== 'open') return;
+
+    // Only update if the sale belongs to the current branch
+    const rawBranchId = this.getRawBranchId();
+    if (rawBranchId && sale.storeBranchId && sale.storeBranchId !== rawBranchId) {
+      // Resolve short codes for comparison
+      let resolvedBranchId = rawBranchId;
+      if (!StorageService.UUID_RE.test(resolvedBranchId)) {
+        const branches = this.getBranches();
+        const matched = branches.find((b) => b.id === resolvedBranchId || b.code === resolvedBranchId);
+        if (matched) resolvedBranchId = matched.id;
+      }
+      if (sale.storeBranchId !== resolvedBranchId) return;
+    }
+
+    // Aggregate payment amounts from the sale
+    let cashDelta = 0;
+    let pixDelta = 0;
+    let cardDelta = 0;
+    let creditDelta = 0;
+
+    for (const payment of sale.payments || []) {
+      const amount = payment.amount || 0;
+      switch (payment.method) {
+        case 'cash':
+          cashDelta += amount;
+          break;
+        case 'pix':
+          pixDelta += amount;
+          break;
+        case 'credit_card':
+          cardDelta += amount;
+          break;
+        case 'debit_card':
+          cardDelta += amount;
+          break;
+        case 'credit_account':
+          creditDelta += amount;
+          break;
+      }
+    }
+
+    // Update session counters (use MAX to avoid losing data from concurrent devices)
+    session.totalSalesCash = Math.max(session.totalSalesCash, cashDelta);
+    session.totalSalesPix = Math.max(session.totalSalesPix, pixDelta);
+    session.totalSalesCard = Math.max(session.totalSalesCard, cardDelta);
+    session.totalSalesCreditAccount = Math.max(session.totalSalesCreditAccount, creditDelta);
+    session.currentCashBalance =
+      session.initialCash + session.totalSalesCash + session.suprimentos - session.sangrias;
+
+    this.set(KEYS.CAIXA, session);
+    console.log(
+      `[HD-Sync] 🔄 Caixa updated from sale ${sale.code}: cash=R$${cashDelta.toFixed(2)} pix=R$${pixDelta.toFixed(2)} card=R$${cardDelta.toFixed(2)}`,
+    );
   }
 
   updateCustomerFromRemote(row: any) {
