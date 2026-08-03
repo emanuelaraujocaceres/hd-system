@@ -354,6 +354,21 @@ class SupabaseSyncService {
       }
     }
 
+    // Validação defensiva: store_branch_id obrigatório para todas as tabelas
+    // exceto store_branches e system_settings (são globais/por-org)
+    const BRANCH_REQUIRED_TABLES: TableName[] = [
+      'products', 'categories', 'customers', 'suppliers',
+      'sales', 'sale_items', 'financial_transactions',
+      'cash_sessions', 'stock_movements', 'system_users',
+    ];
+    if (BRANCH_REQUIRED_TABLES.includes(table)) {
+      const branchId = row.store_branch_id;
+      if (!branchId || branchId === '' || branchId === 'undefined' || branchId === 'null') {
+        console.warn(`[HD-Sync] ⚠️ Skipping ${table} upsert — store_branch_id ausente (id: ${row.id})`);
+        return false;
+      }
+    }
+
     const rowWithTimestamp = SupabaseSyncService.TABLES_WITH_UPDATED_AT.includes(table)
       ? { ...row, updated_at: new Date().toISOString() }
       : row;

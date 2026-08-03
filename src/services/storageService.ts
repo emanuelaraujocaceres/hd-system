@@ -359,10 +359,20 @@ class StorageService {
   // When Supabase Realtime delivers remote changes, they update localStorage via syncRemoteToLocal().
 
   private syncProduct(p: Product) {
+    // Resolve store_branch_id: use product's value, or fall back to selected branch
+    let branchId = p.storeBranchId || this.getSelectedBranchId() || '';
+    if (branchId && !StorageService.UUID_RE.test(branchId)) {
+      const resolved = this.resolveBranchId(branchId);
+      if (resolved) branchId = resolved;
+    }
+    if (!branchId) {
+      console.error('❌ syncProduct: Nenhuma filial selecionada!', p.id);
+      return;
+    }
     syncService.upsertRow('products', {
       id: p.id,
       organization_id: this.getCurrentOrgId(),
-      store_branch_id: p.storeBranchId || null,
+      store_branch_id: branchId,
       name: p.name,
       barcode: p.barcode,
       category: p.category,
@@ -380,16 +390,34 @@ class StorageService {
   }
 
   private syncCategory(c: Category) {
+    let branchId = c.storeBranchId || this.getSelectedBranchId() || '';
+    if (branchId && !StorageService.UUID_RE.test(branchId)) {
+      const resolved = this.resolveBranchId(branchId);
+      if (resolved) branchId = resolved;
+    }
+    if (!branchId) {
+      console.error('❌ syncCategory: Nenhuma filial selecionada!', c.id);
+      return;
+    }
     syncService.upsertRow('categories', {
       id: c.id,
       organization_id: this.getCurrentOrgId(),
       name: c.name,
       color: c.color || '#6366f1',
-      store_branch_id: c.storeBranchId || this.getSelectedBranchId() || null,
+      store_branch_id: branchId,
     });
   }
 
   private syncCustomer(c: Customer) {
+    let branchId = c.storeBranchId || this.getSelectedBranchId() || '';
+    if (branchId && !StorageService.UUID_RE.test(branchId)) {
+      const resolved = this.resolveBranchId(branchId);
+      if (resolved) branchId = resolved;
+    }
+    if (!branchId) {
+      console.error('❌ syncCustomer: Nenhuma filial selecionada!', c.id);
+      return;
+    }
     syncService.upsertRow('customers', {
       id: c.id,
       organization_id: this.getCurrentOrgId(),
@@ -398,11 +426,20 @@ class StorageService {
       email: c.email,
       phone: c.phone,
       credit_limit: c.creditLimit,
-      store_branch_id: c.storeBranchId || null,
+      store_branch_id: branchId,
     });
   }
 
   private syncSupplier(s: Supplier) {
+    let branchId = s.storeBranchId || this.getSelectedBranchId() || '';
+    if (branchId && !StorageService.UUID_RE.test(branchId)) {
+      const resolved = this.resolveBranchId(branchId);
+      if (resolved) branchId = resolved;
+    }
+    if (!branchId) {
+      console.error('❌ syncSupplier: Nenhuma filial selecionada!', s.id);
+      return;
+    }
     syncService.upsertRow('suppliers', {
       id: s.id,
       organization_id: this.getCurrentOrgId(),
@@ -412,7 +449,7 @@ class StorageService {
       contact_person: s.contactName,
       email: s.email,
       phone: s.phone,
-      store_branch_id: s.storeBranchId || null,
+      store_branch_id: branchId,
     });
   }
 
@@ -586,10 +623,19 @@ class StorageService {
   }
 
   private syncStockMovement(m: StockMovement) {
+    let branchId = m.storeBranchId || this.getSelectedBranchId() || '';
+    if (branchId && !StorageService.UUID_RE.test(branchId)) {
+      const resolved = this.resolveBranchId(branchId);
+      if (resolved) branchId = resolved;
+    }
+    if (!branchId) {
+      console.error('❌ syncStockMovement: Nenhuma filial selecionada!', m.id);
+      return;
+    }
     syncService.upsertRow('stock_movements', {
       id: m.id,
       organization_id: this.getCurrentOrgId(),
-      store_branch_id: m.storeBranchId || null,
+      store_branch_id: branchId,
       product_id: m.productId,
       product_name: m.productName,
       type: m.type,
@@ -603,10 +649,19 @@ class StorageService {
   }
 
   private syncSystemUser(u: UserProfile) {
+    let branchId = u.storeBranchId || this.getSelectedBranchId() || '';
+    if (branchId && !StorageService.UUID_RE.test(branchId)) {
+      const resolved = this.resolveBranchId(branchId);
+      if (resolved) branchId = resolved;
+    }
+    if (!branchId) {
+      console.error('❌ syncSystemUser: Nenhuma filial selecionada!', u.id);
+      return;
+    }
     syncService.upsertRow('system_users', {
       id: u.id,
       organization_id: this.getCurrentOrgId(),
-      store_branch_id: u.storeBranchId || null,
+      store_branch_id: branchId,
       name: u.name,
       email: u.email,
       role: u.role,
@@ -618,12 +673,17 @@ class StorageService {
   }
 
   private syncSettings(s: SystemSettings) {
+    let branchId = this.getSelectedBranchId() || '';
+    if (!branchId) {
+      console.error('❌ syncSettings: Nenhuma filial selecionada!');
+      return;
+    }
     syncService.upsertRow('system_settings', {
       id: this.getCurrentOrgId(),
       organization_id: this.getCurrentOrgId(),
       settings: s,
       updated_at: new Date().toISOString(),
-      store_branch_id: this.getSelectedBranchId() || null,
+      store_branch_id: branchId,
     });
   }
 
@@ -1798,6 +1858,11 @@ class StorageService {
       const resolved = this.resolveBranchId(product.storeBranchId);
       if (resolved) product.storeBranchId = resolved;
     }
+    // 🔥 VALIDAÇÃO OBRIGATÓRIA: store_branch_id deve estar definido
+    if (!product.storeBranchId) {
+      console.error('❌ saveProduct: Nenhuma filial selecionada!', product.id);
+      throw new Error('saveProduct: Nenhuma filial selecionada');
+    }
     const products = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
     const index = products.findIndex((p) => p.id === product.id);
     if (index >= 0) {
@@ -2010,6 +2075,11 @@ class StorageService {
     // store_branch_id agora é NOT NULL no banco
     const branchId = this.getSelectedBranchId();
     if (branchId) category.storeBranchId = branchId;
+    // 🔥 VALIDAÇÃO OBRIGATÓRIA: store_branch_id deve estar definido
+    if (!category.storeBranchId) {
+      console.error('❌ saveCategory: Nenhuma filial selecionada!', category.id);
+      throw new Error('saveCategory: Nenhuma filial selecionada');
+    }
     const categories = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []);
     const idx = categories.findIndex((c) => c.id === category.id);
     if (idx >= 0) {
@@ -2044,6 +2114,11 @@ class StorageService {
       const resolved = this.resolveBranchId(customer.storeBranchId);
       if (resolved) customer.storeBranchId = resolved;
     }
+    // 🔥 VALIDAÇÃO OBRIGATÓRIA: store_branch_id deve estar definido
+    if (!customer.storeBranchId) {
+      console.error('❌ saveCustomer: Nenhuma filial selecionada!', customer.id);
+      throw new Error('saveCustomer: Nenhuma filial selecionada');
+    }
     const customers = this.get<Customer[]>(KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : []);
     const idx = customers.findIndex((c) => c.id === customer.id);
     if (idx >= 0) {
@@ -2077,6 +2152,11 @@ class StorageService {
     if (supplier.storeBranchId && !this.isValidUuid(supplier.storeBranchId)) {
       const resolved = this.resolveBranchId(supplier.storeBranchId);
       if (resolved) supplier.storeBranchId = resolved;
+    }
+    // 🔥 VALIDAÇÃO OBRIGATÓRIA: store_branch_id deve estar definido
+    if (!supplier.storeBranchId) {
+      console.error('❌ saveSupplier: Nenhuma filial selecionada!', supplier.id);
+      throw new Error('saveSupplier: Nenhuma filial selecionada');
     }
     const suppliers = this.get<Supplier[]>(KEYS.SUPPLIERS, this.isDefaultOrg() ? INITIAL_SUPPLIERS : []);
     const idx = suppliers.findIndex((s) => s.id === supplier.id);
