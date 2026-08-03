@@ -82,6 +82,11 @@ class StorageService {
     return StorageService.newId();
   }
 
+  /** Valida se uma string é um UUID válido (v3, v4 ou v5). */
+  isValidUuid(value: string | undefined | null): boolean {
+    return !!value && StorageService.UUID_RE.test(value);
+  }
+
   // Retorna o organization_id do usuário logado.
   // FAIL-CLOSED: se o perfil existe mas não tem organizationId, retorna ''
   // (escrever fica bloqueado em vez de gravar na organização errada).
@@ -1647,6 +1652,11 @@ class StorageService {
     // Isolamento por filial: produto criado/alterado pertence à filial selecionada
     const branchId = this.getSelectedBranchId();
     if (branchId) product.storeBranchId = branchId;
+    // Validação UUID: resolver short codes para UUIDs
+    if (product.storeBranchId && !this.isValidUuid(product.storeBranchId)) {
+      const resolved = this.resolveBranchId(product.storeBranchId);
+      if (resolved) product.storeBranchId = resolved;
+    }
     const products = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
     const index = products.findIndex((p) => p.id === product.id);
     if (index >= 0) {
@@ -1884,6 +1894,11 @@ class StorageService {
     customer.organizationId = this.getCurrentOrgId();
     const branchId = this.getSelectedBranchId();
     if (branchId) customer.storeBranchId = branchId;
+    // Validação UUID
+    if (customer.storeBranchId && !this.isValidUuid(customer.storeBranchId)) {
+      const resolved = this.resolveBranchId(customer.storeBranchId);
+      if (resolved) customer.storeBranchId = resolved;
+    }
     const customers = this.get<Customer[]>(KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : []);
     const idx = customers.findIndex((c) => c.id === customer.id);
     if (idx >= 0) {
@@ -1913,6 +1928,11 @@ class StorageService {
     supplier.organizationId = this.getCurrentOrgId();
     const branchId = this.getSelectedBranchId();
     if (branchId) supplier.storeBranchId = branchId;
+    // Validação UUID
+    if (supplier.storeBranchId && !this.isValidUuid(supplier.storeBranchId)) {
+      const resolved = this.resolveBranchId(supplier.storeBranchId);
+      if (resolved) supplier.storeBranchId = resolved;
+    }
     const suppliers = this.get<Supplier[]>(KEYS.SUPPLIERS, this.isDefaultOrg() ? INITIAL_SUPPLIERS : []);
     const idx = suppliers.findIndex((s) => s.id === supplier.id);
     if (idx >= 0) {
@@ -1983,6 +2003,18 @@ class StorageService {
     // Isolamento por filial: a venda pertence à filial selecionada no PDV
     const branchId = this.getSelectedBranchId();
     if (branchId) sale.storeBranchId = branchId;
+
+    // Validação UUID: store_branch_id DEVE ser UUID válido (banco convertido)
+    if (sale.storeBranchId && !this.isValidUuid(sale.storeBranchId)) {
+      // Tentar resolver short code → UUID
+      const resolved = this.resolveBranchId(sale.storeBranchId);
+      if (resolved) {
+        sale.storeBranchId = resolved;
+      } else {
+        console.error(`[Storage] ❌ addSale: store_branch_id inválido "${sale.storeBranchId}" — venda bloqueada`);
+        return;
+      }
+    }
     // Save sale_items to separate localStorage key FIRST (with stable IDs)
     // so syncSale can read them and upsert with onConflict: 'id' deduplication.
     if (sale.items && sale.items.length > 0) {
@@ -2300,6 +2332,11 @@ class StorageService {
     acc.organizationId = this.getCurrentOrgId();
     const branchId = this.getSelectedBranchId();
     if (branchId) acc.storeBranchId = branchId;
+    // Validação UUID
+    if (acc.storeBranchId && !this.isValidUuid(acc.storeBranchId)) {
+      const resolved = this.resolveBranchId(acc.storeBranchId);
+      if (resolved) acc.storeBranchId = resolved;
+    }
     const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
     const idx = accounts.findIndex((a) => a.id === acc.id);
     if (idx >= 0) {

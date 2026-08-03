@@ -42,6 +42,7 @@ class SupabaseSyncService {
   private _pendingCount = 0;
   private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private _reconnectOrgId: string | undefined;
+  private _reconnectBranchId: string | undefined;
   private _reconnectAttempts = 0;
   private static MAX_RECONNECT_ATTEMPTS = 10;
   private static RECONNECT_BASE_DELAY_MS = 2000;
@@ -97,8 +98,11 @@ class SupabaseSyncService {
    *   payloads de OUTRAS organizações trafeguem para este cliente.
    *   Superadmin (orgId vazio) recebe de todas — o filtro client-side no
    *   App.tsx continua como defense-in-depth.
+   * @param branchId Filial do usuário atual — quando informada, o canal
+   *   filtra server-side por store_branch_id, evitando que payloads de
+   *   OUTRAS filiais trafeguem para este cliente.
    */
-  subscribeRealtime(onChange: SyncChangeCallback, orgId?: string) {
+  subscribeRealtime(onChange: SyncChangeCallback, orgId?: string, branchId?: string) {
     this.changeCallbacks.add(onChange);
 
     if (this.channel) {
@@ -106,17 +110,24 @@ class SupabaseSyncService {
       return;
     }
 
-    // Store orgId for auto-reconnect
+    // Store orgId + branchId for auto-reconnect
     this._reconnectOrgId = orgId;
+    this._reconnectBranchId = branchId;
     this._reconnectAttempts = 0;
-    this._doSubscribe(orgId);
+    this._doSubscribe(orgId, branchId);
   }
 
   /**
    * Internal: create the Realtime channel and subscribe.
    * Separated from subscribeRealtime() to allow reconnection.
    */
-  private _doSubscribe(orgId?: string) {
+  private _doSubscribe(orgId?: string, branchId?: string) {
+    // Tabelas que possuem store_branch_id no banco (filtradas por filial)
+    const branchScopedTables: TableName[] = [
+      'products', 'customers', 'suppliers', 'sales',
+      'financial_transactions', 'cash_sessions', 'stock_movements', 'system_users',
+    ];
+
     const tables: TableName[] = [
       'products',
       'categories',
@@ -136,16 +147,30 @@ class SupabaseSyncService {
 
     // Subscribe to INSERT, UPDATE, DELETE on each table
     for (const table of tables) {
+      // Montar filtros server-side:
+      // 1. organization_id (usuário comum) — exceto sale_items (sem org_id)
+      // 2. store_branch_id (filial atual) — apenas para tabelas que possuem a coluna
+      const filters: string[] = [];
+
+      // Filtro por organização (defense-in-depth)
+      if (orgId && table !== 'sale_items') {
+        filters.push(`organization_id=eq.${orgId}`);
+      }
+
+      // Filtro por filial (isolamento de filial)
+      if (branchId && branchScopedTables.includes(table)) {
+        filters.push(`store_branch_id=eq.${branchId}`);
+      }
+
+      const filterStr = filters.length > 0 ? { filter: filters.join(',') } : {};
+
       this.channel.on(
         'postgres_changes',
         {
           event: '*', // INSERT, UPDATE, DELETE
           schema: 'public',
           table: table,
-          // Filtro server-side: usuário comum só recebe mudanças da sua org.
-          // sale_items e stock_change_log NÃO têm organization_id, então
-          // o filtro é aplicado APENAS nas tabelas que possuem essa coluna.
-          ...(orgId && table !== 'sale_items' ? { filter: `organization_id=eq.${orgId}` } : {}),
+          ...filterStr,
         },
         (payload) => {
           this._connected = true;
@@ -159,7 +184,7 @@ class SupabaseSyncService {
       if (status === 'SUBSCRIBED') {
         this._connected = true;
         this._reconnectAttempts = 0;
-        console.log('[HD-Sync] Realtime connected');
+        console.log(`[HD-Sync] Realtime connected (branch: ${branchId || 'ALL'})`);
       } else if (status === 'CHANNEL_ERROR') {
         this._connected = false;
         console.warn('[HD-Sync] Realtime channel error — scheduling reconnect');
@@ -195,7 +220,7 @@ class SupabaseSyncService {
         supabase.removeChannel(this.channel);
         this.channel = null;
       }
-      this._doSubscribe(this._reconnectOrgId);
+      this._doSubscribe(this._reconnectOrgId, this._reconnectBranchId);
     }, delay);
   }
 

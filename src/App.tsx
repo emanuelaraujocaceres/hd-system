@@ -418,13 +418,16 @@ export const App: React.FC = () => {
       setLastSyncTime(new Date());
     };
 
-    // Subscribe to Realtime — filtra server-side pela org atual do usuário.
+    // Subscribe to Realtime — filtra server-side pela org E filial atual do usuário.
     // Superadmin sem override recebe de todas as orgs (o filtro client-side
     // abaixo continua como defense-in-depth).
     const realtimeOrgId = storageService.isSuperAdmin()
       ? (storageService.getSuperadminViewingOrg() || undefined)
       : (storageService.getCurrentOrgId() || undefined);
-    syncService.subscribeRealtime(handleRemoteChange, realtimeOrgId);
+    const realtimeBranchId = storageService.isSuperAdmin()
+      ? (storageService.getSuperadminViewingOrg() ? storageService.getSelectedBranchId() : undefined)
+      : (storageService.getSelectedBranchId() || undefined);
+    syncService.subscribeRealtime(handleRemoteChange, realtimeOrgId, realtimeBranchId);
 
     // Check connection health periodically (use refs to avoid stale closures)
     const checkConnection = async () => {
