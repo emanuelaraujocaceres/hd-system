@@ -1875,6 +1875,8 @@ class StorageService {
       }
 
       console.log('[HD-Sync] Cloud hydration complete — merge strategy preserves all local data not yet in cloud');
+      // Vendas fiado (novas ou antigas) → garantir conta a receber vinculada
+      this.backfillReceivablesFromSales();
       // Força notify para garantir que o React state seja atualizado
       // com o merge completo (não com dados parciais de um notify anterior).
       if (this.notifyTimer) {
@@ -2061,6 +2063,13 @@ class StorageService {
     const sales = allSales.filter((s) => s.id !== id);
     this.set(KEYS.SALES, sales);
     syncService.deleteRow('sales', id);
+    // Venda fiado excluída → remover a conta a receber vinculada (mesmo id)
+    const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
+    const linked = accounts.find((a) => a.id === id && a.type === 'receivable' && (a.title || '').startsWith('Fiado'));
+    if (linked) {
+      this.set(KEYS.FINANCIAL, accounts.filter((a) => a.id !== id));
+      syncService.deleteRow('financial_transactions', id);
+    }
     // Also delete sale_items from Supabase to prevent orphaned records
     if (saleToDelete && saleToDelete.items) {
       // Delete sale_items from Supabase (we don't have individual IDs — delete by sale_id)
@@ -2401,6 +2410,8 @@ class StorageService {
     sales.unshift(sale);
     this.set(KEYS.SALES, sales);
     this.syncSale(sale);
+    // Venda fiado → criar conta a receber vinculada (id da conta = id da venda)
+    this.createReceivableFromSale(sale);
 
     // ─── Deduce stock LOCALLY ONLY (instant UI) ────────────────
     // Uses deductStockLocal() instead of updateStock() to avoid calling
@@ -2738,6 +2749,116 @@ class StorageService {
     this.syncFinancialAccount(acc);
   }
 
+  // ─── FIADO → CONTAS A RECEBER ────────────────────────────────────
+  // A conta a receber de uma venda fiado usa o MESMO id da venda — vínculo
+  // determinístico em qualquer dispositivo, sem coluna nova e sem migração.
+  // O amount da conta é SEMPRE o saldo RESTANTE: cada pagamento desconta,
+  // e quando zera a conta vai para 'paid' e sai das pendentes no Financeiro.
+
+  private getFiadoAmount(sale: Sale): number {
+    return Math.round(
+      (sale.payments || [])
+        .filter((p) => p.method === 'credit_account')
+        .reduce((sum, p) => sum + (p.amount || 0), 0) * 100,
+    ) / 100;
+  }
+
+  private getTotalPaidForSale(saleId: string): number {
+    return this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, [])
+      .filter((cp) => cp.saleId === saleId)
+      .reduce((sum, cp) => sum + (cp.amount || 0), 0);
+  }
+
+  // Cria (ou atualiza) a conta a receber vinculada a uma venda fiado.
+  // Idempotente: re-syncs só quando o saldo realmente mudou.
+  private createReceivableFromSale(sale: Sale) {
+    try {
+      const fiadoAmount = this.getFiadoAmount(sale);
+      if (fiadoAmount <= 0) return;
+      const totalPaid = this.getTotalPaidForSale(sale.id);
+      const remaining = Math.max(0, Math.round((fiadoAmount - totalPaid) * 100) / 100);
+
+      const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
+      const existing = accounts.find((a) => a.id === sale.id);
+      if (existing) {
+        // Nunca reabrir uma conta já quitada/cancelada
+        if (existing.status === 'paid' || existing.status === 'cancelled') return;
+        const changed = Math.abs((existing.amount || 0) - remaining) > 0.01;
+        existing.amount = remaining;
+        if (!existing.title) existing.title = `Fiado ${sale.code || ''} — ${sale.customerName || 'Cliente'}`;
+        if (!existing.recipientOrPayer) existing.recipientOrPayer = sale.customerName || '';
+        if (changed) {
+          this.set(KEYS.FINANCIAL, accounts);
+          this.syncFinancialAccount(existing);
+        }
+        return;
+      }
+
+      const acc: FinancialAccount = {
+        id: sale.id,
+        title: `Fiado ${sale.code || ''} — ${sale.customerName || 'Cliente'}`,
+        type: 'receivable',
+        category: 'fiado',
+        amount: remaining,
+        dueDate: sale.date ? sale.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        status: 'pending',
+        recipientOrPayer: sale.customerName || '',
+        storeBranchId: sale.storeBranchId,
+        organizationId: sale.organizationId,
+      };
+      accounts.unshift(acc);
+      this.set(KEYS.FINANCIAL, accounts);
+      this.syncFinancialAccount(acc);
+      console.log(`[HD-Sync] 🧾 Conta a receber criada para fiado ${sale.code}: R$${remaining.toFixed(2)}`);
+    } catch (e: any) {
+      console.warn('[HD-Sync] createReceivableFromSale failed:', e?.message);
+    }
+  }
+
+  // Dá baixa na conta a receber vinculada à venda após salvar/excluir um
+  // pagamento. orig = saldo restante (amount) + o que já foi pago.
+  private updateReceivableFromPayments(saleId: string) {
+    try {
+      const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
+      let acc = accounts.find((a) => a.id === saleId);
+      if (!acc) {
+        // Conta ainda não existe localmente (ex.: venda fiado legada) — tenta criar
+        const sale = this.get<Sale[]>(KEYS.SALES, []).find((s) => s.id === saleId);
+        if (sale) this.createReceivableFromSale(sale);
+        return;
+      }
+      if (acc.status === 'cancelled') return;
+      const totalPaid = this.getTotalPaidForSale(saleId);
+      const orig = Math.round((acc.amount + totalPaid) * 100) / 100;
+      const remaining = Math.max(0, Math.round((orig - totalPaid) * 100) / 100);
+      if (remaining <= 0.01) {
+        acc.status = 'paid';
+        acc.amount = 0;
+        acc.paidDate = new Date().toISOString();
+      } else {
+        acc.status = 'pending';
+        acc.amount = remaining;
+      }
+      this.set(KEYS.FINANCIAL, accounts);
+      this.syncFinancialAccount(acc);
+      console.log(`[HD-Sync] 🧾 Baixa fiado ${saleId}: pago=R$${totalPaid.toFixed(2)} restante=R$${remaining.toFixed(2)} (${acc.status})`);
+    } catch (e: any) {
+      console.warn('[HD-Sync] updateReceivableFromPayments failed:', e?.message);
+    }
+  }
+
+  // Garante que toda venda fiado tenha conta a receber — cobre vendas feitas
+  // antes desta feature e dispositivos que perderam a conta local. Roda no
+  // fim da hidratação (depois do merge de sales, finance e credit_payments).
+  private backfillReceivablesFromSales() {
+    const sales = this.get<Sale[]>(KEYS.SALES, []);
+    for (const sale of sales) {
+      if (this.getFiadoAmount(sale) > 0) {
+        this.createReceivableFromSale(sale);
+      }
+    }
+  }
+
   deleteFinancialAccount(id: string) {
     const allAccounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
     const accToDelete = allAccounts.find(a => a.id === id);
@@ -2837,12 +2958,17 @@ class StorageService {
     else all.unshift(p);
     this.set(KEYS.CREDIT_PAYMENTS, all);
     this.syncCreditPayment(p);
+    // Baixa (parcial ou total) na conta a receber vinculada à venda fiado
+    if (p.saleId) this.updateReceivableFromPayments(p.saleId);
   }
 
   deleteCreditPayment(id: string) {
-    const all = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []).filter((x) => x.id !== id);
-    this.set(KEYS.CREDIT_PAYMENTS, all);
+    const all = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []);
+    const removed = all.find((x) => x.id === id);
+    this.set(KEYS.CREDIT_PAYMENTS, all.filter((x) => x.id !== id));
     syncService.deleteRow('credit_payments', id);
+    // Pagamento removido → devolver o valor ao saldo da conta a receber
+    if (removed?.saleId) this.updateReceivableFromPayments(removed.saleId);
   }
 
   private syncCreditPayment(p: CreditPayment) {
