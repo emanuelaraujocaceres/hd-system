@@ -326,6 +326,8 @@ class SupabaseSyncService {
         console.warn(`[HD-Sync] ❌ Upsert ${table} failed:`, error.message, `(row id: ${row.id})`);
         // DIAGNÓSTICO: loga o payload completo para revelar qual coluna UUID vai vazia ("")
         console.warn(`[HD-Sync] 🔍 PAYLOAD ${table}:`, JSON.stringify(row).slice(0, 2000));
+        // DIAGNÓSTICO: details/hint do Postgres apontam a coluna exata do 22P02
+        console.warn(`[HD-Sync] 📋 DB DETAILS:`, error.details ?? '(sem details)', `| hint:`, error.hint ?? '(sem hint)', `| code:`, error.code ?? '(sem code)');
         // Log to DLQ
         try {
           await supabase.rpc('fn_insserir_dlq', {
