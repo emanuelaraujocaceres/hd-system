@@ -115,15 +115,20 @@ class SupabaseSyncService {
      if (online) {
        // When coming back online, re-establish Realtime channel AND process pending queue
        this._reconnectAttempts = 0;
-       if (this.channel) {
-         // Channel might be dead after going offline — remove and recreate
-         try { supabase.removeChannel(this.channel); } catch {}
-         this.channel = null;
-       }
-       if (this._reconnectOrgId) {
-         this._doSubscribe(this._reconnectOrgId, this._reconnectBranchId);
-       }
-       this.processPendingQueue();
+       // Garante sessão Supabase válida ANTES de re-subscribir/processar:
+       // login OFFLINE não cria JWT e, sem sessão, nem o Realtime nem a fila
+       // funcionam (PGRST301). O re-login usa as credenciais locais do aparelho.
+       this.ensureSession().then(() => {
+         if (this.channel) {
+           // Channel might be dead after going offline — remove and recreate
+           try { supabase.removeChannel(this.channel); } catch {}
+           this.channel = null;
+         }
+         if (this._reconnectOrgId) {
+           this._doSubscribe(this._reconnectOrgId, this._reconnectBranchId);
+         }
+         this.processPendingQueue();
+       });
      }
    }
 
@@ -436,7 +441,18 @@ class SupabaseSyncService {
       return false;
     }
 
-    const result = await this.tryUpsert(table, rowWithTimestamp);
+    let result = await this.tryUpsert(table, rowWithTimestamp);
+    if (!result.ok && this.isAuthError(result.error)) {
+      // Sem sessão Supabase válida (ex.: login OFFLINE não cria JWT): re-login
+      // silencioso com as credenciais locais + 1 tentativa extra. Sem isso a
+      // escrita morreria aqui (PGRST301 não é erro de conexão → nem enfileira)
+      // e a venda ficaria só no aparelho, invisível para os outros.
+      console.warn('[HD-Sync] 🔑 Auth error — re-autenticando com credenciais locais...');
+      const reauthed = await this.ensureSession(true);
+      if (reauthed) {
+        result = await this.tryUpsert(table, rowWithTimestamp);
+      }
+    }
     if (!result.ok) {
       // Só enfileira erros de CONEXÃO. Erros permanentes (RLS/permissão,
       // org inválida) nunca vão passar com retry — enfileirar só faria a
@@ -462,7 +478,16 @@ class SupabaseSyncService {
       return false;
     }
 
-    const result = await this.tryDelete(table, id);
+    let result = await this.tryDelete(table, id);
+    if (!result.ok && this.isAuthError(result.error)) {
+      // Mesma regra do upsert: login offline não deixa JWT — re-autentica e
+      // tenta 1x de novo antes de descartar.
+      console.warn('[HD-Sync] 🔑 Auth error — re-autenticando com credenciais locais...');
+      const reauthed = await this.ensureSession(true);
+      if (reauthed) {
+        result = await this.tryDelete(table, id);
+      }
+    }
     if (!result.ok) {
       // Só enfileira erros de CONEXÃO (mesma regra do upsert — evita fila infinita)
       if (this.isConnectionError(result.error)) {
@@ -514,7 +539,16 @@ class SupabaseSyncService {
       return false;
     }
 
-    const result = await this.tryUpsertBatch(table, rowsWithTimestamp);
+    let result = await this.tryUpsertBatch(table, rowsWithTimestamp);
+    if (!result.ok && this.isAuthError(result.error)) {
+      // Mesma regra do upsert: login offline não deixa JWT — re-autentica e
+      // tenta 1x de novo antes de descartar.
+      console.warn('[HD-Sync] 🔑 Auth error — re-autenticando com credenciais locais...');
+      const reauthed = await this.ensureSession(true);
+      if (reauthed) {
+        result = await this.tryUpsertBatch(table, rowsWithTimestamp);
+      }
+    }
     if (!result.ok) {
       // Só enfileira erros de CONEXÃO (mesma regra do upsert — evita fila infinita)
       if (this.isConnectionError(result.error)) {
@@ -604,6 +638,11 @@ class SupabaseSyncService {
 
     console.log(`[HD-Sync] 🔄 Processing ${count} pending operations...`);
 
+    // Login OFFLINE não cria sessão Supabase — sem sessão o testConnection
+    // falha com PGRST301 e a fila nunca drena. Re-autentica primeiro
+    // (silencioso, usando as credenciais locais do aparelho).
+    await this.ensureSession();
+
     // First check if Supabase is actually reachable
     const connected = await this.testConnection();
     if (!connected) {
@@ -656,6 +695,62 @@ class SupabaseSyncService {
   // ─── CONNECTION TESTING ────────────────────────────────────────
 
   /**
+   * Garante uma sessão Supabase VÁLIDA para sincronizar.
+   * - Sessão armazenada: valida com 1 consulta leve (o supabase-js renova o
+   *   access token sozinho nessa chamada). Se o refresh token estiver morto,
+   *   o erro PGRST301 limpa a sessão e o fluxo abaixo tenta re-login.
+   * - Sem sessão (login OFFLINE não cria JWT): re-login SILENCIOSO com as
+   *   credenciais locais capturadas no último login online deste aparelho
+   *   (email + senha em hd_system_user_profile). É isso que permite a fila
+   *   drenar e as vendas subirem quando a internet volta, sem pedir nada
+   *   ao usuário.
+   * - Offline (navigator.onLine false): retorna false sem rede desnecessária.
+   * @param forceReauth pula a validação e força o signInWithPassword (usado
+   *   quando uma escrita acabou de falhar com erro de auth).
+   */
+  async ensureSession(forceReauth = false): Promise<boolean> {
+    if (!navigator.onLine) return false;
+    // Logout EXPLÍCITO: não re-autenticar em hipótese alguma — senão a sessão
+    // voltaria a existir e o app reabriria logado como o último usuário,
+    // anulando o logout.
+    if (localStorage.getItem('hd_system_logged_in_email') === 'LOGGED_OUT') return false;
+
+    if (!forceReauth) {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session) {
+          const { error } = await supabase.from('products').select('id').limit(1);
+          if (!error) return true;
+          console.warn('[HD-Sync] Sessão armazenada inválida — tentando re-login local:', error.message);
+        }
+      } catch (e) {
+        console.warn('[HD-Sync] getSession falhou:', e);
+      }
+    }
+
+    // Re-login silencioso com as credenciais locais (mesmo aparelho)
+    try {
+      const raw = localStorage.getItem('hd_system_user_profile');
+      if (!raw) return false;
+      const user = JSON.parse(raw);
+      if (!user?.email || !user?.password) return false;
+      const { error } = await supabase.auth.signInWithPassword({
+        email: String(user.email).toLowerCase(),
+        password: String(user.password),
+      });
+      if (error) {
+        console.warn('[HD-Sync] Re-login automático falhou (senha local ≠ Supabase?):', error.message);
+        return false;
+      }
+      console.log('[HD-Sync] 🔑 Sessão Supabase restabelecida automaticamente');
+      return true;
+    } catch (e) {
+      console.warn('[HD-Sync] Re-login automático exceção:', e);
+      return false;
+    }
+  }
+
+  /**
    * Test connection to Supabase.
    * Uses 'products' table which is guaranteed to exist.
    */
@@ -677,6 +772,23 @@ class SupabaseSyncService {
   }
 
   // ─── HELPERS ───────────────────────────────────────────────────
+
+  /**
+   * Erros de AUTENTICAÇÃO (PGRST301 / JWT / não autenticado) — não são erros
+   * de conexão: enfileirar não resolveria (o retry nunca autentica de novo).
+   * Para esses, o app re-autentica com as credenciais locais (ensureSession)
+   * e tenta a escrita 1x extra.
+   */
+  private isAuthError(error: any): boolean {
+    if (!error) return false;
+    const msg = (error.message || '').toLowerCase();
+    return (
+      error.code === 'PGRST301' ||
+      msg.includes('jwt') ||
+      msg.includes('not authenticated') ||
+      msg.includes('invalid login credentials')
+    );
+  }
 
   /**
    * Determine if a Supabase error is a connection-related error (should be queued).

@@ -464,6 +464,11 @@ export const App: React.FC = () => {
 
     // Check connection health periodically (use refs to avoid stale closures)
     const checkConnection = async () => {
+      // Garante sessão Supabase válida antes do testConnection (re-login
+      // silencioso com credenciais locais quando o login foi offline e não
+      // deixou JWT) — sem isso, após F5 com sessão morta, o testConnection
+      // falha com PGRST301 e a fila pendente nunca drena.
+      await syncService.ensureSession();
       const healthy = await syncService.testConnection();
       const nowConnected = healthy || syncService.connected;
       setIsSyncConnected(nowConnected);
