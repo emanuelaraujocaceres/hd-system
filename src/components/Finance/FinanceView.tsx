@@ -56,8 +56,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [formDueDate, setFormDueDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [formRecipient, setFormRecipient] = useState('');
   const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
-  // Recorrência
-  const [formIsRecurring, setFormIsRecurring] = useState(false);
+  // Recorrência / Parcelamento
+  const [formMode, setFormMode] = useState<'single' | 'installment' | 'recurring'>('single');
   const [formRecurrenceType, setFormRecurrenceType] = useState<'monthly' | 'weekly' | 'biweekly'>('monthly');
   const [formRecurrenceCount, setFormRecurrenceCount] = useState<string>('');
   const [expandedDreRow, setExpandedDreRow] = useState<string | null>(null);
@@ -65,7 +65,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
 
-  // ── Recorrência: parse do número de parcelas ─────────────────
+  // ── Recorrência: parse do número de repetições/parcelas ───────
   const recurrenceCount = parseInt(formRecurrenceCount, 10) || 0;
 
   // ── Helper: calcular data de vencimento de cada parcela ──────
@@ -97,6 +97,12 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       addToast('error', 'O valor deve ser maior que zero.');
       return;
     }
+    if (formMode !== 'single' && recurrenceCount < 2) {
+      addToast('error', formMode === 'installment'
+        ? 'Informe o número de parcelas (mínimo 2).'
+        : 'Informe o número de repetições (mínimo 2).');
+      return;
+    }
     setIsSaving(true);
     try {
       if (editingAccount) {
@@ -115,8 +121,41 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         setIsModalOpen(false);
         setEditingAccount(null);
         addToast('success', `Conta "${newAcc.title}" atualizada com sucesso.`);
-      } else if (formIsRecurring && recurrenceCount > 0) {
-        // Criar parcelas recorrentes
+      } else if (formMode === 'installment' && recurrenceCount > 0) {
+        // PARCELADA: o montante digitado é DIVIDIDO em N parcelas
+        const parentId = `fin-${Date.now()}`;
+        const branchId = storageService.getSelectedBranchId() || undefined;
+        const perInstallment = Math.round((amountValue / recurrenceCount) * 100) / 100;
+        for (let i = 0; i < recurrenceCount; i++) {
+          const dueDate = computeInstallmentDate(formDueDate, formRecurrenceType, i);
+          // Última parcela absorve a sobra do arredondamento (ex.: 100/3 → 33,34 + 33,33 + 33,33)
+          const amount = i === recurrenceCount - 1
+            ? Math.round((amountValue - perInstallment * (recurrenceCount - 1)) * 100) / 100
+            : perInstallment;
+          const installment: FinancialAccount = {
+            id: i === 0 ? parentId : `fin-${Date.now()}-${i}`,
+            title: `${formTitle.trim()} (${i + 1}/${recurrenceCount})`,
+            type: formType,
+            category: formCategory,
+            amount,
+            dueDate,
+            status: 'pending',
+            recipientOrPayer: formRecipient.trim(),
+            storeBranchId: branchId,
+            isInstallment: true,
+            isRecurring: false,
+            recurrenceType: formRecurrenceType,
+            recurrenceCount,
+            recurrenceParentId: parentId,
+            installmentNumber: i + 1,
+          };
+          storageService.saveFinancialAccount(installment);
+        }
+        posAudio.chime();
+        setIsModalOpen(false);
+        addToast('success', `${recurrenceCount} parcelas de R$ ${perInstallment.toFixed(2).replace('.', ',')} criadas para "${formTitle.trim()}".`);
+      } else if (formMode === 'recurring' && recurrenceCount > 0) {
+        // RECORRENTE: valor FIXO se repete a cada período (NÃO é montante dividido)
         const parentId = `fin-${Date.now()}`;
         const branchId = storageService.getSelectedBranchId() || undefined;
         for (let i = 0; i < recurrenceCount; i++) {
@@ -132,6 +171,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             recipientOrPayer: formRecipient.trim(),
             storeBranchId: branchId,
             isRecurring: true,
+            isInstallment: false,
             recurrenceType: formRecurrenceType,
             recurrenceCount,
             recurrenceParentId: parentId,
@@ -141,7 +181,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         }
         posAudio.chime();
         setIsModalOpen(false);
-        addToast('success', `${recurrenceCount} parcelas criadas para "${formTitle.trim()}".`);
+        addToast('success', `${recurrenceCount} ocorrências recorrentes de R$ ${amountValue.toFixed(2).replace('.', ',')} criadas para "${formTitle.trim()}".`);
       } else {
         // Conta única (sem recorrência)
         const newAcc: FinancialAccount = {
@@ -203,7 +243,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     setFormAmount('');
     setFormDueDate(new Date().toISOString().slice(0, 10));
     setFormRecipient('');
-    setFormIsRecurring(false);
+    setFormMode('single');
     setFormRecurrenceType('monthly');
     setFormRecurrenceCount('');
     setIsModalOpen(true);
@@ -246,13 +286,26 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     }
   };
 
+  // Calcula se uma conta entra nos totais de pendência/competência.
+  // PARCELADA e conta única: sempre (são obrigações/receitas reais).
+  // RECORRENTE: só as ocorrências do período atual (mês vigente ou anteriores,
+  // ex.: vencidas) — ocorrências futuras ainda não são devidas. Sem isso, uma
+  // recorrente de 24x R$ 1.000 inflaria os totais com R$ 24.000.
+  const today = new Date();
+  const countsInCurrentPeriod = (a: FinancialAccount): boolean => {
+    if (!a.isRecurring) return true;
+    const d = new Date(a.dueDate + 'T12:00:00');
+    return d.getFullYear() < today.getFullYear()
+      || (d.getFullYear() === today.getFullYear() && d.getMonth() <= today.getMonth());
+  };
+
   // Calculations for Financial Accounts
   const totalPayablePending = financialAccounts
-    .filter((a) => a.type === 'payable' && a.status === 'pending')
+    .filter((a) => a.type === 'payable' && a.status === 'pending' && countsInCurrentPeriod(a))
     .reduce((acc, a) => acc + a.amount, 0);
 
   const totalReceivablePending = financialAccounts
-    .filter((a) => a.type === 'receivable' && a.status === 'pending')
+    .filter((a) => a.type === 'receivable' && a.status === 'pending' && countsInCurrentPeriod(a))
     .reduce((acc, a) => acc + a.amount, 0);
 
   // DRE CALCULATIONS
@@ -280,8 +333,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const grossMargin = totalSalesRevenue > 0 ? (grossProfit / totalSalesRevenue) * 100 : 0;
 
   // Two DRE bases: accrual (regime de competência) and cash (regime de caixa)
+  // Competência: despesas recorrentes só entram pelas ocorrências do período
+  // atual (countsInCurrentPeriod) — futuras ainda não são despesa incorrida.
   const totalExpensesAccrual = financialAccounts
-    .filter((a) => a.type === 'payable')
+    .filter((a) => a.type === 'payable' && countsInCurrentPeriod(a))
     .reduce((acc, a) => acc + a.amount, 0);
 
   const totalExpensesCash = financialAccounts
@@ -454,7 +509,21 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                       onClick={() => handleOpenEditAccount(acc)}
                       className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors cursor-pointer"
                     >
-                      <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">{acc.title}</td>
+                      <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate">{acc.title}</span>
+                          {acc.isInstallment && (
+                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold text-[9px]">
+                              Parcela
+                            </span>
+                          )}
+                          {acc.isRecurring && (
+                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 font-bold text-[9px]">
+                              Recorrente
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-3 px-4">
                         <span
                           className={`px-2 py-0.5 rounded font-bold text-[10px] ${
@@ -525,7 +594,19 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm p-4 space-y-2.5 cursor-pointer active:scale-[0.98] transition-transform"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-tight">{acc.title}</h4>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-tight truncate">{acc.title}</h4>
+                      {acc.isInstallment && (
+                        <span className="shrink-0 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold text-[9px]">
+                          Parcela
+                        </span>
+                      )}
+                      {acc.isRecurring && (
+                        <span className="shrink-0 px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 font-bold text-[9px]">
+                          Recorrente
+                        </span>
+                      )}
+                    </div>
                     <span
                       className={`shrink-0 px-2 py-0.5 rounded font-bold text-[10px] ${
                         isPayable
@@ -1098,20 +1179,46 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 />
               </div>
 
-              {/* ── RECORRÊNCIA (apenas para contas novas) ──── */}
+              {/* ── PARCELADA / RECORRENTE (apenas para contas novas) ──── */}
               {!editingAccount && (
                 <div className="border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-3 space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formIsRecurring}
-                      onChange={(e) => setFormIsRecurring(e.target.checked)}
-                      className="rounded border-slate-300"
-                    />
-                    <span className="font-bold text-xs">Conta Recorrente?</span>
-                  </label>
-                  {formIsRecurring && (
-                    <div className="grid grid-cols-2 gap-2 mt-2">
+                  <label className="block font-bold mb-1">Tipo de Lançamento</label>
+                  <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                    {([
+                      { key: 'single', label: 'Única' },
+                      { key: 'installment', label: 'Parcelada' },
+                      { key: 'recurring', label: 'Recorrente' },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setFormMode(opt.key)}
+                        className={`px-2 py-2 rounded-lg font-bold text-[11px] transition-colors ${
+                          formMode === opt.key
+                            ? 'bg-white dark:bg-slate-900 shadow text-emerald-600 dark:text-emerald-400 border border-emerald-500/40'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {formMode === 'installment' && (
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      O valor informado é <strong>dividido</strong> entre as parcelas
+                      (ex.: 60 × R$ 1.000 = R$ 60.000 em 60 parcelas).
+                    </p>
+                  )}
+                  {formMode === 'recurring' && (
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      O valor é <strong>fixo</strong> e se repete todo período (ex.: R$ 1.000/mês).
+                      Só a ocorrência do mês atual conta nos totais — as futuras entram conforme o mês chega.
+                    </p>
+                  )}
+
+                  {formMode !== 'single' && (
+                    <div className="grid grid-cols-2 gap-2 mt-1">
                       <div>
                         <label className="block font-bold mb-1 text-[10px]">Frequência</label>
                         <select
@@ -1125,13 +1232,15 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                         </select>
                       </div>
                       <div>
-                        <label className="block font-bold mb-1 text-[10px]">Nº de Parcelas</label>
+                        <label className="block font-bold mb-1 text-[10px]">
+                          {formMode === 'installment' ? 'Nº de Parcelas' : 'Nº de Repetições'}
+                        </label>
                         <input
                           type="number"
                           min="2"
-                          max="60"
+                          max="1200"
                           required
-                          placeholder="Ex: 12"
+                          placeholder={formMode === 'installment' ? 'Ex: 12' : 'Ex: 1000'}
                           value={formRecurrenceCount}
                           onChange={(e) => setFormRecurrenceCount(e.target.value)}
                           className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border rounded-xl text-xs"
@@ -1167,7 +1276,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   disabled={isSaving}
                   className="px-5 py-2 rounded-xl bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold min-h-[44px]"
                 >
-                  {isSaving ? 'Salvando...' : (formIsRecurring && recurrenceCount > 0 ? `Criar ${recurrenceCount} Parcelas` : 'Salvar Conta')}
+                  {isSaving ? 'Salvando...' : (formMode !== 'single' && recurrenceCount > 0 ? `Criar ${recurrenceCount} ${formMode === 'installment' ? 'Parcelas' : 'Repetições'}` : 'Salvar Conta')}
                 </button>
               </div>
             </form>

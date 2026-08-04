@@ -194,8 +194,12 @@ export interface FinancialAccount {
   notes?: string;
   storeBranchId?: string;
   organizationId?: string; // multi-tenant
-  // Recorrência
+  // Recorrência / Parcelamento (localStorage apenas — não sincroniza colunas)
+  // RECORRENTE (isRecurring): valor FIXO que se repete a cada período — não é
+  // um montante dividido. Só ocorrências do período atual contam nos totais.
+  // PARCELADA (isInstallment): o montante digitado é dividido em N parcelas.
   isRecurring?: boolean;
+  isInstallment?: boolean;
   recurrenceType?: 'monthly' | 'weekly' | 'biweekly';
   recurrenceCount?: number;
   recurrenceParentId?: string; // ID da parcela "mãe" (para agrupar parcelas)
