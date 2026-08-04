@@ -1742,11 +1742,13 @@ class StorageService {
               return new Date(b.opened_at).getTime() - new Date(a.opened_at).getTime();
             });
             const s = sorted[0];
-            // Se o caixa foi aberto em um dia ANTERIOR, reinicia o saldo para o dia atual
-            const openedDate = new Date(s.opened_at).toDateString();
-            const today = new Date().toDateString();
-            const isPreviousDay = openedDate !== today;
-            // Recalcula o saldo: se sessão de hoje, usa expected_balance; se de dia anterior, reinicia
+            // O cloud é a fonte da verdade: adota expected_balance/totais como estão.
+            // (Antes havia um "reset de dia anterior" aqui que zerava as vendas e
+            // voltava o saldo para o opening_balance quando a sessão tinha sido
+            // aberta em um dia anterior — só LOCALMENTE, sem gravar no cloud. Isso
+            // fazia cada dispositivo mostrar um valor diferente para a MESMA sessão:
+            // quem tinha a sessão local mantinha o total, quem hidratava depois caía
+            // no reset e mostrava só o valor inicial.)
             const expectedBalance = parseFloat(s.expected_balance) || 0;
             const totalSalesCash = parseFloat(s.total_sales_cash) || 0;
             const suprimentos = parseFloat(s.suprimentos) || 0;
@@ -1756,13 +1758,13 @@ class StorageService {
               id: s.id, openedAt: s.opened_at, closedAt: s.closed_at || undefined,
               operatorId: s.user_id || '', operatorName: s.operator_name || '',
               initialCash: initialCash,
-              currentCashBalance: isPreviousDay ? initialCash : expectedBalance,
-              totalSalesCash: isPreviousDay ? 0 : totalSalesCash,
-              totalSalesPix: isPreviousDay ? 0 : (parseFloat(s.total_sales_pix) || 0),
-              totalSalesCard: isPreviousDay ? 0 : (parseFloat(s.total_sales_card) || 0),
-              totalSalesCreditAccount: isPreviousDay ? 0 : (parseFloat(s.total_sales_credit_account) || 0),
-              suprimentos: isPreviousDay ? 0 : suprimentos,
-              sangrias: isPreviousDay ? 0 : sangrias,
+              currentCashBalance: expectedBalance,
+              totalSalesCash: totalSalesCash,
+              totalSalesPix: parseFloat(s.total_sales_pix) || 0,
+              totalSalesCard: parseFloat(s.total_sales_card) || 0,
+              totalSalesCreditAccount: parseFloat(s.total_sales_credit_account) || 0,
+              suprimentos: suprimentos,
+              sangrias: sangrias,
               status: s.status, notes: s.notes || undefined,
               storeBranchId: s.store_branch_id || undefined,
             });
@@ -1781,22 +1783,21 @@ class StorageService {
             if (localSession && localSession.id === s.id && localSession.status === 'open') {
               console.log(`[HD-Sync] 🔄 Caixa session "${s.id}" já existe localmente — mantendo dados locais`);
             } else {
-              // Se o caixa foi aberto em um dia ANTERIOR, reinicia o saldo para o dia atual
-              const openedDate = new Date(s.opened_at).toDateString();
-              const today = new Date().toDateString();
-              const isPreviousDay = openedDate !== today;
+              // Sessão local não bate com a do cloud (ou não existe) → adota o
+              // cloud como está, sem reset de dia anterior (mesmo motivo acima:
+              // reset local sem gravar no cloud divergia os dispositivos).
               const initialCash = parseFloat(s.opening_balance) || 0;
               this.set(KEYS.CAIXA, {
                 id: s.id, openedAt: s.opened_at, closedAt: s.closed_at || undefined,
                 operatorId: s.user_id || '', operatorName: s.operator_name || '',
                 initialCash: initialCash,
-                currentCashBalance: isPreviousDay ? initialCash : (parseFloat(s.expected_balance) || 0),
-                totalSalesCash: isPreviousDay ? 0 : (parseFloat(s.total_sales_cash) || 0),
-                totalSalesPix: isPreviousDay ? 0 : (parseFloat(s.total_sales_pix) || 0),
-                totalSalesCard: isPreviousDay ? 0 : (parseFloat(s.total_sales_card) || 0),
-                totalSalesCreditAccount: isPreviousDay ? 0 : (parseFloat(s.total_sales_credit_account) || 0),
-                suprimentos: isPreviousDay ? 0 : (parseFloat(s.suprimentos) || 0),
-                sangrias: isPreviousDay ? 0 : (parseFloat(s.sangrias) || 0),
+                currentCashBalance: parseFloat(s.expected_balance) || 0,
+                totalSalesCash: parseFloat(s.total_sales_cash) || 0,
+                totalSalesPix: parseFloat(s.total_sales_pix) || 0,
+                totalSalesCard: parseFloat(s.total_sales_card) || 0,
+                totalSalesCreditAccount: parseFloat(s.total_sales_credit_account) || 0,
+                suprimentos: parseFloat(s.suprimentos) || 0,
+                sangrias: parseFloat(s.sangrias) || 0,
                 status: s.status, notes: s.notes || undefined,
                 storeBranchId: s.store_branch_id || undefined,
               });
