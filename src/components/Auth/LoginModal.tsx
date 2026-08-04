@@ -32,11 +32,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     // Tentativa de login local (fallback ou modo offline)
-    // SEGURANÇA: usuários sincronizados do cloud não possuem senha local
-    // (o Supabase nunca armazena senha). Permitir login local sem exigir
-    // senha permitiria acesso com QUALQUER senha digitada — validação
-    // passa a exigir senha local obrigatória. Login sem senha local só é
-    // possível via Supabase Auth (fluxo online).
+    // A senha local só existe neste dispositivo (localStorage): o Supabase
+    // nunca armazena senha. Após o 1º login online, a senha digitada é
+    // capturada como senha local (setLocalPassword) — é isso que permite o
+    // login offline com as mesmas credenciais. Antes disso, só é possível
+    // entrar via Supabase Auth (fluxo online) ou com senha definida em
+    // Usuários & Permissões.
     const tryLocalLogin = (): boolean => {
       const user = storageService.getUserByEmail(email);
       if (!user) {
@@ -131,9 +132,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
               },
               active: profileData.active,
               createdAt: profileData.created_at,
-              password: undefined,
+              password, // capturada no 1º login online → habilita login offline
             };
             storageService.saveUserProfile(userProfile);
+            // Registra a senha local na lista de usuários (hd_system_users_list):
+            // é dela que o login offline lê. Se o usuário ainda não foi hidratado
+            // neste dispositivo, setLocalPassword cria o registro.
+            storageService.setLocalPassword(userProfile, password);
             // Auto-selecionar filial do usuário no login
             if (userProfile.storeBranchId) {
               storageService.setSelectedBranchId(userProfile.storeBranchId);

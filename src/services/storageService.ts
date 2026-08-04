@@ -2815,6 +2815,35 @@ class StorageService {
     this.notify();
   }
 
+  /**
+   * Guarda a senha digitada no login online (Supabase) como senha LOCAL do
+   * usuário, permitindo o login offline com as mesmas credenciais após o
+   * primeiro login com internet. Senhas só existem neste dispositivo
+   * (localStorage) — o Supabase nunca as armazena; por isso o merge do
+   * Realtime (applyRemoteUserUpdate) preserva a senha local.
+   */
+  setLocalPassword(user: UserProfile, password: string) {
+    const users = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
+    const idx = users.findIndex(
+      (u) => (u.email || '').toLowerCase() === (user.email || '').toLowerCase(),
+    );
+    const entry = { ...user, password };
+    if (idx >= 0) {
+      // Preserva campos locais que não vêm do perfil (ex.: superadmin local)
+      users[idx] = { ...users[idx], ...entry, password };
+    } else {
+      users.unshift(entry);
+    }
+    this.set(KEYS.USERS_LIST, users);
+
+    // Mantém o perfil ativo (KEYS.USER) consistente com a senha recém-capturada
+    const activeEmail = localStorage.getItem(KEYS.LOGGED_IN_EMAIL);
+    if (activeEmail && activeEmail.toLowerCase() === (user.email || '').toLowerCase()) {
+      const current = this.get<UserProfile | null>(KEYS.USER, null);
+      if (current) this.saveUserProfile({ ...current, password });
+    }
+  }
+
   loginWithGoogle(email: string, password?: string): { success: boolean; user?: UserProfile; message?: string } {
     const user = this.getUserByEmail(email);
     if (!user) {
