@@ -2277,6 +2277,10 @@ class StorageService {
         quantity: item.quantity,
         unit_price: item.unitPrice,
         total_price: item.total,
+        // 🔥 store_branch_id OBRIGATÓRIO: a trigger do banco rejeita
+        // sale_items sem filial ("Tentativa de salvar sale_items sem
+        // store_branch_id"). Reaproveita o UUID já validado na venda.
+        store_branch_id: sale.storeBranchId || this.getSelectedBranchId() || null,
       }));
       const filtered = existingItems.filter((i: any) => i.sale_id !== sale.id);
       this.set(KEYS.SALE_ITEMS, [...newItems, ...filtered]);

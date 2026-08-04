@@ -24,6 +24,28 @@ function isSuperAdmin(): boolean {
   return false;
 }
 
+// Regex de UUID canônico — usado para bloquear short codes ("br-01") que
+// causavam erro 22P02 no banco ("invalid input syntax for type uuid").
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Tabelas que exigem store_branch_id válido (UUID) — exceto store_branches
+// e system_settings (globais/por-org, sem coluna de filial).
+const BRANCH_REQUIRED_TABLES: TableName[] = [
+  'products', 'categories', 'customers', 'suppliers',
+  'sales', 'sale_items', 'financial_transactions',
+  'cash_sessions', 'stock_movements', 'system_users',
+];
+
+/**
+ * Retorna o store_branch_id da linha se for UUID válido, senão undefined.
+ * Bloqueia short codes ("br-01"), strings vazias e valores inválidos.
+ */
+function validBranchId(row: Record<string, any>): string | undefined {
+  const v = row?.store_branch_id;
+  if (typeof v !== 'string' || !UUID_RE.test(v)) return undefined;
+  return v;
+}
+
 export type TableName =
   | 'products'
   | 'categories'
@@ -144,13 +166,12 @@ class SupabaseSyncService {
    * Separated from subscribeRealtime() to allow reconnection.
    */
   private _doSubscribe(orgId?: string, branchId?: string) {
-    // TODAS as tabelas agora possuem store_branch_id NOT NULL (banco convertido).
-    // Todas são filtradas por filial no Realtime.
-    const branchScopedTables: TableName[] = [
-      'products', 'categories', 'customers', 'suppliers',
-      'sales', 'sale_items', 'financial_transactions', 'cash_sessions',
-      'stock_movements', 'store_branches', 'system_users', 'system_settings',
-    ];
+    // Filtro por filial APENAS nas tabelas que possuem a coluna store_branch_id
+    // (mesmo conjunto de BRANCH_REQUIRED_TABLES). Exclui store_branches (é a
+    // própria tabela de filiais — coluna é `id`, não `store_branch_id`) e
+    // system_settings (org-scoped) — filtrar por store_branch_id nelas causa
+    // "invalid column for filter store_branch_id" no Realtime.
+    const branchScopedTables: TableName[] = BRANCH_REQUIRED_TABLES;
 
     const tables: TableName[] = [
       'products',
@@ -384,17 +405,13 @@ class SupabaseSyncService {
       }
     }
 
-    // Validação defensiva: store_branch_id obrigatório para todas as tabelas
-    // exceto store_branches e system_settings (são globais/por-org)
-    const BRANCH_REQUIRED_TABLES: TableName[] = [
-      'products', 'categories', 'customers', 'suppliers',
-      'sales', 'sale_items', 'financial_transactions',
-      'cash_sessions', 'stock_movements', 'system_users',
-    ];
+    // Validação defensiva: store_branch_id obrigatório e em formato UUID
+    // (bloqueia short codes como "br-01" que causavam 22P02 no banco).
     if (BRANCH_REQUIRED_TABLES.includes(table)) {
-      const branchId = row.store_branch_id;
-      if (!branchId || branchId === '' || branchId === 'undefined' || branchId === 'null') {
-        console.warn(`[HD-Sync] ⚠️ Skipping ${table} upsert — store_branch_id ausente (id: ${row.id})`);
+      const branchId = validBranchId(row);
+      if (!branchId) {
+        const raw = row?.store_branch_id;
+        console.warn(`[HD-Sync] ⚠️ Skipping ${table} upsert — store_branch_id ausente ou inválido ("${raw}", id: ${row.id})`);
         return false;
       }
     }
@@ -454,6 +471,18 @@ class SupabaseSyncService {
    */
   async upsertRows(table: TableName, rows: Record<string, any>[]) {
     if (rows.length === 0) return true;
+
+    // Validação defensiva por linha: descarta itens com store_branch_id
+    // ausente ou em formato inválido (short code "br-01" → 22P02 no banco).
+    // Linhas inválidas são logadas e ignoradas; o lote segue com as válidas.
+    if (BRANCH_REQUIRED_TABLES.includes(table)) {
+      const valid = rows.filter((r) => validBranchId(r));
+      if (valid.length !== rows.length) {
+        console.warn(`[HD-Sync] ⚠️ upsertRows(${table}): descartadas ${rows.length - valid.length} linha(s) sem store_branch_id UUID válido`);
+      }
+      rows = valid;
+      if (rows.length === 0) return true;
+    }
 
     const rowsWithTimestamp = SupabaseSyncService.TABLES_WITH_UPDATED_AT.includes(table)
       ? rows.map((r) => ({ ...r, updated_at: new Date().toISOString() }))
