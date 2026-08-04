@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Wallet,
   Search,
@@ -68,6 +68,14 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
   const [paymentAmount, setPaymentAmount] = useState('');
   const [registeringPayment, setRegisteringPayment] = useState(false);
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
+
+  // Atualiza pagamentos ao vivo quando outro dispositivo registra/exclui um pagamento
+  useEffect(() => {
+    const unsub = storageService.subscribe(() => {
+      setCreditPayments(storageService.getCreditPayments());
+    });
+    return () => { unsub(); };
+  }, []);
 
   // ── Build debt data ────────────────────────────────────────────
   const customerDebts = useMemo<CustomerDebt[]>(() => {
@@ -271,7 +279,8 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
         if (newPayments.length > 0) {
           const updated = [...creditPayments, ...newPayments];
           setCreditPayments(updated);
-          storageService.saveCreditPayments(updated);
+          // Sincroniza cada pagamento com o banco (aparece em todos os dispositivos)
+          newPayments.forEach((p) => storageService.saveCreditPayment(p));
           posAudio.chime();
           addToast('success', `Pagamento de ${formatCurrency(amount)} registrado com sucesso.`);
         } else {
@@ -299,7 +308,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
     try {
       const updated = creditPayments.filter((cp) => cp.id !== paymentId);
       setCreditPayments(updated);
-      storageService.saveCreditPayments(updated);
+      storageService.deleteCreditPayment(paymentId);
       posAudio.chime();
       addToast('success', 'Pagamento excluído.');
     } catch (err: any) {

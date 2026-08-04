@@ -194,7 +194,7 @@ export interface FinancialAccount {
   notes?: string;
   storeBranchId?: string;
   organizationId?: string; // multi-tenant
-  // Recorrência / Parcelamento (localStorage apenas — não sincroniza colunas)
+  // Recorrência / Parcelamento (sincronizado — colunas em financial_transactions)
   // RECORRENTE (isRecurring): valor FIXO que se repete a cada período — não é
   // um montante dividido. Só ocorrências do período atual contam nos totais.
   // PARCELADA (isInstallment): o montante digitado é dividido em N parcelas.
@@ -204,6 +204,46 @@ export interface FinancialAccount {
   recurrenceCount?: number;
   recurrenceParentId?: string; // ID da parcela "mãe" (para agrupar parcelas)
   installmentNumber?: number;  // Número desta parcela (1, 2, 3...)
+}
+
+// Histórico de boletos escaneados (sincronizado — tabela scanned_boletos)
+export interface ScannedBoleto {
+  id: string;
+  linhaDigitavel: string;
+  barcode?: string;
+  amount: number;
+  dueDate?: string;
+  payer: string;
+  scanDate: string;
+  financialAccountId?: string; // conta a pagar criada a partir do boleto
+  status?: string;
+  storeBranchId?: string;
+  organizationId?: string;
+}
+
+// Pagamento de dívida fiado (sincronizado — tabela credit_payments)
+export interface CreditPayment {
+  id: string;
+  saleId: string;
+  customerId?: string;
+  customerName?: string;
+  amount: number;
+  date: string; // ISO
+  paymentMethod?: string;
+  storeBranchId?: string;
+  organizationId?: string;
+}
+
+// Nota fiscal importada (sincronizado — tabela nf_records)
+export interface NFRecord {
+  id: string;
+  scanDate: string;
+  supplierName: string;
+  items: { productName: string; quantity: number; unitPrice: number }[];
+  totalValue: number;
+  note: string;
+  storeBranchId?: string;
+  organizationId?: string;
 }
 
 export interface SystemSettings {

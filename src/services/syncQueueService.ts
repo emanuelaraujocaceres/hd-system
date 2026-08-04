@@ -24,7 +24,10 @@ type TableName =
   | 'stock_movements'
   | 'store_branches'
   | 'system_users'
-  | 'system_settings';
+  | 'system_settings'
+  | 'scanned_boletos'
+  | 'credit_payments'
+  | 'nf_records';
 
 type QueueAction = 'upsert' | 'delete' | 'upsert_batch';
 

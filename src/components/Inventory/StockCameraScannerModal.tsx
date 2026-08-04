@@ -11,7 +11,7 @@ import {
   Zap,
   ZapOff,
 } from 'lucide-react';
-import { Product, StoreBranch } from '../../types';
+import { Product, StoreBranch, NFRecord } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 
@@ -346,6 +346,17 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
 
     const reasonText = `Importa\u00e7\u00e3o NF ${invInvoiceNumber || 'S/N'} - Fornecedor ${invSupplierName || 'N\u00e3o informado'}`;
     await storageService.updateStock(newProd.id, newProd.currentStock, reasonText, 'Leitor NF C\u00e2mera');
+
+    // Registrar a NF no histórico (localStorage + banco — aparece em todos os dispositivos)
+    const nfRecord: NFRecord = {
+      id: `nf-${Date.now()}`,
+      scanDate: new Date().toISOString(),
+      supplierName: invSupplierName.trim() || 'Fornecedor não informado',
+      items: [{ productName: name, quantity: invQty || 1, unitPrice: invUnitPrice || 0 }],
+      totalValue: (invQty || 1) * (invUnitPrice || 0),
+      note: `NF ${invInvoiceNumber || 'S/N'}`,
+    };
+    storageService.saveNFRecord(nfRecord);
 
     posAudio.chime();
     if (onProductsImported) onProductsImported();

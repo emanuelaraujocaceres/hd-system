@@ -16,22 +16,10 @@ import {
   Zap,
   ZapOff,
 } from 'lucide-react';
-import { FinancialAccount, StoreBranch } from '../../types';
+import { FinancialAccount, StoreBranch, ScannedBoleto } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { decodeBoleto } from '../../../functions/api/ai/boletoLib';
-
-const BOLETOS_STORAGE_KEY = 'hd_system_scanned_boletos';
-
-interface ScannedBoletoRecord {
-  id: string;
-  linhaDigitavel: string;
-  amount: number;
-  dueDate: string;
-  payer: string;
-  scanDate: string;
-  financialAccountId: string;
-}
 
 interface BoletoCameraScannerModalProps {
   isOpen: boolean;
@@ -61,7 +49,7 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
   const [flashOn, setFlashOn] = useState(false);
 
   // Scanned boletos history
-  const [scannedBoletos, setScannedBoletos] = useState<ScannedBoletoRecord[]>([]);
+  const [scannedBoletos, setScannedBoletos] = useState<ScannedBoleto[]>([]);
   const [showBoletosHistory, setShowBoletosHistory] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -74,16 +62,9 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
     streamRef.current = cameraStream;
   }, [cameraStream]);
 
-  // Load scanned boletos from localStorage
+  // Load scanned boletos (localStorage + banco via storageService)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(BOLETOS_STORAGE_KEY);
-      if (stored) {
-        setScannedBoletos(JSON.parse(stored));
-      }
-    } catch {
-      // ignore parse errors
-    }
+    setScannedBoletos(storageService.getScannedBoletos());
   }, []);
 
   if (!isOpen) return null;
@@ -233,7 +214,7 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
   };
 
   const saveBoletoRecord = (linhaDigitavel: string, amount: number, dueDate: string, payer: string, financialAccountId: string) => {
-    const record: ScannedBoletoRecord = {
+    const record: ScannedBoleto = {
       id: `bol-${Date.now()}`,
       linhaDigitavel,
       amount,
@@ -243,13 +224,9 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
       financialAccountId,
     };
 
-    const updated = [record, ...scannedBoletos].slice(0, 50); // Keep last 50
-    setScannedBoletos(updated);
-    try {
-      localStorage.setItem(BOLETOS_STORAGE_KEY, JSON.stringify(updated));
-    } catch {
-      // ignore storage errors
-    }
+    // Grava no localStorage + envia ao Supabase (aparece em todos os dispositivos)
+    storageService.saveScannedBoleto(record);
+    setScannedBoletos(storageService.getScannedBoletos().slice(0, 50)); // Keep last 50 na tela
   };
 
   const handleConfirmSavePayable = () => {
@@ -289,13 +266,8 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
   };
 
   const handleDeleteBoletoRecord = (id: string) => {
-    const updated = scannedBoletos.filter((b) => b.id !== id);
-    setScannedBoletos(updated);
-    try {
-      localStorage.setItem(BOLETOS_STORAGE_KEY, JSON.stringify(updated));
-    } catch {
-      // ignore
-    }
+    storageService.deleteScannedBoleto(id);
+    setScannedBoletos(storageService.getScannedBoletos());
   };
 
   const formatDate = (iso: string) => {

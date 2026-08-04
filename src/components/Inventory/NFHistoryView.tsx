@@ -12,8 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { Product, Supplier } from '../../types';
-
-const NF_STORAGE_KEY = 'hd_system_scanned_nfs';
+import { storageService } from '../../services/storageService';
 
 interface NFItem {
   productName: string;
@@ -40,16 +39,14 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Load NFs from localStorage
+  // Load NFs (localStorage + banco via storageService)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(NF_STORAGE_KEY);
-      if (stored) {
-        setNfs(JSON.parse(stored));
-      }
-    } catch {
-      // ignore
-    }
+    setNfs(storageService.getNFRecords());
+    // Atualiza ao vivo quando outro dispositivo importa/remove uma NF
+    const unsub = storageService.subscribe(() => {
+      setNfs(storageService.getNFRecords());
+    });
+    return () => { unsub(); };
   }, []);
 
   // Filter NFs by search term
@@ -68,13 +65,8 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
   }, [nfs, searchTerm]);
 
   const handleDeleteNF = (id: string) => {
-    const updated = nfs.filter((nf) => nf.id !== id);
-    setNfs(updated);
-    try {
-      localStorage.setItem(NF_STORAGE_KEY, JSON.stringify(updated));
-    } catch {
-      // ignore
-    }
+    storageService.deleteNFRecord(id);
+    setNfs(storageService.getNFRecords());
     if (expandedId === id) setExpandedId(null);
   };
 

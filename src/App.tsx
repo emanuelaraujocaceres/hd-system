@@ -405,6 +405,18 @@ export const App: React.FC = () => {
           if (event === 'DELETE') storageService.removeFinancialFromRemote(row.id);
           else storageService.updateFinancialFromRemote(row);
           break;
+        case 'scanned_boletos':
+          if (event === 'DELETE') storageService.removeScannedBoletoFromRemote(row.id);
+          else storageService.updateScannedBoletoFromRemote(row);
+          break;
+        case 'credit_payments':
+          if (event === 'DELETE') storageService.removeCreditPaymentFromRemote(row.id);
+          else storageService.updateCreditPaymentFromRemote(row);
+          break;
+        case 'nf_records':
+          if (event === 'DELETE') storageService.removeNFRecordFromRemote(row.id);
+          else storageService.updateNFRecordFromRemote(row);
+          break;
         case 'cash_sessions':
           if (event === 'DELETE') storageService.removeCaixaFromRemote(row.id);
           else storageService.updateCaixaFromRemote(row);

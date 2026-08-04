@@ -10,6 +10,9 @@ import {
   SystemSettings,
   UserProfile,
   StockMovement,
+  ScannedBoleto,
+  CreditPayment,
+  NFRecord,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -56,6 +59,8 @@ const KEYS = {
   LOGGED_IN_EMAIL: 'hd_system_logged_in_email',
   SETTINGS: 'hd_system_settings',
   CREDIT_PAYMENTS: 'hd_system_credit_payments',
+  SCANNED_BOLETOS: 'hd_system_scanned_boletos',
+  NF_RECORDS: 'hd_system_nf_records',
   VIEWING_ORG: 'hd_system_viewing_org',
 };
 
@@ -544,6 +549,13 @@ class StorageService {
       payment_date: a.paidDate || null,
       status: a.status,
       notes: a.recipientOrPayer,
+      // Recorrência / parcelamento (colunas novas — migração 20260810)
+      is_recurring: a.isRecurring || false,
+      is_installment: a.isInstallment || false,
+      recurrence_type: a.recurrenceType || null,
+      recurrence_count: a.recurrenceCount || null,
+      recurrence_parent_id: a.recurrenceParentId || null,
+      installment_number: a.installmentNumber || null,
     });
   }
 
@@ -969,6 +981,13 @@ class StorageService {
       recipientOrPayer: row.notes || '',
       storeBranchId: row.store_branch_id || undefined,
       organizationId: row.organization_id || undefined,
+      // Recorrência / parcelamento (colunas novas)
+      isRecurring: row.is_recurring || undefined,
+      isInstallment: row.is_installment || undefined,
+      recurrenceType: row.recurrence_type || undefined,
+      recurrenceCount: row.recurrence_count || undefined,
+      recurrenceParentId: row.recurrence_parent_id || undefined,
+      installmentNumber: row.installment_number || undefined,
     };
     const idx = accounts.findIndex((a) => a.id === mapped.id);
     if (idx >= 0) accounts[idx] = mapped;
@@ -1212,7 +1231,7 @@ class StorageService {
       // PASSO 3: Buscar todos os dados filtrados pela filial
       // Todas as tabelas agora têm store_branch_id NOT NULL (banco convertido).
       // store_branches: já buscado no PASSO 1 (precisamos de TODAS para o seletor)
-      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems] =
+      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords] =
         await Promise.all([
           syncService.fetchRows('products', resolvedBranchId),
           syncService.fetchRows('categories', resolvedBranchId),
@@ -1225,6 +1244,9 @@ class StorageService {
           syncService.fetchRows('stock_movements', resolvedBranchId),
           syncService.fetchRows('cash_sessions', resolvedBranchId),
           syncService.fetchRows('sale_items', resolvedBranchId),
+          syncService.fetchRows('scanned_boletos', resolvedBranchId),
+          syncService.fetchRows('credit_payments', resolvedBranchId),
+          syncService.fetchRows('nf_records', resolvedBranchId),
         ]);
 
       // ── HELPER: merge cloud rows into local data by ID ──────────
@@ -1512,16 +1534,105 @@ class StorageService {
       // ── FINANCIAL ACCOUNTS ────────────────────────────────────────
       {
          const local = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
+         // Contas cuja recorrência existe só no local (criadas antes da migração
+         // 20260810) precisam ser re-enviadas ao cloud após o merge preservá-la.
+         const needsRecurrenceResync: FinancialAccount[] = [];
          const merged = mergeBy(KEYS.FINANCIAL, local, financial,
           (r: any) => ({
             id: r.id, title: r.description, type: r.type, category: r.category,
             amount: parseFloat(r.amount) || 0, dueDate: r.due_date,
             paidDate: r.payment_date || undefined, status: r.status,
             recipientOrPayer: r.notes || '', storeBranchId: r.store_branch_id || undefined,
+            organizationId: r.organization_id || undefined,
+            isRecurring: r.is_recurring || undefined,
+            isInstallment: r.is_installment || undefined,
+            recurrenceType: r.recurrence_type || undefined,
+            recurrenceCount: r.recurrence_count || undefined,
+            recurrenceParentId: r.recurrence_parent_id || undefined,
+            installmentNumber: r.installment_number || undefined,
           }),
           (a) => this.syncFinancialAccount(a),
+          (a) => a.id,
+          (loc, cm) => {
+            // Cloud ainda sem os campos de recorrência (pré-migração)? Preservar
+            // os valores locais e marcar para re-sync — senão a ocorrência futura
+            // perderia a flag e voltaria a inflar os totais no outro dispositivo.
+            const localHadRecurrence = loc.isRecurring || loc.isInstallment || loc.recurrenceParentId;
+            if (localHadRecurrence && !cm.isRecurring && !cm.isInstallment && !cm.recurrenceParentId) {
+              const restored: FinancialAccount = {
+                ...cm,
+                isRecurring: loc.isRecurring,
+                isInstallment: loc.isInstallment,
+                recurrenceType: loc.recurrenceType,
+                recurrenceCount: loc.recurrenceCount,
+                recurrenceParentId: loc.recurrenceParentId,
+                installmentNumber: loc.installmentNumber,
+              };
+              needsRecurrenceResync.push(restored);
+              return restored;
+            }
+            return cm;
+          },
         );
-        if (merged !== null) this.set(KEYS.FINANCIAL, merged);
+        if (merged !== null) {
+          this.set(KEYS.FINANCIAL, merged);
+          // Subir os campos de recorrência preservados para o banco (idempotente)
+          for (const acc of needsRecurrenceResync) this.syncFinancialAccount(acc);
+        }
+      }
+
+      // ── SCANNED BOLETOS (histórico de leituras) ───────────────────
+      {
+        const local = this.get<ScannedBoleto[]>(KEYS.SCANNED_BOLETOS, []);
+        const merged = mergeBy(KEYS.SCANNED_BOLETOS, local, boletos,
+          (r: any) => ({
+            id: r.id, linhaDigitavel: r.linha_digitavel || '',
+            barcode: r.barcode || '', amount: parseFloat(r.amount) || 0,
+            dueDate: r.due_date || undefined, payer: r.payer || '',
+            scanDate: r.scan_date || r.created_at || new Date().toISOString(),
+            financialAccountId: r.financial_account_id || undefined,
+            status: r.status || 'pending',
+            storeBranchId: r.store_branch_id || undefined,
+            organizationId: r.organization_id || undefined,
+          }),
+          (b) => this.syncScannedBoleto(b),
+        );
+        if (merged !== null) this.set(KEYS.SCANNED_BOLETOS, merged);
+      }
+
+      // ── CREDIT PAYMENTS (pagamentos de fiado) ─────────────────────
+      {
+        const local = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []);
+        const merged = mergeBy(KEYS.CREDIT_PAYMENTS, local, creditPayments,
+          (r: any) => ({
+            id: r.id, saleId: r.sale_id, customerId: r.customer_id || undefined,
+            customerName: r.customer_name || '', amount: parseFloat(r.amount) || 0,
+            date: r.paid_at || r.created_at || new Date().toISOString(),
+            paymentMethod: r.payment_method || undefined,
+            storeBranchId: r.store_branch_id || undefined,
+            organizationId: r.organization_id || undefined,
+          }),
+          (p) => this.syncCreditPayment(p),
+        );
+        if (merged !== null) this.set(KEYS.CREDIT_PAYMENTS, merged);
+      }
+
+      // ── NF RECORDS (notas fiscais importadas) ─────────────────────
+      {
+        const local = this.get<NFRecord[]>(KEYS.NF_RECORDS, []);
+        const merged = mergeBy(KEYS.NF_RECORDS, local, nfRecords,
+          (r: any) => ({
+            id: r.id, scanDate: r.scan_date || r.created_at || new Date().toISOString(),
+            supplierName: r.supplier_name || '',
+            items: Array.isArray(r.items) ? r.items : [],
+            totalValue: parseFloat(r.total_amount) || 0,
+            note: r.note || '',
+            storeBranchId: r.store_branch_id || undefined,
+            organizationId: r.organization_id || undefined,
+          }),
+          (nf) => this.syncNFRecord(nf),
+        );
+        if (merged !== null) this.set(KEYS.NF_RECORDS, merged);
       }
 
       // ── USERS ─────────────────────────────────────────────────────
@@ -2601,6 +2712,185 @@ class StorageService {
     const accounts = allAccounts.filter((a) => a.id !== id);
     this.set(KEYS.FINANCIAL, accounts);
     syncService.deleteRow('financial_transactions', id);
+  }
+
+  // --- SCANNED BOLETOS (histórico de leituras) ---
+  getScannedBoletos(): ScannedBoleto[] {
+    const all = this.get<ScannedBoleto[]>(KEYS.SCANNED_BOLETOS, []);
+    return this.filterBySelectedBranch(this.filterByOrg(all));
+  }
+
+  saveScannedBoleto(b: ScannedBoleto) {
+    b.id = StorageService.ensureUuid(b.id);
+    b.organizationId = this.getCurrentOrgId();
+    const branchId = this.getSelectedBranchId();
+    if (branchId) b.storeBranchId = branchId;
+    const all = this.get<ScannedBoleto[]>(KEYS.SCANNED_BOLETOS, []);
+    const idx = all.findIndex((x) => x.id === b.id);
+    if (idx >= 0) all[idx] = b;
+    else all.unshift(b);
+    this.set(KEYS.SCANNED_BOLETOS, all);
+    this.syncScannedBoleto(b);
+  }
+
+  deleteScannedBoleto(id: string) {
+    const all = this.get<ScannedBoleto[]>(KEYS.SCANNED_BOLETOS, []).filter((x) => x.id !== id);
+    this.set(KEYS.SCANNED_BOLETOS, all);
+    syncService.deleteRow('scanned_boletos', id);
+  }
+
+  private syncScannedBoleto(b: ScannedBoleto) {
+    syncService.upsertRow('scanned_boletos', {
+      id: b.id,
+      organization_id: this.getCurrentOrgId(),
+      store_branch_id: b.storeBranchId || null,
+      barcode: b.barcode || null,
+      linha_digitavel: b.linhaDigitavel,
+      amount: b.amount,
+      due_date: b.dueDate || null,
+      payer: b.payer || null,
+      scan_date: b.scanDate,
+      financial_account_id: b.financialAccountId || null,
+      status: b.status || 'pending',
+    });
+  }
+
+  updateScannedBoletoFromRemote(row: any) {
+    const all = this.get<ScannedBoleto[]>(KEYS.SCANNED_BOLETOS, []);
+    const mapped: ScannedBoleto = {
+      id: row.id, linhaDigitavel: row.linha_digitavel || '',
+      barcode: row.barcode || '', amount: parseFloat(row.amount) || 0,
+      dueDate: row.due_date || undefined, payer: row.payer || '',
+      scanDate: row.scan_date || row.created_at || new Date().toISOString(),
+      financialAccountId: row.financial_account_id || undefined,
+      status: row.status || 'pending',
+      storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.SCANNED_BOLETOS, all);
+  }
+
+  removeScannedBoletoFromRemote(id: string) {
+    const all = this.get<ScannedBoleto[]>(KEYS.SCANNED_BOLETOS, []).filter((x) => x.id !== id);
+    this.set(KEYS.SCANNED_BOLETOS, all);
+  }
+
+  // --- CREDIT PAYMENTS (pagamentos de fiado) ---
+  saveCreditPayment(p: CreditPayment) {
+    p.id = StorageService.ensureUuid(p.id);
+    p.organizationId = this.getCurrentOrgId();
+    const branchId = this.getSelectedBranchId();
+    if (branchId) p.storeBranchId = branchId;
+    const all = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []);
+    const idx = all.findIndex((x) => x.id === p.id);
+    if (idx >= 0) all[idx] = p;
+    else all.unshift(p);
+    this.set(KEYS.CREDIT_PAYMENTS, all);
+    this.syncCreditPayment(p);
+  }
+
+  deleteCreditPayment(id: string) {
+    const all = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []).filter((x) => x.id !== id);
+    this.set(KEYS.CREDIT_PAYMENTS, all);
+    syncService.deleteRow('credit_payments', id);
+  }
+
+  private syncCreditPayment(p: CreditPayment) {
+    syncService.upsertRow('credit_payments', {
+      id: p.id,
+      organization_id: this.getCurrentOrgId(),
+      store_branch_id: p.storeBranchId || null,
+      sale_id: p.saleId && StorageService.UUID_RE.test(p.saleId) ? p.saleId : null,
+      customer_id: p.customerId && StorageService.UUID_RE.test(p.customerId) ? p.customerId : null,
+      customer_name: p.customerName || null,
+      amount: p.amount,
+      paid_at: p.date,
+      payment_method: p.paymentMethod || null,
+    });
+  }
+
+  updateCreditPaymentFromRemote(row: any) {
+    const all = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []);
+    const mapped: CreditPayment = {
+      id: row.id, saleId: row.sale_id, customerId: row.customer_id || undefined,
+      customerName: row.customer_name || '', amount: parseFloat(row.amount) || 0,
+      date: row.paid_at || row.created_at || new Date().toISOString(),
+      paymentMethod: row.payment_method || undefined,
+      storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.CREDIT_PAYMENTS, all);
+  }
+
+  removeCreditPaymentFromRemote(id: string) {
+    const all = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []).filter((x) => x.id !== id);
+    this.set(KEYS.CREDIT_PAYMENTS, all);
+  }
+
+  // --- NF RECORDS (notas fiscais importadas) ---
+  getNFRecords(): NFRecord[] {
+    const all = this.get<NFRecord[]>(KEYS.NF_RECORDS, []);
+    return this.filterBySelectedBranch(this.filterByOrg(all));
+  }
+
+  saveNFRecord(nf: NFRecord) {
+    nf.id = StorageService.ensureUuid(nf.id);
+    nf.organizationId = this.getCurrentOrgId();
+    const branchId = this.getSelectedBranchId();
+    if (branchId) nf.storeBranchId = branchId;
+    const all = this.get<NFRecord[]>(KEYS.NF_RECORDS, []);
+    const idx = all.findIndex((x) => x.id === nf.id);
+    if (idx >= 0) all[idx] = nf;
+    else all.unshift(nf);
+    this.set(KEYS.NF_RECORDS, all);
+    this.syncNFRecord(nf);
+  }
+
+  deleteNFRecord(id: string) {
+    const all = this.get<NFRecord[]>(KEYS.NF_RECORDS, []).filter((x) => x.id !== id);
+    this.set(KEYS.NF_RECORDS, all);
+    syncService.deleteRow('nf_records', id);
+  }
+
+  private syncNFRecord(nf: NFRecord) {
+    syncService.upsertRow('nf_records', {
+      id: nf.id,
+      organization_id: this.getCurrentOrgId(),
+      store_branch_id: nf.storeBranchId || null,
+      supplier_name: nf.supplierName,
+      total_amount: nf.totalValue,
+      scan_date: nf.scanDate,
+      items: nf.items || [],
+      note: nf.note || null,
+    });
+  }
+
+  updateNFRecordFromRemote(row: any) {
+    const all = this.get<NFRecord[]>(KEYS.NF_RECORDS, []);
+    const mapped: NFRecord = {
+      id: row.id, scanDate: row.scan_date || row.created_at || new Date().toISOString(),
+      supplierName: row.supplier_name || '',
+      items: Array.isArray(row.items) ? row.items : [],
+      totalValue: parseFloat(row.total_amount) || 0,
+      note: row.note || '',
+      storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.NF_RECORDS, all);
+  }
+
+  removeNFRecordFromRemote(id: string) {
+    const all = this.get<NFRecord[]>(KEYS.NF_RECORDS, []).filter((x) => x.id !== id);
+    this.set(KEYS.NF_RECORDS, all);
   }
 
   // --- BRANCHES ---

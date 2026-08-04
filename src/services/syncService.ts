@@ -34,6 +34,7 @@ const BRANCH_REQUIRED_TABLES: TableName[] = [
   'products', 'categories', 'customers', 'suppliers',
   'sales', 'sale_items', 'financial_transactions',
   'cash_sessions', 'stock_movements', 'system_users',
+  'scanned_boletos', 'credit_payments', 'nf_records',
 ];
 
 /**
@@ -58,7 +59,10 @@ export type TableName =
   | 'stock_movements'
   | 'store_branches'
   | 'system_users'
-  | 'system_settings';
+  | 'system_settings'
+  | 'scanned_boletos'
+  | 'credit_payments'
+  | 'nf_records';
 
 type SyncChangeCallback = (table: TableName, payload: any) => void;
 type ConnectionListener = (online: boolean) => void;
@@ -191,6 +195,9 @@ class SupabaseSyncService {
       'store_branches',
       'system_users',
       'system_settings',
+      'scanned_boletos',
+      'credit_payments',
+      'nf_records',
     ];
 
     this.channel = supabase.channel('hd-system-realtime');
