@@ -445,16 +445,22 @@ export const App: React.FC = () => {
       setLastSyncTime(new Date());
     };
 
-    // Subscribe to Realtime — filtra server-side pela org E filial atual do usuário.
-    // Superadmin sem override recebe de todas as orgs (o filtro client-side
-    // abaixo continua como defense-in-depth).
-    const realtimeOrgId = storageService.isSuperAdmin()
-      ? (storageService.getSuperadminViewingOrg() || undefined)
-      : (storageService.getCurrentOrgId() || undefined);
-    const realtimeBranchId = storageService.isSuperAdmin()
-      ? (storageService.getSuperadminViewingOrg() ? storageService.getSelectedBranchId() : undefined)
-      : (storageService.getSelectedBranchId() || undefined);
-    syncService.subscribeRealtime(handleRemoteChange, realtimeOrgId, realtimeBranchId);
+    // Subscribe to Realtime — only when a user is logged in.
+    // Without a logged-in user (bootstrap/offline preview), there is no
+    // Supabase JWT, so server-side filters (org_id + branch_id) trigger RLS
+    // errors → CHANNEL_ERROR in reconnect loop. Defer Realtime until login.
+    if (user) {
+      const realtimeOrgId = storageService.isSuperAdmin()
+        ? (storageService.getSuperadminViewingOrg() || undefined)
+        : (storageService.getCurrentOrgId() || undefined);
+      const realtimeBranchId = storageService.isSuperAdmin()
+        ? (storageService.getSuperadminViewingOrg() ? storageService.getSelectedBranchId() : undefined)
+        : (storageService.getSelectedBranchId() || undefined);
+      syncService.subscribeRealtime(handleRemoteChange, realtimeOrgId, realtimeBranchId);
+    } else {
+      console.log('[App] Realtime deferred — no logged-in user (bootstrap mode)');
+      syncService.unsubscribeRealtime(handleRemoteChange);
+    }
 
     // Check connection health periodically (use refs to avoid stale closures)
     const checkConnection = async () => {
