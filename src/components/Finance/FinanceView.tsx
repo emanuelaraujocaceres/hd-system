@@ -13,7 +13,6 @@ import {
   Building2,
   CreditCard,
   Building,
-  Camera,
   Trash2,
   ChevronDown,
   ChevronUp,
@@ -24,7 +23,6 @@ import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
 import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
-import { BoletoCameraScannerModal } from './BoletoCameraScannerModal';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { undoManager } from '../../lib/undoManager';
 
@@ -48,10 +46,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isBoletoModalOpen, setIsBoletoModalOpen] = useState(false);
   const [formTitle, setFormTitle] = useState('');
   const [formType, setFormType] = useState<'payable' | 'receivable'>('payable');
-  const [formCategory, setFormCategory] = useState('Instalações');
   const [formAmount, setFormAmount] = useState<string>('');
   const [formDueDate, setFormDueDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [formRecipient, setFormRecipient] = useState('');
@@ -111,7 +107,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           ...editingAccount,
           title: formTitle.trim(),
           type: formType,
-          category: formCategory,
           amount: amountValue,
           dueDate: formDueDate,
           recipientOrPayer: formRecipient.trim(),
@@ -136,7 +131,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             id: i === 0 ? parentId : `fin-${Date.now()}-${i}`,
             title: `${formTitle.trim()} (${i + 1}/${recurrenceCount})`,
             type: formType,
-            category: formCategory,
             amount,
             dueDate,
             status: 'pending',
@@ -164,7 +158,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             id: i === 0 ? parentId : `fin-${Date.now()}-${i}`,
             title: `${formTitle.trim()} (${i + 1}/${recurrenceCount})`,
             type: formType,
-            category: formCategory,
             amount: amountValue,
             dueDate,
             status: 'pending',
@@ -188,7 +181,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           id: `fin-${Date.now()}`,
           title: formTitle.trim(),
           type: formType,
-          category: formCategory,
           amount: amountValue,
           dueDate: formDueDate,
           status: 'pending',
@@ -228,7 +220,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     setEditingAccount(account);
     setFormTitle(account.title);
     setFormType(account.type);
-    setFormCategory(account.category);
     setFormAmount(account.amount ? String(account.amount).replace('.', ',') : '');
     setFormDueDate(account.dueDate);
     setFormRecipient(account.recipientOrPayer);
@@ -239,7 +230,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     setEditingAccount(null);
     setFormTitle('');
     setFormType('payable');
-    setFormCategory('Instalações');
     setFormAmount('');
     setFormDueDate(new Date().toISOString().slice(0, 10));
     setFormRecipient('');
@@ -403,15 +393,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsBoletoModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-emerald-600/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold text-xs hover:bg-emerald-600/20 transition-all flex items-center gap-1.5 shadow-sm min-h-[44px]"
-            title="Escanear Boleto Bancário via Câmera"
-          >
-            <Camera className="w-4 h-4" />
-            <span>Ler Boleto Câmera</span>
-          </button>
-
-          <button
             onClick={handleOpenNewAccount}
             className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 min-h-[44px]"
           >
@@ -490,7 +471,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <tr className="bg-slate-50 dark:bg-[#09090b]/80 border-b border-slate-200 dark:border-[#27272a] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider">
                   <th className="py-3.5 px-4">Título / Lançamento</th>
                   <th className="py-3.5 px-4">Tipo</th>
-                  <th className="py-3.5 px-4">Categoria</th>
                   <th className="py-3.5 px-4">Fornecedor / Favorecido</th>
                   <th className="py-3.5 px-4">Vencimento</th>
                   <th className="py-3.5 px-4">Valor (R$)</th>
@@ -535,7 +515,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           {isPayable ? 'PAGAR' : 'RECEBER'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-slate-500 dark:text-[#71717a]">{acc.category}</td>
                       <td className="py-3 px-4 text-slate-700 dark:text-[#a1a1aa]">{acc.recipientOrPayer}</td>
                       <td className="py-3 px-4 text-slate-600 dark:text-[#a1a1aa] font-medium">{acc.dueDate}</td>
                       <td className={`py-3 px-4 font-extrabold ${isPayable ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
@@ -619,10 +598,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   </div>
 
                   <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                    <div>
-                      <span className="text-slate-400 dark:text-[#52525b]">Categoria</span>
-                      <p className="font-medium text-slate-700 dark:text-[#a1a1aa]">{acc.category}</p>
-                    </div>
                     <div>
                       <span className="text-slate-400 dark:text-[#52525b]">Fornecedor</span>
                       <p className="font-medium text-slate-700 dark:text-[#a1a1aa] truncate">{acc.recipientOrPayer}</p>
@@ -1283,15 +1258,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           </div>
         </div>
       )}
-      {/* BOLETO CAMERA SCANNER MODAL */}
-      <BoletoCameraScannerModal
-        isOpen={isBoletoModalOpen}
-        onClose={() => setIsBoletoModalOpen(false)}
-        onAccountAdded={() => {
-          // Trigger reactive updates
-        }}
-      />
-
       {/* Confirm: excluir conta financeira */}
       <ConfirmDialog
         isOpen={confirmDeleteAccount !== null}

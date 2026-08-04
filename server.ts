@@ -1,10 +1,9 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, ApiError } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
-import { decodeBoleto } from "./functions/api/ai/boletoLib";
 
 // Carrega .env.local (desenvolvimento local) + .env (produção)
 dotenv.config();
@@ -223,62 +222,6 @@ async function startServer() {
     }
   });
 
-  // API Route: Gemini AI Copilot Insights for ERP
-  app.post("/api/ai/insights", async (req, res) => {
-    try {
-      const { salesData, stockAlerts, financialSummary, promptType } = req.body;
-
-      if (!ai) {
-        // Fallback intelligent response if API key is not active
-        return res.json({
-          insight: `📊 **Análise Inteligente HD-System ERP**
-• **Desempenho de Vendas**: Seu faturamento teve um aumento projetado no período. Destaque para produtos da categoria Bebidas e Alimentos.
-• **Recomendações de Reposição**: Existem ${stockAlerts?.length || 3} produtos abaixo do estoque mínimo. Recomendamos emitir pedido de compra para os itens com maior giro.
-• **Fluxo de Caixa**: Mantenha atenção nas contas a pagar previstas para os próximos 7 dias para garantir liquidez positiva.`,
-          isFallback: true,
-        });
-      }
-
-      const prompt = `Você é um Consultor Especialista em Gestão Empresarial e ERP/PDV para Varejo no Brasil no HD-System ERP.
-Analise os seguintes dados do ERP do cliente e forneça um relatório curto, direto, acionável e com marcadores claros em Português do Brasil:
-
-DADOS DE VENDAS: ${JSON.stringify(salesData || {})}
-ALERTAS DE ESTOQUE BAIXO: ${JSON.stringify(stockAlerts || [])}
-RESUMO FINANCEIRO: ${JSON.stringify(financialSummary || {})}
-TIPO DE SOLICITAÇÃO: ${promptType || "geral"}
-
-Forneça 3 a 4 tópicos práticos com dicas para aumentar lucro, evitar rupturas de estoque e melhorar a margem de vendas. Seja profissional, encorajador e objetivo.`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-lite",
-        contents: prompt,
-      });
-
-      return res.json({
-        insight: response.text || "Análise concluída com sucesso.",
-        isFallback: false,
-      });
-    } catch (error: any) {
-      console.error("Erro ao gerar insight IA:", error?.message || error);
-
-      // Detect quota exceeded (429)
-      if ((error instanceof ApiError && error.status === 429) || /quota|rate_limit|resource_exhausted/i.test(error?.message || "")) {
-        return res.json({
-          insight: "⚠️ **Cota da IA excedida temporariamente**\nA cota gratuita do Gemini foi atingida. Aguarde um minuto e tente novamente.\n\n💡 **Sugestão:** Para liberar o uso ilimitado, ative o faturamento em https://aistudio.google.com/apikey",
-          retryAfter: 60,
-          isFallback: true,
-          errorType: "quota",
-        });
-      }
-
-      return res.json({
-        insight: "⚠️ **Análise temporariamente indisponível**\nO serviço de IA está passando por instabilidade. Tente novamente em alguns instantes.\n\nEnquanto isso:\n• Verifique seus relatórios de vendas no Dashboard\n• Confira os produtos com estoque baixo na seção de Estoque\n• Acompanhe o fluxo de caixa no módulo Financeiro",
-        isFallback: true,
-        error: error?.message,
-      });
-    }
-  });
-
   // API Route: Camera Scan Product / Box (Atacado ou Unidade)
   app.post("/api/ai/scan-product", async (req, res) => {
     try {
@@ -354,129 +297,6 @@ Retorne ESTRITAMENTE um objeto JSON válido sem Markdown:
     } catch (err: any) {
       console.error("Erro scan-product:", err);
       return res.status(500).json({ error: "Falha ao analisar imagem do produto." });
-    }
-  });
-
-  // API Route: Camera Scan Supplier Invoice / Paper Order (Nota Fiscal do Fornecedor)
-  app.post("/api/ai/scan-invoice", async (req, res) => {
-    try {
-      const { imageBase64 } = req.body;
-
-      if (!ai || !imageBase64) {
-        // High quality simulated invoice parsing
-        return res.json({
-          result: {
-            supplierName: "AMBEV S.A. Distribuidora",
-            invoiceNumber: `NF-${Math.floor(100000 + Math.random() * 900000)}`,
-            date: new Date().toISOString().slice(0, 10),
-            totalAmount: 488.50,
-            items: [
-              { name: "Caixa Cerveja Brahma Duplo Malte 350ml (cx 12un)", barcode: "7891149103001", quantity: 5, unitPrice: 38.50, totalPrice: 192.50, category: "Bebidas" },
-              { name: "Caixa Guaraná Antarctica 2L (cx 6un)", barcode: "7891149010101", quantity: 4, unitPrice: 34.00, totalPrice: 136.00, category: "Bebidas" },
-              { name: "Fardo Pepsi Black Zero 350ml (cx 12un)", barcode: "7891149202020", quantity: 4, unitPrice: 40.00, totalPrice: 160.00, category: "Bebidas" },
-            ],
-          },
-          isFallback: true,
-        });
-      }
-
-      const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-      const prompt = `Você é um leitor de Nota Fiscal de Fornecedor / Espelho de Pedido em papel para ERP.
-Analise a imagem da nota/folha do fornecedor. Extraia:
-1) Nome ou Razão Social do Fornecedor
-2) Número do Documento / Nota Fiscal
-3) Data de emissão (YYYY-MM-DD)
-4) Valor Total da Nota (R$)
-5) Lista de produtos contendo: nome, código de barras/EAN, quantidade, preço unitário de custo, preço total do item, e categoria sugerida.
-
-Retorne ESTRITAMENTE um objeto JSON válido sem formatação Markdown extra:
-{
-  "supplierName": "string",
-  "invoiceNumber": "string",
-  "date": "YYYY-MM-DD",
-  "totalAmount": number,
-  "items": [
-    {
-      "name": "string",
-      "barcode": "string",
-      "quantity": number,
-      "unitPrice": number,
-      "totalPrice": number,
-      "category": "string"
-    }
-  ]
-}`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-lite",
-        contents: [
-          {
-            inlineData: {
-              data: cleanBase64,
-              mimeType: "image/jpeg",
-            },
-          },
-          { text: prompt },
-        ],
-      });
-
-      const text = response.text || "";
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return res.json({ result: parsed, isFallback: false });
-      }
-
-      return res.json({
-        result: {
-          supplierName: "Fornecedor Detectado via Câmera",
-          invoiceNumber: `NF-${Math.floor(1000 + Math.random() * 9000)}`,
-          date: new Date().toISOString().slice(0, 10),
-          totalAmount: 250.00,
-          items: [
-            { name: "Produto Fornecedor A", barcode: "789000111222", quantity: 10, unitPrice: 15.00, totalPrice: 150.00, category: "Geral" },
-            { name: "Produto Fornecedor B", barcode: "789000333444", quantity: 5, unitPrice: 20.00, totalPrice: 100.00, category: "Geral" },
-          ],
-        },
-        isFallback: false,
-      });
-    } catch (err: any) {
-      console.error("Erro scan-invoice:", err);
-      return res.status(500).json({ error: "Falha ao ler nota fiscal do fornecedor." });
-    }
-  });
-
-  // API Route: Camera Scan Bank Slip / Boleto Bancário
-  // Decodificação determinística do código de barras (SEM IA): boleto bancário
-  // (44/47/48 dígitos) e contas de arrecadação (44 dígitos começando com 8).
-  app.post("/api/ai/scan-boleto", async (req, res) => {
-    try {
-      const { barcode } = req.body || {};
-
-      const decoded = decodeBoleto(barcode);
-      if (!decoded.type || !decoded.barcode) {
-        return res.status(422).json({
-          error: "Código de barras inválido. Envie os 44, 47 ou 48 dígitos.",
-          result: null,
-        });
-      }
-
-      return res.json({
-        result: {
-          supplierName: decoded.supplierName || "",
-          barcode: decoded.barcode,
-          dueDate: decoded.dueDate || "",
-          amount: decoded.amount,
-          category: decoded.category || "Fornecedores",
-          documentNumber: "",
-          source: decoded.type,
-          barcodeValid: decoded.barcodeValid,
-        },
-        isFallback: false,
-      });
-    } catch (err: any) {
-      console.error("Erro scan-boleto:", err);
-      return res.status(500).json({ error: "Falha ao realizar leitura do boleto." });
     }
   });
 

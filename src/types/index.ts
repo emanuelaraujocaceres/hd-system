@@ -185,7 +185,7 @@ export interface FinancialAccount {
   id: string;
   title: string;
   type: 'payable' | 'receivable';
-  category: string;
+  category?: string; // opcional — não é mais exibida no app
   amount: number;
   dueDate: string;
   paidDate?: string;

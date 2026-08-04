@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   Package,
   ArrowUpRight,
-  Sparkles,
   Trash2,
   ChevronDown,
   ChevronUp,
@@ -141,86 +140,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const yesterdayRevenue = yesterdaySales.reduce((acc, s) => acc + getSaleTotal(s), 0);
   const revenueChange = yesterdayRevenue > 0 ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100 : 0;
 
-  // AI Analysis State
-  const [aiInsight, setAiInsight] = useState<string>('');
-  const [loadingAi, setLoadingAi] = useState(false);
-  const [cooldownUntil, setCooldownUntil] = useState(0);
-  const [remainingSeconds, setRemainingSeconds] = useState(0);
-  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Countdown timer effect
-  useEffect(() => {
-    if (Date.now() >= cooldownUntil) {
-      if (cooldownRef.current) clearInterval(cooldownRef.current);
-      setRemainingSeconds(0);
-      return;
-    }
-
-    cooldownRef.current = setInterval(() => {
-      const rem = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
-      setRemainingSeconds(rem);
-      if (rem <= 0 && cooldownRef.current) {
-        clearInterval(cooldownRef.current);
-        cooldownRef.current = null;
-      }
-    }, 1000);
-
-    return () => {
-      if (cooldownRef.current) clearInterval(cooldownRef.current);
-    };
-  }, [cooldownUntil]);
-
   // Initial loading simulation
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 600);
     return () => clearTimeout(timer);
   }, []);
-
-  const handleFetchAiInsights = async () => {
-    // Block if still in cooldown
-    if (Date.now() < cooldownUntil) return;
-
-    setLoadingAi(true);
-    setAiInsight('');
-    try {
-      const lowStockProducts = products
-        .filter((p) => p.currentStock <= p.minStock)
-        .map((p) => ({ name: p.name, currentStock: p.currentStock, minStock: p.minStock }));
-
-      const res = await fetch('/api/ai/insights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          salesData: { totalRevenue: todayRevenue, totalSales: totalSalesCount, ticketMedio },
-          stockAlerts: lowStockProducts,
-          financialSummary: { todayRevenue, totalSalesCount },
-          promptType: 'geral',
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-
-      const data = await res.json();
-
-      if (data.retryAfter) {
-        // Quota exceeded — start cooldown
-        const delay = (data.retryAfter || 60) * 1000;
-        setCooldownUntil(Date.now() + delay);
-        setRemainingSeconds(Math.ceil(delay / 1000));
-        if (data.insight) setAiInsight(data.insight);
-        return;
-      }
-
-      setAiInsight(data.insight || 'Análise concluída sem retorno.');
-    } catch (err) {
-      console.warn('[Dashboard] AI Insights não disponível:', err);
-      setAiInsight('O serviço de Análise por IA ainda não está configurado. Contate o suporte para ativar.');
-    } finally {
-      setLoadingAi(false);
-    }
-  };
 
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
@@ -567,41 +491,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {isAdmin && (
         <CollaboratorPerformance sales={sales} />
       )}
-
-      {/* AI INTELLIGENT REPORT SECTION */}
-      <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl overflow-hidden shadow-sm">
-        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 dark:border-[#27272a] flex justify-between items-center">
-          <h3 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-purple-500" />
-            Relatório Inteligente IA
-          </h3>
-        </div>
-        <div className="p-4 sm:p-6">
-          <p className="text-xs text-slate-500 dark:text-[#71717a] mb-4">
-            Analise seu desempenho com inteligência artificial — vendas, estoque e oportunidades de lucro.
-          </p>
-          <button
-            onClick={handleFetchAiInsights}
-            disabled={loadingAi || remainingSeconds > 0}
-            className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md transition-colors flex items-center gap-2"
-          >
-            <Sparkles className={`w-4 h-4 ${loadingAi ? 'animate-spin' : ''}`} />
-            <span>
-              {loadingAi
-                ? 'Analisando dados...'
-                : remainingSeconds > 0
-                  ? `Aguarde ${remainingSeconds}s`
-                  : 'Gerar Análise IA'}
-            </span>
-          </button>
-
-          {aiInsight && (
-            <div className="mt-4 p-4 rounded-xl bg-purple-50 dark:bg-purple-500/5 border border-purple-200 dark:border-purple-500/20 text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-              {aiInsight}
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* Confirm: excluir venda */}
       <ConfirmDialog

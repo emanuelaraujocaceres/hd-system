@@ -3,7 +3,6 @@ import {
   X,
   Camera,
   Package,
-  FileText,
   Check,
   Plus,
   CheckCircle2,
@@ -11,7 +10,7 @@ import {
   Zap,
   ZapOff,
 } from 'lucide-react';
-import { Product, StoreBranch, NFRecord } from '../../types';
+import { Product, StoreBranch } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 
@@ -50,17 +49,6 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   // Overall success overlay (after adding stock)
   const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
   const [successData, setSuccessData] = useState<{ name: string; quantity: number } | null>(null);
-
-  // Tab: product vs invoice
-  const [activeTab, setActiveTab] = useState<'product' | 'invoice'>('product');
-
-  // Invoice fields (simplified)
-  const [invSupplierName, setInvSupplierName] = useState('');
-  const [invInvoiceNumber, setInvInvoiceNumber] = useState('');
-  const [invProductName, setInvProductName] = useState('');
-  const [invBarcode, setInvBarcode] = useState('');
-  const [invQty, setInvQty] = useState<number>(1);
-  const [invUnitPrice, setInvUnitPrice] = useState<number>(0);
 
   // Refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -320,60 +308,6 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     }
   };
 
-  // Invoice: confirm import
-  const handleConfirmInvoice = async () => {
-    const name = invProductName.trim() || 'Produto NF';
-    const barcode = invBarcode.trim() || '';
-
-    const newProd: Product = {
-      id: `prod-inv-${Date.now()}`,
-      name,
-      barcode,
-      category: 'Geral',
-      unit: 'un',
-      costPrice: invUnitPrice || 10.0,
-      salePrice: (invUnitPrice || 10.0) * 1.4,
-      currentStock: invQty || 1,
-      minStock: 5,
-      maxStock: 100,
-      imageUrl: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80',
-      active: true,
-      updatedAt: new Date().toISOString(),
-      storeBranchId: currentBranch?.id,
-    };
-
-    storageService.saveProduct(newProd);
-
-    const reasonText = `Importa\u00e7\u00e3o NF ${invInvoiceNumber || 'S/N'} - Fornecedor ${invSupplierName || 'N\u00e3o informado'}`;
-    await storageService.updateStock(newProd.id, newProd.currentStock, reasonText, 'Leitor NF C\u00e2mera');
-
-    // Registrar a NF no histórico (localStorage + banco — aparece em todos os dispositivos)
-    const nfRecord: NFRecord = {
-      id: `nf-${Date.now()}`,
-      scanDate: new Date().toISOString(),
-      supplierName: invSupplierName.trim() || 'Fornecedor não informado',
-      items: [{ productName: name, quantity: invQty || 1, unitPrice: invUnitPrice || 0 }],
-      totalValue: (invQty || 1) * (invUnitPrice || 0),
-      note: `NF ${invInvoiceNumber || 'S/N'}`,
-    };
-    storageService.saveNFRecord(nfRecord);
-
-    posAudio.chime();
-    if (onProductsImported) onProductsImported();
-
-    setInvProductName('');
-    setInvBarcode('');
-    setInvQty(1);
-    setInvUnitPrice(0);
-
-    setSuccessData({ name: `NF ${invInvoiceNumber || 'S/N'}`, quantity: newProd.currentStock });
-    setShowSuccessOverlay(true);
-    setTimeout(() => {
-      setShowSuccessOverlay(false);
-      setSuccessData(null);
-    }, 1500);
-  };
-
   // Manual barcode submit
   const handleManualBarcodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -463,40 +397,8 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
             </div>
           )}
 
-          {/* Mode Tabs */}
-          <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-[#09090b] rounded-xl border border-slate-200 dark:border-[#27272a] text-xs font-bold">
-            <button
-              onClick={() => {
-                setActiveTab('product');
-                if (isScannerOpen) stopScanner();
-              }}
-              className={`py-2 rounded-lg flex items-center justify-center gap-2 transition-all ${
-                activeTab === 'product'
-                  ? 'bg-white dark:bg-[#18181b] text-indigo-600 dark:text-indigo-400 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span>Produto / Caixa</span>
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('invoice');
-                if (isScannerOpen) stopScanner();
-              }}
-              className={`py-2 rounded-lg flex items-center justify-center gap-2 transition-all ${
-                activeTab === 'invoice'
-                  ? 'bg-white dark:bg-[#18181b] text-indigo-600 dark:text-indigo-400 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>Nota Fiscal</span>
-            </button>
-          </div>
-
           {/* PRODUCT TAB - Camera start screen */}
-          {activeTab === 'product' && !isScannerOpen && (
+          {!isScannerOpen && (
             <div className="p-8 rounded-2xl border-2 border-dashed border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] flex flex-col items-center justify-center text-center space-y-4">
               <div className="p-4 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
                 <Camera className="w-8 h-8" />
@@ -525,7 +427,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
           )}
 
           {/* PRODUCT TAB - While scanner is open (show results below camera) */}
-          {activeTab === 'product' && isScannerOpen && (
+          {isScannerOpen && (
             <>
               {/* Found: existing product */}
               {scannerStatus === 'found' && scannedProduct && !showSuccessOverlay && (
@@ -598,73 +500,6 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                 Fechar C\u00e2mera
               </button>
             </>
-          )}
-
-          {/* INVOICE TAB (simplified) */}
-          {activeTab === 'invoice' && (
-            <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-3">
-                <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
-                  <FileText className="w-4 h-4" />
-                  Dados da Nota Fiscal
-                </span>
-                <div className="grid grid-cols-2 gap-3">
-                  <input
-                    value={invSupplierName}
-                    onChange={(e) => setInvSupplierName(e.target.value)}
-                    placeholder="Fornecedor"
-                    className="col-span-2 px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                  <input
-                    value={invInvoiceNumber}
-                    onChange={(e) => setInvInvoiceNumber(e.target.value)}
-                    placeholder="N\u00famero NF"
-                    className="px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div className="p-3 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Item</span>
-                  <input
-                    value={invProductName}
-                    onChange={(e) => setInvProductName(e.target.value)}
-                    placeholder="Nome do Produto"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                  <div className="grid grid-cols-3 gap-2">
-                    <input
-                      value={invBarcode}
-                      onChange={(e) => setInvBarcode(e.target.value)}
-                      placeholder="EAN"
-                      className="px-2 py-2 rounded-lg bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-[11px] font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <input
-                      type="number"
-                      min="1"
-                      value={invQty}
-                      onChange={(e) => setInvQty(Math.max(1, Number(e.target.value) || 1))}
-                      placeholder="Qtd"
-                      className="px-2 py-2 rounded-lg bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-[11px] font-bold text-slate-900 dark:text-white text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={invUnitPrice || ''}
-                      onChange={(e) => setInvUnitPrice(Number(e.target.value))}
-                      placeholder="R$ Unit."
-                      className="px-2 py-2 rounded-lg bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-[11px] font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={handleConfirmInvoice}
-                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>IMPORTAR DIRETO AO ESTOQUE</span>
-                </button>
-              </div>
-            </div>
           )}
         </div>
 
