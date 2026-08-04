@@ -325,7 +325,12 @@ class SupabaseSyncService {
       if (error) {
         console.warn(`[HD-Sync] ❌ Upsert ${table} failed:`, error.message, `(row id: ${row.id})`);
         // DIAGNÓSTICO: loga o payload completo para revelar qual coluna UUID vai vazia ("")
-        console.warn(`[HD-Sync] 🔍 PAYLOAD ${table}:`, JSON.stringify(row).slice(0, 2000));
+        console.warn(`[HD-Sync] 🔍 PAYLOAD ${table}:`, JSON.stringify(row).slice(0, 6000));
+        // DIAGNÓSTICO: campos vazios no payload — prova se o "" nasce no cliente ou no banco
+        const emptyFields = Object.entries(row)
+          .filter(([k, v]) => v === '' || v === null || v === undefined)
+          .map(([k]) => k);
+        console.warn(`[HD-Sync] 🔍 EMPTY FIELDS ${table}:`, emptyFields.length ? emptyFields.join(', ') : '(nenhum — payload 100% limpo)');
         // DIAGNÓSTICO: details/hint do Postgres apontam a coluna exata do 22P02
         console.warn(`[HD-Sync] 📋 DB DETAILS:`, error.details ?? '(sem details)', `| hint:`, error.hint ?? '(sem hint)', `| code:`, error.code ?? '(sem code)');
         // Log to DLQ
