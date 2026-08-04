@@ -2251,7 +2251,14 @@ class StorageService {
     // Só usa getSelectedBranchId() como fallback para vendas criadas sem filial explícita.
     if (!sale.storeBranchId) {
       const branchId = this.getSelectedBranchId();
-      if (branchId) sale.storeBranchId = branchId;
+      if (branchId) {
+        sale.storeBranchId = branchId;
+      } else {
+        // Última defesa: primeira filial visível da org atual. Nunca deixar a
+        // venda sem filial — o banco (trigger) e o guard de sync rejeitam ''.
+        const firstBranch = this.getBranches()[0];
+        if (firstBranch) sale.storeBranchId = firstBranch.id;
+      }
     }
 
     // Validação UUID: store_branch_id DEVE ser UUID válido (banco convertido)
@@ -2689,7 +2696,16 @@ class StorageService {
     // superadmin), o filtro usava a filial de outra org e zerava as listas.
     const branches = this.getBranches();
     const found = branches.find((b) => b.id === savedId || b.code === savedId);
-    return found ? found.id : '';
+    if (found) return found.id;
+    // Janela de boot: getBranches() ainda vazio (hidratação do cloud em
+    // andamento) fazia este método retornar '' e TODAS as escritas iam com
+    // store_branch_id vazio ("invalid input syntax for type uuid: ''").
+    // Se o valor salvo já é um UUID válido (definido pelo seletor de filial
+    // ou pelo login), confia nele até as branches chegarem do cloud.
+    // Não afeta o caso do superadmin trocando de org: aí getBranches() tem
+    // linhas e a validação continua rejeitando UUID de outra organização.
+    if (branches.length === 0 && this.isValidUuid(savedId)) return savedId;
+    return '';
   }
 
   /**
