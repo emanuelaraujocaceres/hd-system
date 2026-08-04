@@ -324,6 +324,8 @@ class SupabaseSyncService {
       const { error } = await supabase.from(table).upsert(row, { onConflict: 'id' });
       if (error) {
         console.warn(`[HD-Sync] ❌ Upsert ${table} failed:`, error.message, `(row id: ${row.id})`);
+        // DIAGNÓSTICO: loga o payload completo para revelar qual coluna UUID vai vazia ("")
+        console.warn(`[HD-Sync] 🔍 PAYLOAD ${table}:`, JSON.stringify(row).slice(0, 2000));
         // Log to DLQ
         try {
           await supabase.rpc('fn_insserir_dlq', {

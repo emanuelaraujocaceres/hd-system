@@ -652,7 +652,7 @@ class StorageService {
       id: m.id,
       organization_id: this.getCurrentOrgId(),
       store_branch_id: branchId,
-      product_id: m.productId,
+      product_id: m.productId && StorageService.UUID_RE.test(m.productId) ? m.productId : null,
       product_name: m.productName,
       type: m.type,
       quantity: m.quantity,
@@ -2279,7 +2279,7 @@ class StorageService {
       const newItems = sale.items.map((item) => ({
         id: StorageService.newId(),
         sale_id: sale.id,
-        product_id: item.productId,
+        product_id: item.productId && StorageService.UUID_RE.test(item.productId) ? item.productId : null,
         product_name: item.productName || '',
         quantity: item.quantity,
         unit_price: item.unitPrice,
@@ -2325,23 +2325,37 @@ class StorageService {
         if (matched) branchUuid = matched.id;
       }
 
-      const { data, error } = await supabase.rpc('process_sale_transaction', {
-        p_sale_id: sale.id,
-        p_product_id: sale.items?.[0]?.productId || '',
-        p_quantity: sale.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
-        p_unit_price: sale.items?.[0]?.unitPrice || sale.total,
-        p_discount: sale.discount || 0,
-        p_total: sale.total,
-        p_reason: `Venda PDV #${sale.code}`,
-        p_operator_name: sale.operatorName,
-        p_organization_id: this.getCurrentOrgId(),
-        p_store_branch_id: branchUuid,
-        p_sale_items: saleItemsJson,
-      });
+      // SANITIZAÇÃO RPC: getCurrentOrgId() retorna '' para superadmin sem org
+      // salva (acesso global). PostgREST tenta cast ''::uuid → 22P02
+      // "invalid input syntax for type uuid: """ — EXATAMENTE o erro observado.
+      // Regra igual ao upsertRow: org inválida → null para superadmin, skip p/ comum.
+      const rpcOrgId = this.getCurrentOrgId();
+      const rpcOrgParam = rpcOrgId && StorageService.UUID_RE.test(rpcOrgId) ? rpcOrgId : null;
+      const rpcProductId = sale.items?.[0]?.productId && StorageService.UUID_RE.test(sale.items[0].productId)
+        ? sale.items[0].productId
+        : null;
 
-      if (error) {
-        console.warn('[HD-Sync] process_sale_transaction RPC failed:', error.message);
-        await this.insertDLQ('INSERT', 'sales', sale.id, { sale, saleItemsJson }, error.message);
+      if (rpcOrgParam || this.isSuperAdmin()) {
+        const { data, error } = await supabase.rpc('process_sale_transaction', {
+          p_sale_id: sale.id,
+          p_product_id: rpcProductId,
+          p_quantity: sale.items?.reduce((sum, i) => sum + i.quantity, 0) || 0,
+          p_unit_price: sale.items?.[0]?.unitPrice || sale.total,
+          p_discount: sale.discount || 0,
+          p_total: sale.total,
+          p_reason: `Venda PDV #${sale.code}`,
+          p_operator_name: sale.operatorName,
+          p_organization_id: rpcOrgParam,
+          p_store_branch_id: branchUuid,
+          p_sale_items: saleItemsJson,
+        });
+
+        if (error) {
+          console.warn('[HD-Sync] process_sale_transaction RPC failed:', error.message);
+          await this.insertDLQ('INSERT', 'sales', sale.id, { sale, saleItemsJson }, error.message);
+        }
+      } else {
+        console.warn('[HD-Sync] process_sale_transaction RPC skipped — organization_id inválido');
       }
     } catch (e: any) {
       console.warn('[HD-Sync] process_sale_transaction RPC exception:', e?.message);
