@@ -504,68 +504,14 @@ class StorageService {
       if (items.length > 0) {
         await syncService.upsertRows('sale_items', items);
       }
-
-      // Atualizar caixa em tempo real: somar a venda aos totais da sessão ativa
-      await this.updateCaixaFromSale(s, branchUuid);
+      // NOTA: o caixa NÃO é atualizado aqui. O syncCaixaSession() (chamado por
+      // saveActiveCaixaSession) grava os totais ABSOLUTOS da sessão local no
+      // cloud. Somar a venda incrementalmente por cima (updateCaixaFromSale)
+      // aplicava a venda DUAS vezes (ex.: caixa 101.90 + venda 79.90 = 181.80).
+      // Vendas de outros dispositivos atualizam os contadores locais via
+      // _updateCaixaFromSale() (realtime), sem escrever no cloud.
     } catch (err) {
       console.warn('[HD-Sync] syncSale failed (will retry via queue):', err);
-    }
-  }
-
-  /**
-   * Atualiza os totais da sessão de caixa ativa quando uma venda
-   * é sincronizada de outro dispositivo.
-   */
-  private async updateCaixaFromSale(s: Sale, branchUuid: string) {
-    try {
-      const orgId = this.getCurrentOrgId();
-      if (!orgId) return;
-
-      // Resolver código curto (ex.: "br-01") para UUID
-      let resolvedBranchUuid = branchUuid;
-      if (resolvedBranchUuid && !StorageService.UUID_RE.test(resolvedBranchUuid)) {
-        const branches = this.getBranches();
-        const matched = branches.find(b => b.code === resolvedBranchUuid || b.id === resolvedBranchUuid);
-        if (matched) resolvedBranchUuid = matched.id;
-      }
-
-      // Buscar a sessão de caixa ativa da filial
-      // Se branchUuid for vazio, não filtrar por store_branch_id
-      let query = supabase
-        .from('cash_sessions')
-        .select('*')
-        .eq('organization_id', orgId)
-        .eq('status', 'open');
-
-      if (resolvedBranchUuid) {
-        query = query.eq('store_branch_id', resolvedBranchUuid);
-      }
-
-      const { data: activeSession, error: sessionError } = await query.maybeSingle();
-
-      if (sessionError || !activeSession) return;
-
-      // Calcular o valor da venda por método de pagamento
-      const paymentTotals: Record<string, number> = {};
-      s.payments.forEach((p) => {
-        const method = p.method || 'cash';
-        paymentTotals[method] = (paymentTotals[method] || 0) + (p.amount || 0);
-      });
-
-      // Atualizar os totais da sessão de caixa
-      const updatedSession = {
-        ...activeSession,
-        total_sales_cash: (parseFloat(activeSession.total_sales_cash) || 0) + (paymentTotals['cash'] || 0),
-        total_sales_pix: (parseFloat(activeSession.total_sales_pix) || 0) + (paymentTotals['pix'] || 0),
-        total_sales_card: (parseFloat(activeSession.total_sales_card) || 0) + (paymentTotals['card'] || 0),
-        total_sales_credit_account: (parseFloat(activeSession.total_sales_credit_account) || 0) + (paymentTotals['credit_account'] || 0),
-        expected_balance: (parseFloat(activeSession.expected_balance) || 0) + s.total,
-      };
-
-      await syncService.upsertRow('cash_sessions', updatedSession);
-      console.log(`[HD-Sync] Caixa atualizado em tempo real: venda R$${s.total.toFixed(2)}`);
-    } catch (err) {
-      console.warn('[HD-Sync] updateCaixaFromSale failed (non-critical):', err);
     }
   }
 
