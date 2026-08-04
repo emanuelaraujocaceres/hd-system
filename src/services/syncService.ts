@@ -486,6 +486,16 @@ class SupabaseSyncService {
       if (rows.length === 0) return true;
     }
 
+    // Sanitização extra de colunas UUID em lote (dados legados do localStorage
+    // podiam carregar '' e causar 22P02 "invalid input syntax for type uuid").
+    rows = rows.map((r) => {
+      const out: Record<string, any> = { ...r };
+      if (typeof out.product_id === 'string' && !UUID_RE.test(out.product_id)) out.product_id = null;
+      if (typeof out.sale_id === 'string' && !UUID_RE.test(out.sale_id)) out.sale_id = null;
+      if (typeof out.customer_id === 'string' && !UUID_RE.test(out.customer_id)) out.customer_id = null;
+      return out;
+    });
+
     const rowsWithTimestamp = SupabaseSyncService.TABLES_WITH_UPDATED_AT.includes(table)
       ? rows.map((r) => ({ ...r, updated_at: new Date().toISOString() }))
       : rows;
