@@ -320,6 +320,24 @@ class SupabaseSyncService {
     this._doSubscribe(orgId, branchId);
   }
 
+  /**
+   * Ressuscita o canal Realtime se ele estiver morto de vez.
+   * Chamado periodicamente pelo health check do App (a cada 30s).
+   * Sem isso, depois de MAX_RECONNECT_ATTEMPTS o canal desiste e o
+   * dispositivo fica "cego" até recarregar a página — vendas e caixa de
+   * outros dispositivos nunca chegam em tempo real, só via F5/hidratação.
+   */
+  resubscribeIfDead(orgId?: string, branchId?: string) {
+    if (!this.channel) return; // Nunca foi criado (ex.: bootstrap sem login)
+    if (this._connected) return; // Canal vivo — nada a fazer
+    if (this._reconnectAttempts < SupabaseSyncService.MAX_RECONNECT_ATTEMPTS) {
+      // Ainda está na janela de reconexão automática — deixar o backoff agir
+      return;
+    }
+    console.warn('[HD-Sync] 🔌 Canal Realtime morto (reconexão esgotada) — recriando canal');
+    this.resubscribeRealtime(orgId, branchId);
+  }
+
   // ─── GENERIC CRUD OPERATIONS (OFFLINE-FIRST) ───────────────────
 
   /**

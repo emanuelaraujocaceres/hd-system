@@ -1791,9 +1791,16 @@ class StorageService {
             const s = sorted[0];
             const localSession = this.getActiveCaixaSession();
             if (localSession && localSession.id === s.id && localSession.status === 'open') {
-              // Mesma sessão aberta localmente — mas se o cloud diz que ela
-              // FECHOU (fechada manualmente em outro dispositivo), fecha aqui
-              // também, para o fechamento propagar para toda a filial.
+              // Mesma sessão aberta localmente — o cloud é a fonte da verdade
+              // (mesma regra do updateCaixaFromRemote no realtime):
+              // 1. Se o cloud diz que ela FECHOU (fechada manualmente em outro
+              //    dispositivo), fecha aqui também, para o fechamento propagar
+              //    para toda a filial.
+              // 2. Se continua aberta, ADOTA os contadores do cloud. Antes
+              //    mantinha os dados locais ("prefer local open session") e o
+              //    caixa de um dispositivo ficava travado num valor velho mesmo
+              //    após F5 (ex.: R$ 639,20 local vs R$ 632,10 no cloud) — o F5
+              //    atualizava as vendas mas nunca o caixa.
               if (s.status === 'closed') {
                 const fechado = {
                   ...localSession,
@@ -1804,7 +1811,19 @@ class StorageService {
                 this.set(KEYS.CAIXA, fechado);
                 console.log(`[HD-Sync] 🔄 Caixa "${s.id}" FECHADO via hidratação (fechado em outro dispositivo)`);
               } else {
-                console.log(`[HD-Sync] 🔄 Caixa session "${s.id}" já existe localmente — mantendo dados locais`);
+                const adopted = {
+                  ...localSession,
+                  totalSalesCash: parseFloat(s.total_sales_cash) || 0,
+                  totalSalesPix: parseFloat(s.total_sales_pix) || 0,
+                  totalSalesCard: parseFloat(s.total_sales_card) || 0,
+                  totalSalesCreditAccount: parseFloat(s.total_sales_credit_account) || 0,
+                  suprimentos: parseFloat(s.suprimentos) || 0,
+                  sangrias: parseFloat(s.sangrias) || 0,
+                };
+                adopted.currentCashBalance =
+                  adopted.initialCash + adopted.totalSalesCash + adopted.suprimentos - adopted.sangrias;
+                this.set(KEYS.CAIXA, adopted);
+                console.log(`[HD-Sync] 🔄 Caixa "${s.id}" adotado do cloud (hidratação): cash=R$${adopted.totalSalesCash.toFixed(2)} saldo=R$${adopted.currentCashBalance.toFixed(2)}`);
               }
             } else {
               // Sessão local não bate com a do cloud (ou não existe) → adota o

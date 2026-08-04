@@ -461,13 +461,15 @@ export const App: React.FC = () => {
     // Without a logged-in user (bootstrap/offline preview), there is no
     // Supabase JWT, so server-side filters (org_id + branch_id) trigger RLS
     // errors → CHANNEL_ERROR in reconnect loop. Defer Realtime until login.
+    // Declaradas no escopo do efeito: o health check (checkConnection) usa
+    // estes ids para ressuscitar o canal Realtime se ele morrer.
+    const realtimeOrgId = storageService.isSuperAdmin()
+      ? (storageService.getSuperadminViewingOrg() || undefined)
+      : (storageService.getCurrentOrgId() || undefined);
+    const realtimeBranchId = storageService.isSuperAdmin()
+      ? (storageService.getSuperadminViewingOrg() ? storageService.getSelectedBranchId() : undefined)
+      : (storageService.getSelectedBranchId() || undefined);
     if (user) {
-      const realtimeOrgId = storageService.isSuperAdmin()
-        ? (storageService.getSuperadminViewingOrg() || undefined)
-        : (storageService.getCurrentOrgId() || undefined);
-      const realtimeBranchId = storageService.isSuperAdmin()
-        ? (storageService.getSuperadminViewingOrg() ? storageService.getSelectedBranchId() : undefined)
-        : (storageService.getSelectedBranchId() || undefined);
       syncService.subscribeRealtime(handleRemoteChange, realtimeOrgId, realtimeBranchId);
     } else {
       console.log('[App] Realtime deferred — no logged-in user (bootstrap mode)');
@@ -489,6 +491,11 @@ export const App: React.FC = () => {
       if (nowConnected) {
         const pending = syncPendingCountRef.current;
         setSyncStatus(pending > 0 ? 'syncing' : 'online');
+        // Ressuscita o canal Realtime se ele morreu (reconexão esgotada).
+        // Sem isso, após um pico de rede/CLOUDFLARE reset, o dispositivo
+        // fica "cego" até F5: vendas de outros dispositivos não chegam
+        // em tempo real, só na hidratação manual.
+        syncService.resubscribeIfDead(realtimeOrgId, realtimeBranchId);
         // Processa pendentes SEMPRE que houver e a conexão estiver OK — não
         // apenas na transição offline→online. Antes, no F5 (com isOnline já
         // true no mount), a fila existente nunca era processada: cada nova
