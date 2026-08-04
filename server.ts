@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, ApiError } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import { decodeBoleto } from "./functions/api/ai/boletoLib";
 
 // Carrega .env.local (desenvolvimento local) + .env (produção)
 dotenv.config();
@@ -446,75 +447,30 @@ Retorne ESTRITAMENTE um objeto JSON válido sem formatação Markdown extra:
   });
 
   // API Route: Camera Scan Bank Slip / Boleto Bancário
+  // Decodificação determinística do código de barras (SEM IA): boleto bancário
+  // (44/47/48 dígitos) e contas de arrecadação (44 dígitos começando com 8).
   app.post("/api/ai/scan-boleto", async (req, res) => {
     try {
-      const { imageBase64 } = req.body;
+      const { barcode } = req.body || {};
 
-      if (!ai || !imageBase64) {
-        // High quality simulated boleto OCR
-        const dueDate = new Date();
-        dueDate.setDate(dueDate.getDate() + 15);
-        return res.json({
-          result: {
-            supplierName: "CPFL Energia / Distribuidora de Eletrônicos",
-            barcode: "23793381286008221008701000000018398450000035000",
-            dueDate: dueDate.toISOString().slice(0, 10),
-            amount: 350.00,
-            category: "Instalações / Energia",
-            documentNumber: "BOL-98421",
-          },
-          isFallback: true,
+      const decoded = decodeBoleto(barcode);
+      if (!decoded.type || !decoded.barcode) {
+        return res.status(422).json({
+          error: "Código de barras inválido. Envie os 44, 47 ou 48 dígitos.",
+          result: null,
         });
-      }
-
-      const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-      const prompt = `Você é um leitor óptico de Boletos Bancários e Contas a Pagar para ERP financeiro.
-Examine a foto do boleto. Identifique:
-1) Nome do Beneficiário / Fornecedor ou Emissor
-2) Linha Digitável / Código de Barras (47 ou 48 dígitos)
-3) Data de Vencimento no formato YYYY-MM-DD
-4) Valor a Pagar (R$)
-5) Categoria sugerida de despesa (ex: Fornecedores, Energia Elétrica, Água, Aluguel, Impostos)
-6) Número do documento / referência
-
-Retorne ESTRITAMENTE um objeto JSON válido sem Markdown:
-{
-  "supplierName": "string",
-  "barcode": "string",
-  "dueDate": "YYYY-MM-DD",
-  "amount": number,
-  "category": "string",
-  "documentNumber": "string"
-}`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-lite",
-        contents: [
-          {
-            inlineData: {
-              data: cleanBase64,
-              mimeType: "image/jpeg",
-            },
-          },
-          { text: prompt },
-        ],
-      });
-
-      const text = response.text || "";
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return res.json({ result: parsed, isFallback: false });
       }
 
       return res.json({
         result: {
-          supplierName: "Beneficiário Boleto Câmera",
-          barcode: "34191000080000012345670000012345890000025000",
-          dueDate: new Date(Date.now() + 864000000).toISOString().slice(0, 10),
-          amount: 250.00,
-          category: "Fornecedores",
-          documentNumber: "BOL-1234",
+          supplierName: decoded.supplierName || "",
+          barcode: decoded.barcode,
+          dueDate: decoded.dueDate || "",
+          amount: decoded.amount,
+          category: decoded.category || "Fornecedores",
+          documentNumber: "",
+          source: decoded.type,
+          barcodeValid: decoded.barcodeValid,
         },
         isFallback: false,
       });

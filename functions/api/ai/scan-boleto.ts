@@ -1,90 +1,47 @@
 // Cloudflare Pages Function — POST /api/ai/scan-boleto
-// Adapted from api/ai/scan-boleto.ts for Cloudflare Workers runtime
+// Decodificação determinística do código de barras (SEM IA).
+// Endpoint de apoio: o frontend já decodifica localmente; este endpoint existe
+// para casos em que os dígitos precisam ser validados/devolvidos pelo servidor.
+
+import { decodeBoleto } from './boletoLib';
+
+function jsonResponse(body: any, status: number) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
 export async function onRequestPost(context: any) {
-  const { request, env } = context;
-
   try {
-    const { imageBase64 } = await request.json();
-    const apiKey = env.GEMINI_API_KEY;
+    const body = await context.request.json();
+    const barcode = typeof body?.barcode === 'string' ? body.barcode : '';
 
-    if (!apiKey || !imageBase64) {
-      const dueDate = new Date();
-      dueDate.setDate(dueDate.getDate() + 15);
-      return new Response(JSON.stringify({
-        result: {
-          supplierName: 'CPFL Energia / Distribuidora de Eletrônicos',
-          barcode: '23793381286008221008701000000018398450000035000',
-          dueDate: dueDate.toISOString().slice(0, 10),
-          amount: 350.00,
-          category: 'Instalações / Energia',
-          documentNumber: 'BOL-98421',
-        },
-        isFallback: true,
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+    const decoded = decodeBoleto(barcode);
+    if (!decoded.type || !decoded.barcode) {
+      return jsonResponse(
+        { error: 'Código de barras inválido. Envie os 44, 47 ou 48 dígitos.', result: null },
+        422
+      );
     }
 
-    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-    const prompt = `Você é um leitor óptico de Boletos Bancários para ERP financeiro.
-Examine a foto do boleto. Identifique:
-1) Beneficiário/Fornecedor
-2) Código de Barras (47-48 dígitos)
-3) Data de Vencimento (YYYY-MM-DD)
-4) Valor (R$)
-5) Categoria (Energia, Água, Aluguel, etc.)
-6) Número do documento
-
-Retorne JSON válido:
-{
-  "supplierName": "string",
-  "barcode": "string",
-  "dueDate": "YYYY-MM-DD",
-  "amount": number,
-  "category": "string",
-  "documentNumber": "string"
-}`;
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+    return jsonResponse(
       {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { inlineData: { data: cleanBase64, mimeType: 'image/jpeg' } },
-              { text: prompt },
-            ],
-          }],
-        }),
-      }
+        result: {
+          supplierName: decoded.supplierName || '',
+          barcode: decoded.barcode,
+          dueDate: decoded.dueDate || '',
+          amount: decoded.amount,
+          category: decoded.category || 'Fornecedores',
+          documentNumber: '',
+          source: decoded.type,
+          barcodeValid: decoded.barcodeValid,
+        },
+        isFallback: false,
+      },
+      200
     );
-
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-
-    if (jsonMatch) {
-      return new Response(JSON.stringify({ result: JSON.parse(jsonMatch[0]), isFallback: false }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    return new Response(JSON.stringify({
-      result: { supplierName: 'Beneficiário Boleto', barcode: '34191000080000012345670000012345890000025000', dueDate: new Date(Date.now() + 864000000).toISOString().slice(0, 10), amount: 250.00, category: 'Fornecedores', documentNumber: 'BOL-1234' },
-      isFallback: false,
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: 'Falha ao ler boleto.', details: err?.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'Falha ao ler o boleto.', details: err?.message }, 500);
   }
 }

@@ -4,8 +4,6 @@ import {
   Camera,
   FileCheck,
   Barcode,
-  Calendar,
-  DollarSign,
   Sparkles,
   Check,
   RefreshCw,
@@ -21,6 +19,7 @@ import {
 import { FinancialAccount, StoreBranch } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { decodeBoleto } from '../../../functions/api/ai/boletoLib';
 
 const BOLETOS_STORAGE_KEY = 'hd_system_scanned_boletos';
 
@@ -51,6 +50,12 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [scannedBoleto, setScannedBoleto] = useState<any | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  // Campos editáveis antes de lançar em contas a pagar (o usuário confirma os dados)
+  const [editSupplier, setEditSupplier] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editAmount, setEditAmount] = useState(0);
 
   // Flash toggle
   const [flashOn, setFlashOn] = useState(false);
@@ -141,7 +146,7 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
         const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
         setCapturedImage(dataUrl);
         handleStopCamera();
-        processBoletoAI(dataUrl);
+        processCapturedBoleto(dataUrl);
       }
     }
   };
@@ -155,31 +160,73 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
           const dataUrl = evt.target.result as string;
           setCapturedImage(dataUrl);
           handleStopCamera();
-          processBoletoAI(dataUrl);
+          processCapturedBoleto(dataUrl);
         }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const processBoletoAI = async (dataUrl: string) => {
+  // Lê o código de barras diretamente da foto no dispositivo (exato, sem IA).
+  // Usa o mesmo BarcodeDetector já usado no PDV (polyfill carregado no main.tsx).
+  const readBarcodeFromImage = async (dataUrl: string): Promise<string | null> => {
+    const BCD = (window as any).BarcodeDetector;
+    if (!BCD) return null;
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const bitmap = await createImageBitmap(blob);
+      const detector = new BCD({
+        formats: ['code_128', 'code_39', 'codabar', 'itf', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code'],
+      });
+      const codes = await detector.detect(bitmap);
+      if (bitmap && typeof (bitmap as any).close === 'function') (bitmap as any).close();
+      const raw = codes?.[0]?.rawValue?.trim() || '';
+      const digits = raw.replace(/\D/g, '');
+      return digits.length >= 10 ? digits : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const processCapturedBoleto = async (dataUrl: string) => {
     setIsScanning(true);
+    setScanError(null);
     posAudio.chime();
 
     try {
-      const res = await fetch('/api/ai/scan-boleto', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: dataUrl }),
-      });
+      // Sem IA: leitura 100% local e determinística do código de barras
+      const digits = await readBarcodeFromImage(dataUrl);
 
-      const data = await res.json();
-      if (data.result) {
-        setScannedBoleto(data.result);
-        posAudio.chime();
+      if (!digits) {
+        setScanError('Nenhum código de barras detectado na imagem. Aproxime a câmera, evite reflexos e capture novamente. Sem IA, o valor é lido diretamente do código de barras.');
+        return;
       }
+
+      const decoded = decodeBoleto(digits);
+      if (!decoded.type || !decoded.barcode) {
+        setScanError('O código de barras lido não é de boleto bancário nem de conta de arrecadação (44, 47 ou 48 dígitos).');
+        return;
+      }
+
+      const result = {
+        supplierName: decoded.supplierName || '',
+        barcode: decoded.barcode,
+        dueDate: decoded.dueDate || '',
+        amount: decoded.amount,
+        category: decoded.category || 'Fornecedores',
+        documentNumber: '',
+        source: decoded.type,
+        barcodeValid: decoded.barcodeValid,
+      };
+
+      setScannedBoleto(result);
+      setEditSupplier(result.supplierName);
+      setEditDueDate(result.dueDate);
+      setEditAmount(result.amount ?? 0);
+      posAudio.chime();
     } catch (err) {
       console.error('Erro na leitura do boleto:', err);
+      setScanError('Falha ao processar a imagem. Tente novamente.');
     } finally {
       setIsScanning(false);
     }
@@ -208,17 +255,21 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
   const handleConfirmSavePayable = () => {
     if (!scannedBoleto) return;
 
+    const amount = Number(editAmount);
+    if (!(amount > 0)) return;
+
     const financialAccountId = `fin-bol-${Date.now()}`;
+    const supplier = editSupplier.trim() || 'Fornecedor';
 
     const newPayable: FinancialAccount = {
       id: financialAccountId,
-      title: `Boleto: ${scannedBoleto.supplierName || 'Fornecedor'}`,
+      title: `Boleto: ${supplier}`,
       type: 'payable',
       category: scannedBoleto.category || 'Fornecedores',
-      amount: scannedBoleto.amount || 100.0,
-      dueDate: scannedBoleto.dueDate || new Date().toISOString().slice(0, 10),
+      amount,
+      dueDate: editDueDate || new Date().toISOString().slice(0, 10),
       status: 'pending',
-      recipientOrPayer: scannedBoleto.supplierName || 'Fornecedor Lido via Câmera',
+      recipientOrPayer: supplier,
     };
 
     storageService.saveFinancialAccount(newPayable);
@@ -226,9 +277,9 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
     // Store boleto record in localStorage
     saveBoletoRecord(
       scannedBoleto.barcode || '',
-      scannedBoleto.amount || 0,
-      scannedBoleto.dueDate || '',
-      scannedBoleto.supplierName || '',
+      amount,
+      editDueDate || '',
+      supplier,
       financialAccountId
     );
 
@@ -278,7 +329,7 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Escaneie o boleto bancário para registrar a conta a pagar automaticamente com valor e vencimento
+                Escaneie o boleto bancário ou a conta (luz, água, gás) — o valor é lido do código de barras e você confirma o emissor e o vencimento
               </p>
             </div>
           </div>
@@ -312,10 +363,10 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
               </div>
               <div>
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Aponta a câmera para o Boleto Bancário ou Código de Barras
+                  Aponta a câmera para o Código de Barras (boleto ou conta)
                 </h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xs">
-                  O sistema extrai a linha digitável, fornecedor, data de vencimento e valor total da conta.
+                  Sem IA: o valor é lido exatamente do código de barras. Nome do emissor e vencimento você confirma na tela seguinte.
                 </p>
               </div>
 
@@ -407,7 +458,7 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
                     <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
                     <span className="text-xs font-bold flex items-center gap-1.5">
                       <Sparkles className="w-4 h-4 text-amber-400" />
-                      Lendo código de barras e dados do boleto...
+                      Lendo o código de barras...
                     </span>
                   </div>
                 )}
@@ -418,6 +469,7 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
                   onClick={() => {
                     setCapturedImage(null);
                     setScannedBoleto(null);
+                    setScanError(null);
                     handleStartCamera();
                   }}
                   className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
@@ -429,26 +481,62 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
             </div>
           )}
 
-          {/* SCANNED BOLETO RESULT */}
+          {/* Scan error — honest feedback, no invented data */}
+          {scanError && !scannedBoleto && (
+            <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/20 space-y-3 animate-fadeIn">
+              <p className="text-xs font-bold text-red-600 dark:text-red-400 flex items-start gap-1.5">
+                <X className="w-4 h-4 mt-0.5 shrink-0" /> {scanError}
+              </p>
+              <button
+                onClick={() => {
+                  setCapturedImage(null);
+                  setScanError(null);
+                  handleStartCamera();
+                }}
+                className="w-full py-2.5 rounded-xl bg-slate-200 dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-2"
+              >
+                <Camera className="w-4 h-4" />
+                Tentar novamente
+              </button>
+            </div>
+          )}
+
+          {/* SCANNED BOLETO RESULT — confirm & edit before saving */}
           {scannedBoleto && (
             <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-3 animate-fadeIn">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                  <Check className="w-4 h-4" /> Boleto Reconhecido com Sucesso!
+                  <Check className="w-4 h-4" /> Código de Barras Lido — Confirme os Dados
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-extrabold">
                   PENDENTE DE PAGAMENTO
                 </span>
               </div>
 
+              {scannedBoleto.source === 'arrecadacao' && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                  Conta de arrecadação (luz/água/gás): o vencimento não vem no código de barras — preencha a data que está na conta impressa.
+                </p>
+              )}
+              {scannedBoleto.source === 'bancario' && !scannedBoleto.barcodeValid && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                  Atenção: o código não passou na validação dos dígitos verificadores. Revise o valor e o vencimento antes de salvar.
+                </p>
+              )}
+
               <div className="space-y-2 text-xs">
                 <div>
-                  <span className="text-slate-400 block text-[10px] font-bold">BENEFICIÁRIO / FORNECEDOR</span>
-                  <span className="font-bold text-slate-900 dark:text-white text-sm">{scannedBoleto.supplierName}</span>
+                  <span className="text-slate-400 block text-[10px] font-bold">EMISSOR / FORNECEDOR *</span>
+                  <input
+                    value={editSupplier}
+                    onChange={(e) => setEditSupplier(e.target.value)}
+                    placeholder="Ex.: Neoenergia, CPFL, Sabesp, Itaú"
+                    className="w-full mt-1 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  />
                 </div>
 
                 <div>
-                  <span className="text-slate-400 block text-[10px] font-bold">LINHA DIGITÁVEL / CÓDIGO</span>
+                  <span className="text-slate-400 block text-[10px] font-bold">CÓDIGO / LINHA DIGITÁVEL</span>
                   <span className="font-mono text-[11px] font-bold text-slate-800 dark:text-sky-300 break-all select-all block bg-slate-100 dark:bg-slate-900 p-1.5 rounded-lg border border-slate-200 dark:border-slate-800">
                     {scannedBoleto.barcode}
                   </span>
@@ -457,24 +545,33 @@ export const BoletoCameraScannerModal: React.FC<BoletoCameraScannerModalProps> =
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
                     <span className="text-slate-400 block text-[10px] font-bold">DATA DE VENCIMENTO</span>
-                    <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 text-indigo-500" />
-                      {scannedBoleto.dueDate}
-                    </span>
+                    <input
+                      type="date"
+                      value={editDueDate}
+                      onChange={(e) => setEditDueDate(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                    />
                   </div>
 
                   <div>
-                    <span className="text-slate-400 block text-[10px] font-bold">VALOR DO BOLETO</span>
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                      R$ {scannedBoleto.amount.toFixed(2)}
-                    </span>
+                    <span className="text-slate-400 block text-[10px] font-bold">VALOR (R$) *</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editAmount > 0 ? editAmount : ''}
+                      onChange={(e) => setEditAmount(e.target.value === '' ? 0 : Number(e.target.value))}
+                      placeholder="0,00"
+                      className="w-full mt-1 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                    />
                   </div>
                 </div>
               </div>
 
               <button
                 onClick={handleConfirmSavePayable}
-                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-lg transition-colors flex items-center justify-center gap-2"
+                disabled={!(Number(editAmount) > 0)}
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs shadow-lg transition-colors flex items-center justify-center gap-2"
               >
                 <Check className="w-4 h-4" />
                 <span>LANÇAR EM CONTAS A PAGAR</span>
