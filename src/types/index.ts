@@ -61,6 +61,8 @@ export interface Product {
   tvPromoPrice?: number;
   tvHighlightTag?: string; // e.g. "COMBO DO DIA", "OFERTA TV", "LEVE 3 PAGUE 2"
   organizationId?: string; // multi-tenant: qual organização este produto pertence
+  // Venda no ATACADO: uma ou mais caixas com quantidades e preços diferentes
+  wholesaleOptions?: WholesaleOption[];
 }
 
 export interface Category {
@@ -73,12 +75,24 @@ export interface Category {
   organizationId?: string; // multi-tenant
 }
 
+// Opção de venda no ATACADO (caixa/fardo): quantidade de unidades na caixa + preço
+// de venda da caixa INTEIRA. Ex.: { boxQuantity: 12, salePrice: 38.00 } =
+// caixa com 12 unidades vendida por R$ 38,00 (preço unitário efetivo 3,17).
+export interface WholesaleOption {
+  id: string;
+  boxQuantity: number; // quantas unidades vêm na caixa (12, 15, 18...)
+  salePrice: number;   // preço de venda da caixa inteira (R$)
+}
+
 export interface CartItem {
   product: Product;
   quantity: number;
   unitPrice: number;
   discount: number; // R$
   totalPrice: number;
+  // Quando o item é uma opção de ATACADO (caixa):
+  sourceProductId?: string; // id REAL do produto (para baixa de estoque unitária)
+  stockQuantity?: number;   // quantas UNIDADES o item representa no estoque (ex.: 12)
 }
 
 export type PaymentMethod = 'cash' | 'pix' | 'credit_card' | 'debit_card' | 'credit_account';

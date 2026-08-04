@@ -286,10 +286,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         customerName: selectedCustomer?.name || 'Cliente Não Identificado',
         storeBranchId: branchId,
         items: cartItems.map((ci) => ({
-          productId: ci.product.id,
+          // Caixa de atacado: baixa estoque do produto REAL (sourceProductId) em
+          // stockQuantity unidades; o histórico guarda o preço por unidade efetivo.
+          productId: ci.sourceProductId ?? ci.product.id,
           productName: ci.product.name,
-          unitPrice: ci.unitPrice,
-          quantity: ci.quantity,
+          unitPrice: ci.stockQuantity ? ci.unitPrice / ci.stockQuantity : ci.unitPrice,
+          quantity: ci.stockQuantity ?? ci.quantity,
           total: ci.totalPrice,
         })),
         subtotal,

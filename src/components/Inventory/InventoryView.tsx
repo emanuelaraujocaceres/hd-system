@@ -22,7 +22,7 @@ import {
   RefreshCw,
   Tv,
 } from 'lucide-react';
-import { Product, Category, Supplier, StockMovement, UserProfile, SystemSettings } from '../../types';
+import { Product, Category, Supplier, StockMovement, UserProfile, SystemSettings, WholesaleOption } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
@@ -101,6 +101,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formShowOnTV, setFormShowOnTV] = useState(false);
   const [formTvPromoPrice, setFormTvPromoPrice] = useState('');
   const [formTvHighlightTag, setFormTvHighlightTag] = useState('');
+  // Venda no ATACADO (caixa/fardo): quantidade de unidades na caixa + valor da caixa
+  const [formWholesaleEnabled, setFormWholesaleEnabled] = useState(false);
+  const [formWholesaleOptions, setFormWholesaleOptions] = useState<{ boxQuantity: string; salePrice: string }[]>([
+    { boxQuantity: '', salePrice: '' },
+  ]);
 
   // ============================================================
   // 2. TODOS OS useRef
@@ -340,6 +345,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormShowOnTV(false);
     setFormTvPromoPrice('');
     setFormTvHighlightTag('');
+    setFormWholesaleEnabled(false);
+    setFormWholesaleOptions([{ boxQuantity: '', salePrice: '' }]);
     setImageSuggestions([]);
     setIsSearchingImages(false);
   };
@@ -364,6 +371,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormShowOnTV(product.showOnTV || false);
     setFormTvPromoPrice(String(product.tvPromoPrice || ''));
     setFormTvHighlightTag(product.tvHighlightTag || '');
+    const existingWholesale = product.wholesaleOptions || [];
+    setFormWholesaleEnabled(existingWholesale.length > 0);
+    setFormWholesaleOptions(
+      existingWholesale.length > 0
+        ? existingWholesale.map((o) => ({ boxQuantity: String(o.boxQuantity), salePrice: String(o.salePrice) }))
+        : [{ boxQuantity: '', salePrice: '' }]
+    );
     setIsProductModalOpen(true);
   };
 
@@ -383,6 +397,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     }
     setSavingProduct(true);
     try {
+      // Opções de atacado: só entram linhas com quantidade (mín. 2 un) e valor de caixa > 0
+      const wholesaleOptions: WholesaleOption[] | undefined = formWholesaleEnabled
+        ? formWholesaleOptions
+            .map((line, idx) => ({
+              id: `wh-${editingProduct?.id || 'prod'}-${idx}-${Date.now()}`,
+              boxQuantity: Math.floor(Number(line.boxQuantity) || 0),
+              salePrice: parseBrlToNumber(line.salePrice),
+            }))
+            .filter((o) => o.boxQuantity >= 2 && o.salePrice > 0)
+        : undefined;
+
       const newProd: Product = {
         id: editingProduct ? editingProduct.id : `prod-${Date.now()}`,
         barcode: formBarcode,
@@ -401,6 +426,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         showOnTV: formShowOnTV,
         tvPromoPrice: formTvPromoPrice ? parseBrlToNumber(formTvPromoPrice) || undefined : undefined,
         tvHighlightTag: formTvHighlightTag || undefined,
+        wholesaleOptions,
       };
 
       storageService.saveProduct(newProd);
@@ -1104,6 +1130,103 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     placeholder="https://images.unsplash.com/..."
                     className="w-full px-3 py-1.5 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none"
                   />
+                )}
+              </div>
+
+              {/* ─── ATACADO (CAIXA / FARDOS) ─── */}
+              <div className="pt-3 border-t border-slate-200 dark:border-[#27272a] space-y-3">
+                <label className="flex items-center gap-3 p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/20 cursor-pointer hover:bg-indigo-500/10 transition-colors">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={formWholesaleEnabled}
+                      onChange={(e) => {
+                        setFormWholesaleEnabled(e.target.checked);
+                        posAudio.click();
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 rounded-full bg-slate-300 dark:bg-[#27272a] peer-checked:bg-indigo-500 transition-colors" />
+                    <div className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-transform peer-checked:translate-x-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">Adicionar produto no atacado</p>
+                    <p className="text-[10px] text-slate-500 dark:text-[#71717a]">
+                      Ex.: caixa de Skol 12un vendida por um preço único (diferente do preço da unidade)
+                    </p>
+                  </div>
+                </label>
+
+                {formWholesaleEnabled && (
+                  <div className="space-y-3 pl-1 animate-in slide-in-from-top-2 duration-200">
+                    {formWholesaleOptions.map((line, i) => (
+                      <div key={i} className="p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/15 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a]">
+                            Configuração {i + 1}
+                          </span>
+                          {formWholesaleOptions.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setFormWholesaleOptions((prev) => prev.filter((_, x) => x !== i))}
+                              className="p-1 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors"
+                              title="Remover configuração"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                              Quantidade na caixa (un)
+                            </label>
+                            <input
+                              type="number"
+                              min="2"
+                              value={line.boxQuantity}
+                              onChange={(e) =>
+                                setFormWholesaleOptions((prev) =>
+                                  prev.map((l, x) => (x === i ? { ...l, boxQuantity: e.target.value } : l))
+                                )
+                              }
+                              placeholder="Ex: 12"
+                              className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                              Valor da caixa (R$)
+                            </label>
+                            <MoneyInput
+                              value={line.salePrice}
+                              onChange={(v) =>
+                                setFormWholesaleOptions((prev) =>
+                                  prev.map((l, x) => (x === i ? { ...l, salePrice: v } : l))
+                                )
+                              }
+                              placeholder="Ex: 38,00"
+                              className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                        </div>
+                        {parseBrlToNumber(line.salePrice) > 0 && Math.floor(Number(line.boxQuantity) || 0) >= 2 && (
+                          <p className="text-[10px] font-bold text-indigo-500">
+                            Preço por unidade na caixa: R${' '}
+                            {(parseBrlToNumber(line.salePrice) / (Math.floor(Number(line.boxQuantity)) || 1)).toFixed(2)}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setFormWholesaleOptions((prev) => [...prev, { boxQuantity: '', salePrice: '' }])}
+                      className="w-full py-2.5 rounded-xl border-2 border-dashed border-indigo-500/30 text-indigo-600 dark:text-indigo-400 font-bold text-xs hover:bg-indigo-500/5 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Adicionar outra configuração
+                    </button>
+                  </div>
                 )}
               </div>
 

@@ -147,8 +147,38 @@ export const PDVView: React.FC<PDVViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [cart, isCaixaOpen]);
 
+  // ─── ATACADO: expande o catálogo ────────────────────────────────────
+  // Cada produto com opções de atacado vira o card unitário + um card por
+  // caixa ("Caixa Skol 350ml 12un — R$ 38,00"). O estoque continua UNITÁRIO:
+  // vender 1 caixa dá baixa de N unidades no produto real.
+  interface PdvProductEntry {
+    product: Product;
+    sourceProductId?: string; // id REAL do produto (para baixa de estoque)
+    boxQuantity?: number;     // unidades por caixa
+  }
+
+  const productEntries: PdvProductEntry[] = products.flatMap((p) => {
+    const variants: PdvProductEntry[] = [{ product: p }];
+    for (const opt of p.wholesaleOptions || []) {
+      variants.push({
+        product: {
+          ...p,
+          id: `${p.id}::wh::${opt.id}`,
+          name: `${p.name} — Caixa ${opt.boxQuantity}un`,
+          salePrice: opt.salePrice,
+          showOnTV: false,
+          tvPromoPrice: undefined,
+        },
+        sourceProductId: p.id,
+        boxQuantity: opt.boxQuantity,
+      });
+    }
+    return variants;
+  });
+
   // Filter products by search or category
-  const filteredProducts = products.filter((p) => {
+  const filteredProducts = productEntries.filter((entry) => {
+    const p = entry.product;
     const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
     const term = searchTerm.toLowerCase().trim();
     const matchesSearch =
@@ -158,30 +188,42 @@ export const PDVView: React.FC<PDVViewProps> = ({
     return matchesCategory && matchesSearch && p.active;
   });
 
+  // Total de UNIDADES no carrinho de um produto real (unidades + caixas somam juntas)
+  const countUnitsInCart = (realProductId: string) =>
+    cart.reduce((sum, item) => {
+      const belongs = item.sourceProductId === realProductId || item.product.id === realProductId;
+      return belongs ? sum + (item.stockQuantity ?? item.quantity) : sum;
+    }, 0);
+
   // Preço efetivo: usa o preço promocional da TV sempre que a oferta estiver
   // ativa (showOnTV) e o valor promocional for definido e maior que zero
   const getEffectivePrice = (p: Product) =>
     p.showOnTV && p.tvPromoPrice != null && p.tvPromoPrice > 0 ? p.tvPromoPrice : p.salePrice;
 
-  // Add Product to Cart
-  const handleAddToCart = (product: Product) => {
+  // Add Product to Cart (recebe a entrada expandida: unidade OU caixa de atacado)
+  const handleAddToCart = (entry: PdvProductEntry) => {
     if (!isCaixaOpen) {
       onOpenCaixaModal();
       return;
     }
 
-    if (product.currentStock <= 0) {
+    const { product, sourceProductId, boxQuantity } = entry;
+    const realProduct = sourceProductId ? products.find((p) => p.id === sourceProductId) : product;
+    const realStock = realProduct?.currentStock ?? product.currentStock;
+
+    if (realStock <= 0) {
       posAudio.error();
       addToast('error', `"${product.name}" está com estoque esgotado!`);
       return;
     }
 
-    // Check if adding 1 more would exceed stock
-    const existingItem = cart.find((item) => item.product.id === product.id);
-    const currentQtyInCart = existingItem ? existingItem.quantity : 0;
-    if (currentQtyInCart >= product.currentStock) {
+    // Check: somar as unidades já no carrinho (unidades + caixas) + o que vem agora
+    const realId = sourceProductId ?? product.id;
+    const unitsInCart = countUnitsInCart(realId);
+    const unitsNeeded = boxQuantity ?? 1;
+    if (unitsInCart + unitsNeeded > realStock) {
       posAudio.error();
-      setStockAlert({ product, currentQty: currentQtyInCart });
+      setStockAlert({ product, currentQty: unitsInCart });
       return;
     }
 
@@ -210,6 +252,9 @@ export const PDVView: React.FC<PDVViewProps> = ({
             unitPrice: effectivePrice,
             discount: 0,
             totalPrice: effectivePrice,
+            // Caixa de atacado: baixa o equivalente em unidades do produto real
+            sourceProductId,
+            stockQuantity: boxQuantity,
           },
         ];
       }
@@ -227,7 +272,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
     );
 
     if (exactMatch) {
-      handleAddToCart(exactMatch);
+      handleAddToCart({ product: exactMatch });
       setSearchTerm('');
     } else if (filteredProducts.length === 1) {
       handleAddToCart(filteredProducts[0]);
@@ -244,13 +289,19 @@ export const PDVView: React.FC<PDVViewProps> = ({
 
   // Modify Cart Item Quantity
   const handleUpdateQuantity = (productId: string, delta: number) => {
-    // Block increasing beyond available stock
+    // Block increasing beyond available stock (soma unidades + caixas do mesmo produto real)
     if (delta > 0) {
       const item = cart.find((i) => i.product.id === productId);
-      if (item && item.quantity >= item.product.currentStock) {
-        posAudio.error();
-        addToast('error', `Estoque insuficiente! "${item.product.name}" tem apenas ${item.product.currentStock} ${item.product.unit}(s) disponível(is).`);
-        return;
+      if (item) {
+        const realId = item.sourceProductId ?? item.product.id;
+        const realProduct = item.sourceProductId ? products.find((p) => p.id === item.sourceProductId) : item.product;
+        const realStock = realProduct?.currentStock ?? item.product.currentStock;
+        const unitsAfter = countUnitsInCart(realId) + (item.stockQuantity ?? item.quantity);
+        if (unitsAfter > realStock) {
+          posAudio.error();
+          addToast('error', `Estoque insuficiente! "${item.product.name}" tem apenas ${realStock} ${item.product.unit}(s) disponível(is).`);
+          return;
+        }
       }
     }
 
@@ -385,7 +436,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
       posAudio.beep();
 
       // Add to cart immediately
-      handleAddToCart(found);
+      handleAddToCart({ product: found });
 
       // Show success overlay and PAUSE scanner — wait for user confirmation
       setScanSuccessProduct(found);
@@ -561,12 +612,13 @@ export const PDVView: React.FC<PDVViewProps> = ({
 
         {/* Product Cards Catalog Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5 flex-1 overflow-y-auto pr-1">
-          {filteredProducts.map((p) => {
+          {filteredProducts.map((entry) => {
+            const p = entry.product;
             const isLowStock = p.currentStock <= p.minStock;
             return (
               <button
                 key={p.id}
-                onClick={() => handleAddToCart(p)}
+                onClick={() => handleAddToCart(entry)}
                 className="group p-3.5 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-all duration-200 text-left flex flex-col justify-between shadow-sm hover:shadow-md"
               >
                 <div>
@@ -579,12 +631,17 @@ export const PDVView: React.FC<PDVViewProps> = ({
                       onError={(e) => {
                         const img = e.target as HTMLImageElement;
                         // Fallback para placeholder local via SVG data URL
-                        img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iI2YwZjhmOCIvPgogIDxjaXJjbGUgY3g9IjYwIiBjeT0iNDUiIHI9IjE4IiBmaWxsPSIjOGM5NGYwIi8+CiAgPHJlY3QgeD0iMjUiIHk9IjgwIiB3aWR0aD0iNzAiIGhlaWdodD0iNDAiIGZpbGw9IiM5Yzk0ZjAiLz4KICA8cGF0aCBkPSJNNDQuNSAyNGwxNS40IDE1LjRoLSYuNGwtOC41IDguNUwzNC4xIDQyLjVsLTEuNC0xLjRTNDIuNSAzNC41IDM4LjUgMzAuNWwzLjAtMmwtLjItLjN6IiBmaWxsPSIjZmZmIi8+Cjwvc3ZnPg==';
+                        img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMvMjAwMC9zdmciPgogIDxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiBmaWxsPSIjZjBmOGY4Ii8+CiAgPGNpcmNsZSBjeD0iNjAiIGN5PSI0NSIgcj0iMTgiIGZpbGw9IiM4Yzk0ZjAiLz4KICA8cmVjdCB4PSIyNSIgeT0iODAiIHdpZHRoPSI3MCIgaGVpZ2h0PSI0MCIgZmlsbD0iIzljOTRmMCIvPgogIDxwYXRoIGQ9Ik00NC41IDI0bDE1LjQgMTUuNGgtLjRsLTguNSA4LjVMMzQuMSA0Mi41bC0xLjQtMS40UzQyLjUgMzQuNSAzOC41IDMwLjVsMy4wLTJsLS4yLS4zeiIgZmlsbD0iI2ZmZiIvPgo8L3N2Zz4=';
                       }}
                     />
                     <span className="absolute top-1.5 right-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-black/60 text-white backdrop-blur-sm">
                       {p.category}
                     </span>
+                    {entry.boxQuantity && (
+                      <span className="absolute top-1.5 left-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-600 text-white shadow-md">
+                        ATACADO {entry.boxQuantity}un
+                      </span>
+                    )}
                   </div>
 
                   <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 leading-tight">
@@ -688,18 +745,18 @@ export const PDVView: React.FC<PDVViewProps> = ({
                   >
                     <Minus className="w-3 h-3" />
                   </button>
-                  <span className={`text-xs font-bold w-6 text-center ${item.quantity >= item.product.currentStock ? 'text-amber-500 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>
+                  <span className={`text-xs font-bold w-6 text-center ${item.quantity * (item.stockQuantity ?? 1) >= item.product.currentStock ? 'text-amber-500 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>
                     {item.quantity}
                   </span>
                   <button
                     onClick={() => handleUpdateQuantity(item.product.id, 1)}
-                    disabled={item.quantity >= item.product.currentStock}
+                    disabled={item.quantity * (item.stockQuantity ?? 1) >= item.product.currentStock}
                     className={`p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded transition-colors ${
-                      item.quantity >= item.product.currentStock
+                      item.quantity * (item.stockQuantity ?? 1) >= item.product.currentStock
                         ? 'text-slate-300 dark:text-[#3f3f46] cursor-not-allowed'
                         : 'text-slate-500 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#27272a]'
                     }`}
-                    title={item.quantity >= item.product.currentStock ? 'Estoque máximo atingido' : 'Adicionar mais'}
+                    title={item.quantity * (item.stockQuantity ?? 1) >= item.product.currentStock ? 'Estoque máximo atingido' : 'Adicionar mais'}
                   >
                     <Plus className="w-3 h-3" />
                   </button>
@@ -810,7 +867,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
         onSaved={(product) => {
           setQuickProductBarcode(null);
           setSearchTerm('');
-          handleAddToCart(product);
+          handleAddToCart({ product });
           searchInputRef.current?.focus();
         }}
       />
