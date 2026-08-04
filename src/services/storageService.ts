@@ -1024,6 +1024,10 @@ class StorageService {
     // Same session, both open → adopt remote counters (cloud is authoritative).
     // Using Math.max previously kept stale local values (e.g., R$ 54,00 from
     // old data) instead of the correct cloud totals (R$ 23,00).
+    // Se o cloud diz que a sessão FECHOU (fechada manualmente em outro
+    // dispositivo), o caixa local também fecha — antes o spread de
+    // localSession preservava status:'open' e o caixa nunca fechava nos
+    // demais dispositivos da filial.
     if (localSession && localSession.id === row.id && localSession.status === 'open') {
       const remoteCash = parseFloat(row.total_sales_cash) || 0;
       const remotePix = parseFloat(row.total_sales_pix) || 0;
@@ -1031,6 +1035,7 @@ class StorageService {
       const remoteCredit = parseFloat(row.total_sales_credit_account) || 0;
       const remoteSuprimentos = parseFloat(row.suprimentos) || 0;
       const remoteSangrias = parseFloat(row.sangrias) || 0;
+      const remoteClosed = row.status === 'closed';
 
       const adopted = {
         ...localSession,
@@ -1040,10 +1045,15 @@ class StorageService {
         totalSalesCreditAccount: remoteCredit,
         suprimentos: remoteSuprimentos,
         sangrias: remoteSangrias,
+        // Fechamento manual em outro dispositivo propaga para este
+        status: remoteClosed ? 'closed' : localSession.status,
+        closedAt: remoteClosed ? (row.closed_at || new Date().toISOString()) : localSession.closedAt,
       };
-      adopted.currentCashBalance = adopted.initialCash + adopted.totalSalesCash + adopted.suprimentos - adopted.sangrias;
+      adopted.currentCashBalance = remoteClosed
+        ? (parseFloat(row.expected_balance) || adopted.currentCashBalance)
+        : adopted.initialCash + adopted.totalSalesCash + adopted.suprimentos - adopted.sangrias;
       this.set(KEYS.CAIXA, adopted);
-      console.log(`[HD-Sync] 🔄 Caixa adotado do cloud: cash=R$${adopted.totalSalesCash.toFixed(2)} pix=R$${adopted.totalSalesPix.toFixed(2)} card=R$${adopted.totalSalesCard.toFixed(2)}`);
+      console.log(`[HD-Sync] 🔄 Caixa ${remoteClosed ? 'FECHADO via cloud' : 'adotado do cloud'}: cash=R$${adopted.totalSalesCash.toFixed(2)} pix=R$${adopted.totalSalesPix.toFixed(2)} card=R$${adopted.totalSalesCard.toFixed(2)}`);
       return;
     }
 
@@ -1781,7 +1791,21 @@ class StorageService {
             const s = sorted[0];
             const localSession = this.getActiveCaixaSession();
             if (localSession && localSession.id === s.id && localSession.status === 'open') {
-              console.log(`[HD-Sync] 🔄 Caixa session "${s.id}" já existe localmente — mantendo dados locais`);
+              // Mesma sessão aberta localmente — mas se o cloud diz que ela
+              // FECHOU (fechada manualmente em outro dispositivo), fecha aqui
+              // também, para o fechamento propagar para toda a filial.
+              if (s.status === 'closed') {
+                const fechado = {
+                  ...localSession,
+                  status: 'closed' as const,
+                  closedAt: s.closed_at || new Date().toISOString(),
+                  currentCashBalance: parseFloat(s.expected_balance) || localSession.currentCashBalance,
+                };
+                this.set(KEYS.CAIXA, fechado);
+                console.log(`[HD-Sync] 🔄 Caixa "${s.id}" FECHADO via hidratação (fechado em outro dispositivo)`);
+              } else {
+                console.log(`[HD-Sync] 🔄 Caixa session "${s.id}" já existe localmente — mantendo dados locais`);
+              }
             } else {
               // Sessão local não bate com a do cloud (ou não existe) → adota o
               // cloud como está, sem reset de dia anterior (mesmo motivo acima:
