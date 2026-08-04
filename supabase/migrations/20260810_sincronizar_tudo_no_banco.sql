@@ -258,6 +258,15 @@ BEGIN
 END $$;
 
 -- ═══════════════════════════════════════════════════════════════════════════
+-- FASE 5: PRIVILÉGIOS DE TABELA PARA O PostgREST
+-- (sem isso o app autenticado recebe 403 "permission denied for table" —
+--  o ALTER DEFAULT PRIVILEGES do projeto não cobre tabelas criadas aqui)
+-- ═══════════════════════════════════════════════════════════════════════════
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.scanned_boletos TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.credit_payments TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.nf_records TO anon, authenticated, service_role;
+
+-- ═══════════════════════════════════════════════════════════════════════════
 -- VERIFICAÇÃO
 -- ═══════════════════════════════════════════════════════════════════════════
 -- SELECT table_name, column_name FROM information_schema.columns
