@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Building2, Plus, ChevronDown, ChevronRight, Users, MapPin,
   ShieldCheck, Loader2, Copy, Check, X, Mail, UserPlus, LogIn,
-  Store, AlertCircle, ArrowRightFromLine,
+  Store, AlertCircle, ArrowRightFromLine, Trash2,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { callServerApi } from '../../lib/serverApi';
 import { storageService } from '../../services/storageService';
+import { DEFAULT_ORG_ID } from '../../data/mockData';
 import { UserProfile } from '../../types';
 import { useToast } from '../shared/Toast';
 
@@ -134,6 +135,12 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
   const [addingUser, setAddingUser] = useState(false);
   const [addUserResult, setAddUserResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  // Modal de excluir organização
+  const [deleteOrgTarget, setDeleteOrgTarget] = useState<OrgRow | null>(null);
+  const [deleteOrgConfirm, setDeleteOrgConfirm] = useState('');
+  const [deletingOrg, setDeletingOrg] = useState(false);
+  const [deleteOrgError, setDeleteOrgError] = useState<string | null>(null);
+
   /* ---------- fetch orgs (RPC JSON → imune a type mismatch) ---------- */
   const fetchOrgs = useCallback(async () => {
     setLoading(true); setError(null);
@@ -237,6 +244,48 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
     catch { /* */ }
   };
 
+  /* ---------- excluir organização ---------- */
+  const openDeleteOrg = (org: OrgRow) => {
+    setDeleteOrgTarget(org);
+    setDeleteOrgConfirm('');
+    setDeleteOrgError(null);
+  };
+
+  const handleDeleteOrg = async () => {
+    if (!deleteOrgTarget) return;
+    if (deleteOrgConfirm.trim() !== deleteOrgTarget.name.trim()) {
+      setDeleteOrgError('O nome digitado não confere. Nada foi excluído.');
+      return;
+    }
+    setDeletingOrg(true); setDeleteOrgError(null);
+    try {
+      const { data, error } = await callServerApi<{ success: boolean; message: string }>(
+        '/api/admin/delete-organization',
+        { organization_id: deleteOrgTarget.id, confirm_name: deleteOrgConfirm.trim() }
+      );
+      if (error) {
+        setDeleteOrgError(error);
+        return;
+      }
+      if (!data?.success) {
+        setDeleteOrgError(data?.message || 'Falha ao excluir organização.');
+        return;
+      }
+      // Sucesso: remove da lista e limpa mapas
+      setOrgs((prev) => prev.filter((o) => o.id !== deleteOrgTarget.id));
+      setBranchesMap((prev) => { const n = { ...prev }; delete n[deleteOrgTarget.id]; return n; });
+      setUsersMap((prev) => { const n = { ...prev }; delete n[deleteOrgTarget.id]; return n; });
+      // Se a org excluída era a que estava sendo visualizada, sai dela
+      if (localStorage.getItem('hd_system_viewing_org') === deleteOrgTarget.id) {
+        storageService.superadminSetViewingOrg(null);
+      }
+      addToast('success', data.message);
+      setDeleteOrgTarget(null); setDeleteOrgConfirm('');
+    } catch (e: any) {
+      setDeleteOrgError(e?.message || 'Erro ao excluir organização.');
+    } finally { setDeletingOrg(false); }
+  };
+
   /* ---------- viewing org state ---------- */
   const viewingOrgId = localStorage.getItem('hd_system_viewing_org');
   const viewingOrgName = viewingOrgId ? orgs.find(o => o.id === viewingOrgId)?.name : null;
@@ -310,6 +359,15 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
           >
             <ArrowRightFromLine className="w-3.5 h-3.5" />
             <span>Entrar</span>
+          </button>
+          {/* Botão Excluir — protegido: org padrão do sistema não pode ser excluída */}
+          <button
+            onClick={() => openDeleteOrg(org)}
+            disabled={org.id === DEFAULT_ORG_ID}
+            className="flex items-center gap-1.5 px-3 py-2 m-3 ml-0 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 font-bold text-xs transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            title={org.id === DEFAULT_ORG_ID ? 'A organização padrão do sistema não pode ser excluída' : 'Excluir organização (irreversível)'}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
 
@@ -595,6 +653,63 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
                   </div>
                 </form>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL: Excluir Organização                                   */}
+      {/* ============================================================ */}
+      {deleteOrgTarget && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[15vh] bg-slate-950/60 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-gradient-to-br from-rose-950 via-slate-900 to-black p-5 text-white relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.25),transparent_50%)] pointer-events-none" />
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center"><Trash2 className="w-5 h-5 text-rose-300" /></div>
+                  <div><h2 className="text-lg font-bold">Excluir Organização</h2><p className="text-xs text-slate-300">Ação irreversível</p></div>
+                </div>
+                <button onClick={() => setDeleteOrgTarget(null)} className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"><X className="w-4 h-4" /></button>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30">
+                <p className="text-sm font-bold text-rose-600 dark:text-rose-400 mb-1">⚠️ Você está excluindo <strong className="break-words">{deleteOrgTarget.name}</strong></p>
+                <p className="text-xs text-slate-500 dark:text-[#a1a1aa] mt-1">
+                  Tudo será removido permanentemente do banco: {deleteOrgTarget.branch_count} filial(is), {deleteOrgTarget.user_count} usuário(s), produtos, vendas, caixa, financeiro e mais. <strong>Não é possível desfazer.</strong>
+                </p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Digite o nome da organização para confirmar
+                </label>
+                <input
+                  type="text"
+                  placeholder={deleteOrgTarget.name}
+                  value={deleteOrgConfirm}
+                  onChange={(e) => setDeleteOrgConfirm(e.target.value)}
+                  autoFocus
+                  className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium"
+                />
+              </div>
+              {deleteOrgError && (
+                <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-600 dark:text-rose-400">
+                  {deleteOrgError}
+                </div>
+              )}
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setDeleteOrgTarget(null)} disabled={deletingOrg}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-[#27272a] text-xs font-semibold text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-50 dark:hover:bg-[#09090b] transition-all disabled:opacity-60">
+                  Cancelar
+                </button>
+                <button type="button" onClick={handleDeleteOrg}
+                  disabled={deletingOrg || deleteOrgConfirm.trim() !== deleteOrgTarget.name.trim()}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-600/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                  {deletingOrg ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Excluindo...</> : <><Trash2 className="w-3.5 h-3.5" /> Excluir Definitivamente</>}
+                </button>
+              </div>
             </div>
           </div>
         </div>
