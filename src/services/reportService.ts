@@ -362,7 +362,9 @@ export async function fetchReport(filters: ReportFilters): Promise<{ model: Repo
 // ── CSV ─────────────────────────────────────────────────────────────────────
 function csvCell(value: string | number | null): string {
   if (value === null || value === undefined) return '';
-  const s = typeof value === 'number' ? num.format(value).replace(/\./g, '').replace(',', '.') : String(value);
+  // Números em formato pt-BR ("86,80") — com separador ';' e BOM, o Excel
+  // pt-BR interpreta as células como NÚMERO. Decimal com ponto vira texto.
+  const s = typeof value === 'number' ? num.format(value) : String(value);
   return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
