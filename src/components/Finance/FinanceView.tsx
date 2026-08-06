@@ -16,6 +16,7 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
+  FileBarChart,
 } from 'lucide-react';
 import { FinancialAccount, Sale, Product, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -25,6 +26,7 @@ import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { undoManager } from '../../lib/undoManager';
+import { ReportModal } from './ReportModal';
 
 interface FinanceViewProps {
   financialAccounts: FinancialAccount[];
@@ -43,6 +45,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'contas' | 'dre'>('contas');
   const [filterType, setFilterType] = useState<'all' | 'payable' | 'receivable'>('all');
+  const [isReportOpen, setIsReportOpen] = useState(false);
 
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -390,6 +393,15 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               DRE Gerencial
             </button>
           </div>
+
+          <button
+            onClick={() => setIsReportOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 min-h-[44px]"
+            title="Relatório gerencial de vendas — PDF para apresentar/arquivar + CSV detalhado"
+          >
+            <FileBarChart className="w-4 h-4" />
+            <span>Relatório Gerencial</span>
+          </button>
 
         <div className="flex items-center gap-2">
           <button
@@ -1283,6 +1295,11 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         onConfirm={handleConfirmDeleteSale}
         onCancel={() => setConfirmDeleteSale(null)}
       />
+
+      {/* Relatório Gerencial (Frente 5) */}
+      {isReportOpen && (
+        <ReportModal user={user} onClose={() => setIsReportOpen(false)} />
+      )}
     </div>
   );
 };
