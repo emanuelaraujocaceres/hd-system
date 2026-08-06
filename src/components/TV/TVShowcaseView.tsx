@@ -14,7 +14,8 @@ import {
   X,
   CheckCircle2,
 } from 'lucide-react';
-import { Product, StoreBranch, SystemSettings } from '../../types';
+import { Product, StoreBranch, SystemSettings, FooterMessage } from '../../types';
+import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 
 interface TVShowcaseViewProps {
@@ -43,6 +44,7 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [timeString, setTimeString] = useState('');
+  const [footerMessages, setFooterMessages] = useState<FooterMessage[]>([]);
 
   // Clock ticker for TV — larger display
   useEffect(() => {
@@ -55,6 +57,24 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
     updateTime();
     const timer = setInterval(updateTime, 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Rodapé dinâmico: mensagens de footer_messages sincronizadas do cloud.
+  // Polling leve + eventos storage/focus — o App grava no localStorage ao
+  // receber UPDATE do Realtime, então esta janela (ou outra aba) re-renderiza.
+  useEffect(() => {
+    const loadFooters = () => {
+      setFooterMessages(storageService.getFooterMessages());
+    };
+    loadFooters();
+    const timer = setInterval(loadFooters, 5000);
+    window.addEventListener('storage', loadFooters);
+    window.addEventListener('focus', loadFooters);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('storage', loadFooters);
+      window.removeEventListener('focus', loadFooters);
+    };
   }, []);
 
   // Auto slide loop
@@ -99,6 +119,22 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
   };
 
   const activeProduct = displayList[currentIndex] || displayList[0];
+
+  // Segmentos do rodapé: mensagens ativas ordenadas por sortOrder;
+  // fallback para o texto padrão quando nenhuma mensagem foi configurada.
+  const footerSegments = footerMessages
+    .filter((m) => m.active && m.message && m.message.trim().length > 0)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((m) => m.message.trim());
+  const renderSegments =
+    footerSegments.length > 0
+      ? footerSegments
+      : [
+          `🔥 PROMOÇÕES IMPERDÍVEIS HOJE NA FILIAL ${currentBranch.name.toUpperCase()}`,
+          'ACEITAMOS PIX, CARTÃO DE CRÉDITO E DÉBITO',
+          'FAÇA SEU PEDIDO DIRETO NO BALCÃO OU CHAME NO WHATSAPP DE ATENDIMENTO',
+          'QUALIDADE E OS MELHORES PREÇOS GARANTIDOS HD-SYSTEM',
+        ];
 
   return (
     <div className="min-h-screen bg-[#09090b] text-white flex flex-col justify-between overflow-hidden relative font-sans select-none animate-fadeIn">
@@ -351,13 +387,10 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
       {/* SCROLLING MARQUEE BANNER AT BOTTOM */}
       <div className="bg-gradient-to-r from-amber-500 via-indigo-600 to-amber-500 text-black font-extrabold text-xs py-2 px-4 uppercase tracking-wider overflow-hidden whitespace-nowrap border-t border-amber-400 z-20">
         <div className="inline-block animate-marquee space-x-8">
-          <span>🔥 PROMOÇÕES IMPERDÍVEIS HOJE NA FILIAL {currentBranch.name.toUpperCase()}</span>
-          <span>•</span>
-          <span>ACEITAMOS PIX, CARTÃO DE CRÉDITO E DÉBITO</span>
-          <span>•</span>
-          <span>FAÇA SEU PEDIDO DIRETO NO BALCÃO OU CHAME NO WHATSAPP DE ATENDIMENTO</span>
-          <span>•</span>
-          <span>QUALIDADE E OS MELHORES PREÇOS GARANTIDOS HD-SYSTEM</span>
+          {renderSegments.flatMap((seg, i) => [
+            <span key={`seg-${i}`}>{seg}</span>,
+            <span key={`dot-${i}`}>•</span>,
+          ])}
         </div>
       </div>
 

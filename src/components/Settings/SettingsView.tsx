@@ -19,8 +19,12 @@ import {
   Tv,
   QrCode,
   Copy,
+  Megaphone,
+  ArrowUp,
+  ArrowDown,
+  Circle,
 } from 'lucide-react';
-import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions } from '../../types';
+import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage } from '../../types';
 import { storageService } from '../../services/storageService';
 import { pixConfigService, PixBranchConfig, PixKeyType } from '../../services/pixConfigService';
 import { posAudio } from '../../services/audioService';
@@ -77,6 +81,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   // TV Showcase Settings State
   const [tvSlideSpeed, setTvSlideSpeed] = useState(settings.tvSlideSpeed || 6);
   const [tvDisplayMode, setTvDisplayMode] = useState<'single' | 'grid'>(settings.tvDisplayMode || 'single');
+
+  // Rodapé da TV — mensagens sincronizadas (tabela footer_messages)
+  const [footerMessages, setFooterMessages] = useState<FooterMessage[]>(storageService.getFooterMessages());
+  const [newFooterMessage, setNewFooterMessage] = useState('');
+  const [editingFooterId, setEditingFooterId] = useState<string | null>(null);
+  const [editingFooterText, setEditingFooterText] = useState('');
 
   // ── PIX Config per branch ───────────────────────────────────
   const currentBranchId = storageService.getSelectedBranchId();
@@ -502,6 +512,70 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     } finally {
       setSavingTv(false);
     }
+  };
+
+  // ── Mensagens do rodapé da TV (footer_messages) ──────────────────────
+  const refreshFooterMessages = () => setFooterMessages(storageService.getFooterMessages());
+
+  const handleAddFooterMessage = () => {
+    const text = newFooterMessage.trim();
+    if (!text) {
+      setErrorMessage('Digite o texto da mensagem.');
+      return;
+    }
+    const msg: FooterMessage = {
+      id: crypto.randomUUID(),
+      message: text,
+      active: true,
+      sortOrder: storageService.getFooterMessages().length * 10,
+    };
+    storageService.saveFooterMessage(msg);
+    setNewFooterMessage('');
+    refreshFooterMessages();
+    posAudio.chime();
+    setSuccessMessage('Mensagem do rodapé adicionada!');
+  };
+
+  const handleStartEditFooter = (m: FooterMessage) => {
+    setEditingFooterId(m.id);
+    setEditingFooterText(m.message);
+  };
+
+  const handleSaveEditFooter = () => {
+    const text = editingFooterText.trim();
+    if (!text) return;
+    const target = footerMessages.find((m) => m.id === editingFooterId);
+    if (target) {
+      storageService.saveFooterMessage({ ...target, message: text });
+      posAudio.chime();
+    }
+    setEditingFooterId(null);
+    refreshFooterMessages();
+  };
+
+  const handleToggleFooterMessage = (m: FooterMessage) => {
+    storageService.saveFooterMessage({ ...m, active: !m.active });
+    refreshFooterMessages();
+  };
+
+  const handleDeleteFooterMessage = (id: string) => {
+    storageService.deleteFooterMessage(id);
+    if (editingFooterId === id) setEditingFooterId(null);
+    refreshFooterMessages();
+    posAudio.chime();
+    setSuccessMessage('Mensagem removida.');
+  };
+
+  const handleMoveFooter = (idx: number, dir: -1 | 1) => {
+    const sorted = [...footerMessages].sort((a, b) => a.sortOrder - b.sortOrder);
+    const target = idx + dir;
+    if (target < 0 || target >= sorted.length) return;
+    const a = sorted[idx];
+    const b = sorted[target];
+    const aOrder = a.sortOrder;
+    storageService.saveFooterMessage({ ...a, sortOrder: b.sortOrder });
+    storageService.saveFooterMessage({ ...b, sortOrder: aOrder });
+    refreshFooterMessages();
   };
 
   return (
@@ -1624,6 +1698,106 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               <CheckCircle className="w-4 h-4" />
               {savingTv ? 'Salvando...' : 'Salvar Configurações da TV'}
             </button>
+          </div>
+
+          {/* Mensagens do Rodapé da TV */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                <Megaphone className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Mensagens do Rodapé da TV</h3>
+                <p className="text-xs text-slate-500 dark:text-[#71717a]">Texto em rotação no rodapé da vitrine — sincroniza em tempo real com as TVs pareadas</p>
+              </div>
+            </div>
+
+            {/* Adicionar nova mensagem */}
+            <div className="flex gap-2">
+              <input
+                value={newFooterMessage}
+                onChange={(e) => setNewFooterMessage(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddFooterMessage()}
+                placeholder="Nova mensagem (ex.: PIX aprovado na hora!)"
+                maxLength={120}
+                className="flex-1 min-h-[44px] px-3 py-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+              <button
+                onClick={handleAddFooterMessage}
+                disabled={!newFooterMessage.trim()}
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-colors flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Adicionar
+              </button>
+            </div>
+
+            {/* Lista de mensagens */}
+            <div className="space-y-2">
+              {[...footerMessages]
+                .sort((a, b) => a.sortOrder - b.sortOrder)
+                .map((m, idx) => (
+                  <div key={m.id} className="flex items-center gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]">
+                    {editingFooterId === m.id ? (
+                      <>
+                        <input
+                          value={editingFooterText}
+                          onChange={(e) => setEditingFooterText(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSaveEditFooter()}
+                          autoFocus
+                          maxLength={120}
+                          className="flex-1 min-h-[36px] px-3 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                        <button onClick={handleSaveEditFooter} className="p-2 rounded-lg text-emerald-500 hover:bg-emerald-500/10" title="Salvar edição">
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setEditingFooterId(null)} className="p-2 rounded-lg text-slate-400 hover:bg-slate-500/10" title="Cancelar">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleMoveFooter(idx, -1)}
+                          disabled={idx === 0}
+                          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-500/10 disabled:opacity-30"
+                          title="Mover para cima"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleMoveFooter(idx, 1)}
+                          disabled={idx === footerMessages.length - 1}
+                          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-500/10 disabled:opacity-30"
+                          title="Mover para baixo"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="flex-1 text-xs font-semibold text-slate-700 dark:text-[#d4d4d8]">{m.message}</span>
+                        <button
+                          onClick={() => handleToggleFooterMessage(m)}
+                          className={`p-2 rounded-lg transition-colors ${m.active ? 'text-emerald-500 hover:bg-emerald-500/10' : 'text-slate-400 hover:bg-slate-500/10'}`}
+                          title={m.active ? 'Desativar mensagem' : 'Ativar mensagem'}
+                        >
+                          {m.active ? <CheckCircle className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
+                        </button>
+                        <button onClick={() => handleStartEditFooter(m)} className="p-2 rounded-lg text-indigo-500 hover:bg-indigo-500/10" title="Editar">
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDeleteFooterMessage(m.id)} className="p-2 rounded-lg text-red-500 hover:bg-red-500/10" title="Excluir">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+
+              {footerMessages.length === 0 && (
+                <p className="text-xs text-slate-500 dark:text-[#71717a] py-3 text-center">
+                  Nenhuma mensagem configurada — a TV exibe o rodapé padrão.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}
