@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Settings,
   Building2,
-  Printer,
+  Printer as PrinterIcon,
   Store,
   Save,
   Plus,
@@ -23,11 +23,14 @@ import {
   ArrowUp,
   ArrowDown,
   Circle,
+  Star,
+  Loader2,
 } from 'lucide-react';
-import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage } from '../../types';
+import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer } from '../../types';
 import { storageService } from '../../services/storageService';
 import { pixConfigService, PixBranchConfig, PixKeyType } from '../../services/pixConfigService';
 import { posAudio } from '../../services/audioService';
+import { printTestPage } from '../../services/printService';
 import { callServerApi } from '../../lib/serverApi';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
@@ -87,6 +90,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [newFooterMessage, setNewFooterMessage] = useState('');
   const [editingFooterId, setEditingFooterId] = useState<string | null>(null);
   const [editingFooterText, setEditingFooterText] = useState('');
+
+  // Impressoras térmicas (tabela printers)
+  const [printersList, setPrintersList] = useState<Printer[]>(storageService.getPrinters());
+  const [printerName, setPrinterName] = useState('');
+  const [printerModel, setPrinterModel] = useState('');
+  const [printerTransport, setPrinterTransport] = useState<Printer['transport']>('webusb');
+  const [printerIp, setPrinterIp] = useState('');
+  const [printerPort, setPrinterPort] = useState('');
+  const [printerIsDefault, setPrinterIsDefault] = useState(false);
+  const [testingPrinterId, setTestingPrinterId] = useState<string | null>(null);
 
   // ── PIX Config per branch ───────────────────────────────────
   const currentBranchId = storageService.getSelectedBranchId();
@@ -578,6 +591,78 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     refreshFooterMessages();
   };
 
+  // ── Impressoras térmicas (printers) ─────────────────────────────────
+  const PRINTER_TRANSPORT_LABELS: Record<string, string> = {
+    webusb: 'USB (WebUSB)',
+    serial: 'Serial / USB-CDC',
+    network: 'Rede (IP)',
+    os: 'Sistema',
+  };
+
+  const refreshPrinters = () => setPrintersList(storageService.getPrinters());
+
+  const handleAddPrinter = () => {
+    if (!printerName.trim()) {
+      setErrorMessage('Informe o nome da impressora.');
+      return;
+    }
+    const p: Printer = {
+      id: crypto.randomUUID(),
+      name: printerName.trim(),
+      model: printerModel.trim() || undefined,
+      transport: printerTransport,
+      ipAddress: printerTransport === 'network' ? printerIp.trim() : undefined,
+      port: printerTransport === 'network' && printerPort ? parseInt(printerPort) : undefined,
+      // A primeira impressora da filial vira padrão automaticamente.
+      isDefault: printerIsDefault || printersList.length === 0,
+      status: 'offline',
+    };
+    storageService.savePrinter(p);
+    setPrinterName('');
+    setPrinterModel('');
+    setPrinterIp('');
+    setPrinterPort('');
+    setPrinterIsDefault(false);
+    refreshPrinters();
+    posAudio.chime();
+    setSuccessMessage('Impressora cadastrada!');
+  };
+
+  const handleDeletePrinter = (id: string) => {
+    storageService.deletePrinter(id);
+    refreshPrinters();
+    posAudio.chime();
+    setSuccessMessage('Impressora removida.');
+  };
+
+  const handleSetDefaultPrinter = (p: Printer) => {
+    // Só uma impressora padrão por filial (constraint no banco) — desmarca as demais.
+    storageService
+      .getPrinters()
+      .filter((x) => x.id !== p.id && x.isDefault)
+      .forEach((x) => storageService.savePrinter({ ...x, isDefault: false }));
+    if (!p.isDefault) {
+      storageService.savePrinter({ ...p, isDefault: true });
+    }
+    refreshPrinters();
+    posAudio.chime();
+    setSuccessMessage('Impressora padrão atualizada!');
+  };
+
+  const handleTestPrinter = async (p: Printer) => {
+    setTestingPrinterId(p.id);
+    try {
+      await printTestPage(p);
+      setSuccessMessage('Página de teste enviada para a impressora!');
+      posAudio.chime();
+    } catch (err: any) {
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível imprimir o teste.'));
+      posAudio.error();
+    } finally {
+      setTestingPrinterId(null);
+    }
+  };
+
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-6xl mx-auto space-y-4 sm:space-y-6">
       {/* Top Header */}
@@ -752,7 +837,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           {/* Payment & Printer Settings */}
           <div className="p-6 rounded-3xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm space-y-4">
             <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-[#27272a] pb-3">
-              <Printer className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <PrinterIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               <span>Impressão de Comprovantes</span>
             </div>
 
@@ -784,6 +869,179 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 Abrir modal de comprovante automaticamente ao finalizar venda
               </label>
             </div>
+          </div>
+
+          {/* ── PRINTERS (impressoras térmicas) ─────────────────────── */}
+          <div className="p-6 rounded-3xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm space-y-4">
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-[#27272a] pb-3">
+              <PrinterIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <span>Impressoras Térmicas</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 ml-auto">
+                Sincroniza em tempo real
+              </span>
+            </div>
+
+            {/* Formulário de cadastro */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                  Nome da Impressora
+                </label>
+                <input
+                  type="text"
+                  value={printerName}
+                  onChange={(e) => setPrinterName(e.target.value)}
+                  placeholder="Ex.: Balcão Principal"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white placeholder:text-slate-400"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                  Conexão
+                </label>
+                <select
+                  value={printerTransport}
+                  onChange={(e) => setPrinterTransport(e.target.value as Printer['transport'])}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
+                >
+                  <option value="webusb">USB (WebUSB)</option>
+                  <option value="serial">Serial / USB-CDC</option>
+                  <option value="network">Rede (IP)</option>
+                  <option value="os">Sistema (janela de impressão)</option>
+                </select>
+              </div>
+
+              {printerTransport === 'network' ? (
+                <>
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                      Endereço IP
+                    </label>
+                    <input
+                      type="text"
+                      value={printerIp}
+                      onChange={(e) => setPrinterIp(e.target.value)}
+                      placeholder="192.168.0.50"
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-mono text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                      Porta
+                    </label>
+                    <input
+                      type="number"
+                      value={printerPort}
+                      onChange={(e) => setPrinterPort(e.target.value)}
+                      placeholder="9100"
+                      className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-mono text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                    Modelo (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={printerModel}
+                    onChange={(e) => setPrinterModel(e.target.value)}
+                    placeholder="Ex.: Elgin i9"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-[#a1a1aa] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={printerIsDefault}
+                  onChange={(e) => setPrinterIsDefault(e.target.checked)}
+                  className="w-4 h-4 rounded text-indigo-600 cursor-pointer"
+                />
+                Definir como padrão desta filial
+              </label>
+              <button
+                type="button"
+                onClick={handleAddPrinter}
+                disabled={!printerName.trim()}
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-colors flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Adicionar Impressora
+              </button>
+            </div>
+
+            {/* Lista de impressoras */}
+            <div className="space-y-2">
+              {printersList.map((p) => (
+                <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]">
+                  <PrinterIcon className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      {p.name}
+                      {p.isDefault && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                          Padrão
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-[#71717a] truncate">
+                      {PRINTER_TRANSPORT_LABELS[p.transport] || p.transport}
+                      {p.model ? ` • ${p.model}` : ''}
+                      {p.ipAddress ? ` • ${p.ipAddress}:${p.port || 9100}` : ''}
+                    </p>
+                  </div>
+
+                  {!p.isDefault && (
+                    <button
+                      onClick={() => handleSetDefaultPrinter(p)}
+                      className="p-2 rounded-lg text-slate-400 hover:text-amber-500 hover:bg-amber-500/10"
+                      title="Tornar impressora padrão"
+                    >
+                      <Star className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => handleTestPrinter(p)}
+                    disabled={testingPrinterId === p.id}
+                    className="p-2 rounded-lg text-indigo-500 hover:bg-indigo-500/10 disabled:opacity-50"
+                    title="Imprimir página de teste"
+                  >
+                    {testingPrinterId === p.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <PrinterIcon className="w-4 h-4" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => handleDeletePrinter(p.id)}
+                    className="p-2 rounded-lg text-red-500 hover:bg-red-500/10"
+                    title="Excluir impressora"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+
+              {printersList.length === 0 && (
+                <p className="text-xs text-slate-500 dark:text-[#71717a] py-3 text-center">
+                  Nenhuma impressora cadastrada — a venda usa a janela de impressão do navegador.
+                </p>
+              )}
+            </div>
+
+            <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+              <strong>Dica:</strong> para impressão direta, cadastre uma impressora USB (WebUSB) ou Serial e clique no
+              teste ao lado — o navegador pede o pareamento na primeira vez (Chrome/Edge). No primeiro clique de "Imprimir
+              Recibo", a térmica é usada; sem impressora pareada, abre a janela de impressão do sistema.
+            </p>
           </div>
 
           {/* ── PIX CONFIG PER BRANCH ──────────────────────────── */}

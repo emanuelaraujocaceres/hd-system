@@ -1,6 +1,8 @@
-import React from 'react';
-import { X, Printer, Share2, CheckCircle2, ArrowRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, Printer, Share2, CheckCircle2, ArrowRight, Loader2 } from 'lucide-react';
 import { Sale, SystemSettings, Customer } from '../../types';
+import { storageService } from '../../services/storageService';
+import { printThermalReceipt } from '../../services/printService';
 
 interface ThermalReceiptModalProps {
   isOpen: boolean;
@@ -19,10 +21,33 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
   customers = [],
   onNewSale,
 }) => {
+  const [printStatus, setPrintStatus] = useState<'idle' | 'printing' | 'ok'>('idle');
+
   if (!isOpen || !sale) return null;
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    setPrintStatus('printing');
+
+    // Impressora padrão da filial ativa (fallback: primeira cadastrada).
+    const printers = storageService.getPrinters();
+    const printer = printers.find((p) => p.isDefault) || printers[0];
+
+    try {
+      if (printer && (printer.transport === 'webusb' || printer.transport === 'serial')) {
+        // Impressão térmica direta (ESC/POS via USB/Serial)
+        await printThermalReceipt(sale, settings, printer);
+        setPrintStatus('ok');
+        return;
+      }
+    } catch (e: any) {
+      // Falha na térmica (ex.: pareamento cancelado): cai para a janela nativa.
+      console.warn('[HD-Print] Falha na impressão térmica, caindo para window.print:', e);
+    }
+
+    // Sem impressora pareada, transporte "os"/"network" ou falha acima:
+    // diálogo de impressão nativo do navegador (recibo estilizado).
     window.print();
+    setPrintStatus('ok');
   };
 
   const handleWhatsAppShare = () => {
@@ -163,10 +188,21 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={handlePrint}
-              className="py-2.5 px-3 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs hover:bg-slate-800 dark:hover:bg-white transition-colors flex items-center justify-center gap-1.5"
+              disabled={printStatus === 'printing'}
+              className="py-2.5 px-3 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs hover:bg-slate-800 dark:hover:bg-white transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60"
             >
-              <Printer className="w-4 h-4" />
-              <span>Imprimir Recibo</span>
+              {printStatus === 'printing' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Printer className="w-4 h-4" />
+              )}
+              <span>
+                {printStatus === 'printing'
+                  ? 'Imprimindo...'
+                  : printStatus === 'ok'
+                  ? 'Impresso! Imprimir de Novo'
+                  : 'Imprimir Recibo'}
+              </span>
             </button>
             <button
               onClick={handleWhatsAppShare}
