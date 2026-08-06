@@ -58,6 +58,8 @@ const BRANCH_REQUIRED_TABLES: TableName[] = [
   'sales', 'sale_items', 'financial_transactions',
   'cash_sessions', 'stock_movements', 'system_users',
   'scanned_boletos', 'credit_payments', 'nf_records',
+  // Frentes TV/impressora (agosto/2026): tabelas escopadas por filial
+  'footer_messages', 'media_devices', 'printers',
 ];
 
 /**
@@ -85,7 +87,10 @@ export type TableName =
   | 'system_settings'
   | 'scanned_boletos'
   | 'credit_payments'
-  | 'nf_records';
+  | 'nf_records'
+  | 'footer_messages'
+  | 'media_devices'
+  | 'printers';
 
 type SyncChangeCallback = (table: TableName, payload: any) => void;
 type ConnectionListener = (online: boolean) => void;
@@ -234,6 +239,10 @@ class SupabaseSyncService {
       'scanned_boletos',
       'credit_payments',
       'nf_records',
+      // Frentes TV/impressora (agosto/2026): publicadas no supabase_realtime
+      'footer_messages',
+      'media_devices',
+      'printers',
     ];
 
     this.channel = supabase.channel('hd-system-realtime');
@@ -456,6 +465,8 @@ class SupabaseSyncService {
     'products', 'categories', 'customers', 'suppliers',
     'sales', 'financial_transactions', 'cash_sessions',
     'stock_movements', 'store_branches', 'system_users', 'system_settings',
+    // Frentes TV/impressora: têm updated_at + trigger fn_update_updated_at
+    'footer_messages', 'media_devices', 'printers',
   ];
 
   /**

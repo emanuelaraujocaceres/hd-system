@@ -13,6 +13,9 @@ import {
   ScannedBoleto,
   CreditPayment,
   NFRecord,
+  FooterMessage,
+  MediaDevice,
+  Printer,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -61,6 +64,10 @@ const KEYS = {
   CREDIT_PAYMENTS: 'hd_system_credit_payments',
   SCANNED_BOLETOS: 'hd_system_scanned_boletos',
   NF_RECORDS: 'hd_system_nf_records',
+  // Frentes TV/impressora (agosto/2026)
+  FOOTER_MESSAGES: 'hd_system_footer_messages',
+  MEDIA_DEVICES: 'hd_system_media_devices',
+  PRINTERS: 'hd_system_printers',
   VIEWING_ORG: 'hd_system_viewing_org',
 };
 
@@ -1248,7 +1255,7 @@ class StorageService {
       // PASSO 3: Buscar todos os dados filtrados pela filial
       // Todas as tabelas agora têm store_branch_id NOT NULL (banco convertido).
       // store_branches: já buscado no PASSO 1 (precisamos de TODAS para o seletor)
-      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords] =
+      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers] =
         await Promise.all([
           syncService.fetchRows('products', resolvedBranchId),
           syncService.fetchRows('categories', resolvedBranchId),
@@ -1264,6 +1271,9 @@ class StorageService {
           syncService.fetchRows('scanned_boletos', resolvedBranchId),
           syncService.fetchRows('credit_payments', resolvedBranchId),
           syncService.fetchRows('nf_records', resolvedBranchId),
+          syncService.fetchRows('footer_messages', resolvedBranchId),
+          syncService.fetchRows('media_devices', resolvedBranchId),
+          syncService.fetchRows('printers', resolvedBranchId),
         ]);
 
       // ── HELPER: merge cloud rows into local data by ID ──────────
@@ -1651,6 +1661,59 @@ class StorageService {
           (nf) => this.syncNFRecord(nf),
         );
         if (merged !== null) this.set(KEYS.NF_RECORDS, merged);
+      }
+
+      // ── FOOTER MESSAGES (rodapé da vitrine de TV) ─────────────────
+      {
+        const local = this.get<FooterMessage[]>(KEYS.FOOTER_MESSAGES, []);
+        const merged = mergeBy(KEYS.FOOTER_MESSAGES, local, footerMessages,
+          (r: any) => ({
+            id: r.id, text: r.text || '',
+            active: r.is_active !== false,
+            sortOrder: parseInt(r.sort_order) || 0,
+            storeBranchId: r.store_branch_id || undefined,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
+          }),
+          (f) => this.syncFooterMessage(f),
+        );
+        if (merged !== null) this.set(KEYS.FOOTER_MESSAGES, merged);
+      }
+
+      // ── MEDIA DEVICES (TVs/vitrines pareadas) ─────────────────────
+      {
+        const local = this.get<MediaDevice[]>(KEYS.MEDIA_DEVICES, []);
+        const merged = mergeBy(KEYS.MEDIA_DEVICES, local, mediaDevices,
+          (r: any) => ({
+            id: r.id, name: r.name || '',
+            deviceType: (r.device_type === 'vitrine' ? 'vitrine' : 'tv'),
+            pairingCode: r.pairing_code || '',
+            status: (r.status === 'online' || r.status === 'pending' ? r.status : 'offline'),
+            lastHeartbeatAt: r.last_heartbeat_at || undefined,
+            storeBranchId: r.store_branch_id || undefined,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
+          }),
+          (d) => this.syncMediaDevice(d),
+        );
+        if (merged !== null) this.set(KEYS.MEDIA_DEVICES, merged);
+      }
+
+      // ── PRINTERS (impressoras configuradas) ───────────────────────
+      {
+        const local = this.get<Printer[]>(KEYS.PRINTERS, []);
+        const merged = mergeBy(KEYS.PRINTERS, local, printers,
+          (r: any) => ({
+            id: r.id, name: r.name || '',
+            type: r.type || 'network',
+            interface: r.interface || undefined,
+            paperSize: r.paper_size || '80mm',
+            isDefault: r.is_default === true,
+            active: r.is_active !== false,
+            storeBranchId: r.store_branch_id || undefined,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
+          }),
+          (p) => this.syncPrinter(p),
+        );
+        if (merged !== null) this.set(KEYS.PRINTERS, merged);
       }
 
       // ── USERS ─────────────────────────────────────────────────────
@@ -3069,6 +3132,184 @@ class StorageService {
   removeNFRecordFromRemote(id: string) {
     const all = this.get<NFRecord[]>(KEYS.NF_RECORDS, []).filter((x) => x.id !== id);
     this.set(KEYS.NF_RECORDS, all);
+  }
+
+  // --- FOOTER MESSAGES (rodapé da vitrine de TV) ---
+  getFooterMessages(): FooterMessage[] {
+    const all = this.get<FooterMessage[]>(KEYS.FOOTER_MESSAGES, []);
+    return this.filterBySelectedBranch(this.filterByOrg(all));
+  }
+
+  saveFooterMessage(f: FooterMessage) {
+    f.id = StorageService.ensureUuid(f.id);
+    f.organizationId = this.getCurrentOrgId();
+    const branchId = this.getSelectedBranchId();
+    if (branchId) f.storeBranchId = branchId;
+    const all = this.get<FooterMessage[]>(KEYS.FOOTER_MESSAGES, []);
+    const idx = all.findIndex((x) => x.id === f.id);
+    if (idx >= 0) all[idx] = f;
+    else all.unshift(f);
+    this.set(KEYS.FOOTER_MESSAGES, all);
+    this.syncFooterMessage(f);
+  }
+
+  deleteFooterMessage(id: string) {
+    const all = this.get<FooterMessage[]>(KEYS.FOOTER_MESSAGES, []).filter((x) => x.id !== id);
+    this.set(KEYS.FOOTER_MESSAGES, all);
+    syncService.deleteRow('footer_messages', id);
+  }
+
+  private syncFooterMessage(f: FooterMessage) {
+    syncService.upsertRow('footer_messages', {
+      id: f.id,
+      organization_id: this.getCurrentOrgId(),
+      store_branch_id: f.storeBranchId || null,
+      text: f.text,
+      is_active: f.active,
+      sort_order: f.sortOrder || 0,
+    });
+  }
+
+  updateFooterMessageFromRemote(row: any) {
+    const all = this.get<FooterMessage[]>(KEYS.FOOTER_MESSAGES, []);
+    const mapped: FooterMessage = {
+      id: row.id, text: row.text || '',
+      active: row.is_active !== false,
+      sortOrder: parseInt(row.sort_order) || 0,
+      storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.FOOTER_MESSAGES, all);
+  }
+
+  removeFooterMessageFromRemote(id: string) {
+    const all = this.get<FooterMessage[]>(KEYS.FOOTER_MESSAGES, []).filter((x) => x.id !== id);
+    this.set(KEYS.FOOTER_MESSAGES, all);
+  }
+
+  // --- MEDIA DEVICES (TVs/vitrines pareadas) ---
+  getMediaDevices(): MediaDevice[] {
+    const all = this.get<MediaDevice[]>(KEYS.MEDIA_DEVICES, []);
+    return this.filterBySelectedBranch(this.filterByOrg(all));
+  }
+
+  saveMediaDevice(d: MediaDevice) {
+    d.id = StorageService.ensureUuid(d.id);
+    d.organizationId = this.getCurrentOrgId();
+    const branchId = this.getSelectedBranchId();
+    if (branchId) d.storeBranchId = branchId;
+    const all = this.get<MediaDevice[]>(KEYS.MEDIA_DEVICES, []);
+    const idx = all.findIndex((x) => x.id === d.id);
+    if (idx >= 0) all[idx] = d;
+    else all.unshift(d);
+    this.set(KEYS.MEDIA_DEVICES, all);
+    this.syncMediaDevice(d);
+  }
+
+  deleteMediaDevice(id: string) {
+    const all = this.get<MediaDevice[]>(KEYS.MEDIA_DEVICES, []).filter((x) => x.id !== id);
+    this.set(KEYS.MEDIA_DEVICES, all);
+    syncService.deleteRow('media_devices', id);
+  }
+
+  private syncMediaDevice(d: MediaDevice) {
+    syncService.upsertRow('media_devices', {
+      id: d.id,
+      organization_id: this.getCurrentOrgId(),
+      store_branch_id: d.storeBranchId || null,
+      name: d.name,
+      device_type: d.deviceType,
+      pairing_code: d.pairingCode,
+      status: d.status,
+      last_heartbeat_at: d.lastHeartbeatAt || null,
+    });
+  }
+
+  updateMediaDeviceFromRemote(row: any) {
+    const all = this.get<MediaDevice[]>(KEYS.MEDIA_DEVICES, []);
+    const mapped: MediaDevice = {
+      id: row.id, name: row.name || '',
+      deviceType: (row.device_type === 'vitrine' ? 'vitrine' : 'tv'),
+      pairingCode: row.pairing_code || '',
+      status: (row.status === 'online' || row.status === 'pending' ? row.status : 'offline'),
+      lastHeartbeatAt: row.last_heartbeat_at || undefined,
+      storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.MEDIA_DEVICES, all);
+  }
+
+  removeMediaDeviceFromRemote(id: string) {
+    const all = this.get<MediaDevice[]>(KEYS.MEDIA_DEVICES, []).filter((x) => x.id !== id);
+    this.set(KEYS.MEDIA_DEVICES, all);
+  }
+
+  // --- PRINTERS (impressoras configuradas) ---
+  getPrinters(): Printer[] {
+    const all = this.get<Printer[]>(KEYS.PRINTERS, []);
+    return this.filterBySelectedBranch(this.filterByOrg(all));
+  }
+
+  savePrinter(p: Printer) {
+    p.id = StorageService.ensureUuid(p.id);
+    p.organizationId = this.getCurrentOrgId();
+    const branchId = this.getSelectedBranchId();
+    if (branchId) p.storeBranchId = branchId;
+    const all = this.get<Printer[]>(KEYS.PRINTERS, []);
+    const idx = all.findIndex((x) => x.id === p.id);
+    if (idx >= 0) all[idx] = p;
+    else all.unshift(p);
+    this.set(KEYS.PRINTERS, all);
+    this.syncPrinter(p);
+  }
+
+  deletePrinter(id: string) {
+    const all = this.get<Printer[]>(KEYS.PRINTERS, []).filter((x) => x.id !== id);
+    this.set(KEYS.PRINTERS, all);
+    syncService.deleteRow('printers', id);
+  }
+
+  private syncPrinter(p: Printer) {
+    syncService.upsertRow('printers', {
+      id: p.id,
+      organization_id: this.getCurrentOrgId(),
+      store_branch_id: p.storeBranchId || null,
+      name: p.name,
+      type: p.type,
+      interface: p.interface || null,
+      paper_size: p.paperSize || '80mm',
+      is_default: p.isDefault,
+      is_active: p.active,
+    });
+  }
+
+  updatePrinterFromRemote(row: any) {
+    const all = this.get<Printer[]>(KEYS.PRINTERS, []);
+    const mapped: Printer = {
+      id: row.id, name: row.name || '',
+      type: row.type || 'network',
+      interface: row.interface || undefined,
+      paperSize: row.paper_size || '80mm',
+      isDefault: row.is_default === true,
+      active: row.is_active !== false,
+      storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.PRINTERS, all);
+  }
+
+  removePrinterFromRemote(id: string) {
+    const all = this.get<Printer[]>(KEYS.PRINTERS, []).filter((x) => x.id !== id);
+    this.set(KEYS.PRINTERS, all);
   }
 
   // --- BRANCHES ---

@@ -468,6 +468,18 @@ export const App: React.FC = () => {
           if (event === 'DELETE') storageService.removeNFRecordFromRemote(row.id);
           else storageService.updateNFRecordFromRemote(row);
           break;
+        case 'footer_messages':
+          if (event === 'DELETE') storageService.removeFooterMessageFromRemote(row.id);
+          else storageService.updateFooterMessageFromRemote(row);
+          break;
+        case 'media_devices':
+          if (event === 'DELETE') storageService.removeMediaDeviceFromRemote(row.id);
+          else storageService.updateMediaDeviceFromRemote(row);
+          break;
+        case 'printers':
+          if (event === 'DELETE') storageService.removePrinterFromRemote(row.id);
+          else storageService.updatePrinterFromRemote(row);
+          break;
         case 'cash_sessions':
           if (event === 'DELETE') storageService.removeCaixaFromRemote(row.id);
           else storageService.updateCaixaFromRemote(row);

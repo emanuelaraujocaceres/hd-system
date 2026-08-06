@@ -280,3 +280,41 @@ export interface SystemSettings {
   tvSlideSpeed?: number;
   tvDisplayMode?: 'single' | 'grid';
 }
+
+// ─── FRENTES TV E IMPRESSORA (agosto/2026) ─────────────────────────────
+// Sincronizadas — tabelas footer_messages, media_devices, printers.
+
+// Mensagem do rodapé da vitrine de TV (tabela footer_messages)
+export interface FooterMessage {
+  id: string;
+  text: string;
+  active: boolean;
+  sortOrder: number;
+  storeBranchId?: string;
+  organizationId?: string;
+}
+
+// Dispositivo de TV/vitrine pareado (tabela media_devices)
+export interface MediaDevice {
+  id: string;
+  name: string;
+  deviceType: 'tv' | 'vitrine';
+  pairingCode: string;
+  status: 'online' | 'offline' | 'pending';
+  lastHeartbeatAt?: string;
+  storeBranchId?: string;
+  organizationId?: string;
+}
+
+// Impressora configurada (tabela printers)
+export interface Printer {
+  id: string;
+  name: string;
+  type: 'webusb' | 'serial' | 'network' | 'os';
+  interface?: string; // p.ex. "0483:5740" (WebUSB) ou "192.168.0.20:9100"
+  paperSize?: '58mm' | '80mm';
+  isDefault: boolean;
+  active: boolean;
+  storeBranchId?: string;
+  organizationId?: string;
+}
