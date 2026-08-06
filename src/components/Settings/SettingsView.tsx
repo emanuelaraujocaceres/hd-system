@@ -18,12 +18,13 @@ import {
   UserPlus,
   Tv,
   QrCode,
+  Copy,
 } from 'lucide-react';
 import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions } from '../../types';
 import { storageService } from '../../services/storageService';
 import { pixConfigService, PixBranchConfig, PixKeyType } from '../../services/pixConfigService';
 import { posAudio } from '../../services/audioService';
-import { supabase } from '../../lib/supabase';
+import { callServerApi } from '../../lib/serverApi';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { BranchCheck } from '../Admin/BranchCheck';
@@ -168,6 +169,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     settings: false,
   });
   const [userPassword, setUserPassword] = useState('');
+  // Senha gerada pelo servidor ao criar um usuário novo (exibida UMA vez)
+  const [createdUserPassword, setCreatedUserPassword] = useState<string | null>(null);
 
   const branchFirstInputRef = useRef<HTMLInputElement>(null);
   const userFirstInputRef = useRef<HTMLInputElement>(null);
@@ -246,7 +249,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     setIsBranchModalOpen(true);
   };
 
-  const handleSaveBranch = (e: React.FormEvent) => {
+  const handleSaveBranch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!branchName.trim()) {
       setErrorMessage('Nome da filial é obrigatório.');
@@ -258,6 +261,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     }
     setSavingBranch(true);
     try {
+      const orgId = storageService.getCurrentOrgId();
       const newBranch: StoreBranch = {
         id: editingBranch ? editingBranch.id : `br-${Date.now()}`,
         name: branchName.trim(),
@@ -269,8 +273,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         phone: branchPhone.trim(),
         isHeadquarters: branchIsHQ,
         active: true,
-        organizationId: editingBranch?.organizationId || user.organizationId,
+        organizationId: editingBranch?.organizationId || orgId,
       };
+
+      // Filial NOVA: cria PRIMEIRO no Supabase via Pages Function
+      // (service role — funciona para qualquer org, sem depender de RLS).
+      // Só salva localmente se o cloud confirmar; senão mostra o erro.
+      if (!editingBranch) {
+        const { data, error } = await callServerApi<{
+          success: boolean;
+          branch_id?: string;
+          message?: string;
+        }>('/api/admin/create-branch', {
+          name: newBranch.name,
+          code: newBranch.code,
+          organization_id: orgId,
+          cnpj: newBranch.cnpj || null,
+          city: newBranch.city || null,
+          state: newBranch.state || null,
+          address: newBranch.address || null,
+          phone: newBranch.phone || null,
+          is_headquarters: newBranch.isHeadquarters,
+          active: newBranch.active,
+        });
+        if (!data?.success) {
+          setErrorMessage(`Não foi possível criar a filial no Supabase: ${error || data?.message || 'erro desconhecido'}`);
+          posAudio.error();
+          return;
+        }
+        if (data.branch_id) newBranch.id = data.branch_id;
+      }
 
       storageService.saveBranch(newBranch);
       setIsBranchModalOpen(false);
@@ -305,6 +337,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   // User / Collaborator Handlers
   const handleOpenUserModal = (u?: UserProfile) => {
+    setCreatedUserPassword(null);
     if (u) {
       setEditingUser(u);
       setUserName(u.name);
@@ -352,13 +385,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
     setSavingUser(true);
     try {
+      const orgId = storageService.getCurrentOrgId();
       const newUser: UserProfile = {
         id: editingUser ? editingUser.id : `usr-${Date.now()}`,
         name: userName.trim(),
         email: userEmail.trim().toLowerCase(),
         role: userRole,
         avatarUrl: editingUser?.avatarUrl || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`,
-        organizationId: user.organizationId,
+        organizationId: orgId,
         storeBranchId: userBranchId,
         permissions: userRole === 'admin' ? {
           pdv: true,
@@ -373,15 +407,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         password: userPassword || editingUser?.password || undefined,
       };
 
-      // Se for um usuário NOVO (não edição) e tem senha, criar também no Supabase Auth
-      if (!editingUser && userPassword) {
-        const { error: signUpError } = await supabase.auth.signUp({
-          email: userEmail.trim().toLowerCase(),
-          password: userPassword,
+      // Usuário NOVO: cria PRIMEIRO no Supabase via Pages Function
+      // (Supabase Auth + system_users com service role — ignora RLS).
+      // Só salva localmente se o cloud confirmar; senão mostra o erro.
+      if (!editingUser) {
+        // Filial vinculada precisa ser UUID válido (ex.: sem filial cadastrada
+        // o fallback "br-01" era rejeitado pelo banco em silêncio).
+        let branchId = userBranchId;
+        if (branchId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(branchId)) {
+          const matched = branches.find((b) => b.code === branchId || b.id === branchId);
+          branchId = matched?.id || '';
+        }
+        if (!branchId) {
+          setErrorMessage('Cadastre pelo menos uma filial nesta organização antes de criar usuários.');
+          posAudio.error();
+          return;
+        }
+
+        const { data, error } = await callServerApi<{
+          success: boolean;
+          user_id?: string;
+          password?: string;
+          message?: string;
+        }>('/api/admin/create-user', {
+          name: newUser.name,
+          email: newUser.email,
+          role: newUser.role,
+          organization_id: orgId,
+          store_branch_id: branchId,
         });
-        if (signUpError) {
-          console.warn('[Settings] Supabase Auth signUp warning (non-fatal):', signUpError.message);
-          // Não bloqueia — o usuário pode usar login local mesmo sem Supabase Auth
+        if (!data?.success) {
+          setErrorMessage(`Não foi possível criar o usuário no Supabase: ${error || data?.message || 'erro desconhecido'}`);
+          posAudio.error();
+          return;
+        }
+        if (data.user_id) newUser.id = data.user_id;
+        if (data.password) {
+          setCreatedUserPassword(data.password);
+          return; // mantém o modal aberto para o usuário copiar a senha
         }
       }
 
@@ -1272,6 +1335,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               </button>
             </div>
 
+            {createdUserPassword ? (
+              <div className="space-y-4 text-xs">
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
+                  <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">✅ Usuário criado com sucesso!</p>
+                  <p className="text-xs text-slate-500 dark:text-[#a1a1aa] mt-1">
+                    O usuário <strong>{userName}</strong> pode logar em qualquer dispositivo com a senha abaixo.
+                  </p>
+                </div>
+                <div className="space-y-2.5 bg-slate-50 dark:bg-[#09090b] rounded-2xl p-4 border border-slate-200 dark:border-[#27272a]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-500 dark:text-[#71717a]">Senha temporária:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg">{createdUserPassword}</span>
+                      <button
+                        type="button"
+                        onClick={() => { navigator.clipboard?.writeText(createdUserPassword); setSuccessMessage('Senha copiada!'); }}
+                        className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-[#27272a] transition-colors"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-slate-400" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-400 space-y-1">
+                  <p>⚠️ A senha <strong>não fica salva</strong> — copie agora e envie para o usuário.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setIsUserModalOpen(false); refreshUsersList(); }}
+                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all"
+                >
+                  Fechar
+                </button>
+              </div>
+            ) : (
             <form onSubmit={handleSaveUser} className="space-y-4 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -1440,6 +1538,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 </button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}
