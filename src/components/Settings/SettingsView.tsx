@@ -1197,9 +1197,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-[11px] text-slate-500 dark:text-[#71717a]">
-                  <strong>Como funciona:</strong> O PDV usa a chave PIX configurada acima para a filial atual.
+                  <strong>Como funciona:</strong> O PDV mostra a chave PIX configurada acima para a filial atual.
                   Se nao houver chave configurada, usa a chave global (campo acima).
-                  Voce informa a chave para o cliente pagar no app do banco e clica em "Confirmar Pagamento Recebido" para finalizar a venda.
+                  Voce informa a chave para o cliente pagar no app do banco, confere o recebimento no celular e finaliza a venda.
                 </div>
               </div>
             )}

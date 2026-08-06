@@ -59,14 +59,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 }) => {
   const totalAmount = Math.max(0, subtotal - discount);
 
-  const [method, setMethod] = useState<PaymentMethod>('pix');
+  const [method, setMethod] = useState<PaymentMethod>('cash');
   const [cashGiven, setCashGiven] = useState<number>(totalAmount);
   const [installments, setInstallments] = useState<number>(1);
   const [cardBrand, setCardBrand] = useState<string>('Visa');
 
-  // PIX state
+  // PIX state (pagamento manual — exibe a chave, sem QR code e sem aguardar confirmação)
   const [pixCopied, setPixCopied] = useState(false);
-  const [pixPaid, setPixPaid] = useState(false);
 
   // Split payment state
   const [isSplit, setIsSplit] = useState(false);
@@ -87,8 +86,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   useEscapeKey(onClose, isOpen);
 
-  // Resolve effective PIX config per branch (pixConfigService > settings.pixKey)
+  // Filial ativa — gravada na venda para isolamento por filial
   const branchId = storageService.getSelectedBranchId();
+  // Chave PIX efetiva (config da filial > global) — apenas exibição para pagamento manual
   const effectivePixKey = pixConfigService.getEffectivePixKey(branchId, settings.pixKey) || '';
 
   useEffect(() => {
@@ -115,8 +115,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   useEffect(() => {
     setPaymentError(null);
   }, [isOpen, method]);
-
-  const isPixUnconfirmed = method === 'pix' && !pixPaid;
 
   // Split helpers
   const splitPartsTotal = splitParts.reduce((sum, p) => sum + p.amount, 0);
@@ -186,7 +184,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           payments.push({
             method: 'pix',
             amount: totalAmount,
-            pixTxId: `PIX-SIMULATED-${Date.now()}`,
           });
         } else if (method === 'credit_card') {
           payments.push({
@@ -545,7 +542,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   </div>
                 )}
 
-                {/* METHOD: PIX */}
+                {/* METHOD: PIX (pagamento manual — sem QR code e sem aguardar confirmação) */}
                 {method === 'pix' && (() => {
                   const hasPixConfig = !!effectivePixKey;
 
@@ -556,15 +553,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                           <span className="text-xs font-bold text-slate-900 dark:text-white">
                             Pagamento PIX
                           </span>
-                          {pixPaid ? (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" /> Recebido!
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
-                              Aguardando...
-                            </span>
-                          )}
                         </div>
                         <span className="text-xl font-extrabold text-sky-600 dark:text-sky-400">
                           R$ {totalAmount.toFixed(2)}
@@ -586,31 +574,18 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                               {effectivePixKey}
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                              Informe esta chave no aplicativo do banco do cliente (ou copie ao lado). Assim que o pagamento for confirmado no celular, clique em "Confirmar Pagamento Recebido".
+                              Informe a chave no aplicativo do banco do cliente (ou copie ao lado), confira o recebimento no celular e finalize a venda.
                             </p>
                           </div>
 
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={handleCopyPix}
-                              className="flex-1 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm min-h-[44px]"
-                            >
-                              {pixCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                              <span>{pixCopied ? 'Chave Copiada!' : 'Copiar Chave PIX'}</span>
-                            </button>
-
-                            {!pixPaid && (
-                              <button
-                                type="button"
-                                onClick={() => { setPixPaid(true); posAudio.chime(); }}
-                                className="flex-1 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm min-h-[44px]"
-                              >
-                                <CheckCircle2 className="w-4 h-4" />
-                                <span>Confirmar Pagamento Recebido</span>
-                              </button>
-                            )}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={handleCopyPix}
+                            className="w-full px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm min-h-[44px]"
+                          >
+                            {pixCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                            <span>{pixCopied ? 'Chave Copiada!' : 'Copiar Chave PIX'}</span>
+                          </button>
                         </>
                       )}
                     </div>
@@ -709,7 +684,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           <LoadingButton
             type="button"
             onClick={handleFinalize}
-            disabled={loading || isPixUnconfirmed || (method === 'credit_account' && !selectedCustomer) || (isSplit && !isSplitValid)}
+            disabled={loading || (method === 'credit_account' && !selectedCustomer) || (isSplit && !isSplitValid)}
             loading={loading}
             loadingText="Processando..."
             className="flex-1 py-3 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 min-h-[44px]"

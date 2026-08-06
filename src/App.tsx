@@ -1096,7 +1096,10 @@ export const App: React.FC = () => {
               )}
 
               {activeTab === 'connect-tv' && (
-                <ConnectTVView onEnterTV={() => handleTabChange('tv-showcase')} />
+                <ConnectTVView
+                  onEnterTV={() => handleTabChange('tv-showcase')}
+                  onExitTVMode={() => handleTabChange('pdv')}
+                />
               )}
 
               {activeTab === 'organizations' && (

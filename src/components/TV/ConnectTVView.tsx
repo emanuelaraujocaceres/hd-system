@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Tv, Plug, ArrowRight, CheckCircle2, XCircle, RefreshCw, MonitorPlay } from 'lucide-react';
+import { Tv, Plug, ArrowRight, CheckCircle2, XCircle, RefreshCw, MonitorPlay, X } from 'lucide-react';
 import { storageService } from '../../services/storageService';
 import { tvPairing } from '../../services/tvPairingService';
 import { posAudio } from '../../services/audioService';
 
 interface ConnectTVViewProps {
   onEnterTV: () => void;
+  /** Chamado pelo botão "Sair" — sai do modo TV (ex.: volta para o PDV). */
+  onExitTVMode?: () => void;
 }
 
 /**
@@ -20,7 +22,7 @@ interface ConnectTVViewProps {
  * 4. A vitrine mantém o heartbeat a cada 30s (RPC heartbeat_media_device),
  *    deixando a TV "online" no painel.
  */
-export const ConnectTVView: React.FC<ConnectTVViewProps> = ({ onEnterTV }) => {
+export const ConnectTVView: React.FC<ConnectTVViewProps> = ({ onEnterTV, onExitTVMode }) => {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [searching, setSearching] = useState(false);
@@ -79,6 +81,18 @@ export const ConnectTVView: React.FC<ConnectTVViewProps> = ({ onEnterTV }) => {
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-950/40 via-purple-950/20 to-black pointer-events-none" />
       <div className="absolute top-1/4 -left-48 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 -right-48 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Botão de sair — sem ele o modo TV fica sem saída em aparelhos sem teclado */}
+      {onExitTVMode && (
+        <button
+          onClick={onExitTVMode}
+          className="absolute top-4 right-4 z-20 p-2.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors"
+          title="Sair do Modo TV"
+          aria-label="Sair do Modo TV"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      )}
 
       <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
