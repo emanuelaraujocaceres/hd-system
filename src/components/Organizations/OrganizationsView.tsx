@@ -99,14 +99,14 @@ export const OrganizationsView: React.FC<Props> = ({ user, onEnterOrg }) => {
     );
   }
 
-  return <OrganizationsManager onEnterOrg={onEnterOrg} />;
+  return <OrganizationsManager user={user} onEnterOrg={onEnterOrg} />;
 };
 
 /* ================================================================== */
 /*  OrganizationsManager (inner component, no guard check)              */
 /* ================================================================== */
 
-const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> = ({ onEnterOrg }) => {
+const OrganizationsManager: React.FC<{ user: UserProfile; onEnterOrg?: (orgId: string) => void }> = ({ user, onEnterOrg }) => {
   const { addToast } = useToast();
   /* ---------- state ---------- */
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
@@ -146,6 +146,9 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
   const [toggleOrgTarget, setToggleOrgTarget] = useState<OrgRow | null>(null);
   const [togglingOrg, setTogglingOrg] = useState(false);
   const [toggleOrgError, setToggleOrgError] = useState<string | null>(null);
+
+  // Bloqueio remoto de usuário (admin/colaborador)
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
 
   /* ---------- fetch orgs (RPC JSON → imune a type mismatch) ---------- */
   const fetchOrgs = useCallback(async () => {
@@ -324,6 +327,32 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
     } finally { setTogglingOrg(false); }
   };
 
+  /* ---------- desativar / reativar usuário (bloqueio remoto de conta) ---------- */
+  const handleToggleUser = async (u: UserRow) => {
+    if (togglingUserId) return;
+    const nextActive = !u.active;
+    setTogglingUserId(u.id);
+    try {
+      const { data, error } = await callServerApi<{ success: boolean; message: string }>(
+        '/api/admin/set-user-active',
+        { user_id: u.id, active: nextActive }
+      );
+      if (error) { addToast('error', error); return; }
+      if (!data?.success) { addToast('error', data?.message || 'Falha ao atualizar o usuário.'); return; }
+      // Sucesso: atualiza a lista na tela
+      setUsersMap((prev) => {
+        const updated = { ...prev };
+        for (const orgId of Object.keys(updated)) {
+          updated[orgId] = updated[orgId].map((x) => x.id === u.id ? { ...x, active: nextActive } : x);
+        }
+        return updated;
+      });
+      addToast(nextActive ? 'success' : 'warning', data.message);
+    } catch (e: any) {
+      addToast('error', e?.message || 'Erro ao atualizar o usuário.');
+    } finally { setTogglingUserId(null); }
+  };
+
   /* ---------- viewing org state ---------- */
   const viewingOrgId = localStorage.getItem('hd_system_viewing_org');
   const viewingOrgName = viewingOrgId ? orgs.find(o => o.id === viewingOrgId)?.name : null;
@@ -493,6 +522,7 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
                         <th className="px-4 py-2.5 text-left">E-mail</th>
                         <th className="px-4 py-2.5 text-left">Perfil</th>
                         <th className="px-4 py-2.5 text-center">Ativo</th>
+                        <th className="px-4 py-2.5 text-center">Ação</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
@@ -509,6 +539,25 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
                             <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${u.active ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'}`}>
                               {u.active ? 'SIM' : 'NÃO'}
                             </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <button
+                              onClick={() => handleToggleUser(u)}
+                              disabled={togglingUserId !== null || u.id === user.id}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                                u.active === false
+                                  ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                                  : 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400'
+                              }`}
+                              title={u.id === user.id
+                                ? 'Você não pode desativar a sua própria conta'
+                                : u.active === false ? 'Reativar acesso deste usuário' : 'Desativar — derruba o aparelho dele em até 30s quando ficar online'}
+                            >
+                              {togglingUserId === u.id
+                                ? <Loader2 className="w-3 h-3 animate-spin" />
+                                : <Power className="w-3 h-3" />}
+                              <span>{u.active === false ? 'Reativar' : 'Desativar'}</span>
+                            </button>
                           </td>
                         </tr>
                       ))}

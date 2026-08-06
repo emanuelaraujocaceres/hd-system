@@ -534,6 +534,7 @@ export const App: React.FC = () => {
       //    check (a cada 30s) reconecta Realtime + esvazia a fila pendente.
       if (realtimeOrgId && user) {
         try {
+          // 1a) Interruptor da ORGANIZAÇÃO (mensalidade) — já existente
           const { data: orgRow, error: orgErr } = await supabase
             .from('organizations')
             .select('active')
@@ -554,8 +555,23 @@ export const App: React.FC = () => {
               return;
             }
           }
+
+          // 1b) Bloqueio remoto de USUÁRIO: conta desativada no painel
+          // (superadmin) → logout forçado em até 30s. get_my_profile é RPC
+          // SECURITY DEFINER — funciona mesmo com RLS restrito.
+          const { data: myProfile, error: profErr } = await supabase.rpc('get_my_profile');
+          if (!profErr && myProfile && myProfile.active === false) {
+            console.warn('[HD-Sync] 🚫 Conta desativada — encerrando sessão remotamente (bloqueio do superadmin)');
+            syncService.unsubscribeRealtime(handleRemoteChange);
+            await supabase.auth.signOut().catch(() => {});
+            storageService.logout();
+            setUser(null);
+            setIsSyncConnected(false);
+            setSyncStatus('offline');
+            return;
+          }
         } catch (e) {
-          console.warn('[HD-Sync] Falha ao verificar status da organização no health check:', e);
+          console.warn('[HD-Sync] Falha ao verificar status no health check:', e);
         }
       }
 
@@ -651,6 +667,15 @@ export const App: React.FC = () => {
           }
           if (!data) {
             // Sessão sem registro em system_users: limpa e volta para o login
+            storageService.logout();
+            setUser(null);
+            return;
+          }
+          if (data.active === false) {
+            // Bloqueio remoto: conta desativada no painel (superadmin).
+            // Restauração de sessão com internet → logout imediato.
+            console.warn('[Auth] Conta desativada detectada na restauração de sessão. Encerrando sessão:', session.user.email);
+            supabase.auth.signOut().catch(() => {});
             storageService.logout();
             setUser(null);
             return;
