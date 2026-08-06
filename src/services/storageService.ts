@@ -95,10 +95,15 @@ class StorageService {
   }
 
   /** Status da TV/vitrine derivado do heartbeat: online se last_seen_at < 60s. */
-  private static mediaStatusFrom(lastSeenAt?: string | null): 'online' | 'offline' | 'pending' {
+  static mediaStatusFrom(lastSeenAt?: string | null): 'online' | 'offline' | 'pending' {
     if (!lastSeenAt) return 'pending';
     const ageMs = Date.now() - new Date(lastSeenAt).getTime();
     return Number.isFinite(ageMs) && ageMs <= 60000 ? 'online' : 'offline';
+  }
+
+  /** Acesso via instância (singleton storageService). */
+  mediaStatusFrom(lastSeenAt?: string | null): 'online' | 'offline' | 'pending' {
+    return StorageService.mediaStatusFrom(lastSeenAt);
   }
 
   /** Valida se uma string é um UUID válido (v3, v4 ou v5). */
@@ -3205,6 +3210,21 @@ class StorageService {
   getMediaDevices(): MediaDevice[] {
     const all = this.get<MediaDevice[]>(KEYS.MEDIA_DEVICES, []);
     return this.filterBySelectedBranch(this.filterByOrg(all));
+  }
+
+  /**
+   * Busca um dispositivo de mídia pelo código de pareamento de 6 dígitos,
+   * SEM filtrar por filial — usado na tela "Conectar TV" (o aparelho da TV
+   * pode ainda não ter filial selecionada). Escopo: organização atual apenas.
+   */
+  findMediaDeviceByPairingCode(code: string): MediaDevice | undefined {
+    const clean = (code || '').trim().replace(/\D/g, '');
+    if (!clean) return undefined;
+    const all = this.get<MediaDevice[]>(KEYS.MEDIA_DEVICES, []);
+    return all.find(
+      (d) => (d.pairingCode || '').replace(/\D/g, '') === clean
+        && d.organizationId === this.getCurrentOrgId(),
+    );
   }
 
   saveMediaDevice(d: MediaDevice) {

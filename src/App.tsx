@@ -10,6 +10,7 @@ import { CRMView } from './components/CRM/CRMView';
 import { FiadosView } from './components/CRM/FiadosView';
 import { SettingsView } from './components/Settings/SettingsView';
 import { TVShowcaseView } from './components/TV/TVShowcaseView';
+import { ConnectTVView } from './components/TV/ConnectTVView';
 import { OrganizationsView } from './components/Organizations/OrganizationsView';
 import { CaixaModal } from './components/PDV/CaixaModal';
 import { LoginModal } from './components/Auth/LoginModal';
@@ -800,7 +801,7 @@ export const App: React.FC = () => {
       {
         key: 'F11',
         handler: () => {
-          if (activeTab === 'tv-showcase') {
+          if (activeTab === 'tv-showcase' || activeTab === 'connect-tv') {
             if (!document.fullscreenElement) {
               document.documentElement.requestFullscreen().catch(() => {});
             } else {
@@ -878,10 +879,14 @@ export const App: React.FC = () => {
     if (tab === 'crm') return !!perms.crm;
     if (tab === 'fiados') return !!perms.crm;
     if (tab === 'tv-showcase') return perms.tvShowcase !== false;
+    if (tab === 'connect-tv') return perms.tvShowcase !== false;
     if (tab === 'settings') return !!perms.settings;
     if (tab === 'organizations') return !!user.superadmin;
     return false;
   };
+
+  // Modo TV: vitrine e tela de pareamento escondem sidebar/header/rodapé.
+  const isTvMode = activeTab === 'tv-showcase' || activeTab === 'connect-tv';
 
   return (
     <ToastProvider>
@@ -900,7 +905,7 @@ export const App: React.FC = () => {
         onOpenProfile={() => setIsProfileModalOpen(true)}
         isMobileOpen={isMobileOpen}
         setIsMobileOpen={setIsMobileOpen}
-        isTvMode={activeTab === 'tv-showcase'}
+        isTvMode={isTvMode}
       />
 
       {/* Mobile backdrop overlay when sidebar is open */}
@@ -914,7 +919,7 @@ export const App: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-dynamic overflow-hidden bg-slate-50 dark:bg-[#09090b]">
         {/* Header Bar — hidden on TV mode */}
-        {activeTab !== 'tv-showcase' && (
+        {!isTvMode && (
           <Header
             onToggleMobileMenu={() => setIsMobileOpen((prev) => !prev)}
             currentTab={activeTab}
@@ -939,7 +944,7 @@ export const App: React.FC = () => {
         )}
 
         {/* Sync Status Banner — hidden on TV mode */}
-        {activeTab !== 'tv-showcase' && (
+        {!isTvMode && (
           <SyncBanner
             status={syncStatus}
             pendingCount={syncPendingCount}
@@ -954,7 +959,7 @@ export const App: React.FC = () => {
         )}
 
         {/* Global viewing org indicator (superadmin) */}
-        {user?.superadmin && activeTab !== 'tv-showcase' && activeTab !== 'organizations' && localStorage.getItem('hd_system_viewing_org') && (
+        {user?.superadmin && !isTvMode && activeTab !== 'organizations' && localStorage.getItem('hd_system_viewing_org') && (
           <div className="flex items-center justify-between px-4 sm:px-6 py-2 bg-indigo-500/10 border-b border-indigo-500/20">
             <div className="flex items-center gap-2 text-xs text-indigo-700 dark:text-indigo-300">
               <Store className="w-3.5 h-3.5" />
@@ -1090,6 +1095,10 @@ export const App: React.FC = () => {
                 />
               )}
 
+              {activeTab === 'connect-tv' && (
+                <ConnectTVView onEnterTV={() => handleTabChange('tv-showcase')} />
+              )}
+
               {activeTab === 'organizations' && (
                 <OrganizationsView
                   user={user}
@@ -1119,7 +1128,7 @@ export const App: React.FC = () => {
         )}
 
         {/* Footer Info Bar — hidden on TV mode */}
-        {activeTab !== 'tv-showcase' && (
+        {!isTvMode && (
           <footer className="h-8 md:h-9 safe-area-bottom bg-white dark:bg-[#09090b] border-t border-slate-200 dark:border-[#27272a] px-3 sm:px-6 flex items-center justify-between text-[9px] md:text-[10px] text-slate-500 dark:text-[#52525b] uppercase tracking-widest font-bold select-none shrink-0">
             <div className="flex items-center gap-3 sm:gap-6">
               <span className="flex items-center gap-1.5">

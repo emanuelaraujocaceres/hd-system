@@ -12,10 +12,13 @@ import {
   Clock,
   X,
   CheckCircle2,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { Product, StoreBranch, SystemSettings, FooterMessage } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { tvPairing } from '../../services/tvPairingService';
 
 interface TVShowcaseViewProps {
   products: Product[];
@@ -43,6 +46,23 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [timeString, setTimeString] = useState('');
   const [footerMessages, setFooterMessages] = useState<FooterMessage[]>([]);
+
+  // Pareamento: este aparelho é um media_device conhecido? Se sim, mantém
+  // o heartbeat (last_seen_at no cloud) para o painel exibir online/offline.
+  const [pairedTv, setPairedTv] = useState(tvPairing.getPairedTv());
+
+  useEffect(() => {
+    if (!pairedTv) return;
+    const sendHeartbeat = () => { tvPairing.heartbeat(pairedTv.deviceId); };
+    sendHeartbeat();
+    const timer = setInterval(sendHeartbeat, 30000);
+    const onStorage = () => setPairedTv(tvPairing.getPairedTv());
+    window.addEventListener('storage', onStorage);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [pairedTv?.deviceId]);
 
   // Clock ticker for TV — larger display
   useEffect(() => {
@@ -173,6 +193,19 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
 
         {/* Header Controls & Live Clock — Relogio maior */}
         <div className="flex items-center gap-4">
+          {/* Status de pareamento da TV */}
+          <div
+            className={`hidden md:flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold ${
+              pairedTv
+                ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
+                : 'bg-amber-500/10 border-amber-500/25 text-amber-400'
+            }`}
+            title={pairedTv ? `Pareada com "${pairedTv.deviceId}"` : 'Este aparelho ainda não foi pareado com nenhuma TV cadastrada'}
+          >
+            {pairedTv ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
+            <span>{pairedTv ? 'TV CONECTADA' : 'NÃO PAREADA'}</span>
+          </div>
+
           <div className="hidden lg:flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-zinc-900/90 border border-zinc-800 font-mono text-xl font-bold text-zinc-200">
             <Clock className="w-5 h-5 text-amber-400" />
             <span>{timeString}</span>

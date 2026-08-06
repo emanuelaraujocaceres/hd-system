@@ -25,8 +25,9 @@ import {
   Circle,
   Star,
   Loader2,
+  MonitorPlay,
 } from 'lucide-react';
-import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer } from '../../types';
+import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, MediaDevice } from '../../types';
 import { storageService } from '../../services/storageService';
 import { pixConfigService, PixBranchConfig, PixKeyType } from '../../services/pixConfigService';
 import { posAudio } from '../../services/audioService';
@@ -88,6 +89,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   // Rodapé da TV — mensagens sincronizadas (tabela footer_messages)
   const [footerMessages, setFooterMessages] = useState<FooterMessage[]>(storageService.getFooterMessages());
   const [newFooterMessage, setNewFooterMessage] = useState('');
+
+  // ── Dispositivos de TV / vitrine (media_devices) ────────────────────
+  const [mediaDevicesList, setMediaDevicesList] = useState<MediaDevice[]>(storageService.getMediaDevices());
+  const [tvDeviceName, setTvDeviceName] = useState('');
+  const [tvDeviceType, setTvDeviceType] = useState<'tv' | 'vitrine'>('tv');
   const [editingFooterId, setEditingFooterId] = useState<string | null>(null);
   const [editingFooterText, setEditingFooterText] = useState('');
 
@@ -589,6 +595,50 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     storageService.saveFooterMessage({ ...a, sortOrder: b.sortOrder });
     storageService.saveFooterMessage({ ...b, sortOrder: aOrder });
     refreshFooterMessages();
+  };
+
+  // ── Dispositivos de TV / vitrine (media_devices) ────────────────────
+  const refreshMediaDevices = () => setMediaDevicesList(storageService.getMediaDevices());
+
+  const handleAddMediaDevice = () => {
+    const name = tvDeviceName.trim();
+    if (!name) {
+      setErrorMessage('Informe o nome do dispositivo (ex.: TV do Balcão).');
+      return;
+    }
+    // Gera código de pareamento de 6 dígitos único na organização.
+    const existing = storageService.getMediaDevices().map((d) => d.pairingCode);
+    let code = '';
+    do {
+      code = String(Math.floor(100000 + Math.random() * 900000));
+    } while (existing.includes(code));
+
+    const device: MediaDevice = {
+      id: crypto.randomUUID(),
+      name,
+      deviceType: tvDeviceType,
+      pairingCode: code,
+      active: true,
+      status: 'pending',
+    };
+    storageService.saveMediaDevice(device);
+    setTvDeviceName('');
+    refreshMediaDevices();
+    posAudio.chime();
+    setSuccessMessage(`TV cadastrada! Código de pareamento: ${code} — digite-o na tela "Conectar TV".`);
+  };
+
+  const handleDeleteMediaDevice = (id: string) => {
+    storageService.deleteMediaDevice(id);
+    refreshMediaDevices();
+    posAudio.chime();
+    setSuccessMessage('Dispositivo de TV removido.');
+  };
+
+  const handleCopyPairingCode = (code: string) => {
+    navigator.clipboard.writeText(code).catch(() => {});
+    posAudio.click();
+    setSuccessMessage(`Código ${code} copiado — digite-o na tela "Conectar TV".`);
   };
 
   // ── Impressoras térmicas (printers) ─────────────────────────────────
@@ -2053,6 +2103,103 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               {footerMessages.length === 0 && (
                 <p className="text-xs text-slate-500 dark:text-[#71717a] py-3 text-center">
                   Nenhuma mensagem configurada — a TV exibe o rodapé padrão.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Dispositivos de TV / Vitrine (media_devices) */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                <MonitorPlay className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Dispositivos de TV / Vitrine</h3>
+                <p className="text-xs text-slate-500 dark:text-[#71717a]">Cadastre cada TV/vitrine, copie o código de pareamento e digite-o na tela "Conectar TV" do aparelho</p>
+              </div>
+            </div>
+
+            {/* Cadastrar novo dispositivo */}
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                value={tvDeviceName}
+                onChange={(e) => setTvDeviceName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddMediaDevice()}
+                placeholder="Nome (ex.: TV do Balcão)"
+                maxLength={60}
+                className="flex-1 min-h-[44px] px-3 py-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+              <select
+                value={tvDeviceType}
+                onChange={(e) => setTvDeviceType(e.target.value as 'tv' | 'vitrine')}
+                className="min-h-[44px] px-3 py-2.5 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                <option value="tv">TV</option>
+                <option value="vitrine">Vitrine</option>
+              </select>
+              <button
+                onClick={handleAddMediaDevice}
+                disabled={!tvDeviceName.trim()}
+                className="min-h-[44px] px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-colors flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Gerar Código
+              </button>
+            </div>
+
+            {/* Lista de dispositivos */}
+            <div className="space-y-2">
+              {mediaDevicesList.map((d) => {
+                const status = storageService.mediaStatusFrom(d.lastSeenAt);
+                return (
+                  <div key={d.id} className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]">
+                    <div className={`p-2 rounded-lg ${d.deviceType === 'tv' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-sky-500/10 text-sky-600 dark:text-sky-400'}`}>
+                      <Tv className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        {d.name}
+                        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                          {d.deviceType === 'tv' ? 'TV' : 'Vitrine'}
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-[#71717a] font-mono mt-0.5">
+                        Código: {d.pairingCode}
+                      </p>
+                    </div>
+                    <span
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide ${
+                        status === 'online'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                          : status === 'offline'
+                            ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                            : 'bg-slate-500/10 text-slate-500 dark:text-slate-400'
+                      }`}
+                    >
+                      {status === 'online' ? 'Online' : status === 'offline' ? 'Offline' : 'Aguardando'}
+                    </span>
+                    <button
+                      onClick={() => handleCopyPairingCode(d.pairingCode)}
+                      className="p-2 rounded-lg text-indigo-500 hover:bg-indigo-500/10"
+                      title="Copiar código de pareamento"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMediaDevice(d.id)}
+                      className="p-2 rounded-lg text-red-500 hover:bg-red-500/10"
+                      title="Excluir dispositivo"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
+
+              {mediaDevicesList.length === 0 && (
+                <p className="text-xs text-slate-500 dark:text-[#71717a] py-3 text-center">
+                  Nenhuma TV cadastrada — adicione uma acima para gerar o código de pareamento.
                 </p>
               )}
             </div>

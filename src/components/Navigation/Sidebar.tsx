@@ -13,6 +13,7 @@ import {
   Receipt,
   FileText,
   Tv,
+  Plug,
 } from 'lucide-react';
 import { StoreBranch, UserProfile, CashRegisterSession } from '../../types';
 import { ResetDataButton } from '../shared/ResetDataButton';
@@ -84,6 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'inventory', label: 'Estoque', icon: Package, module: 'inventory' as const },
     { id: 'nf-history', label: 'Nota Fiscal', icon: FileText, module: 'inventory' as const },
     { id: 'tv-showcase', label: 'Ofertas / TV', icon: Tv, module: 'pdv' as const, badge: 'AO VIVO', badgeColor: 'bg-amber-500/10 text-amber-500 border-amber-500/20' },
+    { id: 'connect-tv', label: 'Conectar TV', icon: Plug, module: 'pdv' as const },
     { id: 'finance', label: 'Financeiro', icon: DollarSign, module: 'finance' as const },
     { id: 'crm', label: 'Clientes/Fornecedores', icon: Users, module: 'crm' as const },
     { id: 'fiados', label: 'Fiados', icon: Receipt, module: 'crm' as const },
