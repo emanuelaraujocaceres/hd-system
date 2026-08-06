@@ -218,6 +218,12 @@ export const ReportModal: React.FC<ReportModalProps> = ({ user, onClose }) => {
                 {kpis.itemsSold} itens · {kpis.discountTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} em descontos
                 {result.meta.filters.paymentMethod !== 'Todas' && ` · Pagamento: ${result.meta.filters.paymentMethod}`}
               </p>
+              {result.model.rows.length === 0 && (
+                <p className="text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  Nenhuma venda encontrada para estes filtros — o CSV/PDF sairá vazio. Confira o período ou teste depois de registrar uma venda.
+                </p>
+              )}
             </>
           ) : null}
         </div>
