@@ -405,12 +405,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm">
+        <button
+          onClick={() => onNavigateTab('fiados')}
+          className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm cursor-pointer transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] hover:shadow-md hover:scale-[1.01] text-left w-full"
+          title="Abrir página de Fiados"
+        >
           <span className="text-xs font-semibold text-slate-500 dark:text-[#71717a]">Contas a Receber (Pendente)</span>
           <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
             R$ {totalReceivablePending.toFixed(2)}
           </p>
-        </div>
+        </button>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm">
           <span className="text-xs font-semibold text-slate-500 dark:text-[#71717a]">Contas a Pagar (Pendente)</span>
