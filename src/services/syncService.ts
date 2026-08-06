@@ -28,6 +28,29 @@ function isSuperAdmin(): boolean {
 // causavam erro 22P02 no banco ("invalid input syntax for type uuid").
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// ─── INTERRUPTOR DE ACESSO ONLINE POR ORGANIZAÇÃO ─────────────────────
+// Modelo de mensalidade: quando a organização está DESATIVADA (active=false,
+// mensalidade vencida), o app corta TODO o tráfego de nuvem:
+//  - Não assina Realtime (não recebe nem envia eventos)
+//  - Não sincroniza fila (escritas entram na fila local e ficam PENDENTES)
+//  - Não re-autentica sessão, não hidrata do cloud
+// O app continua 100% funcional LOCALMENTE (localStorage), e quando a org é
+// reativada a fila esvazia automaticamente — o trabalho do período offline
+// volta para o cloud sem perda.
+let orgOnlineAllowed = true;
+
+/** Corta/restaura o acesso online (chamado pelo App ao detectar org inativa). */
+export function setOrgOnlineAllowed(allowed: boolean) {
+  orgOnlineAllowed = allowed;
+  console.log(`[HD-Sync] ${allowed ? '✅ Acesso online liberado' : '🚫 Acesso online SUSPENSO (modo local)'}`);
+}
+
+/** Estado atual do interruptor — usado como trava nas operações de rede. */
+export function isOrgOnlineAllowed(): boolean {
+  return orgOnlineAllowed;
+}
+
+
 // Tabelas que exigem store_branch_id válido (UUID) — exceto store_branches
 // e system_settings (globais/por-org, sem coluna de filial).
 const BRANCH_REQUIRED_TABLES: TableName[] = [
@@ -119,6 +142,13 @@ class SupabaseSyncService {
      if (online) {
        // When coming back online, re-establish Realtime channel AND process pending queue
        this._reconnectAttempts = 0;
+       // Se o acesso online da org está suspenso, não re-estabelece nada
+       // (o App faz essa checagem no health check e corta o tráfego de nuvem).
+       if (!isOrgOnlineAllowed()) {
+         console.warn('[HD-Sync] 🚫 Online, mas acesso da organização suspenso — mantendo modo local');
+         this.notifyConnection(false);
+         return;
+       }
        // Garante sessão Supabase válida ANTES de re-subscribir/processar:
        // login OFFLINE não cria JWT e, sem sessão, nem o Realtime nem a fila
        // funcionam (PGRST301). O re-login usa as credenciais locais do aparelho.
@@ -175,6 +205,12 @@ class SupabaseSyncService {
    * Separated from subscribeRealtime() to allow reconnection.
    */
   private _doSubscribe(orgId?: string, branchId?: string) {
+    // Trava: com acesso online suspenso (org desativada), o Realtime não é
+    // criado. Quando a org é reativada, o App chama subscribeRealtime de novo.
+    if (!isOrgOnlineAllowed()) {
+      console.warn('[HD-Sync] 🚫 Realtime não iniciado — acesso online suspenso');
+      return;
+    }
     // Filtro por filial APENAS nas tabelas que possuem a coluna store_branch_id
     // (mesmo conjunto de BRANCH_REQUIRED_TABLES). Exclui store_branches (é a
     // própria tabela de filiais — coluna é `id`, não `store_branch_id`) e
@@ -260,6 +296,7 @@ class SupabaseSyncService {
    * after a WebSocket drop (VULN-01 fix).
    */
   private _scheduleReconnect() {
+    if (!isOrgOnlineAllowed()) return; // Suspenso — não reconectar
     if (this._reconnectTimer) return; // Already scheduled
     if (this._reconnectAttempts >= SupabaseSyncService.MAX_RECONNECT_ATTEMPTS) {
       console.error('[HD-Sync] Max reconnect attempts reached — manual re-login may be needed');
@@ -459,8 +496,8 @@ class SupabaseSyncService {
       ? { ...row, updated_at: new Date().toISOString() }
       : row;
 
-    if (!navigator.onLine) {
-      console.log(`[HD-Sync] 📝 Queuing ${table} upsert (offline)`);
+    if (!navigator.onLine || !isOrgOnlineAllowed()) {
+      console.log(`[HD-Sync] 📝 Queuing ${table} upsert (${isOrgOnlineAllowed() ? 'offline' : 'acesso suspenso'})`);
       syncQueue.enqueue(table, 'upsert', { data: rowWithTimestamp });
       this._pendingCount = syncQueue.getPendingCount();
       return false;
@@ -496,8 +533,8 @@ class SupabaseSyncService {
    * If browser is offline, queue the operation for later sync.
    */
   async deleteRow(table: TableName, id: string) {
-    if (!navigator.onLine) {
-      console.log(`[HD-Sync] 📝 Queuing ${table} delete (offline)`);
+    if (!navigator.onLine || !isOrgOnlineAllowed()) {
+      console.log(`[HD-Sync] 📝 Queuing ${table} delete (${isOrgOnlineAllowed() ? 'offline' : 'acesso suspenso'})`);
       syncQueue.enqueue(table, 'delete', { rowId: id });
       this._pendingCount = syncQueue.getPendingCount();
       return false;
@@ -557,8 +594,8 @@ class SupabaseSyncService {
       ? rows.map((r) => ({ ...r, updated_at: new Date().toISOString() }))
       : rows;
 
-    if (!navigator.onLine) {
-      console.log(`[HD-Sync] 📝 Queuing ${table} batch upsert (offline)`);
+    if (!navigator.onLine || !isOrgOnlineAllowed()) {
+      console.log(`[HD-Sync] 📝 Queuing ${table} batch upsert (${isOrgOnlineAllowed() ? 'offline' : 'acesso suspenso'})`);
       syncQueue.enqueue(table, 'upsert_batch', { dataArray: rowsWithTimestamp });
       this._pendingCount = syncQueue.getPendingCount();
       return false;
@@ -661,6 +698,13 @@ class SupabaseSyncService {
     const count = syncQueue.getPendingCount();
     if (count === 0) return { processed: 0, failed: 0 };
 
+    // Trava: acesso suspenso (org desativada) — a fila fica guardada e só
+    // esvazia quando a organização for reativada (o trabalho não se perde).
+    if (!isOrgOnlineAllowed()) {
+      console.warn(`[HD-Sync] 🚫 ${count} operações pendentes MANTIDAS — acesso da organização suspenso`);
+      return { processed: 0, failed: 0 };
+    }
+
     console.log(`[HD-Sync] 🔄 Processing ${count} pending operations...`);
 
     // Login OFFLINE não cria sessão Supabase — sem sessão o testConnection
@@ -717,6 +761,11 @@ class SupabaseSyncService {
     return this._syncingTables.has(table);
   }
 
+  /** Se existe um canal Realtime ativo (usado pelo App para re-subscribir após reativação). */
+  hasChannel(): boolean {
+    return !!this.channel;
+  }
+
   // ─── CONNECTION TESTING ────────────────────────────────────────
 
   /**
@@ -735,6 +784,7 @@ class SupabaseSyncService {
    */
   async ensureSession(forceReauth = false): Promise<boolean> {
     if (!navigator.onLine) return false;
+    if (!isOrgOnlineAllowed()) return false; // Suspenso — não re-autenticar nem acessar rede
     // Logout EXPLÍCITO: não re-autenticar em hipótese alguma — senão a sessão
     // voltaria a existir e o app reabriria logado como o último usuário,
     // anulando o logout.

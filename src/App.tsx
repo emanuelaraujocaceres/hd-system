@@ -16,11 +16,11 @@ import { LoginModal } from './components/Auth/LoginModal';
 import { UserProfileModal } from './components/Auth/UserProfileModal';
 import { SyncBanner } from './components/Sync/SyncBanner';
 import { storageService } from './services/storageService';
-import { syncService } from './services/syncService';
+import { syncService, setOrgOnlineAllowed as syncSetOrgOnlineAllowed } from './services/syncService';
 import { syncQueue } from './services/syncQueueService';
 import { supabase } from './lib/supabase';
 import { posAudio } from './services/audioService';
-import { Lock, ShieldAlert, ArrowLeft, Loader2, Store, X } from 'lucide-react';
+import { Lock, ShieldAlert, ArrowLeft, Loader2, Store, X, AlertTriangle } from 'lucide-react';
 import { GlobalSearch } from './components/shared/GlobalSearch';
 import {
   Product,
@@ -166,6 +166,13 @@ export const App: React.FC = () => {
     setCurrentBranch(branch);
     posAudio.click();
 
+    // Acesso online suspenso (org desativada): troca a filial apenas localmente
+    if (!orgOnlineAllowedRef.current) {
+      console.warn('[Branch] Acesso online suspenso — filial trocada apenas localmente');
+      refreshLocalState();
+      return;
+    }
+
     // Re-hidratar dados do cloud com a nova filial para garantir isolamento
     // Completo (limpa dados da filial anterior, carrega dados da nova filial)
     const resolvedBranchId = storageService.resolveBranchId(branch.id);
@@ -174,17 +181,7 @@ export const App: React.FC = () => {
         // Armazenar branch resolvido para defense-in-depth no Realtime handler
         resolvedBranchIdRef.current = result.resolvedBranchId;
         // Forçar refresh imediato do React state após hidratação
-        setProducts(storageService.getProducts());
-        setCategories(storageService.getCategories());
-        setCustomers(storageService.getCustomers());
-        setSuppliers(storageService.getSuppliers());
-        setSales(storageService.getSales());
-        setCaixaSession(storageService.getActiveCaixaSession());
-        setFinancialAccounts(storageService.getFinancialAccounts());
-        setSettings(storageService.getSettings());
-        setBranches(storageService.getBranches());
-        setCurrentBranch(storageService.getSelectedBranch());
-        setUser(storageService.getUserProfile());
+        refreshLocalState();
         console.log(`[Branch] ✅ Dados re-carregados para filial: ${branch.name}`);
 
         // Re-subscribe Realtime com a nova filial para receber apenas eventos dela
@@ -196,9 +193,7 @@ export const App: React.FC = () => {
       }
     }).catch(() => {
       // Fallback: refresh local mesmo se cloud falhar
-      setProducts(storageService.getProducts());
-      setSales(storageService.getSales());
-      setCaixaSession(storageService.getActiveCaixaSession());
+      refreshLocalState();
     });
   };
 
@@ -232,10 +227,15 @@ export const App: React.FC = () => {
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
   const [syncPendingCount, setSyncPendingCount] = useState<number>(0);
   const [syncStatus, setSyncStatus] = useState<'offline' | 'connecting' | 'syncing' | 'online' | 'error'>('connecting');
+  // Acesso online da organização (mensalidade): false = modo local forçado.
+  // O app continua funcionando com localStorage, mas todo o tráfego de nuvem
+  // (Realtime, hidratação, fila) fica cortado até a organização ser reativada.
+  const [orgOnlineAllowed, setOrgOnlineAllowed] = useState<boolean>(true);
 
   // Refs to avoid stale closures in intervals
   const isOnlineRef = useRef(isOnline);
   const syncPendingCountRef = useRef(syncPendingCount);
+  const orgOnlineAllowedRef = useRef<boolean>(true);
   // Resolved branch UUID — set after hydrateFromCloud resolves short codes.
   // Used by handleRemoteChange for branch isolation (defense-in-depth).
   const resolvedBranchIdRef = useRef<string | undefined>(undefined);
@@ -243,6 +243,7 @@ export const App: React.FC = () => {
   // Keep refs in sync
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
   useEffect(() => { syncPendingCountRef.current = syncPendingCount; }, [syncPendingCount]);
+  useEffect(() => { orgOnlineAllowedRef.current = orgOnlineAllowed; }, [orgOnlineAllowed]);
 
   // Listen for connection changes from syncService
   useEffect(() => {
@@ -285,12 +286,71 @@ export const App: React.FC = () => {
     return unsub;
   }, []);
 
+  // Recarrega TODO o estado React direto do localStorage (usado após hidratação,
+  // na troca de filial e no modo local forçado — org suspensa).
+  const refreshLocalState = useCallback(() => {
+    setProducts(storageService.getProducts());
+    setCategories(storageService.getCategories());
+    setCustomers(storageService.getCustomers());
+    setSuppliers(storageService.getSuppliers());
+    setSales(storageService.getSales());
+    setCaixaSession(storageService.getActiveCaixaSession());
+    setFinancialAccounts(storageService.getFinancialAccounts());
+    setSettings(storageService.getSettings());
+    setBranches(storageService.getBranches());
+    setCurrentBranch(storageService.getSelectedBranch());
+    setUser(storageService.getUserProfile());
+  }, []);
+
+  // Consulta o status de acesso online da organização atual (interruptor de
+  // mensalidade). Retorna true se a org pode sincronizar. Falha na consulta =
+  // fail-open (não derruba o app por um erro de rede momentâneo).
+  const checkOrgAccess = useCallback(async (): Promise<boolean> => {
+    const orgId = storageService.isSuperAdmin()
+      ? (storageService.getSuperadminViewingOrg() || storageService.getCurrentOrgId() || undefined)
+      : (storageService.getCurrentOrgId() || undefined);
+    if (!orgId) return true; // bootstrap/offline sem org: não restringe
+    try {
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('active')
+        .eq('id', orgId)
+        .maybeSingle();
+      if (error) {
+        console.warn('[HD-Sync] Falha ao verificar status da organização:', error.message);
+        return true;
+      }
+      const allowed = data?.active !== false;
+      setOrgOnlineAllowed(allowed);
+      orgOnlineAllowedRef.current = allowed;
+      syncSetOrgOnlineAllowed(allowed);
+      if (!allowed) {
+        console.warn(`[HD-Sync] 🚫 Acesso online da organização ${orgId} SUSPENSO — operando em modo local`);
+      }
+      return allowed;
+    } catch (e) {
+      console.warn('[HD-Sync] checkOrgAccess exceção:', e);
+      return true;
+    }
+  }, []);
+
   // Hidrata o localStorage com os dados do Supabase e força o refresh de todo o
   // estado da UI. Extraído para ser reutilizado no LOGIN (e na restauração de
   // sessão): sem isso, orgs não-default (ex.: Plantão da Cerveja) só carregavam
   // dados após F5, porque a hidratação rodava uma única vez no mount, antes de
   // o perfil/organização do usuário estar disponível.
   const runHydration = useCallback(async () => {
+    // Trava de mensalidade: org desativada → NADA do cloud; só estado local
+    const allowed = await checkOrgAccess();
+    if (!allowed) {
+      console.warn('[HD-Sync] 🚫 Hidratação do cloud pulada — acesso online suspenso');
+      setSyncStatus('offline');
+      setIsSyncConnected(false);
+      setIsOnline(false);
+      isOnlineRef.current = false;
+      refreshLocalState();
+      return;
+    }
     // Ler branch ID direto do localStorage (sem validação) — antes das branches
     // serem carregadas, getSelectedBranchId() retornaria '' porque getBranches()
     // ainda está vazio, causando "branch: ALL" mesmo com filial selecionada.
@@ -306,20 +366,11 @@ export const App: React.FC = () => {
       setSyncStatus('online');
       // Force state refresh after hydration — ensures products/sales
       // loaded from cloud appear in the UI immediately (not just after F5)
-      setProducts(storageService.getProducts());
-      setCategories(storageService.getCategories());
-      setCustomers(storageService.getCustomers());
-      setSuppliers(storageService.getSuppliers());
-      setSales(storageService.getSales());
-      setCaixaSession(storageService.getActiveCaixaSession());
-      setFinancialAccounts(storageService.getFinancialAccounts());
-      setSettings(storageService.getSettings());
-      setBranches(storageService.getBranches());
-      setCurrentBranch(storageService.getSelectedBranch());
-      setUser(storageService.getUserProfile());
+      refreshLocalState();
 
       // Re-subscribe Realtime com o branch UUID resolvido.
       // O useEffect inicial pode ter subscrito com '' (antes da hidratação).
+      // A trava de suspensão já foi tratada acima (retorno antecipado).
       if (result.resolvedBranchId) {
         const orgId = storageService.getCurrentOrgId() || undefined;
         syncService.resubscribeRealtime(orgId, result.resolvedBranchId);
@@ -330,7 +381,7 @@ export const App: React.FC = () => {
       console.log('[HD-Sync] Cloud hydration skipped — using local data');
       setSyncStatus('offline');
     }
-  }, []);
+  }, [checkOrgAccess, refreshLocalState]);
 
   useEffect(() => {
     // Handler for remote changes from Supabase Realtime
@@ -478,6 +529,36 @@ export const App: React.FC = () => {
 
     // Check connection health periodically (use refs to avoid stale closures)
     const checkConnection = async () => {
+      // 1) Interruptor de mensalidade: org desativada → corta TODO o tráfego
+      //    de nuvem e mantém o app em modo local. Quando reativada, este mesmo
+      //    check (a cada 30s) reconecta Realtime + esvazia a fila pendente.
+      if (realtimeOrgId && user) {
+        try {
+          const { data: orgRow, error: orgErr } = await supabase
+            .from('organizations')
+            .select('active')
+            .eq('id', realtimeOrgId)
+            .maybeSingle();
+          if (!orgErr) {
+            const allowed = orgRow?.active !== false;
+            setOrgOnlineAllowed(allowed);
+            orgOnlineAllowedRef.current = allowed;
+            syncSetOrgOnlineAllowed(allowed);
+            if (!allowed) {
+              // Corta o Realtime (remove callbacks + canal) e não toca na nuvem
+              syncService.unsubscribeRealtime(handleRemoteChange);
+              setIsSyncConnected(false);
+              setIsOnline(false);
+              isOnlineRef.current = false;
+              setSyncStatus('offline');
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('[HD-Sync] Falha ao verificar status da organização no health check:', e);
+        }
+      }
+
       // Garante sessão Supabase válida antes do testConnection (re-login
       // silencioso com credenciais locais quando o login foi offline e não
       // deixou JWT) — sem isso, após F5 com sessão morta, o testConnection
@@ -491,6 +572,11 @@ export const App: React.FC = () => {
       if (nowConnected) {
         const pending = syncPendingCountRef.current;
         setSyncStatus(pending > 0 ? 'syncing' : 'online');
+        // Se o canal foi cortado (suspensão) e a org foi reativada, recria a
+        // assinatura com o callback de volta.
+        if (!syncService.hasChannel()) {
+          syncService.subscribeRealtime(handleRemoteChange, realtimeOrgId, realtimeBranchId);
+        }
         // Ressuscita o canal Realtime se ele morreu (reconexão esgotada).
         // Sem isso, após um pico de rede/CLOUDFLARE reset, o dispositivo
         // fica "cego" até F5: vendas de outros dispositivos não chegam
@@ -983,6 +1069,17 @@ export const App: React.FC = () => {
             </>
           )}
         </main>
+
+        {/* Banner de acesso online suspenso (organização desativada / mensalidade vencida) */}
+        {user && !orgOnlineAllowed && (
+          <div className="px-4 py-2.5 bg-amber-500/15 border-t-2 border-amber-500 text-amber-700 dark:text-amber-400 text-[11px] md:text-xs font-semibold flex items-center justify-center gap-2 text-center">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>
+              Acesso online suspenso — sincronização em tempo real desativada. O app continua funcionando localmente;
+              quando a organização for reativada, os dados voltam a sincronizar automaticamente.
+            </span>
+          </div>
+        )}
 
         {/* Footer Info Bar — hidden on TV mode */}
         {activeTab !== 'tv-showcase' && (

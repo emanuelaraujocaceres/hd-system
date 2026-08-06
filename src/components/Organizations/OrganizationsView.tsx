@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Building2, Plus, ChevronDown, ChevronRight, Users, MapPin,
   ShieldCheck, Loader2, Copy, Check, X, Mail, UserPlus, LogIn,
-  Store, AlertCircle, ArrowRightFromLine, Trash2,
+  Store, AlertCircle, ArrowRightFromLine, Trash2, Power,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { callServerApi } from '../../lib/serverApi';
@@ -49,6 +49,7 @@ interface OrgRow {
   id: string;
   name: string;
   created_at: string;
+  active: boolean;
   branch_count: number;
   user_count: number;
 }
@@ -140,6 +141,11 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
   const [deleteOrgConfirm, setDeleteOrgConfirm] = useState('');
   const [deletingOrg, setDeletingOrg] = useState(false);
   const [deleteOrgError, setDeleteOrgError] = useState<string | null>(null);
+
+  // Modal de desativar/reativar (interruptor de acesso online)
+  const [toggleOrgTarget, setToggleOrgTarget] = useState<OrgRow | null>(null);
+  const [togglingOrg, setTogglingOrg] = useState(false);
+  const [toggleOrgError, setToggleOrgError] = useState<string | null>(null);
 
   /* ---------- fetch orgs (RPC JSON → imune a type mismatch) ---------- */
   const fetchOrgs = useCallback(async () => {
@@ -286,6 +292,38 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
     } finally { setDeletingOrg(false); }
   };
 
+  /* ---------- desativar / reativar organização (interruptor de acesso online) ---------- */
+  const openToggleOrg = (org: OrgRow) => {
+    setToggleOrgTarget(org);
+    setToggleOrgError(null);
+  };
+
+  const handleToggleOrg = async () => {
+    if (!toggleOrgTarget) return;
+    const nextActive = !toggleOrgTarget.active;
+    setTogglingOrg(true); setToggleOrgError(null);
+    try {
+      const { data, error } = await callServerApi<{ success: boolean; message: string }>(
+        '/api/admin/set-organization-active',
+        { organization_id: toggleOrgTarget.id, active: nextActive }
+      );
+      if (error) {
+        setToggleOrgError(error);
+        return;
+      }
+      if (!data?.success) {
+        setToggleOrgError(data?.message || 'Falha ao atualizar o acesso da organização.');
+        return;
+      }
+      // Sucesso: atualiza a lista na tela
+      setOrgs((prev) => prev.map((o) => o.id === toggleOrgTarget.id ? { ...o, active: nextActive } : o));
+      addToast(nextActive ? 'success' : 'warning', data.message);
+      setToggleOrgTarget(null);
+    } catch (e: any) {
+      setToggleOrgError(e?.message || 'Erro ao atualizar o acesso da organização.');
+    } finally { setTogglingOrg(false); }
+  };
+
   /* ---------- viewing org state ---------- */
   const viewingOrgId = localStorage.getItem('hd_system_viewing_org');
   const viewingOrgName = viewingOrgId ? orgs.find(o => o.id === viewingOrgId)?.name : null;
@@ -345,6 +383,16 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
             </div>
             <div className="flex items-center gap-4 shrink-0">
               <div className="hidden sm:flex items-center gap-3 text-xs text-slate-500 dark:text-[#71717a]">
+                {/* Status do acesso online */}
+                {org.active === false ? (
+                  <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20">
+                    <Power className="w-3 h-3" />Acesso offline
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                    <ShieldCheck className="w-3 h-3" />Online
+                  </span>
+                )}
                 <span className="flex items-center gap-1"><Store className="w-3.5 h-3.5" />{org.branch_count} filiais</span>
                 <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{org.user_count} usuários</span>
               </div>
@@ -359,6 +407,17 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
           >
             <ArrowRightFromLine className="w-3.5 h-3.5" />
             <span>Entrar</span>
+          </button>
+          {/* Botão interruptor — desativar/reativar acesso online (protegido para org padrão) */}
+          <button
+            onClick={() => openToggleOrg(org)}
+            disabled={org.id === DEFAULT_ORG_ID}
+            className="flex items-center gap-1.5 px-3 py-2 m-3 ml-0 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold text-xs transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            title={org.id === DEFAULT_ORG_ID
+              ? 'A organização padrão do sistema não pode ser desativada'
+              : org.active === false ? 'Reativar acesso online (Realtime + sincronização)' : 'Desativar acesso online (app continua local)'}
+          >
+            <Power className="w-3.5 h-3.5" />
           </button>
           {/* Botão Excluir — protegido: org padrão do sistema não pode ser excluída */}
           <button
@@ -708,6 +767,83 @@ const OrganizationsManager: React.FC<{ onEnterOrg?: (orgId: string) => void }> =
                   disabled={deletingOrg || deleteOrgConfirm.trim() !== deleteOrgTarget.name.trim()}
                   className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-600/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                   {deletingOrg ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Excluindo...</> : <><Trash2 className="w-3.5 h-3.5" /> Excluir Definitivamente</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ============================================================ */}
+      {/* MODAL: Desativar / Reativar acesso online (interruptor)      */}
+      {/* ============================================================ */}
+      {toggleOrgTarget && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[15vh] bg-slate-950/60 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className={toggleOrgTarget.active === false
+              ? 'bg-gradient-to-br from-emerald-950 via-slate-900 to-black p-5 text-white relative overflow-hidden'
+              : 'bg-gradient-to-br from-amber-950 via-slate-900 to-black p-5 text-white relative overflow-hidden'}>
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.2),transparent_50%)] pointer-events-none" />
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center"><Power className="w-5 h-5 text-amber-300" /></div>
+                  <div>
+                    <h2 className="text-lg font-bold">{toggleOrgTarget.active === false ? 'Reativar acesso online' : 'Desativar acesso online'}</h2>
+                    <p className="text-xs text-slate-300">Organização: <strong className="break-words">{toggleOrgTarget.name}</strong></p>
+                  </div>
+                </div>
+                <button onClick={() => setToggleOrgTarget(null)} className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"><X className="w-4 h-4" /></button>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+                {toggleOrgTarget.active === false ? (
+                  <>
+                    <p className="text-sm font-bold text-amber-600 dark:text-amber-400 mb-1">Reativar <strong className="break-words">{toggleOrgTarget.name}</strong>?</p>
+                    <p className="text-xs text-slate-500 dark:text-[#a1a1aa] mt-1">
+                      O acesso online volta imediatamente: tempo real, sincronização e backup na nuvem. Os apps dos
+                      clientes reconectam sozinhos (verificação automática a cada 30s) e a fila de operações feita
+                      offline durante a suspensão é enviada para o banco sem perda de dados.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-bold text-amber-600 dark:text-amber-400 mb-1">⚠️ Desativar <strong className="break-words">{toggleOrgTarget.name}</strong>?</p>
+                    <p className="text-xs text-slate-500 dark:text-[#a1a1aa] mt-1">
+                      O app desta organização passa a funcionar <strong>apenas localmente</strong>: tempo real e sincronização
+                      em nuvem são cortados. Nenhum dado é apagado — nem no app, nem no banco. As operações feitas
+                      offline ficam guardadas no dispositivo e são enviadas automaticamente quando você reativar.
+                    </p>
+                  </>
+                )}
+              </div>
+              <div className="flex items-start gap-2 p-3 rounded-2xl bg-slate-100 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]">
+                <AlertCircle className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-slate-500 dark:text-[#a1a1aa]">
+                  Use o interruptor para gerenciar o acesso online por mensalidade: assinatura em dia = organização
+                  <strong className="text-emerald-600 dark:text-emerald-400"> Online</strong>; atraso/cancelamento = organização
+                  <strong className="text-amber-600 dark:text-amber-400"> Acesso offline</strong>. O cliente continua usando o app
+                  local para sempre, mesmo com acesso online cortado.
+                </p>
+              </div>
+              {toggleOrgError && (
+                <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-600 dark:text-rose-400">
+                  {toggleOrgError}
+                </div>
+              )}
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setToggleOrgTarget(null)} disabled={togglingOrg}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-[#27272a] text-xs font-semibold text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-50 dark:hover:bg-[#09090b] transition-all disabled:opacity-60">
+                  Cancelar
+                </button>
+                <button type="button" onClick={handleToggleOrg}
+                  disabled={togglingOrg}
+                  className={`flex-1 py-2.5 rounded-xl text-white font-bold text-xs shadow-md transition-all disabled:opacity-50 flex items-center justify-center gap-2 ${
+                    toggleOrgTarget.active === false
+                      ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                      : 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'}`}>
+                  {togglingOrg ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando...</> : toggleOrgTarget.active === false
+                    ? <><Power className="w-3.5 h-3.5" /> Reativar Acesso</>
+                    : <><Power className="w-3.5 h-3.5" /> Desativar Acesso</>}
                 </button>
               </div>
             </div>
