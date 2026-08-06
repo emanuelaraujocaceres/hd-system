@@ -27,7 +27,10 @@ type TableName =
   | 'system_settings'
   | 'scanned_boletos'
   | 'credit_payments'
-  | 'nf_records';
+  | 'nf_records'
+  | 'footer_messages'
+  | 'media_devices'
+  | 'printers';
 
 type QueueAction = 'upsert' | 'delete' | 'upsert_batch';
 

@@ -1690,9 +1690,9 @@ class StorageService {
       {
         const local = this.get<MediaDevice[]>(KEYS.MEDIA_DEVICES, []);
         const merged = mergeBy(KEYS.MEDIA_DEVICES, local, mediaDevices,
-          (r: any) => ({
+          (r: any): MediaDevice => ({
             id: r.id, name: r.name || '',
-            deviceType: (r.device_type === 'vitrine' ? 'vitrine' : 'tv'),
+            deviceType: r.device_type === 'vitrine' ? 'vitrine' : 'tv',
             address: r.address || undefined,
             pairingCode: r.pairing_code || '',
             active: r.is_active !== false,

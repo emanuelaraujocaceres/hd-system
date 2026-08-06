@@ -7,7 +7,6 @@ import {
   Minimize2,
   Sparkles,
   Building2,
-  QrCode,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -42,7 +41,6 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [timeString, setTimeString] = useState('');
   const [footerMessages, setFooterMessages] = useState<FooterMessage[]>([]);
 
@@ -179,14 +177,6 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
             <Clock className="w-5 h-5 text-amber-400" />
             <span>{timeString}</span>
           </div>
-
-          <button
-            onClick={() => setIsQrModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2"
-          >
-            <QrCode className="w-4 h-4" />
-            <span className="hidden sm:inline">QR Code</span>
-          </button>
 
           <button
             onClick={() => setIsPlaying(!isPlaying)}
@@ -393,48 +383,6 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
           ])}
         </div>
       </div>
-
-      {/* QR CODE MODAL FOR PAYMENTS & ORDERS */}
-      {isQrModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 max-w-sm w-full text-center space-y-6 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <QrCode className="w-5 h-5 text-amber-400" />
-                <span>QR Code de Atendimento</span>
-              </h3>
-              <button
-                onClick={() => setIsQrModalOpen(false)}
-                className="p-1.5 text-zinc-400 hover:text-white rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 bg-white rounded-2xl shadow-inner flex flex-col items-center justify-center space-y-3">
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://hd-system-pdv.app/filial/${currentBranch.id}`}
-                alt="QR Code"
-                className="w-48 h-48 rounded-lg"
-              />
-              <span className="text-zinc-800 text-xs font-mono font-bold">
-                PIX / Cardápio Digital
-              </span>
-            </div>
-
-            <p className="text-xs text-zinc-400">
-              Aponta a câmera do seu celular para ver o catálogo completo, fazer seu pedido ou realizar pagamentos via PIX.
-            </p>
-
-            <button
-              onClick={() => setIsQrModalOpen(false)}
-              className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-lg transition-colors"
-            >
-              Fechar QR Code
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

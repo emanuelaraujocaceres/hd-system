@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   CreditCard,
   Banknote,
-  QrCode,
+  Smartphone,
   UserCheck,
   CheckCircle2,
   AlertCircle,
@@ -24,7 +24,6 @@ import {
 } from '../../types';
 import { storageService } from '../../services/storageService';
 import { pixConfigService } from '../../services/pixConfigService';
-import { generatePixPayload, generatePixQrCode } from '../../lib/pix';
 import { posAudio } from '../../services/audioService';
 import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
 import { LoadingButton } from '../shared/LoadingButton';
@@ -88,56 +87,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   useEscapeKey(onClose, isOpen);
 
-  // QR Code data URL for PIX (generated async)
-  const [qrDataUrl, setQrDataUrl] = useState<string>('');
-  const [pixPayload, setPixPayload] = useState<string>('');
-
   // Resolve effective PIX config per branch (pixConfigService > settings.pixKey)
   const branchId = storageService.getSelectedBranchId();
   const effectivePixKey = pixConfigService.getEffectivePixKey(branchId, settings.pixKey) || '';
-  const effectiveTitle = pixConfigService.getEffectiveTitle(branchId, settings.tradeName);
-  const effectiveCity = pixConfigService.getEffectiveCity(branchId, settings.city);
-
-  // Generate QR code data URL whenever PIX details change
-  const generateQr = useCallback(async () => {
-    if (!effectivePixKey) {
-      setQrDataUrl('');
-      setPixPayload('');
-      return;
-    }
-    try {
-      const identificador = `VEN-${Date.now()}`;
-      const payload = generatePixPayload({
-        chavePix: effectivePixKey,
-        valor: totalAmount,
-        nomeTitular: effectiveTitle,
-        cidade: effectiveCity,
-        identificador,
-      });
-      setPixPayload(payload);
-
-      const dataUrl = await generatePixQrCode({
-        chavePix: effectivePixKey,
-        valor: totalAmount,
-        nomeTitular: effectiveTitle,
-        cidade: effectiveCity,
-        identificador,
-        width: 250,
-        margin: 1,
-      });
-      setQrDataUrl(dataUrl);
-    } catch (e) {
-      console.error('[HD-Sync] QR code generation failed:', e);
-      setQrDataUrl('');
-      setPixPayload('');
-    }
-  }, [effectivePixKey, effectiveTitle, effectiveCity, totalAmount]);
-
-  useEffect(() => {
-    if (method === 'pix' && isOpen) {
-      generateQr();
-    }
-  }, [method, isOpen, generateQr]);
 
   useEffect(() => {
     setCashGiven(totalAmount);
@@ -163,16 +115,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   useEffect(() => {
     setPaymentError(null);
   }, [isOpen, method]);
-
-  // Simulate auto PIX payment confirmation after 3.5 seconds
-  useEffect(() => {
-    if (method === 'pix' && !pixPaid) {
-      const timer = setTimeout(() => {
-        setPixPaid(true);
-      }, 15000);
-      return () => clearTimeout(timer);
-    }
-  }, [method, pixPaid]);
 
   const isPixUnconfirmed = method === 'pix' && !pixPaid;
 
@@ -208,8 +150,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const changeDue = Math.max(0, cashGiven - totalAmount);
 
   const handleCopyPix = () => {
-    if (!pixPayload) return;
-    navigator.clipboard.writeText(pixPayload);
+    if (!effectivePixKey) return;
+    navigator.clipboard.writeText(effectivePixKey);
     setPixCopied(true);
     posAudio.click();
     setTimeout(() => setPixCopied(false), 2000);
@@ -404,7 +346,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             {!isSplit ? (
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 {[
-                  { id: 'pix', label: 'PIX QrCode', icon: QrCode, badge: 'Simulação' },
+                  { id: 'pix', label: 'PIX', icon: Smartphone },
                   { id: 'cash', label: 'Dinheiro', icon: Banknote, badge: 'Troco' },
                   { id: 'credit_card', label: 'Crédito', icon: CreditCard, badge: 'Até 12x' },
                   { id: 'debit_card', label: 'Débito', icon: CreditCard },
@@ -605,46 +547,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
                 {/* METHOD: PIX */}
                 {method === 'pix' && (() => {
-                  const activePixKey = effectivePixKey || 'Nenhuma chave configurada';
                   const hasPixConfig = !!effectivePixKey;
 
                   return (
-                    <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/20 flex flex-col sm:flex-row items-center gap-4">
-                      {/* Dynamic QR Code Box */}
-                      <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800 flex flex-col items-center shrink-0 w-44 text-center">
-                        <div className="w-36 h-36 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center overflow-hidden p-1 relative">
-                          {!hasPixConfig ? (
-                            <div className="text-xs text-red-400 text-center px-2">
-                              <AlertCircle className="w-6 h-6 mx-auto mb-1 text-red-400" />
-                              Chave PIX não configurada
-                            </div>
-                          ) : qrDataUrl ? (
-                            <img
-                              src={qrDataUrl}
-                              alt="QR Code PIX"
-                              className="w-full h-full object-contain"
-                            />
-                          ) : (
-                            <div className="text-xs text-slate-400 animate-pulse">Gerando QR Code...</div>
-                          )}
-                        </div>
-                        <div className="mt-2 w-full">
-                          <span className="text-[10px] text-slate-400 uppercase font-extrabold block">
-                            Chave PIX Cadastrada
-                          </span>
-                          <span className="text-xs font-mono font-bold text-slate-900 dark:text-sky-300 break-all select-all block bg-slate-100 dark:bg-slate-800 p-1 rounded mt-0.5 border border-slate-200 dark:border-slate-700">
-                            {activePixKey}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex-1 space-y-2 text-center sm:text-left">
-                        <div className="flex items-center justify-center sm:justify-start gap-2">
+                    <div className="p-4 rounded-xl bg-sky-500/5 border border-sky-500/20 space-y-3">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-slate-900 dark:text-white">
-                            Pagamento PIX Instantâneo
-                          </span>
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 italic">
-                            Simulação
+                            Pagamento PIX
                           </span>
                           {pixPaid ? (
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
@@ -656,38 +566,53 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                             </span>
                           )}
                         </div>
-
-                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                          Apresente o QR Code na tela para o cliente escanear no aplicativo do banco ou copie a chave Pix Copia e Cola.
-                        </p>
-
-                        {!pixPaid && (
-                          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-semibold flex items-center gap-2 animate-pulse">
-                            <AlertCircle className="w-4 h-4 shrink-0" />
-                            <span>Aguardando confirmação do pagamento...</span>
-                          </div>
-                        )}
-
-                        {!pixPaid && (
-                          <button
-                            type="button"
-                            onClick={() => setPixPaid(true)}
-                            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm min-h-[44px]"
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                            <span>Simular Confirmação de Pagamento</span>
-                          </button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={handleCopyPix}
-                          className="w-full sm:w-auto px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm min-h-[44px]"
-                        >
-                          {pixCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                          <span>{pixCopied ? 'Chave Copiada!' : 'Copiar Pix Copia e Cola'}</span>
-                        </button>
+                        <span className="text-xl font-extrabold text-sky-600 dark:text-sky-400">
+                          R$ {totalAmount.toFixed(2)}
+                        </span>
                       </div>
+
+                      {!hasPixConfig ? (
+                        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 shrink-0" />
+                          <span>Chave PIX não configurada. Cadastre a chave da filial nas Configurações.</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-2">
+                            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-extrabold">
+                              Chave PIX para receber o pagamento
+                            </p>
+                            <p className="text-lg font-mono font-bold text-slate-900 dark:text-sky-300 break-all select-all">
+                              {effectivePixKey}
+                            </p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                              Informe esta chave no aplicativo do banco do cliente (ou copie ao lado). Assim que o pagamento for confirmado no celular, clique em "Confirmar Pagamento Recebido".
+                            </p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={handleCopyPix}
+                              className="flex-1 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm min-h-[44px]"
+                            >
+                              {pixCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                              <span>{pixCopied ? 'Chave Copiada!' : 'Copiar Chave PIX'}</span>
+                            </button>
+
+                            {!pixPaid && (
+                              <button
+                                type="button"
+                                onClick={() => { setPixPaid(true); posAudio.chime(); }}
+                                className="flex-1 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-sm min-h-[44px]"
+                              >
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>Confirmar Pagamento Recebido</span>
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })()}

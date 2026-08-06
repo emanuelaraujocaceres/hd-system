@@ -17,7 +17,7 @@ import {
   Mail,
   UserPlus,
   Tv,
-  QrCode,
+  Smartphone,
   Copy,
   Megaphone,
   ArrowUp,
@@ -789,7 +789,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           {/* ── PIX CONFIG PER BRANCH ──────────────────────────── */}
           <div className="p-6 rounded-3xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm space-y-4">
             <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-[#27272a] pb-3">
-              <QrCode className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <Smartphone className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               <span>Chave PIX por Filial</span>
               {currentBranchId && (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 ml-auto">
@@ -889,9 +889,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-[11px] text-slate-500 dark:text-[#71717a]">
-                  <strong>Como funciona:</strong> O QR Code PIX no PDV usa a chave configurada acima para a filial atual.
+                  <strong>Como funciona:</strong> O PDV usa a chave PIX configurada acima para a filial atual.
                   Se nao houver chave configurada, usa a chave global (campo acima).
-                  O cliente escaneia o QR Code, paga, e voce clica em "Recebido" para finalizar.
+                  Voce informa a chave para o cliente pagar no app do banco e clica em "Confirmar Pagamento Recebido" para finalizar a venda.
                 </div>
               </div>
             )}
