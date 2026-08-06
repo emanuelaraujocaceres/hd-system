@@ -1207,8 +1207,13 @@ class StorageService {
 
       // Merge branches into localStorage para que getBranches() retorne dados atualizados
       if (cloudBranches.length > 0) {
+        // REGRA 1 (cloud = fonte da verdade): filiais locais que NÃO existem no
+        // cloud são podadas (seed mock INITIAL_BRANCHES, filiais apagadas do banco,
+        // fantasmas de outros aparelhos). Antes o merge era aditivo e nunca removia,
+        // então as 3 filiais do seed "HD-System" voltavam a cada limpeza de dados.
+        const cloudIds = new Set(cloudBranches.map((r) => r.id));
         const localBranches = this.get<StoreBranch[]>(KEYS.BRANCHES, this.isDefaultOrg() ? INITIAL_BRANCHES : []);
-        const merged = [...localBranches];
+        const merged = localBranches.filter((b) => cloudIds.has(b.id));
         for (const row of cloudBranches) {
           const mapped: StoreBranch = {
             id: row.id, name: row.name, code: row.code,
