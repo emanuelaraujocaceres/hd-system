@@ -94,6 +94,13 @@ class StorageService {
     return StorageService.newId();
   }
 
+  /** Status da TV/vitrine derivado do heartbeat: online se last_seen_at < 60s. */
+  private static mediaStatusFrom(lastSeenAt?: string | null): 'online' | 'offline' | 'pending' {
+    if (!lastSeenAt) return 'pending';
+    const ageMs = Date.now() - new Date(lastSeenAt).getTime();
+    return Number.isFinite(ageMs) && ageMs <= 60000 ? 'online' : 'offline';
+  }
+
   /** Valida se uma string é um UUID válido (v3, v4 ou v5). */
   isValidUuid(value: string | undefined | null): boolean {
     return !!value && StorageService.UUID_RE.test(value);
@@ -1668,8 +1675,8 @@ class StorageService {
         const local = this.get<FooterMessage[]>(KEYS.FOOTER_MESSAGES, []);
         const merged = mergeBy(KEYS.FOOTER_MESSAGES, local, footerMessages,
           (r: any) => ({
-            id: r.id, text: r.text || '',
-            active: r.is_active !== false,
+            id: r.id, message: r.message || '',
+            active: r.active !== false,
             sortOrder: parseInt(r.sort_order) || 0,
             storeBranchId: r.store_branch_id || undefined,
             organizationId: r.organization_id || this.getCurrentOrgId(),
@@ -1686,9 +1693,11 @@ class StorageService {
           (r: any) => ({
             id: r.id, name: r.name || '',
             deviceType: (r.device_type === 'vitrine' ? 'vitrine' : 'tv'),
+            address: r.address || undefined,
             pairingCode: r.pairing_code || '',
-            status: (r.status === 'online' || r.status === 'pending' ? r.status : 'offline'),
-            lastHeartbeatAt: r.last_heartbeat_at || undefined,
+            active: r.is_active !== false,
+            status: StorageService.mediaStatusFrom(r.last_seen_at),
+            lastSeenAt: r.last_seen_at || undefined,
             storeBranchId: r.store_branch_id || undefined,
             organizationId: r.organization_id || this.getCurrentOrgId(),
           }),
@@ -1703,11 +1712,13 @@ class StorageService {
         const merged = mergeBy(KEYS.PRINTERS, local, printers,
           (r: any) => ({
             id: r.id, name: r.name || '',
-            type: r.type || 'network',
-            interface: r.interface || undefined,
-            paperSize: r.paper_size || '80mm',
+            model: r.model || undefined,
+            transport: (r.transport === 'webusb' || r.transport === 'serial' || r.transport === 'os' ? r.transport : 'network'),
+            ipAddress: r.ip_address || undefined,
+            port: parseInt(r.port) || undefined,
             isDefault: r.is_default === true,
-            active: r.is_active !== false,
+            status: r.status || 'offline',
+            lastSeenAt: r.last_seen_at || undefined,
             storeBranchId: r.store_branch_id || undefined,
             organizationId: r.organization_id || this.getCurrentOrgId(),
           }),
@@ -3164,8 +3175,8 @@ class StorageService {
       id: f.id,
       organization_id: this.getCurrentOrgId(),
       store_branch_id: f.storeBranchId || null,
-      text: f.text,
-      is_active: f.active,
+      message: f.message,
+      active: f.active,
       sort_order: f.sortOrder || 0,
     });
   }
@@ -3173,8 +3184,8 @@ class StorageService {
   updateFooterMessageFromRemote(row: any) {
     const all = this.get<FooterMessage[]>(KEYS.FOOTER_MESSAGES, []);
     const mapped: FooterMessage = {
-      id: row.id, text: row.text || '',
-      active: row.is_active !== false,
+      id: row.id, message: row.message || '',
+      active: row.active !== false,
       sortOrder: parseInt(row.sort_order) || 0,
       storeBranchId: row.store_branch_id || undefined,
       organizationId: row.organization_id || undefined,
@@ -3222,9 +3233,11 @@ class StorageService {
       store_branch_id: d.storeBranchId || null,
       name: d.name,
       device_type: d.deviceType,
+      address: d.address || null,
       pairing_code: d.pairingCode,
-      status: d.status,
-      last_heartbeat_at: d.lastHeartbeatAt || null,
+      is_active: d.active,
+      // last_seen_at NÃO é escrito aqui: é gerenciado pelo heartbeat RPC no
+      // servidor (throttle 15s) — sobrescrever quebraria o status online/offline.
     });
   }
 
@@ -3233,9 +3246,11 @@ class StorageService {
     const mapped: MediaDevice = {
       id: row.id, name: row.name || '',
       deviceType: (row.device_type === 'vitrine' ? 'vitrine' : 'tv'),
+      address: row.address || undefined,
       pairingCode: row.pairing_code || '',
-      status: (row.status === 'online' || row.status === 'pending' ? row.status : 'offline'),
-      lastHeartbeatAt: row.last_heartbeat_at || undefined,
+      active: row.is_active !== false,
+      status: StorageService.mediaStatusFrom(row.last_seen_at),
+      lastSeenAt: row.last_seen_at || undefined,
       storeBranchId: row.store_branch_id || undefined,
       organizationId: row.organization_id || undefined,
     };
@@ -3281,11 +3296,13 @@ class StorageService {
       organization_id: this.getCurrentOrgId(),
       store_branch_id: p.storeBranchId || null,
       name: p.name,
-      type: p.type,
-      interface: p.interface || null,
-      paper_size: p.paperSize || '80mm',
+      model: p.model || null,
+      transport: p.transport,
+      ip_address: p.ipAddress || null,
+      port: p.port || null,
       is_default: p.isDefault,
-      is_active: p.active,
+      status: p.status || 'offline',
+      // last_seen_at é gerenciado pelo servidor — não sobrescrever.
     });
   }
 
@@ -3293,11 +3310,13 @@ class StorageService {
     const all = this.get<Printer[]>(KEYS.PRINTERS, []);
     const mapped: Printer = {
       id: row.id, name: row.name || '',
-      type: row.type || 'network',
-      interface: row.interface || undefined,
-      paperSize: row.paper_size || '80mm',
+      model: row.model || undefined,
+      transport: (row.transport === 'webusb' || row.transport === 'serial' || row.transport === 'os' ? row.transport : 'network'),
+      ipAddress: row.ip_address || undefined,
+      port: parseInt(row.port) || undefined,
       isDefault: row.is_default === true,
-      active: row.is_active !== false,
+      status: row.status || 'offline',
+      lastSeenAt: row.last_seen_at || undefined,
       storeBranchId: row.store_branch_id || undefined,
       organizationId: row.organization_id || undefined,
     };

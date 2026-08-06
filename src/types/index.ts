@@ -283,25 +283,30 @@ export interface SystemSettings {
 
 // ─── FRENTES TV E IMPRESSORA (agosto/2026) ─────────────────────────────
 // Sincronizadas — tabelas footer_messages, media_devices, printers.
+// Nomes de coluna conferidos contra o catálogo real do Supabase.
 
 // Mensagem do rodapé da vitrine de TV (tabela footer_messages)
 export interface FooterMessage {
   id: string;
-  text: string;
-  active: boolean;
-  sortOrder: number;
+  message: string;   // coluna message
+  active: boolean;   // coluna active
+  sortOrder: number; // coluna sort_order
   storeBranchId?: string;
   organizationId?: string;
 }
 
-// Dispositivo de TV/vitrine pareado (tabela media_devices)
+// Dispositivo de TV/vitrine pareado (tabela media_devices).
+// ATENÇÃO: não existe coluna status no banco — status é DERIVADO de
+// last_seen_at (online se heartbeat < 60s).
 export interface MediaDevice {
   id: string;
   name: string;
   deviceType: 'tv' | 'vitrine';
-  pairingCode: string;
+  address?: string;      // coluna address
+  pairingCode: string;   // coluna pairing_code
+  active: boolean;       // coluna is_active
   status: 'online' | 'offline' | 'pending';
-  lastHeartbeatAt?: string;
+  lastSeenAt?: string;   // coluna last_seen_at
   storeBranchId?: string;
   organizationId?: string;
 }
@@ -310,11 +315,13 @@ export interface MediaDevice {
 export interface Printer {
   id: string;
   name: string;
-  type: 'webusb' | 'serial' | 'network' | 'os';
-  interface?: string; // p.ex. "0483:5740" (WebUSB) ou "192.168.0.20:9100"
-  paperSize?: '58mm' | '80mm';
-  isDefault: boolean;
-  active: boolean;
+  model?: string;                                        // coluna model
+  transport: 'webusb' | 'serial' | 'network' | 'os';     // coluna transport
+  ipAddress?: string;                                    // coluna ip_address
+  port?: number;                                         // coluna port
+  isDefault: boolean;                                    // coluna is_default
+  status?: string;                                       // coluna status (texto bruto)
+  lastSeenAt?: string;                                   // coluna last_seen_at
   storeBranchId?: string;
   organizationId?: string;
 }
