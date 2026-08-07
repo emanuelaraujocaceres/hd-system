@@ -1112,7 +1112,14 @@ export const App: React.FC = () => {
               )}
 
               {activeTab === 'comanda' && (
-                <ComandaView />
+                <ComandaView
+                  sales={sales}
+                  customers={customers}
+                  tables={storageService.getTables()}
+                  customerSessions={storageService.getCustomerSessions()}
+                  products={products}
+                  user={user}
+                />
               )}
 
               {activeTab === 'kds' && (

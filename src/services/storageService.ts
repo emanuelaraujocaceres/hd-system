@@ -2719,6 +2719,41 @@ class StorageService {
     }
   }
 
+  // ─── saveSale: atualiza uma venda existente (usado pela ComandaView) ──
+  saveSale(sale: Sale) {
+    sale.id = StorageService.ensureUuid(sale.id);
+    sale.organizationId = sale.organizationId || this.getCurrentOrgId();
+    sale.storeBranchId = sale.storeBranchId || this.getSelectedBranchId() || undefined;
+    if (!sale.updatedAt) sale.updatedAt = new Date().toISOString();
+
+    // Atualiza sale_items no localStorage
+    if (sale.items && sale.items.length > 0) {
+      const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
+      const newItems = sale.items.map((item) => ({
+        id: StorageService.newId(),
+        sale_id: sale.id,
+        product_id: item.productId && StorageService.UUID_RE.test(item.productId) ? item.productId : null,
+        product_name: item.productName || '',
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        total_price: item.total,
+        store_branch_id: sale.storeBranchId || this.getSelectedBranchId() || null,
+      }));
+      const filtered = existingItems.filter((i: any) => i.sale_id !== sale.id);
+      this.set(KEYS.SALE_ITEMS, [...newItems, ...filtered]);
+    }
+
+    // Atualiza a venda no array
+    const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
+    const idx = sales.findIndex((s) => s.id === sale.id);
+    if (idx >= 0) sales[idx] = sale;
+    else sales.unshift(sale);
+    this.set(KEYS.SALES, sales);
+
+    // Sync com o cloud
+    this.syncSale(sale);
+  }
+
   // --- CAIXA (CASH REGISTER) ---
   getActiveCaixaSession(): CashRegisterSession {
     // Leitura direta da chave particionada (sem o fallback do get<> para a
