@@ -92,7 +92,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
 
         // Fetch products for this branch
         const productsRes = await fetch(
-          `${baseUrl}/rest/v1/products?store_branch_id=eq.${foundTable.storeBranchId}&active=eq.true&show_on_cardapio=eq.true&select=*`,
+          `${baseUrl}/rest/v1/products?store_branch_id=eq.${foundTable.storeBranchId}&is_active=eq.true&show_on_cardapio=eq.true&select=*`,
           {
             headers: {
               'apikey': anonKey,
