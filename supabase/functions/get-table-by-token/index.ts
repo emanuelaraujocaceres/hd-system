@@ -18,8 +18,16 @@ serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url);
-    const token = url.searchParams.get('token');
+    let token: string | null = null;
+
+    // Accept token from query param (GET) or body (POST)
+    if (req.method === 'GET') {
+      const url = new URL(req.url);
+      token = url.searchParams.get('token');
+    } else {
+      const body = await req.json().catch(() => ({}));
+      token = body.token || null;
+    }
 
     if (!token) {
       return new Response(JSON.stringify({ error: 'Token e obrigatorio' }), {
