@@ -1,0 +1,71 @@
+-- ==============================================================================
+-- 20260808_rls_isolation_phase1.sql
+-- Phase 1: Ativar RLS + policies permissivas (USING (true))
+--
+-- OBJETIVO: Ativar Row Level Security em todas as tabelas sem quebrar o app.
+-- Policies permissivas permitem leitura/escrita via anon key, funcionando
+-- igual ao comportamento atual (sem RLS).
+--
+-- INSTRUÇÕES:
+-- 1. Acesse https://supabase.com/dashboard → seu projeto → SQL Editor
+-- 2. Cole este SQL e execute
+-- 3. Após confirmar que o app funciona, aplique a Phase 2 (policies reais)
+-- ==============================================================================
+
+DO $$
+DECLARE
+  t TEXT;
+  tables TEXT[] := ARRAY[
+    'products', 'categories', 'customers', 'suppliers',
+    'sales', 'sale_items', 'financial_transactions',
+    'cash_sessions', 'stock_movements', 'store_branches',
+    'system_users', 'system_settings',
+    'scanned_boletos', 'credit_payments', 'nf_records',
+    'footer_messages', 'media_devices', 'printers',
+    'tables', 'customer_sessions', 'digital_menu_config',
+    'branch_themes', 'api_keys',
+    'profiles', 'organizations',
+    'financial_accounts', 'caixa_sessions'
+  ];
+BEGIN
+  FOR t IN SELECT unnest(tables) LOOP
+    -- Habilitar RLS
+    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
+    
+    -- Drop policies existentes (idempotente)
+    EXECUTE format('DROP POLICY IF EXISTS "%s_r" ON public.%I', t, t);
+    EXECUTE format('DROP POLICY IF EXISTS "%s_a" ON public.%I', t, t);
+    EXECUTE format('DROP POLICY IF EXISTS "%s_u" ON public.%I', t, t);
+    EXECUTE format('DROP POLICY IF EXISTS "%s_d" ON public.%I', t, t);
+    
+    -- Policies permissivas
+    EXECUTE format('CREATE POLICY "%s_r" ON public.%I FOR SELECT USING (true)', t, t);
+    EXECUTE format('CREATE POLICY "%s_a" ON public.%I FOR INSERT WITH CHECK (true)', t, t);
+    EXECUTE format('CREATE POLICY "%s_u" ON public.%I FOR UPDATE USING (true) WITH CHECK (true)', t, t);
+    EXECUTE format('CREATE POLICY "%s_d" ON public.%I FOR DELETE USING (true)', t, t);
+    
+    RAISE NOTICE '✅ RLS + policies permissivas: %', t;
+  END LOOP;
+END $$;
+
+-- Verificar status
+DO $$
+DECLARE
+  t TEXT;
+BEGIN
+  FOR t IN
+    SELECT unnest(ARRAY[
+      'products', 'categories', 'customers', 'suppliers',
+      'sales', 'sale_items', 'financial_transactions',
+      'cash_sessions', 'stock_movements', 'store_branches',
+      'system_users', 'system_settings',
+      'profiles', 'organizations'
+    ])
+  LOOP
+    IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename=t AND rowsecurity=true) THEN
+      RAISE NOTICE '✅ %: RLS ativado', t;
+    ELSE
+      RAISE NOTICE '❌ %: RLS NÃO ativado', t;
+    END IF;
+  END LOOP;
+END $$;
