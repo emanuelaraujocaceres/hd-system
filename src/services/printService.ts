@@ -13,7 +13,7 @@
  * da mesma sessão — o operador precisa reconectar após recarregar a página.
  */
 
-import { Sale, SystemSettings, Printer } from '../types';
+import { Sale, SystemSettings, Printer, Table } from '../types';
 
 const ESC = 0x1b;
 const GS = 0x1d;
@@ -27,7 +27,7 @@ function str2bytes(s: string): number[] {
 }
 
 export interface EscPosLine {
-  text: string;
+  text?: string;
   align?: 0 | 1 | 2;   // 0 esquerda | 1 centro | 2 direita
   bold?: boolean;
   size?: number;       // 0 normal | 17 dupla largura | 18 dupla altura | 19 dupla w+h
@@ -46,7 +46,7 @@ export function buildEscPos(lines: EscPosLine[]): Uint8Array {
     out.push(ESC, 0x61, ln.align ?? 0); // alinhamento
     out.push(ESC, 0x45, ln.bold ? 1 : 0); // negrito
     out.push(GS, 0x21, ln.size ?? 0);     // tamanho da fonte
-    out.push(...str2bytes(ln.text));
+    if (ln.text) out.push(...str2bytes(ln.text));
     out.push(0x0a); // LF — imprime e avança
   }
 
@@ -222,4 +222,49 @@ export async function printTestPage(printer: Printer): Promise<void> {
       ? 'Transporte "Rede (IP)" nao imprime direto do navegador. Use USB, Serial ou "Sistema".'
       : 'Transporte nao suportado para impressao direta.',
   );
+}
+
+/** Imprime um pedido da cozinha/bar (uso do cardápio digital). */
+export async function printKitchenOrder(
+  sale: Sale,
+  table: Table,
+  printer: Printer,
+): Promise<void> {
+  const bytes = buildKitchenOrderEscPos(sale, table, printer);
+  if (printer.transport === 'webusb') return printWebUsb(printer, bytes);
+  if (printer.transport === 'serial') return printSerial(printer, bytes);
+  throw new Error(
+    printer.transport === 'network'
+      ? 'Transporte "Rede (IP)" nao imprime direto do navegador. Use USB, Serial ou "Sistema".'
+      : 'Transporte nao suportado para impressao direta.',
+  );
+}
+
+/**
+ * Monta o comando ESC/POS para pedido da cozinha/bar.
+ * Mostra: mesa, código do pedido, itens com quantidades, hora.
+ */
+function buildKitchenOrderEscPos(sale: Sale, table: Table, printer: Printer): Uint8Array {
+  const paperWidth = printer.model?.includes('58') ? 32 : 48;
+  const lines: EscPosLine[] = [];
+
+  // Header
+  lines.push({ text: 'PEDIDO - COZINHA/BAR', align: 1, bold: true, size: 17 });
+  lines.push({ skip: true });
+  lines.push({ text: `Mesa: ${table.name}`, align: 0, bold: true });
+  lines.push({ text: `Pedido: ${sale.code || sale.id.slice(-6)}`, align: 0 });
+  lines.push({ text: `Hora: ${new Date(sale.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`, align: 0 });
+  lines.push({ skip: true });
+
+  // Items
+  lines.push({ text: 'ITENS:', align: 0, bold: true });
+  lines.push({ text: '-'.repeat(paperWidth) });
+  for (const item of sale.items || []) {
+    lines.push({ text: `${item.quantity}x ${item.productName}`, align: 0, bold: true });
+  }
+  lines.push({ text: '-'.repeat(paperWidth) });
+  lines.push({ skip: true });
+  lines.push({ text: `Total itens: ${sale.items?.reduce((a, i) => a + i.quantity, 0) || 0}`, align: 0 });
+
+  return buildEscPos(lines);
 }
