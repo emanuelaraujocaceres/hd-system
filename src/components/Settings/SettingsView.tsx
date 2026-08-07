@@ -28,7 +28,7 @@ import {
   MonitorPlay,
   Palette,
 } from 'lucide-react';
-import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, MediaDevice, BranchTheme } from '../../types';
+import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, PrinterRole, MediaDevice, BranchTheme, Category } from '../../types';
 import { storageService } from '../../services/storageService';
 import { pixConfigService, PixBranchConfig, PixKeyType } from '../../services/pixConfigService';
 import { posAudio } from '../../services/audioService';
@@ -41,10 +41,11 @@ import { BranchCheck } from '../Admin/BranchCheck';
 interface SettingsViewProps {
   settings: SystemSettings;
   branches: StoreBranch[];
+  categories: Category[];
   user: UserProfile;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, user }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, categories, user }) => {
   const isAdmin = user.role === 'admin';
   const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance'>('fiscal');
 
@@ -111,6 +112,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [printerName, setPrinterName] = useState('');
   const [printerModel, setPrinterModel] = useState('');
   const [printerTransport, setPrinterTransport] = useState<Printer['transport']>('webusb');
+  const [printerRole, setPrinterRole] = useState<PrinterRole>('caixa');
+  const [printerCategory, setPrinterCategory] = useState<string>('');
   const [printerIp, setPrinterIp] = useState('');
   const [printerPort, setPrinterPort] = useState('');
   const [printerIsDefault, setPrinterIsDefault] = useState(false);
@@ -699,6 +702,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       name: printerName.trim(),
       model: printerModel.trim() || undefined,
       transport: printerTransport,
+      role: printerRole,
+      categoryId: printerCategory || undefined,
       ipAddress: printerTransport === 'network' ? printerIp.trim() : undefined,
       port: printerTransport === 'network' && printerPort ? parseInt(printerPort) : undefined,
       // A primeira impressora da filial vira padrão automaticamente.
@@ -711,6 +716,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     setPrinterIp('');
     setPrinterPort('');
     setPrinterIsDefault(false);
+    setPrinterRole('caixa');
+    setPrinterCategory('');
     refreshPrinters();
     posAudio.chime();
     setSuccessMessage('Impressora cadastrada!');
@@ -997,6 +1004,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
               <div>
                 <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                  Setor (Roteamento)
+                </label>
+                <select
+                  value={printerRole}
+                  onChange={(e) => setPrinterRole(e.target.value as PrinterRole)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
+                >
+                  <option value="caixa">Caixa</option>
+                  <option value="cozinha">Cozinha</option>
+                  <option value="bar">Bar</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
                   Conexão
                 </label>
                 <select
@@ -1008,6 +1031,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                   <option value="serial">Serial / USB-CDC</option>
                   <option value="network">Rede (IP)</option>
                   <option value="os">Sistema (janela de impressão)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                  Categoria (opcional)
+                </label>
+                <select
+                  value={printerCategory}
+                  onChange={(e) => setPrinterCategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
+                >
+                  <option value="">Todas as categorias</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
                 </select>
               </div>
 
@@ -1088,11 +1127,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                           Padrão
                         </span>
                       )}
+                      {p.role && p.role !== 'caixa' && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 uppercase">
+                          {p.role}
+                        </span>
+                      )}
                     </p>
                     <p className="text-[11px] text-slate-500 dark:text-[#71717a] truncate">
                       {PRINTER_TRANSPORT_LABELS[p.transport] || p.transport}
                       {p.model ? ` • ${p.model}` : ''}
                       {p.ipAddress ? ` • ${p.ipAddress}:${p.port || 9100}` : ''}
+                      {p.categoryId ? ` • Categoria específica` : ''}
                     </p>
                   </div>
 

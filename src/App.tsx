@@ -1120,7 +1120,7 @@ export const App: React.FC = () => {
               )}
 
               {activeTab === 'settings' && (
-                <SettingsView settings={settings} branches={userBranches} user={user} />
+                <SettingsView settings={settings} branches={userBranches} categories={categories} user={user} />
               )}
 
               {activeTab === 'tv-showcase' && (
