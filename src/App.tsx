@@ -1123,7 +1123,12 @@ export const App: React.FC = () => {
               )}
 
               {activeTab === 'kds' && (
-                <KDSView />
+                <KDSView
+                  sales={sales}
+                  tables={storageService.getTables()}
+                  products={products}
+                  user={user}
+                />
               )}
 
               {activeTab === 'settings' && (
