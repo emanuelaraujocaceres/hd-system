@@ -65,6 +65,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [quickFilter, setQuickFilter] = useState<'all' | 'cardapio' | 'tv'>('all');
   const [isSearching, setIsSearching] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  const [compactMode, setCompactMode] = useState(false);
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [sortField, setSortField] = useState<string>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -619,6 +620,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           >
             <Plus className="w-4 h-4" />
             <span>Cadastrar Produto</span>
+          </button>
+          <button
+            onClick={() => setCompactMode((prev) => !prev)}
+            className="px-3 py-2.5 rounded-xl bg-slate-100 dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-200 dark:hover:bg-[#27272a] transition-all"
+            title={compactMode ? 'Modo Cards' : 'Modo Lista'}
+          >
+            {compactMode ? '▦' : '☰'}
           </button>
         </div>
       </div>
