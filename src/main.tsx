@@ -19,7 +19,13 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 function getPublicRoute(): { type: 'menu'; token: string } | null {
   const hash = window.location.hash;
   const match = hash.match(/^#\/mesa\/(.+)$/);
-  if (match) return { type: 'menu', token: match[1] };
+  if (match) {
+    try {
+      return { type: 'menu', token: decodeURIComponent(match[1]) };
+    } catch {
+      return { type: 'menu', token: match[1] };
+    }
+  }
   return null;
 }
 
