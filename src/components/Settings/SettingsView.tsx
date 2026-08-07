@@ -29,6 +29,7 @@ import {
   Palette,
   UtensilsCrossed,
   QrCode,
+  Eye,
 } from 'lucide-react';
 import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, PrinterRole, MediaDevice, BranchTheme, Category, Table, DigitalMenuConfig } from '../../types';
 import { storageService } from '../../services/storageService';
