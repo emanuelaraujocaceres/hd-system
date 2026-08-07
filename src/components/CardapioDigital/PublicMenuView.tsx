@@ -11,6 +11,7 @@ import {
   Loader2,
   QrCode,
   X,
+  Receipt,
 } from 'lucide-react';
 import { Product, Table, DigitalMenuConfig, CustomerSession, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -154,6 +155,27 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
     setCart([]);
   }, []);
 
+  const [myOrders, setMyOrders] = useState<Sale[]>([]);
+  const [showMyComanda, setShowMyComanda] = useState(false);
+  const [closingComanda, setClosingComanda] = useState(false);
+
+  // Load my orders on mount and after submit
+  const loadMyOrders = useCallback(() => {
+    if (!table) return;
+    const allSales = storageService.getSales();
+    const tableSales = allSales.filter(
+      (s) => s.tableId === table.id && s.orderSource === 'cardapio_digital'
+    );
+    setMyOrders(tableSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+  }, [table]);
+
+  useEffect(() => {
+    loadMyOrders();
+    // Refresh orders every 5 seconds
+    const interval = setInterval(loadMyOrders, 5000);
+    return () => clearInterval(interval);
+  }, [loadMyOrders]);
+
   const handleSubmitOrder = async () => {
     if (cart.length === 0 || !table) return;
     setSubmitting(true);
@@ -190,7 +212,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
         updatedAt: new Date().toISOString(),
       };
 
-      storageService.addSale(sale);
+      await storageService.addSale(sale);
 
       // Print to configured printers (routed by category: kitchen/bar/caixa)
       const printers = storageService.getPrinters();
@@ -211,14 +233,70 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
         }
       }
 
-      setOrderSuccess(true);
       setCart([]);
+      loadMyOrders(); // Refresh my orders
+      setOrderSuccess(true);
     } catch (err: any) {
-      setError('Erro ao enviar pedido. Tente novamente.');
+      // silent fail
     } finally {
       setSubmitting(false);
     }
   };
+
+  const handleCloseComanda = async (paymentMethod: Sale['payments'][0]['method']) => {
+    if (!table || myOrders.length === 0) return;
+    setClosingComanda(true);
+    try {
+      // Update all sales with payment method and mark as completed
+      for (const sale of myOrders) {
+        const updatedSale: Sale = {
+          ...sale,
+          status: 'completed',
+          payments: [{ method: paymentMethod, amount: sale.total }],
+          kitchenStatus: sale.kitchenStatus === 'pending' ? 'delivered' : sale.kitchenStatus,
+          updatedAt: new Date().toISOString(),
+        };
+        storageService.saveSale(updatedSale);
+      }
+
+      // Close the session
+      if (session) {
+        storageService.saveCustomerSession({
+          ...session,
+          status: 'completed',
+          closedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      // Print receipt on caixa printer
+      const caixaPrinter = storageService.getPrinters().find((p) => p.role === 'caixa');
+      if (caixaPrinter) {
+        try {
+          const { printComandaReceipt } = await import('../../services/printService');
+          for (const sale of myOrders) {
+            await printComandaReceipt(sale, table, caixaPrinter, paymentMethod);
+          }
+        } catch (e) {
+          // silent fail - printer may not be connected
+        }
+      }
+
+      setMyOrders([]);
+      setShowMyComanda(false);
+      // Redirect to success screen
+      setOrderSuccess(true);
+    } catch (err: any) {
+      // silent fail
+    } finally {
+      setClosingComanda(false);
+    }
+  };
+
+  const myComandaTotal = myOrders.reduce((sum, s) => {
+    const saleTotal = s.total > 0 ? s.total : (s.items?.reduce((a, i) => a + (i.total || 0), 0) || 0);
+    return sum + saleTotal;
+  }, 0);
 
   if (loading) {
     return (
@@ -290,17 +368,31 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
             {table?.name} • {config?.subtitle || 'Escolha seus produtos'}
           </p>
         </div>
-        <button
-          onClick={() => setShowCart(true)}
-          className="relative p-2 rounded-xl bg-indigo-600 text-white"
-        >
-          <ShoppingCart className="w-5 h-5" />
-          {cartCount > 0 && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
-              {cartCount}
-            </span>
+        <div className="flex items-center gap-2">
+          {myOrders.length > 0 && (
+            <button
+              onClick={() => setShowMyComanda(true)}
+              className="relative px-3 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold flex items-center gap-1"
+            >
+              <Receipt className="w-4 h-4" />
+              <span>Minha Comanda</span>
+              <span className="w-5 h-5 rounded-full bg-white/20 text-white text-[10px] font-bold flex items-center justify-center">
+                {myOrders.length}
+              </span>
+            </button>
           )}
-        </button>
+          <button
+            onClick={() => setShowCart(true)}
+            className="relative p-2 rounded-xl bg-indigo-600 text-white"
+          >
+            <ShoppingCart className="w-5 h-5" />
+            {cartCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+                {cartCount}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Category Pills */}
@@ -477,6 +569,87 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
             <ShoppingCart className="w-4 h-4" />
             Ver Pedido ({cartCount}) • R$ {cartTotal.toFixed(2)}
           </button>
+        </div>
+      )}
+
+      {/* My Comanda Modal */}
+      {showMyComanda && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowMyComanda(false)}>
+          <div className="bg-white dark:bg-[#18181b] w-full max-w-md max-h-[85vh] rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Receipt className="w-4 h-4" />
+                Minha Comanda — {table?.name}
+              </h3>
+              <button onClick={() => setShowMyComanda(false)} className="p-1 rounded-lg text-slate-400 hover:bg-slate-100">✕</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {myOrders.length === 0 ? (
+                <div className="text-center py-8 text-sm text-slate-400">
+                  Nenhum pedido ainda. Faça seu primeiro pedido!
+                </div>
+              ) : (
+                myOrders.map((sale) => (
+                  <div key={sale.id} className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-bold text-slate-500">
+                        #{sale.code || sale.id.slice(-6)}
+                      </span>
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                        sale.kitchenStatus === 'pending' ? 'bg-yellow-500/10 text-yellow-600' :
+                        sale.kitchenStatus === 'preparing' ? 'bg-blue-500/10 text-blue-600' :
+                        sale.kitchenStatus === 'ready' ? 'bg-emerald-500/10 text-emerald-600' :
+                        'bg-slate-500/10 text-slate-600'
+                      }`}>
+                        {sale.kitchenStatus === 'pending' ? 'Pendente' :
+                         sale.kitchenStatus === 'preparing' ? 'Preparando' :
+                         sale.kitchenStatus === 'ready' ? 'Pronto' : 'Entregue'}
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      {(sale.items || []).map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-700 dark:text-slate-300">
+                            {item.quantity}x {item.productName}
+                          </span>
+                          <span className="font-semibold text-slate-900 dark:text-white">R$ {item.total.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-slate-200 dark:border-[#27272a] flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400">{new Date(sale.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">
+                        R$ {(sale.total > 0 ? sale.total : (sale.items?.reduce((a, i) => a + (i.total || 0), 0) || 0)).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            {myOrders.length > 0 && (
+              <div className="p-4 border-t border-slate-200 dark:border-[#27272a] space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-slate-700 dark:text-slate-300">TOTAL</span>
+                  <span className="text-xl font-bold text-slate-900 dark:text-white">R$ {myComandaTotal.toFixed(2)}</span>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase">Forma de Pagamento</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['pix', 'cash', 'credit_card', 'debit_card'] as const).map((method) => (
+                      <button
+                        key={method}
+                        onClick={() => handleCloseComanda(method)}
+                        disabled={closingComanda}
+                        className="py-2 px-3 rounded-xl bg-slate-100 dark:bg-[#27272a] text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-teal-500 hover:text-white transition-colors disabled:opacity-50"
+                      >
+                        {method === 'pix' ? 'PIX' : method === 'cash' ? 'Dinheiro' : method === 'credit_card' ? 'Crédito' : 'Débito'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
