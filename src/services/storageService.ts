@@ -522,6 +522,8 @@ class StorageService {
         store_branch_id: branchUuid,
         user_id: s.operatorId && StorageService.UUID_RE.test(s.operatorId) ? s.operatorId : null,
         customer_id: s.customerId || null,
+        table_id: s.tableId || null,
+        customer_session_id: s.customerSessionId || null,
         code: s.code,
         created_at: s.date,                    // timestamp do momento da finalização
         operator_name: s.operatorName,         // nome real do usuário logado
@@ -529,6 +531,8 @@ class StorageService {
         discount: s.discount,
         total: s.total,
         payment_method: s.payments[0]?.method || 'cash',
+        order_source: s.orderSource || 'pdv',
+        kitchen_status: s.kitchenStatus || 'pending',
         status: s.status,
         notes: s.customerName || null,
         customer_name: s.customerName || null,
@@ -839,11 +843,15 @@ class StorageService {
       customerId: row.customer_id || existing?.customerId || undefined,
       customerName: (row.customer_name ?? row.notes) || existing?.customerName || undefined,
       storeBranchId: row.store_branch_id ?? existing?.storeBranchId ?? '',
+      tableId: row.table_id || existing?.tableId || undefined,
+      customerSessionId: row.customer_session_id || existing?.customerSessionId || undefined,
       items: existing?.items || [],
       subtotal: row.subtotal !== undefined && row.subtotal !== null ? parseFloat(row.subtotal) : (existing?.subtotal ?? 0),
       discount: row.discount !== undefined && row.discount !== null ? parseFloat(row.discount) : (existing?.discount ?? 0),
       total: row.total !== undefined && row.total !== null ? parseFloat(row.total) : (existing?.total ?? 0),
       payments: existing?.payments || [{ method: (row.payment_method as any) || 'cash', amount: parseFloat(row.total) || 0 }],
+      orderSource: row.order_source || existing?.orderSource || 'pdv',
+      kitchenStatus: row.kitchen_status || existing?.kitchenStatus || 'pending',
       status: row.status || 'completed',
       organizationId: row.organization_id || existing?.organizationId || undefined,
     };

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import QRCode from 'qrcode';
 import {
   Settings,
   Building2,
@@ -579,6 +580,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   // ── Imprimir QR Code da mesa ──────────────────────────────────
   const [qrModalTable, setQrModalTable] = useState<Table | null>(null);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Generate QR code when modal opens
+  useEffect(() => {
+    if (qrModalTable) {
+      const baseUrl = window.location.origin + window.location.pathname;
+      const menuUrl = `${baseUrl}#/mesa/${qrModalTable.qrToken}`;
+      QRCode.toDataURL(menuUrl, { width: 300, margin: 2 })
+        .then((url: string) => setQrCodeDataUrl(url))
+        .catch(() => setQrCodeDataUrl(''));
+    }
+  }, [qrModalTable]);
 
   const handlePrintQRCode = (table: Table) => {
     setQrModalTable(table);
@@ -596,7 +610,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         </head><body>
         <h2>${qrModalTable.name}</h2>
         <div class="qr-box">
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(menuUrl)}" width="200" height="200" />
+          <img src="${qrCodeDataUrl}" width="200" height="200" />
           <p style="font-size:10px;word-break:break-all">${menuUrl}</p>
         </div>
         <p>Escaneie para acessar o cardápio</p>
@@ -2658,13 +2672,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         <button onClick={() => setQrModalTable(null)} className="p-1 rounded-lg text-slate-400 hover:bg-slate-100">✕</button>
       </div>
       <div className="p-5 flex flex-col items-center">
-        <img
-          src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(window.location.origin + window.location.pathname + '#/mesa/' + qrModalTable.qrToken)}`}
-          alt="QR Code"
-          width="250"
-          height="250"
-          className="rounded-xl"
-        />
+        {qrCodeDataUrl ? (
+          <img
+            src={qrCodeDataUrl}
+            alt="QR Code"
+            width="250"
+            height="250"
+            className="rounded-xl"
+          />
+        ) : (
+          <div className="w-[250px] h-[250px] bg-slate-100 rounded-xl flex items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+          </div>
+        )}
         <p className="text-xs text-slate-500 mt-3 text-center">
           Escaneie para acessar o cardápio digital
         </p>

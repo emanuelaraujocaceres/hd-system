@@ -572,6 +572,19 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
         </div>
       )}
 
+      {/* Floating My Comanda Button (mobile) */}
+      {myOrders.length > 0 && !showMyComanda && cartCount === 0 && (
+        <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-64">
+          <button
+            onClick={() => setShowMyComanda(true)}
+            className="w-full py-3 rounded-xl bg-teal-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg"
+          >
+            <Receipt className="w-4 h-4" />
+            Minha Comanda ({myOrders.length}) • R$ {myComandaTotal.toFixed(2)}
+          </button>
+        </div>
+      )}
+
       {/* My Comanda Modal */}
       {showMyComanda && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={() => setShowMyComanda(false)}>
