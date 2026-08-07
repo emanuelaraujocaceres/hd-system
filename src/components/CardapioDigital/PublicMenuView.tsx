@@ -293,10 +293,30 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
     }
   };
 
-  const myComandaTotal = myOrders.reduce((sum, s) => {
-    const saleTotal = s.total > 0 ? s.total : (s.items?.reduce((a, i) => a + (i.total || 0), 0) || 0);
-    return sum + saleTotal;
-  }, 0);
+  // Calculate time elapsed for display
+  const getTimeElapsed = (date: string) => {
+    const diff = Math.floor((Date.now() - new Date(date).getTime()) / 60000);
+    if (diff < 1) return 'agora';
+    if (diff === 1) return '1 min';
+    if (diff < 60) return `${diff} min`;
+    return `${Math.floor(diff / 60)}h ${diff % 60}min`;
+  };
+
+  // Get status config for display
+  const getStatusConfig = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return { label: 'Pendente', color: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20', icon: '⏳' };
+      case 'preparing':
+        return { label: 'Preparando', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20', icon: '👨‍🍳' };
+      case 'ready':
+        return { label: 'Pronto', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20', icon: '✅' };
+      case 'delivered':
+        return { label: 'Entregue', color: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20', icon: '📦' };
+      default:
+        return { label: status, color: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20', icon: '❓' };
+    }
+  };
 
   if (loading) {
     return (
