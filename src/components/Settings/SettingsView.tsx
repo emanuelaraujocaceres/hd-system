@@ -1188,7 +1188,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             <div className="space-y-2">
               {printersList.map((p) => (
                 <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]">
-                  <PrinterIcon className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <div className="relative">
+                    <PrinterIcon className="w-4 h-4 text-indigo-500 shrink-0" />
+                    <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ${
+                      p.status === 'online' ? 'bg-emerald-500' : 'bg-slate-400'
+                    }`} title={p.status === 'online' ? 'Conectada' : 'Desconectada'} />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
                       {p.name}
