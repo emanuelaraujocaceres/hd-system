@@ -60,6 +60,9 @@ const BRANCH_REQUIRED_TABLES: TableName[] = [
   'scanned_boletos', 'credit_payments', 'nf_records',
   // Frentes TV/impressora (agosto/2026): tabelas escopadas por filial
   'footer_messages', 'media_devices', 'printers',
+  // Cardápio Digital / Comandas (2026): tabelas escopadas por filial
+  'tables', 'customer_sessions', 'digital_menu_config',
+  'branch_themes', 'api_keys',
 ];
 
 /**
@@ -90,7 +93,12 @@ export type TableName =
   | 'nf_records'
   | 'footer_messages'
   | 'media_devices'
-  | 'printers';
+  | 'printers'
+  | 'tables'
+  | 'customer_sessions'
+  | 'digital_menu_config'
+  | 'branch_themes'
+  | 'api_keys';
 
 type SyncChangeCallback = (table: TableName, payload: any) => void;
 type ConnectionListener = (online: boolean) => void;
@@ -243,6 +251,12 @@ class SupabaseSyncService {
       'footer_messages',
       'media_devices',
       'printers',
+      // Cardápio Digital / Comandas (2026)
+      'tables',
+      'customer_sessions',
+      'digital_menu_config',
+      'branch_themes',
+      'api_keys',
     ];
 
     this.channel = supabase.channel('hd-system-realtime');

@@ -8,6 +8,9 @@ export interface UserPermissions {
   dashboard: boolean;
   settings: boolean;
   tvShowcase?: boolean;
+  comanda?: boolean;        // Fiados/Comanda/Mesa
+  kds?: boolean;            // Kitchen Display System
+  cardapioDigital?: boolean; // Cardápio Digital + Mesas
 }
 
 export interface UserProfile {
@@ -135,6 +138,9 @@ export interface Supplier {
   organizationId?: string; // multi-tenant
 }
 
+export type OrderSource = 'pdv' | 'cardapio_digital' | 'fiado';
+export type KitchenStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+
 export interface Sale {
   id: string;
   code: string; // e.g. VEN-10492
@@ -158,6 +164,11 @@ export interface Sale {
   status: 'completed' | 'cancelled' | 'pending';
   updatedAt?: string;
   organizationId?: string; // multi-tenant
+  // Cardápio Digital / Comanda
+  tableId?: string;            // mesa onde o pedido foi feito
+  customerSessionId?: string;  // sessão do cliente (1 por mesa)
+  orderSource?: OrderSource;   // origem da venda
+  kitchenStatus?: KitchenStatus; // status no KDS
 }
 
 export interface CashRegisterSession {
@@ -312,6 +323,8 @@ export interface MediaDevice {
 }
 
 // Impressora configurada (tabela printers)
+export type PrinterRole = 'caixa' | 'bar' | 'cozinha' | 'outro';
+
 export interface Printer {
   id: string;
   name: string;
@@ -324,4 +337,81 @@ export interface Printer {
   lastSeenAt?: string;                                   // coluna last_seen_at
   storeBranchId?: string;
   organizationId?: string;
+  role?: PrinterRole;                                    // roteamento: caixa/bar/cozinha
+  categoryId?: string;                                   // categoria específica (opcional)
+}
+
+// ─── CARDÁPIO DIGITAL / COMANDAS / MESAS (2026) ──────────────────────────────
+
+// Mesa física do estabelecimento (tabela tables)
+export interface Table {
+  id: string;
+  name: string;
+  number?: number;
+  qrToken: string;          // token embaralhado usado no QR code
+  status: 'active' | 'inactive';
+  storeBranchId: string;
+  organizationId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Sessão de cliente em uma mesa — 1 ativa por mesa (tabela customer_sessions)
+export interface CustomerSession {
+  id: string;
+  tableId: string;
+  sessionToken: string;
+  status: 'active' | 'completed' | 'cancelled';
+  openedAt: string;
+  closedAt?: string;
+  deviceFingerprint?: string;
+  customerName?: string;
+  storeBranchId: string;
+  organizationId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Configuração do cardápio digital por filial (tabela digital_menu_config)
+export interface DigitalMenuConfig {
+  id: string;
+  title: string;
+  subtitle?: string;
+  logoUrl?: string;
+  bannerUrl?: string;
+  layoutMode: 'grid' | 'list';
+  showPrices: boolean;
+  storeBranchId: string;
+  organizationId: string;
+  updatedAt: string;
+}
+
+// Paleta de cores por filial (tabela branch_themes)
+export interface BranchTheme {
+  id: string;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  bgColor: string;
+  logoUrl?: string;
+  faviconUrl?: string;
+  storeBranchId: string;
+  organizationId: string;
+  updatedAt: string;
+}
+
+// Chave de API para integrações externas — por filial (tabela api_keys)
+export interface ApiKey {
+  id: string;
+  name: string;
+  keyHash: string;
+  keyPrefix: string;        // primeiros 8 chars para exibir ex: "pk_live_a3..."
+  permissions: string[];
+  isActive: boolean;
+  lastUsedAt?: string;
+  expiresAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  storeBranchId: string;
+  organizationId: string;
 }

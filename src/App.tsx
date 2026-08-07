@@ -12,6 +12,8 @@ import { SettingsView } from './components/Settings/SettingsView';
 import { TVShowcaseView } from './components/TV/TVShowcaseView';
 import { ConnectTVView } from './components/TV/ConnectTVView';
 import { OrganizationsView } from './components/Organizations/OrganizationsView';
+import { ComandaView } from './components/Comanda/ComandaView';
+import { KDSView } from './components/KDS/KDSView';
 import { CaixaModal } from './components/PDV/CaixaModal';
 import { LoginModal } from './components/Auth/LoginModal';
 import { UserProfileModal } from './components/Auth/UserProfileModal';
@@ -481,6 +483,26 @@ export const App: React.FC = () => {
           if (event === 'DELETE') storageService.removePrinterFromRemote(row.id);
           else storageService.updatePrinterFromRemote(row);
           break;
+        case 'tables':
+          if (event === 'DELETE') storageService.removeTableFromRemote(row.id);
+          else storageService.updateTableFromRemote(row);
+          break;
+        case 'customer_sessions':
+          if (event === 'DELETE') storageService.removeCustomerSessionFromRemote(row.id);
+          else storageService.updateCustomerSessionFromRemote(row);
+          break;
+        case 'digital_menu_config':
+          if (event === 'DELETE') storageService.removeDigitalMenuConfigFromRemote(row.id);
+          else storageService.updateDigitalMenuConfigFromRemote(row);
+          break;
+        case 'branch_themes':
+          if (event === 'DELETE') storageService.removeBranchThemeFromRemote(row.id);
+          else storageService.updateBranchThemeFromRemote(row);
+          break;
+        case 'api_keys':
+          if (event === 'DELETE') storageService.removeApiKeyFromRemote(row.id);
+          else storageService.updateApiKeyFromRemote(row);
+          break;
         case 'cash_sessions':
           if (event === 'DELETE') storageService.removeCaixaFromRemote(row.id);
           else storageService.updateCaixaFromRemote(row);
@@ -878,6 +900,8 @@ export const App: React.FC = () => {
     if (tab === 'sales-history') return !!perms.finance;
     if (tab === 'crm') return !!perms.crm;
     if (tab === 'fiados') return !!perms.crm;
+    if (tab === 'comanda') return !!perms.comanda;
+    if (tab === 'kds') return !!perms.kds;
     if (tab === 'tv-showcase') return perms.tvShowcase !== false;
     if (tab === 'connect-tv') return perms.tvShowcase !== false;
     if (tab === 'settings') return !!perms.settings;
@@ -1080,6 +1104,14 @@ export const App: React.FC = () => {
 
               {activeTab === 'fiados' && (
                 <FiadosView sales={sales} customers={customers} user={user} />
+              )}
+
+              {activeTab === 'comanda' && (
+                <ComandaView />
+              )}
+
+              {activeTab === 'kds' && (
+                <KDSView />
               )}
 
               {activeTab === 'settings' && (

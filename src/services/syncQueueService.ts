@@ -30,7 +30,12 @@ type TableName =
   | 'nf_records'
   | 'footer_messages'
   | 'media_devices'
-  | 'printers';
+  | 'printers'
+  | 'tables'
+  | 'customer_sessions'
+  | 'digital_menu_config'
+  | 'branch_themes'
+  | 'api_keys';
 
 type QueueAction = 'upsert' | 'delete' | 'upsert_batch';
 

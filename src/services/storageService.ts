@@ -16,6 +16,11 @@ import {
   FooterMessage,
   MediaDevice,
   Printer,
+  Table,
+  CustomerSession,
+  DigitalMenuConfig,
+  BranchTheme,
+  ApiKey,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -68,6 +73,12 @@ const KEYS = {
   FOOTER_MESSAGES: 'hd_system_footer_messages',
   MEDIA_DEVICES: 'hd_system_media_devices',
   PRINTERS: 'hd_system_printers',
+  // Cardápio Digital / Comandas (2026)
+  TABLES: 'hd_system_tables',
+  CUSTOMER_SESSIONS: 'hd_system_customer_sessions',
+  DIGITAL_MENU_CONFIG: 'hd_system_digital_menu_config',
+  BRANCH_THEMES: 'hd_system_branch_themes',
+  API_KEYS: 'hd_system_api_keys',
   VIEWING_ORG: 'hd_system_viewing_org',
 };
 
@@ -1267,7 +1278,7 @@ class StorageService {
       // PASSO 3: Buscar todos os dados filtrados pela filial
       // Todas as tabelas agora têm store_branch_id NOT NULL (banco convertido).
       // store_branches: já buscado no PASSO 1 (precisamos de TODAS para o seletor)
-      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers] =
+      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys] =
         await Promise.all([
           syncService.fetchRows('products', resolvedBranchId),
           syncService.fetchRows('categories', resolvedBranchId),
@@ -1286,6 +1297,12 @@ class StorageService {
           syncService.fetchRows('footer_messages', resolvedBranchId),
           syncService.fetchRows('media_devices', resolvedBranchId),
           syncService.fetchRows('printers', resolvedBranchId),
+          // Cardápio Digital / Comandas (2026)
+          syncService.fetchRows('tables', resolvedBranchId),
+          syncService.fetchRows('customer_sessions', resolvedBranchId),
+          syncService.fetchRows('digital_menu_config', resolvedBranchId),
+          syncService.fetchRows('branch_themes', resolvedBranchId),
+          syncService.fetchRows('api_keys', resolvedBranchId),
         ]);
 
       // ── HELPER: merge cloud rows into local data by ID ──────────
@@ -1730,6 +1747,110 @@ class StorageService {
           (p) => this.syncPrinter(p),
         );
         if (merged !== null) this.set(KEYS.PRINTERS, merged);
+      }
+
+      // ── TABLES (mesas do cardápio digital) ───────────────────────
+      {
+        const local = this.get<Table[]>(KEYS.TABLES, []);
+        const merged = mergeBy(KEYS.TABLES, local, tables,
+          (r: any): Table => ({
+            id: r.id, name: r.name || '',
+            number: parseInt(r.number) || undefined,
+            qrToken: r.qr_token || '',
+            status: r.status || 'active',
+            storeBranchId: r.store_branch_id || undefined,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
+            createdAt: r.created_at || new Date().toISOString(),
+            updatedAt: r.updated_at || new Date().toISOString(),
+          }),
+          (t) => this.syncTable(t),
+        );
+        if (merged !== null) this.set(KEYS.TABLES, merged);
+      }
+
+      // ── CUSTOMER SESSÕES (controle 1 celular por mesa) ──────────
+      {
+        const local = this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, []);
+        const merged = mergeBy(KEYS.CUSTOMER_SESSIONS, local, customerSessions,
+          (r: any): CustomerSession => ({
+            id: r.id, tableId: r.table_id || '',
+            sessionToken: r.session_token || '',
+            status: r.status || 'active',
+            openedAt: r.opened_at || new Date().toISOString(),
+            closedAt: r.closed_at || undefined,
+            deviceFingerprint: r.device_fingerprint || undefined,
+            customerName: r.customer_name || undefined,
+            storeBranchId: r.store_branch_id || undefined,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
+            createdAt: r.created_at || new Date().toISOString(),
+            updatedAt: r.updated_at || new Date().toISOString(),
+          }),
+          (s) => this.syncCustomerSession(s),
+        );
+        if (merged !== null) this.set(KEYS.CUSTOMER_SESSIONS, merged);
+      }
+
+      // ── DIGITAL MENU CONFIG (config do cardápio por filial) ──────
+      {
+        const local = this.get<DigitalMenuConfig[]>(KEYS.DIGITAL_MENU_CONFIG, []);
+        const merged = mergeBy(KEYS.DIGITAL_MENU_CONFIG, local, digitalMenuConfig,
+          (r: any): DigitalMenuConfig => ({
+            id: r.id, title: r.title || 'Cardápio Digital',
+            subtitle: r.subtitle || undefined,
+            logoUrl: r.logo_url || undefined,
+            bannerUrl: r.banner_url || undefined,
+            layoutMode: r.layout_mode === 'list' ? 'list' : 'grid',
+            showPrices: r.show_prices !== false,
+            storeBranchId: r.store_branch_id || undefined,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
+            updatedAt: r.updated_at || new Date().toISOString(),
+          }),
+          (c) => this.syncDigitalMenuConfig(c),
+        );
+        if (merged !== null) this.set(KEYS.DIGITAL_MENU_CONFIG, merged);
+      }
+
+      // ── BRANCH THEMES (paleta de cores por filial) ───────────────
+      {
+        const local = this.get<BranchTheme[]>(KEYS.BRANCH_THEMES, []);
+        const merged = mergeBy(KEYS.BRANCH_THEMES, local, branchThemes,
+          (r: any): BranchTheme => ({
+            id: r.id,
+            primaryColor: r.primary_color || '#4f46e5',
+            secondaryColor: r.secondary_color || '#6366f1',
+            accentColor: r.accent_color || '#f59e0b',
+            bgColor: r.bg_color || '#09090b',
+            logoUrl: r.logo_url || undefined,
+            faviconUrl: r.favicon_url || undefined,
+            storeBranchId: r.store_branch_id || undefined,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
+            updatedAt: r.updated_at || new Date().toISOString(),
+          }),
+          (t) => this.syncBranchTheme(t),
+        );
+        if (merged !== null) this.set(KEYS.BRANCH_THEMES, merged);
+      }
+
+      // ── API KEYS (chaves de API por filial) ──────────────────────
+      {
+        const local = this.get<ApiKey[]>(KEYS.API_KEYS, []);
+        const merged = mergeBy(KEYS.API_KEYS, local, apiKeys,
+          (r: any): ApiKey => ({
+            id: r.id, name: r.name || '',
+            keyHash: r.key_hash || '',
+            keyPrefix: r.key_prefix || '',
+            permissions: r.permissions || ['read:products'],
+            isActive: r.is_active !== false,
+            lastUsedAt: r.last_used_at || undefined,
+            expiresAt: r.expires_at || undefined,
+            storeBranchId: r.store_branch_id || undefined,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
+            createdAt: r.created_at || new Date().toISOString(),
+            updatedAt: r.updated_at || new Date().toISOString(),
+          }),
+          (k) => this.syncApiKey(k),
+        );
+        if (merged !== null) this.set(KEYS.API_KEYS, merged);
       }
 
       // ── USERS ─────────────────────────────────────────────────────
@@ -3326,6 +3447,73 @@ class StorageService {
     });
   }
 
+  private syncTable(t: Table) {
+    syncService.upsertRow('tables', {
+      id: t.id,
+      organization_id: this.getCurrentOrgId(),
+      store_branch_id: t.storeBranchId || null,
+      name: t.name,
+      number: t.number || null,
+      qr_token: t.qrToken,
+      status: t.status || 'active',
+    });
+  }
+
+  private syncCustomerSession(s: CustomerSession) {
+    syncService.upsertRow('customer_sessions', {
+      id: s.id,
+      table_id: s.tableId || null,
+      organization_id: this.getCurrentOrgId(),
+      store_branch_id: s.storeBranchId || null,
+      session_token: s.sessionToken,
+      status: s.status || 'active',
+      device_fingerprint: s.deviceFingerprint || null,
+      customer_name: s.customerName || null,
+    });
+  }
+
+  private syncDigitalMenuConfig(c: DigitalMenuConfig) {
+    syncService.upsertRow('digital_menu_config', {
+      id: c.id,
+      organization_id: this.getCurrentOrgId(),
+      store_branch_id: c.storeBranchId || null,
+      title: c.title,
+      subtitle: c.subtitle || null,
+      logo_url: c.logoUrl || null,
+      banner_url: c.bannerUrl || null,
+      layout_mode: c.layoutMode || 'grid',
+      show_prices: c.showPrices !== false,
+    });
+  }
+
+  private syncBranchTheme(t: BranchTheme) {
+    syncService.upsertRow('branch_themes', {
+      id: t.id,
+      organization_id: this.getCurrentOrgId(),
+      store_branch_id: t.storeBranchId || null,
+      primary_color: t.primaryColor,
+      secondary_color: t.secondaryColor,
+      accent_color: t.accentColor,
+      bg_color: t.bgColor,
+      logo_url: t.logoUrl || null,
+      favicon_url: t.faviconUrl || null,
+    });
+  }
+
+  private syncApiKey(k: ApiKey) {
+    syncService.upsertRow('api_keys', {
+      id: k.id,
+      organization_id: this.getCurrentOrgId(),
+      store_branch_id: k.storeBranchId || null,
+      name: k.name,
+      key_hash: k.keyHash,
+      key_prefix: k.keyPrefix,
+      permissions: JSON.stringify(k.permissions || []),
+      is_active: k.isActive !== false,
+      expires_at: k.expiresAt || null,
+    });
+  }
+
   updatePrinterFromRemote(row: any) {
     const all = this.get<Printer[]>(KEYS.PRINTERS, []);
     const mapped: Printer = {
@@ -3349,6 +3537,212 @@ class StorageService {
   removePrinterFromRemote(id: string) {
     const all = this.get<Printer[]>(KEYS.PRINTERS, []).filter((x) => x.id !== id);
     this.set(KEYS.PRINTERS, all);
+  }
+
+  // --- TABLES (mesas) ---
+  getTables(): Table[] {
+    return this.get<Table[]>(KEYS.TABLES, []);
+  }
+
+  saveTable(table: Table) {
+    table.id = StorageService.ensureUuid(table.id);
+    table.organizationId = this.getCurrentOrgId();
+    const all = this.get<Table[]>(KEYS.TABLES, []);
+    const idx = all.findIndex((t) => t.id === table.id);
+    if (idx >= 0) all[idx] = table;
+    else all.push(table);
+    this.set(KEYS.TABLES, all);
+    this.syncTable(table);
+  }
+
+  updateTableFromRemote(row: any) {
+    const all = this.get<Table[]>(KEYS.TABLES, []);
+    const mapped: Table = {
+      id: row.id, name: row.name || '',
+      number: parseInt(row.number) || undefined,
+      qrToken: row.qr_token || '',
+      status: row.status || 'active',
+      storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
+      createdAt: row.created_at || new Date().toISOString(),
+      updatedAt: row.updated_at || new Date().toISOString(),
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.TABLES, all);
+  }
+
+  removeTableFromRemote(id: string) {
+    const all = this.get<Table[]>(KEYS.TABLES, []).filter((x) => x.id !== id);
+    this.set(KEYS.TABLES, all);
+  }
+
+  // --- CUSTOMER SESSIONS ---
+  getCustomerSessions(): CustomerSession[] {
+    return this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, []);
+  }
+
+  saveCustomerSession(session: CustomerSession) {
+    session.id = StorageService.ensureUuid(session.id);
+    session.organizationId = this.getCurrentOrgId();
+    const all = this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, []);
+    const idx = all.findIndex((s) => s.id === session.id);
+    if (idx >= 0) all[idx] = session;
+    else all.push(session);
+    this.set(KEYS.CUSTOMER_SESSIONS, all);
+    this.syncCustomerSession(session);
+  }
+
+  updateCustomerSessionFromRemote(row: any) {
+    const all = this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, []);
+    const mapped: CustomerSession = {
+      id: row.id, tableId: row.table_id || '',
+      sessionToken: row.session_token || '',
+      status: row.status || 'active',
+      openedAt: row.opened_at || new Date().toISOString(),
+      closedAt: row.closed_at || undefined,
+      deviceFingerprint: row.device_fingerprint || undefined,
+      customerName: row.customer_name || undefined,
+      storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
+      createdAt: row.created_at || new Date().toISOString(),
+      updatedAt: row.updated_at || new Date().toISOString(),
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.CUSTOMER_SESSIONS, all);
+  }
+
+  removeCustomerSessionFromRemote(id: string) {
+    const all = this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, []).filter((x) => x.id !== id);
+    this.set(KEYS.CUSTOMER_SESSIONS, all);
+  }
+
+  // --- DIGITAL MENU CONFIG ---
+  getDigitalMenuConfig(): DigitalMenuConfig | null {
+    const all = this.get<DigitalMenuConfig[]>(KEYS.DIGITAL_MENU_CONFIG, []);
+    return all[0] || null;
+  }
+
+  saveDigitalMenuConfig(config: DigitalMenuConfig) {
+    config.id = StorageService.ensureUuid(config.id);
+    config.organizationId = this.getCurrentOrgId();
+    const all = this.get<DigitalMenuConfig[]>(KEYS.DIGITAL_MENU_CONFIG, []);
+    const idx = all.findIndex((c) => c.id === config.id);
+    if (idx >= 0) all[idx] = config;
+    else all.unshift(config);
+    this.set(KEYS.DIGITAL_MENU_CONFIG, all);
+    this.syncDigitalMenuConfig(config);
+  }
+
+  updateDigitalMenuConfigFromRemote(row: any) {
+    const all = this.get<DigitalMenuConfig[]>(KEYS.DIGITAL_MENU_CONFIG, []);
+    const mapped: DigitalMenuConfig = {
+      id: row.id, title: row.title || 'Cardápio Digital',
+      subtitle: row.subtitle || undefined,
+      logoUrl: row.logo_url || undefined,
+      bannerUrl: row.banner_url || undefined,
+      layoutMode: row.layout_mode === 'list' ? 'list' : 'grid',
+      showPrices: row.show_prices !== false,
+      storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
+      updatedAt: row.updated_at || new Date().toISOString(),
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.DIGITAL_MENU_CONFIG, all);
+  }
+
+  removeDigitalMenuConfigFromRemote(id: string) {
+    const all = this.get<DigitalMenuConfig[]>(KEYS.DIGITAL_MENU_CONFIG, []).filter((x) => x.id !== id);
+    this.set(KEYS.DIGITAL_MENU_CONFIG, all);
+  }
+
+  // --- BRANCH THEMES ---
+  getBranchTheme(): BranchTheme | null {
+    const all = this.get<BranchTheme[]>(KEYS.BRANCH_THEMES, []);
+    return all[0] || null;
+  }
+
+  saveBranchTheme(theme: BranchTheme) {
+    theme.id = StorageService.ensureUuid(theme.id);
+    theme.organizationId = this.getCurrentOrgId();
+    const all = this.get<BranchTheme[]>(KEYS.BRANCH_THEMES, []);
+    const idx = all.findIndex((t) => t.id === theme.id);
+    if (idx >= 0) all[idx] = theme;
+    else all.unshift(theme);
+    this.set(KEYS.BRANCH_THEMES, all);
+    this.syncBranchTheme(theme);
+  }
+
+  updateBranchThemeFromRemote(row: any) {
+    const all = this.get<BranchTheme[]>(KEYS.BRANCH_THEMES, []);
+    const mapped: BranchTheme = {
+      id: row.id,
+      primaryColor: row.primary_color || '#4f46e5',
+      secondaryColor: row.secondary_color || '#6366f1',
+      accentColor: row.accent_color || '#f59e0b',
+      bgColor: row.bg_color || '#09090b',
+      logoUrl: row.logo_url || undefined,
+      faviconUrl: row.favicon_url || undefined,
+      storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
+      updatedAt: row.updated_at || new Date().toISOString(),
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.BRANCH_THEMES, all);
+  }
+
+  removeBranchThemeFromRemote(id: string) {
+    const all = this.get<BranchTheme[]>(KEYS.BRANCH_THEMES, []).filter((x) => x.id !== id);
+    this.set(KEYS.BRANCH_THEMES, all);
+  }
+
+  // --- API KEYS ---
+  getApiKeys(): ApiKey[] {
+    return this.get<ApiKey[]>(KEYS.API_KEYS, []);
+  }
+
+  saveApiKey(key: ApiKey) {
+    key.id = StorageService.ensureUuid(key.id);
+    key.organizationId = this.getCurrentOrgId();
+    const all = this.get<ApiKey[]>(KEYS.API_KEYS, []);
+    const idx = all.findIndex((k) => k.id === key.id);
+    if (idx >= 0) all[idx] = key;
+    else all.push(key);
+    this.set(KEYS.API_KEYS, all);
+    this.syncApiKey(key);
+  }
+
+  updateApiKeyFromRemote(row: any) {
+    const all = this.get<ApiKey[]>(KEYS.API_KEYS, []);
+    const mapped: ApiKey = {
+      id: row.id, name: row.name || '',
+      keyHash: row.key_hash || '',
+      keyPrefix: row.key_prefix || '',
+      permissions: row.permissions || ['read:products'],
+      isActive: row.is_active !== false,
+      lastUsedAt: row.last_used_at || undefined,
+      expiresAt: row.expires_at || undefined,
+      storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
+      createdAt: row.created_at || new Date().toISOString(),
+      updatedAt: row.updated_at || new Date().toISOString(),
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.API_KEYS, all);
+  }
+
+  removeApiKeyFromRemote(id: string) {
+    const all = this.get<ApiKey[]>(KEYS.API_KEYS, []).filter((x) => x.id !== id);
+    this.set(KEYS.API_KEYS, all);
   }
 
   // --- BRANCHES ---

@@ -44,6 +44,9 @@ export type Module =
   | 'users'        // User management
   | 'branches'     // Branch management
   | 'organizations' // Organization management (superadmin only)
+  | 'comanda'      // Comandas / Mesas / Fiados
+  | 'kds'          // Kitchen Display System
+  | 'cardapioDigital' // Cardápio Digital
   | 'audit';       // Audit logs & DLQ (superadmin only)
 
 /** Actions that can be performed on a module */
@@ -93,6 +96,14 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'branches', action: 'create' },
     { module: 'branches', action: 'edit' },
     { module: 'branches', action: 'delete' },
+    { module: 'comanda', action: 'view' },
+    { module: 'comanda', action: 'create' },
+    { module: 'comanda', action: 'edit' },
+    { module: 'comanda', action: 'delete' },
+    { module: 'kds', action: 'view' },
+    { module: 'kds', action: 'edit' },
+    { module: 'cardapioDigital', action: 'view' },
+    { module: 'cardapioDigital', action: 'edit' },
   ],
   // Collaborator: PDV + read-only inventory/CRM, no settings/users/finance
   collaborator: [
@@ -103,6 +114,11 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'crm', action: 'create' },
     { module: 'crm', action: 'edit' },
     { module: 'dashboard', action: 'view' },
+    { module: 'comanda', action: 'view' },
+    { module: 'comanda', action: 'create' },
+    { module: 'comanda', action: 'edit' },
+    { module: 'kds', action: 'view' },
+    { module: 'kds', action: 'edit' },
   ],
   // Manager: same as admin (legacy role)
   manager: [
@@ -157,6 +173,8 @@ export const TAB_MODULE_MAP: Record<string, Module> = {
   users: 'users',
   branches: 'branches',
   organizations: 'organizations',
+  comanda: 'comanda',
+  kds: 'kds',
   tv: 'pdv', // TV showcase is part of PDV module
 };
 
@@ -188,7 +206,7 @@ export class PermissionEngine {
     // Developer: bypass everything — has all permissions
     if (user.superadmin) {
       const allPermissions: Permission[] = [];
-      const modules: Module[] = ['pdv', 'inventory', 'crm', 'finance', 'dashboard', 'settings', 'users', 'branches', 'organizations', 'audit'];
+      const modules: Module[] = ['pdv', 'inventory', 'crm', 'finance', 'dashboard', 'settings', 'users', 'branches', 'organizations', 'comanda', 'kds', 'cardapioDigital', 'audit'];
       const actions: PermissionAction[] = ['view', 'create', 'edit', 'delete'];
       for (const mod of modules) {
         for (const act of actions) {

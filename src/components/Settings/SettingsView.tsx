@@ -196,6 +196,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     finance: false,
     dashboard: false,
     settings: false,
+    comanda: false,
+    kds: false,
+    cardapioDigital: false,
   });
   const [userPassword, setUserPassword] = useState('');
   // Senha gerada pelo servidor ao criar um usuário novo (exibida UMA vez)
@@ -1898,6 +1901,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                         className="rounded text-purple-600"
                       />
                       <span className="font-semibold text-slate-900 dark:text-white">Painel Executivo / Dashboard</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={userPermissions.comanda}
+                        onChange={() => togglePermission('comanda')}
+                        className="rounded text-orange-600"
+                      />
+                      <span className="font-semibold text-slate-900 dark:text-white">Comandas / Mesas</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={userPermissions.kds}
+                        onChange={() => togglePermission('kds')}
+                        className="rounded text-red-600"
+                      />
+                      <span className="font-semibold text-slate-900 dark:text-white">KDS (Cozinha)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] cursor-pointer col-span-2">
+                      <input
+                        type="checkbox"
+                        checked={userPermissions.cardapioDigital}
+                        onChange={() => togglePermission('cardapioDigital')}
+                        className="rounded text-teal-600"
+                      />
+                      <span className="font-semibold text-slate-900 dark:text-white">Cardápio Digital</span>
                     </label>
                   </div>
                 </div>
