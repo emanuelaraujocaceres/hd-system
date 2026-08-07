@@ -16,6 +16,8 @@ import {
   Plug,
   ChefHat,
   ClipboardList,
+  UtensilsCrossed,
+  Eye,
 } from 'lucide-react';
 import { StoreBranch, UserProfile, CashRegisterSession } from '../../types';
 import { ResetDataButton } from '../shared/ResetDataButton';
@@ -93,6 +95,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'fiados', label: 'Fiados', icon: Receipt, module: 'crm' as const },
     { id: 'comanda', label: 'Comandas', icon: ClipboardList, module: 'comanda' as const },
     { id: 'kds', label: 'KDS', icon: ChefHat, module: 'kds' as const },
+    { id: 'cardapio_preview', label: 'Cardápio Preview', icon: Eye, module: 'cardapioDigital' as const },
     { id: 'settings', label: 'Configurações', icon: Settings, module: 'settings' as const },
     { id: 'organizations', label: 'Organizações', icon: Building2, module: 'organizations' as const },
   ];

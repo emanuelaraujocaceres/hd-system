@@ -175,7 +175,8 @@ export const TAB_MODULE_MAP: Record<string, Module> = {
   organizations: 'organizations',
   comanda: 'comanda',
   kds: 'kds',
-  tv: 'pdv', // TV showcase is part of PDV module
+  cardapio_preview: 'cardapioDigital',
+  tv: 'pdv',
 };
 
 // ─── CORE PERMISSION ENGINE ────────────────────────────────────
