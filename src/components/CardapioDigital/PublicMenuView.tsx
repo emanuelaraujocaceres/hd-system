@@ -90,9 +90,9 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
         };
         setTable(foundTable);
 
-        // Fetch products for this branch
+        // Fetch products for this branch (with stock > 0)
         const productsRes = await fetch(
-          `${baseUrl}/rest/v1/products?store_branch_id=eq.${foundTable.storeBranchId}&is_active=eq.true&show_on_cardapio=eq.true&select=*`,
+          `${baseUrl}/rest/v1/products?store_branch_id=eq.${foundTable.storeBranchId}&is_active=eq.true&show_on_cardapio=eq.true&stock_quantity=gt.0&select=*`,
           {
             headers: {
               'apikey': anonKey,
@@ -104,7 +104,27 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
 
         if (productsRes.ok) {
           const products = await productsRes.json();
-          setProducts(products || []);
+          // Map snake_case to camelCase
+          setProducts((products || []).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            barcode: p.barcode || '',
+            category: p.category || 'Geral',
+            unit: p.unit || 'un',
+            costPrice: p.cost_price || 0,
+            salePrice: p.sale_price || 0,
+            currentStock: p.stock_quantity || 0,
+            minStock: p.min_stock_quantity || 0,
+            maxStock: p.max_stock_quantity || 100,
+            imageUrl: p.image_url || '',
+            active: p.is_active !== false,
+            updatedAt: p.updated_at,
+            storeBranchId: p.store_branch_id,
+            organizationId: p.organization_id,
+            showOnCardapio: p.show_on_cardapio || false,
+            showOnTV: p.show_on_tv || false,
+            tvPromoPrice: p.tv_promo_price || undefined,
+          })));
         }
 
         // Fetch menu config
@@ -541,14 +561,27 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
                   )}
                 </div>
                 {/* Info */}
-                <div className="p-3 flex-1 flex flex-col">
+                  <div className="p-3 flex-1 flex flex-col">
                   <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 mb-1">
                     {product.name}
                   </p>
                   <div className="mt-auto flex items-center justify-between">
-                    <span className="text-sm font-bold text-emerald-600">
-                      {config?.showPrices !== false ? `R$ ${(product.salePrice ?? 0).toFixed(2)}` : 'Consultar'}
-                    </span>
+                    <div className="flex flex-col">
+                      {product.tvPromoPrice && product.tvPromoPrice > 0 && product.tvPromoPrice < (product.salePrice ?? 0) ? (
+                        <>
+                          <span className="text-[10px] font-bold text-rose-500 line-through">
+                            R$ {(product.salePrice ?? 0).toFixed(2)}
+                          </span>
+                          <span className="text-sm font-bold text-emerald-600">
+                            R$ {product.tvPromoPrice.toFixed(2)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-sm font-bold text-emerald-600">
+                          {config?.showPrices !== false ? `R$ ${(product.salePrice ?? 0).toFixed(2)}` : 'Consultar'}
+                        </span>
+                      )}
+                    </div>
                     {product.currentStock > 0 && config?.showPrices !== false && (
                       <button
                         onClick={() => addToCart(product)}
