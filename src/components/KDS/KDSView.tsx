@@ -227,16 +227,16 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
 
       {/* Kanban Board */}
       <div className="flex-1 overflow-x-auto overflow-y-hidden p-4 sm:p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 h-full min-w-[800px]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 h-full min-w-0">
           {(Object.keys(STATUS_CONFIG) as KdsStatus[]).map((status) => {
             const config = STATUS_CONFIG[status];
             const orders = ordersByStatus[status];
             const isPending = status === 'pending';
 
             return (
-              <div key={status} className="flex flex-col rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] overflow-hidden">
+              <div key={status} className="flex flex-col rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] overflow-hidden h-full max-h-[calc(100vh-220px)]">
                 {/* Column Header */}
-                <div className={`px-4 py-3 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between ${config.color}`}>
+                <div className={`px-4 py-3 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between shrink-0 ${config.color}`}>
                   <div className="flex items-center gap-2">
                     {config.icon}
                     <span className="text-xs font-bold">{config.label}</span>

@@ -18,6 +18,8 @@ import {
 import { Sale, Table, CustomerSession, Customer, UserProfile, Product } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { printComandaReceipt } from '../../services/printService';
+import { findCaixaPrinter } from '../../services/printerRouting';
 import { useToast } from '../shared/Toast';
 import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
@@ -164,7 +166,7 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     return s.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
   };
 
-  const handleCloseComanda = () => {
+  const handleCloseComanda = async () => {
     if (!closeModalTable) return;
     const group = comandaGroups.find((g) => g.table.id === closeModalTable.id);
     if (!group || group.sales.length === 0) {
@@ -195,6 +197,17 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
           updatedAt: new Date().toISOString(),
         };
         storageService.saveCustomerSession(updatedSession);
+      }
+
+      // Print receipt on caixa printer
+      const caixaPrinter = findCaixaPrinter(storageService.getPrinters());
+      if (caixaPrinter && group.sales.length > 0) {
+        const lastSale = group.sales[group.sales.length - 1];
+        try {
+          await printComandaReceipt(lastSale, closeModalTable, caixaPrinter, closePaymentMethod);
+        } catch (e) {
+          // silent fail - printer may not be connected
+        }
       }
 
       posAudio.chime();

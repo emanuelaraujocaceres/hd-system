@@ -240,6 +240,41 @@ export async function printKitchenOrder(
   );
 }
 
+/** Imprime apenas os items designados a uma impressora (cozinha/bar). */
+export async function printRoutedItems(
+  sale: Sale,
+  table: Table,
+  printer: Printer,
+  items: Sale['items'],
+  sectionLabel: string,
+): Promise<void> {
+  const bytes = buildRoutedItemsEscPos(sale, table, printer, items, sectionLabel);
+  if (printer.transport === 'webusb') return printWebUsb(printer, bytes);
+  if (printer.transport === 'serial') return printSerial(printer, bytes);
+  throw new Error(
+    printer.transport === 'network'
+      ? 'Transporte "Rede (IP)" nao imprime direto do navegador. Use USB, Serial ou "Sistema".'
+      : 'Transporte nao suportado para impressao direta.',
+  );
+}
+
+/** Imprime comprovante de fechamento da comanda (caixa). */
+export async function printComandaReceipt(
+  sale: Sale,
+  table: Table,
+  printer: Printer,
+  paymentMethod: string,
+): Promise<void> {
+  const bytes = buildComandaReceiptEscPos(sale, table, printer, paymentMethod);
+  if (printer.transport === 'webusb') return printWebUsb(printer, bytes);
+  if (printer.transport === 'serial') return printSerial(printer, bytes);
+  throw new Error(
+    printer.transport === 'network'
+      ? 'Transporte "Rede (IP)" nao imprime direto do navegador. Use USB, Serial ou "Sistema".'
+      : 'Transporte nao suportado para impressao direta.',
+  );
+}
+
 /**
  * Monta o comando ESC/POS para pedido da cozinha/bar.
  * Mostra: mesa, código do pedido, itens com quantidades, hora.
@@ -265,6 +300,86 @@ function buildKitchenOrderEscPos(sale: Sale, table: Table, printer: Printer): Ui
   lines.push({ text: '-'.repeat(paperWidth) });
   lines.push({ skip: true });
   lines.push({ text: `Total itens: ${sale.items?.reduce((a, i) => a + i.quantity, 0) || 0}`, align: 0 });
+
+  return buildEscPos(lines);
+}
+
+/**
+ * Monta o comando ESC/POS para items roteados (cozinha ou bar).
+ * Mostra apenas os items designados a esta impressora.
+ */
+function buildRoutedItemsEscPos(
+  sale: Sale,
+  table: Table,
+  printer: Printer,
+  items: Sale['items'],
+  sectionLabel: string,
+): Uint8Array {
+  const paperWidth = printer.model?.includes('58') ? 32 : 48;
+  const lines: EscPosLine[] = [];
+
+  // Header
+  lines.push({ text: `PEDIDO - ${sectionLabel.toUpperCase()}`, align: 1, bold: true, size: 17 });
+  lines.push({ skip: true });
+  lines.push({ text: `Mesa: ${table.name}`, align: 0, bold: true });
+  lines.push({ text: `Pedido: ${sale.code || sale.id.slice(-6)}`, align: 0 });
+  lines.push({ text: `Hora: ${new Date(sale.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`, align: 0 });
+  lines.push({ skip: true });
+
+  // Items (apenas os desta impressora)
+  lines.push({ text: `ITENS (${sectionLabel}):`, align: 0, bold: true });
+  lines.push({ text: '-'.repeat(paperWidth) });
+  for (const item of items) {
+    lines.push({ text: `${item.quantity}x ${item.productName}`, align: 0, bold: true });
+  }
+  lines.push({ text: '-'.repeat(paperWidth) });
+
+  return buildEscPos(lines);
+}
+
+/**
+ * Monta o comando ESC/POS para comprovante de fechamento da comanda.
+ * Mostra todos os items e o pagamento.
+ */
+function buildComandaReceiptEscPos(
+  sale: Sale,
+  table: Table,
+  printer: Printer,
+  paymentMethod: string,
+): Uint8Array {
+  const paperWidth = printer.model?.includes('58') ? 32 : 48;
+  const lines: EscPosLine[] = [];
+
+  const paymentLabels: Record<string, string> = {
+    pix: 'PIX',
+    cash: 'DINHEIRO',
+    credit_card: 'CARTAO CREDITO',
+    debit_card: 'CARTAO DEBITO',
+  };
+
+  // Header
+  lines.push({ text: 'COMPROVANTE DE FECHAMENTO', align: 1, bold: true, size: 17 });
+  lines.push({ skip: true });
+  lines.push({ text: `Mesa: ${table.name}`, align: 0, bold: true });
+  lines.push({ text: `Comanda: ${sale.code || sale.id.slice(-6)}`, align: 0 });
+  lines.push({ text: `Data: ${new Date(sale.date).toLocaleString('pt-BR')}`, align: 0 });
+  lines.push({ skip: true });
+
+  // Items
+  lines.push({ text: 'ITENS CONSUMIDOS:', align: 0, bold: true });
+  lines.push({ text: '-'.repeat(paperWidth) });
+  for (const item of sale.items || []) {
+    lines.push({ text: `${item.quantity}x ${item.productName}`, align: 0 });
+    lines.push({ text: `  R$ ${item.unitPrice.toFixed(2)} = R$ ${item.total.toFixed(2)}`, align: 0 });
+  }
+  lines.push({ text: '-'.repeat(paperWidth) });
+
+  // Total
+  lines.push({ text: `TOTAL: R$ ${sale.total.toFixed(2)}`, align: 2, bold: true, size: 17 });
+  lines.push({ skip: true });
+  lines.push({ text: `Pagamento: ${paymentLabels[paymentMethod] || paymentMethod}`, align: 0 });
+  lines.push({ skip: true });
+  lines.push({ text: 'Obrigado pela preferencia!', align: 1 });
 
   return buildEscPos(lines);
 }

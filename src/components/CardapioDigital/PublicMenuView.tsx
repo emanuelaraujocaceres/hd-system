@@ -14,7 +14,8 @@ import {
 } from 'lucide-react';
 import { Product, Table, DigitalMenuConfig, CustomerSession, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
-import { printKitchenOrder } from '../../services/printService';
+import { printRoutedItems } from '../../services/printService';
+import { routeItemsToPrinters } from '../../services/printerRouting';
 
 interface PublicMenuViewProps {
   tableToken: string;
@@ -88,9 +89,9 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
           setSession(activeSession);
         }
 
-        // Load products (show only active ones)
+        // Load products (show only active ones AND showOnCardapio = true)
         const allProducts = storageService.getProducts();
-        setProducts(allProducts.filter((p) => p.active !== false));
+        setProducts(allProducts.filter((p) => p.active !== false && p.showOnCardapio !== false));
 
         // Load menu config
         setConfig(storageService.getDigitalMenuConfig());
@@ -191,14 +192,21 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
 
       storageService.addSale(sale);
 
-      // Print to configured printers (kitchen/bar)
+      // Print to configured printers (routed by category: kitchen/bar/caixa)
       const printers = storageService.getPrinters();
+      const allProducts = storageService.getProducts();
       const activePrinters = printers.filter((p) => p.transport !== 'os');
-      for (const printer of activePrinters) {
-        try {
-          await printKitchenOrder(sale, table, printer);
-        } catch (e) {
-          // silent fail - printer may not be connected
+
+      if (activePrinters.length > 0) {
+        // Route items to appropriate printers
+        const routing = routeItemsToPrinters(sale.items, activePrinters, allProducts);
+        for (const [printer, items] of routing.entries()) {
+          try {
+            const sectionLabel = printer.role === 'cozinha' ? 'Cozinha' : printer.role === 'bar' ? 'Bar' : 'Caixa';
+            await printRoutedItems(sale, table, printer, items, sectionLabel);
+          } catch (e) {
+            // silent fail - printer may not be connected
+          }
         }
       }
 

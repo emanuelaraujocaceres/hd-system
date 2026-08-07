@@ -63,6 +63,7 @@ export interface Product {
   showOnTV?: boolean;
   tvPromoPrice?: number;
   tvHighlightTag?: string; // e.g. "COMBO DO DIA", "OFERTA TV", "LEVE 3 PAGUE 2"
+  showOnCardapio?: boolean; // exibir no cardápio digital (QR code)
   organizationId?: string; // multi-tenant: qual organização este produto pertence
   // Venda no ATACADO: uma ou mais caixas com quantidades e preços diferentes
   wholesaleOptions?: WholesaleOption[];

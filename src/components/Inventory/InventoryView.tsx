@@ -99,6 +99,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formMaxStock, setFormMaxStock] = useState('');
   const [formImageUrl, setFormImageUrl] = useState('');
   const [formShowOnTV, setFormShowOnTV] = useState(false);
+  const [formShowOnCardapio, setFormShowOnCardapio] = useState(false);
   const [formTvPromoPrice, setFormTvPromoPrice] = useState('');
   const [formTvHighlightTag, setFormTvHighlightTag] = useState('');
   // Venda no ATACADO (caixa/fardo): quantidade de unidades na caixa + valor da caixa
@@ -375,6 +376,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormMaxStock(String(product.maxStock));
     setFormImageUrl(product.imageUrl);
     setFormShowOnTV(product.showOnTV || false);
+    setFormShowOnCardapio(product.showOnCardapio || false);
     setFormTvPromoPrice(String(product.tvPromoPrice || ''));
     setFormTvHighlightTag(product.tvHighlightTag || '');
     const existingWholesale = product.wholesaleOptions || [];
@@ -431,6 +433,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         storeBranchId: storageService.getSelectedBranchId() || user.storeBranchId,
         showOnTV: formShowOnTV,
         tvPromoPrice: formTvPromoPrice ? parseBrlToNumber(formTvPromoPrice) || undefined : undefined,
+        showOnCardapio: formShowOnCardapio,
         tvHighlightTag: formTvHighlightTag || undefined,
         wholesaleOptions,
       };
@@ -1363,6 +1366,27 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   <div>
                     <p className="text-xs font-bold text-slate-900 dark:text-white">Exibir nas Ofertas / TV</p>
                     <p className="text-[10px] text-slate-500 dark:text-[#71717a]">Produto aparecerá na página de ofertas (TV)</p>
+                  </div>
+                </label>
+
+                {/* Exibir no Cardápio Digital */}
+                <label className="flex items-center gap-3 p-3 rounded-xl bg-teal-500/5 border border-teal-500/20 cursor-pointer hover:bg-teal-500/10 transition-colors">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={formShowOnCardapio}
+                      onChange={(e) => {
+                        setFormShowOnCardapio(e.target.checked);
+                        posAudio.click();
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 rounded-full bg-slate-300 dark:bg-[#27272a] peer-checked:bg-teal-500 transition-colors" />
+                    <div className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-transform peer-checked:translate-x-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">Exibir no Cardápio Digital</p>
+                    <p className="text-[10px] text-slate-500 dark:text-[#71717a]">Produto aparecerá no cardápio acessado via QR Code</p>
                   </div>
                 </label>
 
