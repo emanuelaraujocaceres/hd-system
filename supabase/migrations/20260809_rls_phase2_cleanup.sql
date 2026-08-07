@@ -32,7 +32,7 @@ DECLARE
   r RECORD;
 BEGIN
   FOR r IN
-    SELECT pol.proname AS policy_name, cls.relname AS table_name
+    SELECT pol.polname AS policy_name, cls.relname AS table_name
     FROM pg_policy pol
     JOIN pg_class cls ON pol.oid = cls.oid
     JOIN pg_namespace ns ON cls.relnamespace = ns.oid
