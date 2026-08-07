@@ -88,38 +88,35 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
         // Set config
         setConfig(data.config);
 
-        // Check for active session (1 device per mesa) - local only
+        // Check for existing session for this device (same celular reutiliza)
+        const deviceFingerprint = navigator.userAgent.slice(0, 100) + (screen.width + 'x' + screen.height);
         const sessions = storageService.getCustomerSessions();
-        const activeSession = sessions.find(
-          (s) => s.tableId === foundTable.id && s.status === 'active'
+        const existingSession = sessions.find(
+          (s) => s.deviceFingerprint === deviceFingerprint && s.status === 'active'
         );
 
-        if (activeSession && activeSession.sessionToken !== sessionId) {
-          setError('Esta mesa já está sendo atendida por outro dispositivo. Aguarde ou chame o garçom.');
+        // Se já existe sessão para este dispositivo, reutiliza
+        if (existingSession) {
+          setSession(existingSession);
           setLoading(false);
           return;
         }
 
-        // Create or use existing session
-        if (!activeSession) {
-          const newSession: CustomerSession = {
-            id: crypto.randomUUID(),
-            tableId: foundTable.id,
-            sessionToken: sessionId,
-            status: 'active',
-            openedAt: new Date().toISOString(),
-            deviceFingerprint: navigator.userAgent.slice(0, 100),
-            storeBranchId: foundTable.storeBranchId,
-            organizationId: foundTable.organizationId,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          storageService.saveCustomerSession(newSession);
-          setSession(newSession);
-        } else {
-          setSession(activeSession);
-        }
-
+        // Criar nova sessão (múltiplos dispositivos permitidos na mesma mesa)
+        const newSession: CustomerSession = {
+          id: crypto.randomUUID(),
+          tableId: foundTable.id,
+          sessionToken: sessionId,
+          status: 'active',
+          openedAt: new Date().toISOString(),
+          deviceFingerprint,
+          storeBranchId: foundTable.storeBranchId,
+          organizationId: foundTable.organizationId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        storageService.saveCustomerSession(newSession);
+        setSession(newSession);
         setLoading(false);
       } catch (err: any) {
         setError('Erro ao carregar o cardápio. Tente novamente.');
