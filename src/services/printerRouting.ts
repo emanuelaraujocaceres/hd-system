@@ -1,4 +1,4 @@
-import { Sale, Printer, Product, Table } from '../types';
+import { Sale, Printer, Product, Table, Category } from '../types';
 
 // Categorias consideradas comida (cozinha) vs bebida (bar)
 const FOOD_CATEGORIES = ['pratos', 'lanches', 'pizzas', 'saladas', 'carnes', 'massas', 'entradas', 'sobremesas', 'burger', 'hambúrguer'];
@@ -8,9 +8,23 @@ export type PrinterRoute = 'cozinha' | 'bar' | 'caixa';
 
 /**
  * Determina o tipo de um item baseado na categoria do produto.
+ * Usa os sectors da categoria se disponíveis, senão usa o nome.
  */
-export function getItemType(category: string): 'food' | 'drink' | 'other' {
-  const cat = category.toLowerCase();
+export function getItemType(categoryName: string, categories?: Category[]): 'food' | 'drink' | 'other' {
+  // Primeiro, verificar se a categoria tem sectors definidos
+  if (categories && categories.length > 0) {
+    const cat = categories.find((c) => c.name === categoryName);
+    if (cat?.sectors && cat.sectors.length > 0) {
+      // Se tem sector definido, usar o primeiro
+      const sector = cat.sectors[0];
+      if (sector === 'cozinha') return 'food';
+      if (sector === 'bar') return 'drink';
+      return 'other';
+    }
+  }
+
+  // Fallback: usar o nome da categoria
+  const cat = categoryName.toLowerCase();
   if (FOOD_CATEGORIES.some((c) => cat.includes(c))) return 'food';
   if (DRINK_CATEGORIES.some((c) => cat.includes(c))) return 'drink';
   return 'other';
@@ -85,7 +99,8 @@ export function findCaixaPrinter(printers: Printer[]): Printer | null {
 export function routeItemsToPrinters(
   items: Sale['items'],
   printers: Printer[],
-  allProducts: Product[]
+  allProducts: Product[],
+  categories?: Category[]
 ): Map<Printer, Sale['items']> {
   const routing = new Map<Printer, Sale['items']>();
 
@@ -96,7 +111,7 @@ export function routeItemsToPrinters(
 
   for (const item of items) {
     const product = allProducts.find((p) => p.id === item.productId);
-    const type = getItemType(product?.category || '');
+    const type = getItemType(product?.category || '', categories);
     if (type === 'food') foodItems.push(item);
     else if (type === 'drink') drinkItems.push(item);
     else otherItems.push(item);

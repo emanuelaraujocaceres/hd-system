@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
-import { X, Plus, Edit2, Trash2, Tag, Check, AlertCircle } from 'lucide-react';
+import { X, Plus, Edit2, Trash2, Tag, Check, AlertCircle, ChefHat, Wine, ShoppingCart } from 'lucide-react';
 import { Category } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+
+// Setores padrão sugeridos para categorias
+export const SUGGESTED_SECTORS = [
+  { id: 'cozinha', label: 'Cozinha', icon: ChefHat, description: 'Lanches, Pratos, Pizzas, Carnes, Massas, Entradas, Sobremesas', color: 'orange' },
+  { id: 'bar', label: 'Bar', icon: Wine, description: 'Bebidas, Cervejas, Vinhos, Sucos, Coquetéis', color: 'blue' },
+  { id: 'caixa', label: 'Caixa', icon: ShoppingCart, description: 'Itens diversos / Sem setor específico', color: 'slate' },
+];
 
 interface CategoryManagerModalProps {
   isOpen: boolean;
@@ -18,6 +25,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 }) => {
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
+  const [newCatSectors, setNewCatSectors] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [editingDesc, setEditingDesc] = useState('');
@@ -46,12 +54,14 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
       id: `cat-${Date.now()}`,
       name: newCatName.trim(),
       description: newCatDesc.trim() || 'Categoria de produtos',
+      sectors: newCatSectors.length > 0 ? newCatSectors : undefined,
     };
 
     storageService.saveCategory(newCategory);
     posAudio.chime();
     setNewCatName('');
     setNewCatDesc('');
+    setNewCatSectors([]);
     setIsCreating(false);
   };
 
@@ -128,7 +138,7 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                 onChange={(e) => setNewCatName(e.target.value)}
                 className="px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              <input
+               <input
                 type="text"
                 placeholder="Descrição (opcional)"
                 value={newCatDesc}
@@ -136,6 +146,50 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
                 className="px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
+
+            {/* Setores sugeridos */}
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-[#71717a]">
+                Vincular a setores (opcional)
+              </p>
+              <div className="space-y-1.5">
+                {SUGGESTED_SECTORS.map((sector) => {
+                  const Icon = sector.icon;
+                  const isChecked = newCatSectors.includes(sector.id);
+                  return (
+                    <label
+                      key={sector.id}
+                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                        isChecked
+                          ? sector.color === 'orange' ? 'bg-orange-500/10 border-orange-500/30' :
+                            sector.color === 'blue' ? 'bg-blue-500/10 border-blue-500/30' :
+                            'bg-slate-500/10 border-slate-500/30'
+                          : 'bg-slate-50 dark:bg-[#09090b] border-slate-200 dark:border-[#27272a]'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setNewCatSectors((prev) => [...prev, sector.id]);
+                          } else {
+                            setNewCatSectors((prev) => prev.filter((s) => s !== sector.id));
+                          }
+                        }}
+                        className="rounded text-indigo-600"
+                      />
+                      <Icon className={`w-3.5 h-3.5 ${sector.color === 'orange' ? 'text-orange-500' : sector.color === 'blue' ? 'text-blue-500' : 'text-slate-500'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">{sector.label}</p>
+                        <p className="text-[9px] text-slate-500 dark:text-[#71717a] truncate">{sector.description}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={isCreating}

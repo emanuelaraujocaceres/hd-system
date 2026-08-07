@@ -21,6 +21,7 @@ import {
   Sparkles,
   RefreshCw,
   Tv,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { Product, Category, Supplier, StockMovement, UserProfile, SystemSettings, WholesaleOption } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -760,6 +761,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   </div>
                 </th>
                 <th className="py-3.5 px-4 hidden lg:table-cell">TV</th>
+                <th className="py-3.5 px-4 hidden lg:table-cell">Cardápio</th>
                 <th className="py-3.5 px-4 text-right">Ações</th>
               </tr>
             </thead>
@@ -821,23 +823,33 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                           {p.currentStock} {p.unit}
                         </span>
                       </td>
-                      <td className="py-3 px-4 hidden lg:table-cell">
-                        {p.showOnTV ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-[10px] border border-amber-500/20 flex items-center gap-1">
-                              <Tv className="w-3 h-3" />
-                              OFERTA
-                            </span>
-                            {p.tvPromoPrice && p.tvPromoPrice > 0 && (
-                              <span className="text-[10px] font-bold text-emerald-500">
-                                R$ {p.tvPromoPrice.toFixed(2)}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 dark:text-[#52525b]">—</span>
-                        )}
-                      </td>
+                       <td className="py-3 px-4 hidden lg:table-cell">
+                         {p.showOnTV ? (
+                           <div className="flex items-center gap-1.5">
+                             <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 font-bold text-[10px] border border-amber-500/20 flex items-center gap-1">
+                               <Tv className="w-3 h-3" />
+                               OFERTA
+                             </span>
+                             {p.tvPromoPrice && p.tvPromoPrice > 0 && (
+                               <span className="text-[10px] font-bold text-emerald-500">
+                                 R$ {p.tvPromoPrice.toFixed(2)}
+                               </span>
+                             )}
+                           </div>
+                         ) : (
+                           <span className="text-[10px] text-slate-400 dark:text-[#52525b]">—</span>
+                         )}
+                       </td>
+                       <td className="py-3 px-4 hidden lg:table-cell">
+                         {p.showOnCardapio ? (
+                           <span className="px-2 py-0.5 rounded-md bg-teal-500/10 text-teal-600 dark:text-teal-400 font-bold text-[10px] border border-teal-500/20 flex items-center gap-1 w-fit">
+                             <UtensilsCrossed className="w-3 h-3" />
+                             CARDÁPIO
+                           </span>
+                         ) : (
+                           <span className="text-[10px] text-slate-400 dark:text-[#52525b]">—</span>
+                         )}
+                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button

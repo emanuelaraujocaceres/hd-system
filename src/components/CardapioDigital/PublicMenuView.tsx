@@ -195,11 +195,12 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
       // Print to configured printers (routed by category: kitchen/bar/caixa)
       const printers = storageService.getPrinters();
       const allProducts = storageService.getProducts();
+      const allCategories = storageService.getCategories();
       const activePrinters = printers.filter((p) => p.transport !== 'os');
 
       if (activePrinters.length > 0) {
         // Route items to appropriate printers
-        const routing = routeItemsToPrinters(sale.items, activePrinters, allProducts);
+        const routing = routeItemsToPrinters(sale.items, activePrinters, allProducts, allCategories);
         for (const [printer, items] of routing.entries()) {
           try {
             const sectionLabel = printer.role === 'cozinha' ? 'Cozinha' : printer.role === 'bar' ? 'Bar' : 'Caixa';

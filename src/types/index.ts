@@ -77,6 +77,7 @@ export interface Category {
   description?: string;
   storeBranchId?: string; // isolamento por filial
   organizationId?: string; // multi-tenant
+  sectors?: string[]; // setores vinculados (cozinha/bar/caixa)
 }
 
 // Opção de venda no ATACADO (caixa/fardo): quantidade de unidades na caixa + preço
