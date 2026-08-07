@@ -16,12 +16,16 @@ interface CategoryManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
   categories: Category[];
+  storeBranchId?: string;
+  organizationId?: string;
 }
 
 export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   isOpen,
   onClose,
   categories,
+  storeBranchId,
+  organizationId,
 }) => {
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
@@ -55,6 +59,8 @@ export const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
       name: newCatName.trim(),
       description: newCatDesc.trim() || 'Categoria de produtos',
       sectors: newCatSectors.length > 0 ? newCatSectors : undefined,
+      storeBranchId: storeBranchId,
+      organizationId: organizationId,
     };
 
     storageService.saveCategory(newCategory);

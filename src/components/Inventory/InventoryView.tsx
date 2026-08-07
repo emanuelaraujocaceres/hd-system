@@ -1691,6 +1691,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         isOpen={isCategoryModalOpen}
         onClose={() => setIsCategoryModalOpen(false)}
         categories={categories}
+        storeBranchId={user.storeBranchId}
+        organizationId={user.organizationId}
       />
 
       {/* LIVE CAMERA VIEWFINDER MODAL */}
