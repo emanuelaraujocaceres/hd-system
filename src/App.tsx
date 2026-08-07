@@ -39,6 +39,7 @@ import {
 } from './types';
 import { ToastProvider } from './components/shared/Toast';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useBranchTheme } from './hooks/useBranchTheme';
 import { PermissionEngine } from './lib/iam';
 
 // Lazy-loaded views for code splitting (reduces TDZ risk from scope-hoisting)
@@ -136,6 +137,9 @@ export const App: React.FC = () => {
     // Collaborator: vê APENAS sua filial
     return branches.filter(b => b.id === user.storeBranchId);
   }, [branches, user]);
+
+  // Apply branch theme (CSS variables)
+  useBranchTheme(storageService.getBranchTheme());
 
   // Load initial state and subscribe to reactive storage updates
   useEffect(() => {

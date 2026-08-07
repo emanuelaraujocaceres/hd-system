@@ -26,8 +26,9 @@ import {
   Star,
   Loader2,
   MonitorPlay,
+  Palette,
 } from 'lucide-react';
-import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, MediaDevice } from '../../types';
+import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, MediaDevice, BranchTheme } from '../../types';
 import { storageService } from '../../services/storageService';
 import { pixConfigService, PixBranchConfig, PixKeyType } from '../../services/pixConfigService';
 import { posAudio } from '../../services/audioService';
@@ -45,7 +46,7 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, user }) => {
   const isAdmin = user.role === 'admin';
-  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv'>('fiscal');
+  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance'>('fiscal');
 
   // Inline message state (replaces browser alert())
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -85,6 +86,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   // TV Showcase Settings State
   const [tvSlideSpeed, setTvSlideSpeed] = useState(settings.tvSlideSpeed || 6);
   const [tvDisplayMode, setTvDisplayMode] = useState<'single' | 'grid'>(settings.tvDisplayMode || 'single');
+
+  // Appearance / Theme State (paleta por filial)
+  const existingTheme = storageService.getBranchTheme();
+  const [themePrimary, setThemePrimary] = useState(existingTheme?.primaryColor || '#4f46e5');
+  const [themeSecondary, setThemeSecondary] = useState(existingTheme?.secondaryColor || '#6366f1');
+  const [themeAccent, setThemeAccent] = useState(existingTheme?.accentColor || '#f59e0b');
+  const [themeBg, setThemeBg] = useState(existingTheme?.bgColor || '#09090b');
+  const [savingTheme, setSavingTheme] = useState(false);
 
   // Rodapé da TV — mensagens sincronizadas (tabela footer_messages)
   const [footerMessages, setFooterMessages] = useState<FooterMessage[]>(storageService.getFooterMessages());
@@ -536,6 +545,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     }
   };
 
+  // ── Tema / Paleta de cores por filial ───────────────────────────
+  const handleSaveTheme = () => {
+    setSavingTheme(true);
+    try {
+      storageService.saveBranchTheme({
+        id: existingTheme?.id || crypto.randomUUID(),
+        primaryColor: themePrimary,
+        secondaryColor: themeSecondary,
+        accentColor: themeAccent,
+        bgColor: themeBg,
+        logoUrl: existingTheme?.logoUrl || undefined,
+        faviconUrl: existingTheme?.faviconUrl || undefined,
+        storeBranchId: user.storeBranchId,
+        organizationId: user.organizationId,
+        updatedAt: new Date().toISOString(),
+      });
+      posAudio.chime();
+      setSuccessMessage('Paleta de cores salva! Recarregue para ver o efeito completo.');
+    } catch (err: any) {
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível salvar a paleta de cores.'));
+      posAudio.error();
+    } finally {
+      setSavingTheme(false);
+    }
+  };
+
   // ── Mensagens do rodapé da TV (footer_messages) ──────────────────────
   const refreshFooterMessages = () => setFooterMessages(storageService.getFooterMessages());
 
@@ -778,6 +813,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           >
             <Tv className="w-4 h-4" />
             <span>TV / Vitrine</span>
+          </button>
+          <button
+            onClick={() => setActiveSubTab('appearance')}
+            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+              activeSubTab === 'appearance'
+                ? 'bg-white dark:bg-[#27272a] text-pink-600 dark:text-pink-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Palette className="w-4 h-4" />
+            <span>Aparência</span>
           </button>
         </div>
       </div>
@@ -2235,6 +2281,156 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                   Nenhuma TV cadastrada — adicione uma acima para gerar o código de pareamento.
                 </p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- TAB 6: APARÊNCIA / TEMA --- */}
+      {activeSubTab === 'appearance' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-pink-500/10 text-pink-600 dark:text-pink-400">
+                <Palette className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Paleta de Cores da Filial</h3>
+                <p className="text-xs text-slate-500 dark:text-[#71717a]">Personalize as cores primária, secundária, de destaque e fundo da sua filial</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Cor Primária */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] block">
+                  Cor Primária
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+                  Cor principal do sistema (botões, links, destaques)
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={themePrimary}
+                    onChange={(e) => setThemePrimary(e.target.value)}
+                    className="w-10 h-10 rounded-lg border border-slate-200 dark:border-[#27272a] cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={themePrimary}
+                    onChange={(e) => setThemePrimary(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-mono text-slate-900 dark:text-white"
+                    placeholder="#4f46e5"
+                  />
+                </div>
+              </div>
+
+              {/* Cor Secundária */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] block">
+                  Cor Secundária
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+                  Cor complementar para gradientes e variações
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={themeSecondary}
+                    onChange={(e) => setThemeSecondary(e.target.value)}
+                    className="w-10 h-10 rounded-lg border border-slate-200 dark:border-[#27272a] cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={themeSecondary}
+                    onChange={(e) => setThemeSecondary(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-mono text-slate-900 dark:text-white"
+                    placeholder="#6366f1"
+                  />
+                </div>
+              </div>
+
+              {/* Cor de Destaque */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] block">
+                  Cor de Destaque
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+                  Cor para alertas, badges e elementos chamativos
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={themeAccent}
+                    onChange={(e) => setThemeAccent(e.target.value)}
+                    className="w-10 h-10 rounded-lg border border-slate-200 dark:border-[#27272a] cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={themeAccent}
+                    onChange={(e) => setThemeAccent(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-mono text-slate-900 dark:text-white"
+                    placeholder="#f59e0b"
+                  />
+                </div>
+              </div>
+
+              {/* Cor de Fundo */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] block">
+                  Cor de Fundo
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+                  Cor de fundo do modo escuro (dashboard, cards)
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={themeBg}
+                    onChange={(e) => setThemeBg(e.target.value)}
+                    className="w-10 h-10 rounded-lg border border-slate-200 dark:border-[#27272a] cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={themeBg}
+                    onChange={(e) => setThemeBg(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-mono text-slate-900 dark:text-white"
+                    placeholder="#09090b"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Preview das cores */}
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-3">
+              <p className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa]">Pré-visualização</p>
+              <div className="flex items-center gap-3">
+                <div className="flex gap-2">
+                  <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: themePrimary }} title="Primária" />
+                  <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: themeSecondary }} title="Secundária" />
+                  <div className="w-8 h-8 rounded-lg" style={{ backgroundColor: themeAccent }} title="Destaque" />
+                  <div className="w-8 h-8 rounded-lg border border-slate-200 dark:border-[#27272a]" style={{ backgroundColor: themeBg }} title="Fundo" />
+                </div>
+                <div className="flex gap-2 ml-auto">
+                  <span className="px-3 py-1 rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: themePrimary }}>Botão</span>
+                  <span className="px-3 py-1 rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: themeAccent }}>Badge</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-slate-200 dark:border-[#27272a]">
+              <button
+                onClick={handleSaveTheme}
+                disabled={savingTheme}
+                className="min-h-[44px] px-5 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-bold disabled:opacity-60 flex items-center gap-2 text-xs"
+              >
+                {savingTheme ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
+                ) : (
+                  <><Save className="w-4 h-4" /> Salvar Paleta</>
+                )}
+              </button>
             </div>
           </div>
         </div>
