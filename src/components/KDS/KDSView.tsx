@@ -8,6 +8,9 @@ import {
   Loader2,
   RefreshCw,
   Filter,
+  Maximize2,
+  Minimize2,
+  Bell,
 } from 'lucide-react';
 import { Sale, Table, Product, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -74,6 +77,8 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
   const { addToast } = useToast();
   const [now, setNow] = useState(Date.now());
   const [filterType, setFilterType] = useState<'all' | 'food' | 'drink'>('all');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showNotification, setShowNotification] = useState(false);
 
   // Update elapsed time every 30 seconds
   useEffect(() => {
@@ -190,7 +195,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
   const preparingCount = ordersByStatus.preparing.length;
 
   return (
-    <div className="h-full flex flex-col bg-slate-50 dark:bg-[#09090b]">
+    <div className={`h-full flex flex-col bg-slate-50 dark:bg-[#09090b] ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}>
       {/* Header */}
       <div className="px-4 sm:px-6 py-3 bg-white dark:bg-[#18181b] border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
@@ -207,8 +212,29 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
           </div>
         </div>
 
-        {/* Filter */}
+        {/* Filter + Fullscreen */}
         <div className="flex items-center gap-2">
+          {/* Notification bell with pending count */}
+          <div className="relative">
+            <button
+              onClick={() => setShowNotification((prev) => !prev)}
+              className="p-2 rounded-xl bg-slate-100 dark:bg-[#27272a] text-slate-500 dark:text-slate-400 relative"
+            >
+              <Bell className="w-4 h-4" />
+              {pendingCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+            {showNotification && pendingCount > 0 && (
+              <div className="absolute right-0 top-full mt-2 p-3 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-lg z-10 w-48">
+                <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  {pendingCount} pedido(s) pendente(s)
+                </p>
+              </div>
+            )}
+          </div>
           <div className="flex items-center bg-slate-100 dark:bg-[#27272a] rounded-full overflow-hidden">
             {([['all', 'Todos'], ['food', 'Cozinha'], ['drink', 'Bar']] as const).map(([key, label]) => (
               <button
@@ -222,6 +248,14 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
               </button>
             ))}
           </div>
+          {/* Fullscreen toggle */}
+          <button
+            onClick={() => setIsFullscreen((prev) => !prev)}
+            className="p-2 rounded-xl bg-slate-100 dark:bg-[#27272a] text-slate-500 dark:text-slate-400"
+            title={isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
         </div>
       </div>
 
