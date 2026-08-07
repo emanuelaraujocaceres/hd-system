@@ -547,7 +547,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
                   </p>
                   <div className="mt-auto flex items-center justify-between">
                     <span className="text-sm font-bold text-emerald-600">
-                      {config?.showPrices !== false ? `R$ ${product.salePrice.toFixed(2)}` : 'Consultar'}
+                      {config?.showPrices !== false ? `R$ ${(product.salePrice ?? 0).toFixed(2)}` : 'Consultar'}
                     </span>
                     {product.currentStock > 0 && config?.showPrices !== false && (
                       <button
@@ -602,7 +602,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
                 <div key={item.product.id} className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 dark:bg-[#09090b]">
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.product.name}</p>
-                    <p className="text-[10px] text-slate-500">R$ {item.product.salePrice.toFixed(2)} cada</p>
+                    <p className="text-[10px] text-slate-500">R$ {(item.product.salePrice ?? 0).toFixed(2)} cada</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => removeFromCart(item.product.id)} className="w-6 h-6 rounded-full bg-slate-200 dark:bg-[#27272a] flex items-center justify-center">
@@ -614,7 +614,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
                     </button>
                   </div>
                   <span className="text-xs font-bold text-slate-900 dark:text-white w-16 text-right">
-                    R$ {(item.product.salePrice * item.quantity).toFixed(2)}
+                    R$ {((item.product.salePrice ?? 0) * item.quantity).toFixed(2)}
                   </span>
                 </div>
               ))}
@@ -628,7 +628,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
               <div className="p-4 border-t border-slate-200 dark:border-[#27272a] space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Total</span>
-                  <span className="text-lg font-bold text-slate-900 dark:text-white">R$ {cartTotal.toFixed(2)}</span>
+                  <span className="text-lg font-bold text-slate-900 dark:text-white">R$ {(cartTotal ?? 0).toFixed(2)}</span>
                 </div>
                 <button
                   onClick={handleSubmitOrder}
@@ -661,7 +661,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
             className="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg"
           >
             <ShoppingCart className="w-4 h-4" />
-            Ver Pedido ({cartCount}) • R$ {cartTotal.toFixed(2)}
+            Ver Pedido ({cartCount}) • R$ {(cartTotal ?? 0).toFixed(2)}
           </button>
         </div>
       )}
@@ -674,7 +674,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
             className="w-full py-3 rounded-xl bg-teal-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg"
           >
             <Receipt className="w-4 h-4" />
-            Minha Comanda ({myOrders.length}) • R$ {myComandaTotal.toFixed(2)}
+            Minha Comanda ({myOrders.length}) • R$ {(myComandaTotal ?? 0).toFixed(2)}
           </button>
         </div>
       )}
@@ -719,14 +719,14 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
                           <span className="text-slate-700 dark:text-slate-300">
                             {item.quantity}x {item.productName}
                           </span>
-                          <span className="font-semibold text-slate-900 dark:text-white">R$ {item.total.toFixed(2)}</span>
+                          <span className="font-semibold text-slate-900 dark:text-white">R$ {(item.total ?? 0).toFixed(2)}</span>
                         </div>
                       ))}
                     </div>
                     <div className="mt-2 pt-2 border-t border-slate-200 dark:border-[#27272a] flex items-center justify-between">
                       <span className="text-[10px] text-slate-400">{new Date(sale.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
                       <span className="text-xs font-bold text-slate-900 dark:text-white">
-                        R$ {(sale.total > 0 ? sale.total : (sale.items?.reduce((a, i) => a + (i.total || 0), 0) || 0)).toFixed(2)}
+                        R$ {((sale.total > 0 ? sale.total : (sale.items?.reduce((a, i) => a + (i.total || 0), 0) || 0)) ?? 0).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -737,7 +737,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
               <div className="p-4 border-t border-slate-200 dark:border-[#27272a] space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-bold text-slate-700 dark:text-slate-300">TOTAL</span>
-                  <span className="text-xl font-bold text-slate-900 dark:text-white">R$ {myComandaTotal.toFixed(2)}</span>
+                  <span className="text-xl font-bold text-slate-900 dark:text-white">R$ {(myComandaTotal ?? 0).toFixed(2)}</span>
                 </div>
                 <div className="space-y-2">
                   <p className="text-[10px] font-bold text-slate-500 uppercase">Forma de Pagamento</p>

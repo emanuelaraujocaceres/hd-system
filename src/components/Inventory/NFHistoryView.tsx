@@ -10,6 +10,11 @@ import {
   DollarSign,
   StickyNote,
   X,
+  Plus,
+  Camera,
+  Printer,
+  Send,
+  Trash2,
 } from 'lucide-react';
 import { Product, Supplier } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -38,6 +43,12 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
   const [nfs, setNfs] = useState<NFRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [scannedImage, setScannedImage] = useState<string | null>(null);
+  const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [showWhatsappModal, setShowWhatsappModal] = useState<string | null>(null);
 
   // Load NFs (localStorage + banco via storageService)
   useEffect(() => {
@@ -104,10 +115,121 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
     setExpandedId(expandedId === id ? null : id);
   };
 
+  // ── Camera & Document Scan ──
+  const startCamera = async () => {
+    setCameraError(null);
+    setScannedImage(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+      setCameraStream(stream);
+      setIsAddModalOpen(true);
+    } catch (err: any) {
+      setCameraError('Câmera indisponível. Verifique as permissões.');
+    }
+  };
+
+  const captureDocument = () => {
+    if (!cameraStream) return;
+    const video = document.querySelector('#nf-scan-video') as HTMLVideoElement;
+    if (!video) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    const imageData = canvas.toDataURL('image/jpeg', 0.95);
+    setScannedImage(imageData);
+    stopCamera();
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((t) => t.stop());
+      setCameraStream(null);
+    }
+  };
+
+  const closeAddModal = () => {
+    stopCamera();
+    setIsAddModalOpen(false);
+    setScannedImage(null);
+    setCameraError(null);
+  };
+
+  // ── PDF Generation ──
+  const generatePDF = (nf: NFRecord): void => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>NF - ${nf.supplierName}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+          h1 { font-size: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+          .header { display: flex; justify-content: space-between; margin-bottom: 20px; }
+          .info { margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background: #f5f5f5; }
+          .total { font-size: 18px; font-weight: bold; text-align: right; }
+          .note { margin-top: 20px; padding: 10px; background: #f9f9f9; border-radius: 4px; }
+        </style>
+      </head>
+      <body>
+        <h1>Nota Fiscal</h1>
+        <div class="header">
+          <div class="info"><strong>Fornecedor:</strong> ${nf.supplierName}</div>
+          <div class="info"><strong>Data:</strong> ${formatDate(nf.scanDate)}</div>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Produto</th><th>Qtd</th><th>Unitário</th><th>Total</th></tr>
+          </thead>
+          <tbody>
+            ${nf.items.map((item) => `
+              <tr>
+                <td>${item.productName}</td>
+                <td>${item.quantity}</td>
+                <td>R$ ${item.unitPrice.toFixed(2)}</td>
+                <td>R$ ${(item.quantity * item.unitPrice).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="total">Total: R$ ${nf.totalValue.toFixed(2)}</div>
+        ${nf.note ? `<div class="note"><strong>Obs:</strong> ${nf.note}</div>` : ''}
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  // ── WhatsApp Share ──
+  const shareViaWhatsApp = (nf: NFRecord, phoneNumber: string) => {
+    const message = encodeURIComponent(
+      `📄 Nota Fiscal\n` +
+      `Fornecedor: ${nf.supplierName}\n` +
+      `Data: ${formatDate(nf.scanDate)}\n` +
+      `Itens: ${nf.items.length}\n` +
+      `Total: R$ ${nf.totalValue.toFixed(2)}`
+    );
+    const cleanNumber = phoneNumber.replace(/\D/g, '');
+    window.open(`https://wa.me/${cleanNumber}?text=${message}`, '_blank');
+  };
+
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-5xl mx-auto">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl">
             <FileText className="w-6 h-6" />
@@ -116,14 +238,23 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
             <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">
               Notas Fiscais Escaneadas
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs text-slate-500 dark:text-[#71717a]">
               Histórico de NFs importadas via câmera ou formulário
             </p>
           </div>
         </div>
-        <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-extrabold">
-          {nfs.length} NF{nfs.length !== 1 ? 's' : ''}
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={startCamera}
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Adicionar NF
+          </button>
+          <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-extrabold">
+            {nfs.length} NF{nfs.length !== 1 ? 's' : ''}
+          </span>
+        </div>
       </div>
 
       {/* Search Bar */}
