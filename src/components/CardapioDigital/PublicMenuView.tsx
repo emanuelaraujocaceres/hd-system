@@ -17,7 +17,6 @@ import { Product, Table, DigitalMenuConfig, CustomerSession, Sale } from '../../
 import { storageService } from '../../services/storageService';
 import { printRoutedItems } from '../../services/printService';
 import { routeItemsToPrinters } from '../../services/printerRouting';
-import { supabase } from '../../lib/supabase';
 
 interface PublicMenuViewProps {
   tableToken: string;
@@ -49,43 +48,47 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Find table by QR token - try localStorage first, then cloud
-        let foundTable = storageService.getTables().find((t) => t.qrToken === tableToken);
+        // Fetch table, config and products via public Edge Function
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-table-by-token?token=${encodeURIComponent(tableToken)}`,
+          { headers: { 'Content-Type': 'application/json' } }
+        );
 
-        // If not in localStorage, fetch directly from cloud
-        if (!foundTable) {
-          const { data: tableFromCloud } = await supabase
-            .from('tables')
-            .select('*')
-            .eq('qr_token', tableToken)
-            .eq('status', 'active')
-            .single();
-
-          if (tableFromCloud) {
-            foundTable = {
-              id: tableFromCloud.id,
-              name: tableFromCloud.name,
-              number: tableFromCloud.number || undefined,
-              qrToken: tableFromCloud.qr_token,
-              status: tableFromCloud.status,
-              storeBranchId: tableFromCloud.store_branch_id,
-              organizationId: tableFromCloud.organization_id,
-              createdAt: tableFromCloud.created_at,
-              updatedAt: tableFromCloud.updated_at,
-            };
-            // Save to localStorage for next time
-            storageService.saveTable(foundTable);
-          }
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          setError(errData.error || 'Mesa não encontrada. Verifique o QR Code.');
+          setLoading(false);
+          return;
         }
 
-        if (!foundTable) {
+        const data = await response.json();
+
+        if (!data.table) {
           setError('Mesa não encontrada. Verifique o QR Code.');
           setLoading(false);
           return;
         }
+
+        const foundTable: Table = {
+          id: data.table.id,
+          name: data.table.name,
+          number: data.table.number || undefined,
+          qrToken: tableToken,
+          status: 'active',
+          storeBranchId: data.table.storeBranchId,
+          organizationId: data.table.organizationId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
         setTable(foundTable);
 
-        // Check for active session (1 device per mesa)
+        // Set products from response
+        setProducts(data.products || []);
+
+        // Set config
+        setConfig(data.config);
+
+        // Check for active session (1 device per mesa) - local only
         const sessions = storageService.getCustomerSessions();
         const activeSession = sessions.find(
           (s) => s.tableId === foundTable.id && s.status === 'active'
@@ -116,13 +119,6 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
         } else {
           setSession(activeSession);
         }
-
-        // Load products (show only active ones AND showOnCardapio = true)
-        const allProducts = storageService.getProducts();
-        setProducts(allProducts.filter((p) => p.active !== false && p.showOnCardapio !== false));
-
-        // Load menu config
-        setConfig(storageService.getDigitalMenuConfig());
 
         setLoading(false);
       } catch (err: any) {
