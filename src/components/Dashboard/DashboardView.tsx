@@ -9,8 +9,12 @@ import {
   ChevronDown,
   ChevronUp,
   Users,
+  TrendingUp,
+  PieChart,
+  CreditCard,
+  Calendar,
 } from 'lucide-react';
-import { Product, Sale, UserProfile, FinancialAccount, CashRegisterSession } from '../../types';
+import { Product, Sale, UserProfile, FinancialAccount, CashRegisterSession, Category } from '../../types';
 import { storageService } from '../../services/storageService';
 import { CollaboratorPerformance } from './CollaboratorPerformance';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
@@ -19,9 +23,12 @@ import { undoManager } from '../../lib/undoManager';
 import { posAudio } from '../../services/audioService';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 
+type PeriodFilter = 'today' | 'week' | 'month';
+
 interface DashboardViewProps {
   sales: Sale[];
   products: Product[];
+  categories: Category[];
   user: UserProfile;
   financialAccounts: FinancialAccount[];
   caixaSession: CashRegisterSession;
@@ -32,6 +39,7 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   sales,
   products,
+  categories,
   user,
   financialAccounts,
   caixaSession,
@@ -41,6 +49,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const isAdmin = user.role === 'admin';
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [period, setPeriod] = useState<PeriodFilter>('today');
   const [confirmDeleteSale, setConfirmDeleteSale] = useState<Sale | null>(null);
   const { addToast } = useToast();
 
@@ -107,6 +116,94 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       .slice(0, 3);
   }, [sales]);
 
+  // ── PERÍODO DE FILTRO (dia/semana/mês) ──────────────────────────
+  const periodRange = useMemo(() => {
+    const now = new Date();
+    let start: Date;
+    if (period === 'today') {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (period === 'week') {
+      start = new Date(now);
+      start.setDate(now.getDate() - 7);
+    } else {
+      start = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    }
+    return { start, end: now };
+  }, [period]);
+
+  const periodSales = useMemo(() => {
+    return sales.filter((s) => {
+      if (s.status !== 'completed') return false;
+      const d = new Date(s.date);
+      return d >= periodRange.start && d <= periodRange.end;
+    });
+  }, [sales, periodRange]);
+
+  const periodRevenue = periodSales.reduce((acc, s) => acc + getSaleTotal(s), 0);
+  const periodTicket = periodSales.length > 0 ? periodRevenue / periodSales.length : 0;
+
+  // ── VENDAS POR CATEGORIA (receita) ──────────────────────────────
+  const revenueByCategory = useMemo(() => {
+    const catMap = new Map<string, number>();
+    for (const sale of periodSales) {
+      for (const item of sale.items || []) {
+        // Encontrar a categoria do produto pelo ID
+        const product = products.find((p) => p.id === item.productId);
+        const catName = product?.category || 'Sem Categoria';
+        catMap.set(catName, (catMap.get(catName) || 0) + item.total);
+      }
+    }
+    const total = Array.from(catMap.values()).reduce((a, b) => a + b, 0) || 1;
+    return Array.from(catMap.entries())
+      .map(([name, value]) => ({ name, value, pct: (value / total) * 100 }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+  }, [periodSales, products]);
+
+  // ── FORMAS DE PAGAMENTO (distribuição percentual) ───────────────
+  const paymentDistribution = useMemo(() => {
+    const payMap = new Map<string, number>();
+    for (const sale of periodSales) {
+      for (const pay of sale.payments || []) {
+        const labels: Record<string, string> = {
+          cash: 'Dinheiro', pix: 'PIX', credit_card: 'Crédito',
+          debit_card: 'Débito', credit_account: 'Fiado',
+        };
+        const label = labels[pay.method] || pay.method;
+        payMap.set(label, (payMap.get(label) || 0) + (pay.amount || getSaleTotal(sale)));
+      }
+    }
+    const total = Array.from(payMap.values()).reduce((a, b) => a + b, 0) || 1;
+    return Array.from(payMap.entries())
+      .map(([name, value]) => ({ name, value, pct: (value / total) * 100 }))
+      .sort((a, b) => b.value - a.value);
+  }, [periodSales]);
+
+  // ── CURVA ABC (produtos por RECEITA, não só quantidade) ─────────
+  const abcByRevenue = useMemo(() => {
+    const revMap = new Map<string, { name: string; revenue: number; qty: number }>();
+    for (const sale of periodSales) {
+      for (const item of sale.items || []) {
+        const existing = revMap.get(item.productId);
+        if (existing) {
+          existing.revenue += item.total;
+          existing.qty += item.quantity;
+        } else {
+          revMap.set(item.productId, { name: item.productName, revenue: item.total, qty: item.quantity });
+        }
+      }
+    }
+    const total = Array.from(revMap.values()).reduce((a, b) => a + b.revenue, 0) || 1;
+    let cumulative = 0;
+    return Array.from(revMap.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 8)
+      .map((item) => {
+        cumulative += (item.revenue / total) * 100;
+        return { ...item, pct: (item.revenue / total) * 100, cumulative };
+      });
+  }, [periodSales]);
+
   // Delete venda — handler único (usado no desktop e no mobile), com
   // confirmação, tratamento de erro amigável e botão "Desfazer" no toast.
   const handleConfirmDeleteSale = () => {
@@ -163,6 +260,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
+          {/* Seletor de período BI */}
+          <div className="flex items-center bg-[#27272a] rounded-full border border-[#3f3f46] overflow-hidden">
+            {([['today', 'Hoje'], ['week', 'Semana'], ['month', 'Mês']] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setPeriod(key)}
+                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                  period === key ? 'bg-white text-black' : 'text-[#a1a1aa] hover:text-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <button
             onClick={() => onNavigateTab('pdv')}
             className="px-4 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-slate-200 transition-colors shadow-md flex items-center gap-2"
@@ -181,35 +292,52 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* KPI METRIC CARDS GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
-        {/* Card 1: Faturamento Hoje / Período do Caixa */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+        {/* Card 1: Faturamento do período selecionado */}
         <button onClick={() => onNavigateTab('finance')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
-          <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">
-            {caixaIsOpen ? 'Faturamento do Caixa' : 'Vendas Hoje'}
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold flex items-center gap-1">
+            <Calendar className="w-3 h-3" />
+            {period === 'today' ? 'Faturamento Hoje' : period === 'week' ? 'Faturamento Semana' : 'Faturamento Mês'}
           </p>
           <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
-            R$ {caixaPeriodRevenue.toFixed(2)}
+            R$ {periodRevenue.toFixed(2)}
           </p>
           <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
-            {caixaPeriodRevenue > 0 ? <span className="text-emerald-500">✓ </span> : <span className="text-slate-400">—</span>}
+            {periodRevenue > 0 ? <span className="text-emerald-500">✓ </span> : <span className="text-slate-400">—</span>}
             <span className="text-slate-400 dark:text-[#71717a]">
-              {caixaIsOpen ? 'vendas desde a abertura' : 'vendas hoje'}
+              {periodSales.length} transações no período
             </span>
           </div>
         </button>
 
-        {/* Card 2: Qtd Vendas Hoje / Transações do período do caixa */}
+        {/* Card 2: Ticket médio do período */}
         <button onClick={() => onNavigateTab('finance')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
-          <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">
-            {caixaIsOpen ? 'Transações do Caixa' : 'Transações'}
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold flex items-center gap-1">
+            <TrendingUp className="w-3 h-3" />
+            Ticket Médio
           </p>
           <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
-            {caixaPeriodCount}
+            R$ {periodTicket.toFixed(2)}
           </p>
           <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
-            <span className="text-slate-400 dark:text-[#71717a]">ticket médio R$ {caixaPeriodTicket.toFixed(2)}</span>
+            <span className="text-slate-400 dark:text-[#71717a]">
+              {period === 'today' ? 'dia' : period === 'week' ? 'última semana' : 'último mês'}
+            </span>
           </div>
         </button>
+
+        {/* Card 3: Faturamento do Caixa aberto (se aberto) */}
+        {caixaIsOpen && (
+          <button onClick={() => onNavigateTab('finance')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">Faturamento do Caixa</p>
+            <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
+              R$ {caixaPeriodRevenue.toFixed(2)}
+            </p>
+            <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
+              <span className="text-slate-400 dark:text-[#71717a]">vendas desde a abertura</span>
+            </div>
+          </button>
+        )}
 
         {/* Card 3: Alerta de Estoque Baixo */}
         <button onClick={() => onNavigateTab('inventory')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
@@ -484,6 +612,92 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             )}
           </button>
+
+          {/* BI: Vendas por Categoria (período selecionado) */}
+          <div className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
+            <h3 className="text-xs uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a] mb-4 flex items-center gap-2">
+              <PieChart className="w-3.5 h-3.5" />
+              Vendas por Categoria
+            </h3>
+            {revenueByCategory.length > 0 ? (
+              <div className="space-y-2.5">
+                {revenueByCategory.map((cat, idx) => (
+                  <div key={idx}>
+                    <div className="flex items-center justify-between text-[11px] mb-1">
+                      <span className="font-medium text-slate-700 dark:text-slate-300 truncate">{cat.name}</span>
+                      <span className="font-bold text-slate-900 dark:text-white">R$ {cat.value.toFixed(2)}</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-100 dark:bg-[#27272a] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-500 rounded-full transition-all"
+                        style={{ width: `${Math.min(cat.pct, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 dark:text-[#71717a]">Sem vendas no período</p>
+            )}
+          </div>
+
+          {/* BI: Formas de Pagamento (distribuição) */}
+          <div className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
+            <h3 className="text-xs uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a] mb-4 flex items-center gap-2">
+              <CreditCard className="w-3.5 h-3.5" />
+              Formas de Pagamento
+            </h3>
+            {paymentDistribution.length > 0 ? (
+              <div className="space-y-2.5">
+                {paymentDistribution.map((pay, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-[11px]">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                      <span className="font-medium text-slate-700 dark:text-slate-300">{pay.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 dark:text-white">R$ {pay.value.toFixed(2)}</span>
+                      <span className="text-[10px] text-slate-400 dark:text-[#71717a]">({pay.pct.toFixed(0)}%)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 dark:text-[#71717a]">Sem vendas no período</p>
+            )}
+          </div>
+
+          {/* BI: Curva ABC (produtos por receita) */}
+          <div className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
+            <h3 className="text-xs uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a] mb-4 flex items-center gap-2">
+              <TrendingUp className="w-3.5 h-3.5" />
+              Curva ABC (Receita)
+            </h3>
+            {abcByRevenue.length > 0 ? (
+              <div className="space-y-2">
+                {abcByRevenue.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-[11px]">
+                    <span className={`w-5 h-5 rounded text-[9px] font-bold flex items-center justify-center shrink-0 ${
+                      item.cumulative <= 80 ? 'bg-emerald-500/10 text-emerald-600' :
+                      item.cumulative <= 95 ? 'bg-amber-500/10 text-amber-600' :
+                      'bg-rose-500/10 text-rose-600'
+                    }`}>
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-slate-700 dark:text-slate-300 truncate">{item.name}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-slate-900 dark:text-white">R$ {item.revenue.toFixed(2)}</p>
+                      <p className="text-[9px] text-slate-400">{item.cumulative.toFixed(0)}% acum.</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 dark:text-[#71717a]">Sem vendas no período</p>
+            )}
+          </div>
         </div>
       </div>
 

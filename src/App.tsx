@@ -1048,6 +1048,7 @@ export const App: React.FC = () => {
                 <DashboardView
                   sales={sales}
                   products={products}
+                  categories={categories}
                   user={user}
                   financialAccounts={financialAccounts}
                   caixaSession={caixaSession}
