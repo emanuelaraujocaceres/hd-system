@@ -577,45 +577,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   };
 
   // ── Imprimir QR Code da mesa ──────────────────────────────────
+  const [qrModalTable, setQrModalTable] = useState<Table | null>(null);
+
   const handlePrintQRCode = (table: Table) => {
+    setQrModalTable(table);
+  };
+
+  const handlePrintFromModal = () => {
+    if (!qrModalTable) return;
     const baseUrl = window.location.origin + window.location.pathname;
-    const menuUrl = `${baseUrl}#/mesa/${table.qrToken}`;
-
+    const menuUrl = `${baseUrl}#/mesa/${qrModalTable.qrToken}`;
     const printWindow = window.open('', '_blank', 'width=400,height=500');
-    if (!printWindow) {
-      setErrorMessage('Permita pop-ups para imprimir o QR Code.');
-      return;
-    }
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>QR Code - ${table.name}</title>
-        <style>
-          body { font-family: sans-serif; text-align: center; padding: 20px; margin: 0; }
-          .container { max-width: 300px; margin: 0 auto; }
-          h2 { font-size: 18px; margin: 10px 0; }
-          .qr-box { border: 2px dashed #ccc; padding: 20px; margin: 20px 0; border-radius: 12px; }
-          .qr-url { font-size: 10px; color: #666; word-break: break-all; margin-top: 10px; }
-          .instructions { font-size: 12px; color: #888; margin-top: 15px; }
-          @media print { body { padding: 0; } .qr-box { border: none; } }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h2>${table.name}</h2>
-          <div class="qr-box">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(menuUrl)}" alt="QR Code" width="200" height="200" />
-            <div class="qr-url">${menuUrl}</div>
-          </div>
-          <p class="instructions">Escaneie o QR Code com seu celular<br>para acessar o cardápio digital</p>
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html><html><head><title>QR - ${qrModalTable.name}</title>
+        <style>body{font-family:sans-serif;text-align:center;padding:20px}.qr-box{border:2px dashed #ccc;padding:20px;border-radius:12px}</style>
+        </head><body>
+        <h2>${qrModalTable.name}</h2>
+        <div class="qr-box">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(menuUrl)}" width="200" height="200" />
+          <p style="font-size:10px;word-break:break-all">${menuUrl}</p>
         </div>
-        <script>window.onload = function() { window.print(); }</script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
+        <p>Escaneie para acessar o cardápio</p>
+        <script>window.onload=function(){window.print()}</script>
+        </body></html>
+      `);
+      printWindow.document.close();
+    }
+    setQrModalTable(null);
   };
 
   // ── Cardápio Digital: configuração ──────────────────────────────
@@ -2646,6 +2635,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
 {/* Branch Check — verificar filial de cada usu�rio */}
 <BranchCheck />
+
+{/* QR Code Modal */}
+{qrModalTable && (
+  <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setQrModalTable(null)}>
+    <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="p-5 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between">
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white">QR Code — {qrModalTable.name}</h3>
+        <button onClick={() => setQrModalTable(null)} className="p-1 rounded-lg text-slate-400 hover:bg-slate-100">✕</button>
+      </div>
+      <div className="p-5 flex flex-col items-center">
+        <img
+          src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(window.location.origin + window.location.pathname + '#/mesa/' + qrModalTable.qrToken)}`}
+          alt="QR Code"
+          width="250"
+          height="250"
+          className="rounded-xl"
+        />
+        <p className="text-xs text-slate-500 mt-3 text-center">
+          Escaneie para acessar o cardápio digital
+        </p>
+        <p className="text-[10px] text-slate-400 mt-1 text-center font-mono break-all">
+          {window.location.origin}/#/mesa/{qrModalTable.qrToken}
+        </p>
+      </div>
+      <div className="p-4 border-t border-slate-200 dark:border-[#27272a] flex justify-end gap-2">
+        <button
+          onClick={() => setQrModalTable(null)}
+          className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-[#27272a]"
+        >
+          Fechar
+        </button>
+        <button
+          onClick={handlePrintFromModal}
+          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2"
+        >
+          <PrinterIcon className="w-4 h-4" />
+          Imprimir
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 </div>
   );
 };
