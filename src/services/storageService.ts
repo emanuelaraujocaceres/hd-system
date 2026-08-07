@@ -1429,6 +1429,7 @@ class StorageService {
           (r: any) => ({
             id: r.id, name: r.name, color: r.color || '#6366f1',
             organizationId: r.organization_id || this.getCurrentOrgId(),
+            storeBranchId: r.store_branch_id || undefined,
           }),
           (c) => this.syncCategory(c),
         );
