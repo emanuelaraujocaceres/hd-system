@@ -141,7 +141,7 @@ export interface Supplier {
 }
 
 export type OrderSource = 'pdv' | 'cardapio_digital' | 'fiado';
-export type KitchenStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+export type KitchenStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'closing_request';
 
 export interface Sale {
   id: string;

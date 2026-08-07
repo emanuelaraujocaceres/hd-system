@@ -11,6 +11,8 @@ import {
   Maximize2,
   Minimize2,
   Bell,
+  DollarSign,
+  Check,
 } from 'lucide-react';
 import { Sale, Table, Product, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -65,6 +67,12 @@ const STATUS_CONFIG: Record<KdsStatus, { label: string; color: string; icon: Rea
     label: 'Entregue',
     color: 'bg-slate-500/10 border-slate-500/20 text-slate-600 dark:text-slate-400',
     icon: <CheckCircle2 className="w-4 h-4" />,
+    next: null,
+  },
+  closing_request: {
+    label: 'Fechamento Solicitado',
+    color: 'bg-orange-500/10 border-orange-500/20 text-orange-600 dark:text-orange-400',
+    icon: <DollarSign className="w-4 h-4" />,
     next: null,
   },
 };
@@ -140,6 +148,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
       preparing: [],
       ready: [],
       delivered: [],
+      closing_request: [],
     };
     for (const order of filteredOrders) {
       const status = order.sale.kitchenStatus || 'pending';
@@ -152,6 +161,59 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
     return grouped;
   }, [filteredOrders]);
 
+  // Handle finalize comanda (operator closes with payment)
+  const handleFinalizeComanda = (sale: Sale) => {
+    // Navigate to ComandaView with this sale
+    // For now, just mark as completed and print receipt
+    storageService.saveSale({
+      ...sale,
+      status: 'completed',
+      kitchenStatus: 'delivered',
+      updatedAt: new Date().toISOString(),
+    });
+    posAudio.chime();
+    addToast('success', `Comanda ${sale.tableId?.slice(0, 8)} finalizada!`);
+  };
+
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+
+  // Toggle item selection
+  const toggleItemSelection = (itemKey: string) => {
+    setSelectedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemKey)) next.delete(itemKey);
+      else next.add(itemKey);
+      return next;
+    });
+  };
+
+  // Advance status for selected items only
+  const handleAdvanceSelected = (currentStatus: KdsStatus) => {
+    const nextStatus = STATUS_CONFIG[currentStatus].next;
+    if (!nextStatus || selectedItems.size === 0) return;
+
+    try {
+      for (const itemKey of selectedItems) {
+        const [saleId, productId] = itemKey.split('::');
+        const sale = sales.find((s) => s.id === saleId);
+        if (!sale) continue;
+
+        // Update kitchenStatus for the whole sale (simplified) or per-item in future
+        storageService.saveSale({
+          ...sale,
+          kitchenStatus: nextStatus,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      setSelectedItems(new Set());
+      posAudio.click();
+      addToast('info', `${selectedItems.size} item(ns) → ${STATUS_CONFIG[nextStatus].label}`);
+    } catch (err: any) {
+      addToast('error', 'Erro ao atualizar status.');
+    }
+  };
+
+  // Advance status for a single item (from the whole sale)
   const handleAdvanceStatus = (saleId: string, currentStatus: KdsStatus) => {
     const nextStatus = STATUS_CONFIG[currentStatus].next;
     if (!nextStatus) return;
@@ -308,36 +370,71 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
                           </span>
                         </div>
 
-                        {/* Items */}
+                        {/* Items com checkbox para seleção individual */}
                         <div className="space-y-1">
-                          {order.items.map((item, idx) => (
-                            <div key={idx} className="flex items-center justify-between text-[11px]">
-                              <span className="text-slate-700 dark:text-slate-300">
-                                {item.quantity}x {item.productName}
-                              </span>
-                              {item.isDrink && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600">
-                                  BAR
+                          {order.items.map((item, idx) => {
+                            const itemKey = `${order.sale.id}::${item.productId}`;
+                            const isSelected = selectedItems.has(itemKey);
+                            return (
+                              <div key={idx} className="flex items-center gap-1 text-[11px]">
+                                {status !== 'delivered' && status !== 'closing_request' && (
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleItemSelection(itemKey)}
+                                    className="rounded text-indigo-600 w-3 h-3"
+                                  />
+                                )}
+                                <span className={`flex-1 ${isSelected ? 'font-bold text-indigo-600' : 'text-slate-700 dark:text-slate-300'}`}>
+                                  {item.quantity}x {item.productName}
                                 </span>
-                              )}
-                            </div>
-                          ))}
+                                {item.isDrink && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600">
+                                    BAR
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
 
                         {/* Actions */}
                         <div className="flex items-center gap-1 pt-1 border-t border-slate-200 dark:border-[#27272a]">
-                          {config.next && (
-                            <button
-                              onClick={() => handleAdvanceStatus(order.sale.id, status)}
-                              className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 ${config.color}`}
-                            >
-                              {config.next === 'preparing' && 'Preparar'}
-                              {config.next === 'ready' && 'Pronto'}
-                              {config.next === 'delivered' && 'Entregue'}
-                              <ArrowRight className="w-3 h-3" />
-                            </button>
-                          )}
-                          {status !== 'delivered' && (
+                          {status === 'closing_request' ? (
+                            <>
+                              <div className="flex-1 text-[10px] text-slate-500 dark:text-slate-400">
+                                Pagam.: <strong className="text-slate-900 dark:text-white">{order.sale.payments?.[0]?.method || '?'}</strong>
+                              </div>
+                              <button
+                                onClick={() => handleFinalizeComanda(order.sale)}
+                                className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-bold"
+                              >
+                                Finalizar
+                              </button>
+                            </>
+                          ) : config.next ? (
+                            <>
+                              {selectedItems.size > 0 && (
+                                <button
+                                  onClick={() => handleAdvanceSelected(status)}
+                                  className="px-2 py-1 rounded-lg bg-orange-500 text-white text-[10px] font-bold"
+                                  title="Mover itens selecionados"
+                                >
+                                  Mover ({selectedItems.size})
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleAdvanceStatus(order.sale.id, status)}
+                                className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 ${config.color}`}
+                              >
+                                {config.next === 'preparing' && 'Preparar'}
+                                {config.next === 'ready' && 'Pronto'}
+                                {config.next === 'delivered' && 'Entregue'}
+                                <ArrowRight className="w-3 h-3" />
+                              </button>
+                            </>
+                          ) : null}
+                          {status !== 'delivered' && status !== 'closing_request' && (
                             <button
                               onClick={() => handleCancelOrder(order.sale.id)}
                               className="px-2 py-1.5 rounded-lg text-rose-500 text-[10px] font-bold hover:bg-rose-500/10"

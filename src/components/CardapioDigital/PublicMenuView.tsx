@@ -345,45 +345,23 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
     if (!table || myOrders.length === 0) return;
     setClosingComanda(true);
     try {
-      // Update all sales with payment method and mark as completed
+      // Cliente solicita fechamento → status muda para 'closing_request'
+      // NÃO fecha automaticamente — operador deve finalizar
       for (const sale of myOrders) {
         const updatedSale: Sale = {
           ...sale,
-          status: 'completed',
+          status: 'pending', // Aguardando operador finalizar
           payments: [{ method: paymentMethod, amount: sale.total }],
-          kitchenStatus: sale.kitchenStatus === 'pending' ? 'delivered' : sale.kitchenStatus,
+          kitchenStatus: 'closing_request', // Sinaliza pedido de fechamento
           updatedAt: new Date().toISOString(),
         };
         storageService.saveSale(updatedSale);
       }
 
-      // Close the session
-      if (session) {
-        storageService.saveCustomerSession({
-          ...session,
-          status: 'completed',
-          closedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
-      // Print receipt on caixa printer
-      const caixaPrinter = storageService.getPrinters().find((p) => p.role === 'caixa');
-      if (caixaPrinter) {
-        try {
-          const { printComandaReceipt } = await import('../../services/printService');
-          for (const sale of myOrders) {
-            await printComandaReceipt(sale, table, caixaPrinter, paymentMethod);
-          }
-        } catch (e) {
-          // silent fail - printer may not be connected
-        }
-      }
-
-      setMyOrders([]);
+      // NÃO fecha a sessão — operador faz isso ao finalizar
+      // Cliente vê mensagem de aguardando
       setShowMyComanda(false);
-      // Redirect to success screen
-      setOrderSuccess(true);
+      setOrderSuccess(true); // Mostra tela de sucesso
     } catch (err: any) {
       // silent fail
     } finally {
@@ -698,14 +676,14 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
             className="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg"
           >
             <ShoppingCart className="w-4 h-4" />
-            Ver Pedido ({cartCount}) • R$ {(cartTotal ?? 0).toFixed(2)}
+            Ver Pedido ({cartCount}) • R$ {cartTotal.toFixed(2)}
           </button>
         </div>
       )}
 
-      {/* Floating My Comanda Button (mobile) */}
+      {/* Floating My Comanda Button (mobile) - only if has orders and no cart */}
       {myOrders.length > 0 && !showMyComanda && cartCount === 0 && (
-        <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-64">
+        <div className="fixed bottom-20 left-4 right-4 sm:left-auto sm:right-4 sm:w-64">
           <button
             onClick={() => setShowMyComanda(true)}
             className="w-full py-3 rounded-xl bg-teal-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg"
