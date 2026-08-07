@@ -32,7 +32,6 @@ import {
 } from 'lucide-react';
 import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, PrinterRole, MediaDevice, BranchTheme, Category, Table, DigitalMenuConfig } from '../../types';
 import { storageService } from '../../services/storageService';
-import { pixConfigService, PixBranchConfig, PixKeyType } from '../../services/pixConfigService';
 import { posAudio } from '../../services/audioService';
 import { printTestPage } from '../../services/printService';
 import { callServerApi } from '../../lib/serverApi';
@@ -76,7 +75,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [ie, setIe] = useState(settings.ie);
   const [address, setAddress] = useState(settings.address);
   const [phone, setPhone] = useState(settings.phone);
-  const [pixKey, setPixKey] = useState(settings.pixKey);
   const [printerPaperSize, setPrinterPaperSize] = useState<'80mm' | '58mm'>(settings.printerPaperSize || '80mm');
   const [autoPrintReceipt, setAutoPrintReceipt] = useState(settings.autoPrintReceipt);
 
@@ -135,65 +133,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   // ── PIX Config per branch ───────────────────────────────────
   const currentBranchId = storageService.getSelectedBranchId();
-  const [pixTipoChave, setPixTipoChave] = useState<PixKeyType>('cpf');
-  const [pixChave, setPixChave] = useState('');
-  const [pixNomeTitular, setPixNomeTitular] = useState('');
-  const [pixCidade, setPxCidade] = useState('');
-  const [pixAtivo, setPixAtivo] = useState(true);
-  const [savingPix, setSavingPix] = useState(false);
-
-  // Load PIX config for current branch
-  useEffect(() => {
-    if (currentBranchId) {
-      const config = pixConfigService.getConfig(currentBranchId);
-      if (config) {
-        setPixTipoChave(config.tipoChave);
-        setPixChave(config.chavePix);
-        setPixNomeTitular(config.nomeTitular);
-        setPxCidade(config.cidade);
-        setPixAtivo(config.ativo);
-      } else {
-        // Defaults from global settings
-        setPixTipoChave('cpf');
-        setPixChave(settings.pixKey || '');
-        setPixNomeTitular(settings.tradeName || '');
-        setPxCidade(settings.city || '');
-        setPixAtivo(true);
-      }
-    }
-  }, [currentBranchId, settings]);
-
-  const handleSavePix = async () => {
-    if (!currentBranchId) {
-      setErrorMessage('Nenhuma filial selecionada.');
-      return;
-    }
-    if (!pixChave.trim()) {
-      setErrorMessage('Informe a chave PIX.');
-      return;
-    }
-    if (!pixConfigService.validateChavePix(pixChave, pixTipoChave)) {
-      setErrorMessage('Chave PIX inválida para o tipo selecionado.');
-      return;
-    }
-    setSavingPix(true);
-    try {
-      const config: PixBranchConfig = {
-        chavePix: pixChave.trim(),
-        tipoChave: pixTipoChave,
-        nomeTitular: pixNomeTitular.trim() || settings.tradeName,
-        cidade: pixCidade.trim() || settings.city || 'SAO PAULO',
-        ativo: pixAtivo,
-      };
-      pixConfigService.saveConfig(currentBranchId, config);
-      posAudio.chime();
-      setSuccessMessage('Configuração PIX salva com sucesso!');
-    } catch (err) {
-      setErrorMessage(friendlyErrorMessage(err, 'Erro ao salvar configuração PIX.'));
-    } finally {
-      setSavingPix(false);
-    }
-  };
 
   // Branch Modal / Edit State
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
@@ -265,7 +204,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         ie: ie.trim(),
         address: address.trim(),
         phone: phone.trim(),
-        pixKey: pixKey.trim(),
         printerPaperSize,
         autoPrintReceipt,
       };
@@ -636,6 +574,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       setErrorMessage(friendlyErrorMessage(err, 'Não foi possível remover a mesa.'));
       posAudio.error();
     }
+  };
+
+  // ── Imprimir QR Code da mesa ──────────────────────────────────
+  const handlePrintQRCode = (table: Table) => {
+    const baseUrl = window.location.origin + window.location.pathname;
+    const menuUrl = `${baseUrl}#/mesa/${table.qrToken}`;
+
+    const printWindow = window.open('', '_blank', 'width=400,height=500');
+    if (!printWindow) {
+      setErrorMessage('Permita pop-ups para imprimir o QR Code.');
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>QR Code - ${table.name}</title>
+        <style>
+          body { font-family: sans-serif; text-align: center; padding: 20px; margin: 0; }
+          .container { max-width: 300px; margin: 0 auto; }
+          h2 { font-size: 18px; margin: 10px 0; }
+          .qr-box { border: 2px dashed #ccc; padding: 20px; margin: 20px 0; border-radius: 12px; }
+          .qr-url { font-size: 10px; color: #666; word-break: break-all; margin-top: 10px; }
+          .instructions { font-size: 12px; color: #888; margin-top: 15px; }
+          @media print { body { padding: 0; } .qr-box { border: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h2>${table.name}</h2>
+          <div class="qr-box">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(menuUrl)}" alt="QR Code" width="200" height="200" />
+            <div class="qr-url">${menuUrl}</div>
+          </div>
+          <p class="instructions">Escaneie o QR Code com seu celular<br>para acessar o cardápio digital</p>
+        </div>
+        <script>window.onload = function() { window.print(); }</script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   // ── Cardápio Digital: configuração ──────────────────────────────
@@ -1287,117 +1267,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               teste ao lado — o navegador pede o pareamento na primeira vez (Chrome/Edge). No primeiro clique de "Imprimir
               Recibo", a térmica é usada; sem impressora pareada, abre a janela de impressão do sistema.
             </p>
-          </div>
-
-          {/* ── PIX CONFIG PER BRANCH ──────────────────────────── */}
-          <div className="p-6 rounded-3xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm space-y-4">
-            <div className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-[#27272a] pb-3">
-              <Smartphone className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <span>Chave PIX por Filial</span>
-              {currentBranchId && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 ml-auto">
-                  Filial Ativa
-                </span>
-              )}
-            </div>
-
-            {!currentBranchId ? (
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-semibold flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>Selecione uma filial no menu lateral para configurar a chave PIX.</span>
-              </div>
-            ) : (
-              <div className="space-y-4 text-xs">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                      Tipo da Chave PIX
-                    </label>
-                    <select
-                      value={pixTipoChave}
-                      onChange={(e) => setPixTipoChave(e.target.value as PixKeyType)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
-                    >
-                      <option value="cpf">CPF</option>
-                      <option value="cnpj">CNPJ</option>
-                      <option value="telefone">Telefone</option>
-                      <option value="email">E-mail</option>
-                      <option value="aleatoria">Chave Aleatoria</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                      Chave PIX
-                    </label>
-                    <input
-                      type="text"
-                      value={pixChave}
-                      onChange={(e) => setPixChave(e.target.value)}
-                      placeholder={pixConfigService.getPlaceholder(pixTipoChave)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-mono text-slate-900 dark:text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                      Nome do Titular
-                    </label>
-                    <input
-                      type="text"
-                      value={pixNomeTitular}
-                      onChange={(e) => setPixNomeTitular(e.target.value)}
-                      placeholder={settings.tradeName || 'Nome do titular'}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-slate-900 dark:text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                      Cidade
-                    </label>
-                    <input
-                      type="text"
-                      value={pixCidade}
-                      onChange={(e) => setPxCidade(e.target.value)}
-                      placeholder={settings.city || 'SAO PAULO'}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-slate-900 dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="pixAtivo"
-                    checked={pixAtivo}
-                    onChange={(e) => setPixAtivo(e.target.checked)}
-                    className="w-4 h-4 rounded text-indigo-600 cursor-pointer"
-                  />
-                  <label htmlFor="pixAtivo" className="text-xs font-semibold text-slate-700 dark:text-[#a1a1aa] cursor-pointer">
-                    Ativar pagamento PIX para esta filial
-                  </label>
-                </div>
-
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="button"
-                    onClick={handleSavePix}
-                    disabled={savingPix}
-                    className="min-h-[44px] px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>{savingPix ? 'Salvando...' : 'Salvar Config PIX'}</span>
-                  </button>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-[11px] text-slate-500 dark:text-[#71717a]">
-                  <strong>Como funciona:</strong> O PDV mostra a chave PIX configurada acima para a filial atual.
-                  Se nao houver chave configurada, usa a chave global (campo acima).
-                  Voce informa a chave para o cliente pagar no app do banco, confere o recebimento no celular e finaliza a venda.
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="flex justify-end">
@@ -2727,6 +2596,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                     }`}>
                       {table.status === 'active' ? 'Ativa' : 'Inativa'}
                     </span>
+                    <button
+                      onClick={() => handlePrintQRCode(table)}
+                      className="p-2 rounded-lg text-indigo-500 hover:bg-indigo-500/10"
+                      title="Imprimir QR Code"
+                    >
+                      <PrinterIcon className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => handleDeleteTable(table.id)}
                       className="p-2 rounded-lg text-red-500 hover:bg-red-500/10"
