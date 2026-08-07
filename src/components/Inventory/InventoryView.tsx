@@ -107,6 +107,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     { boxQuantity: '', salePrice: '' },
   ]);
 
+  // Estoque Inteligente: Inventário (ajuste com motivo)
+  const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
+  const [inventoryProduct, setInventoryProduct] = useState<Product | null>(null);
+  const [inventoryCounted, setInventoryCounted] = useState('');
+  const [inventoryReason, setInventoryReason] = useState('Contagem física (inventário)');
+
   // ============================================================
   // 2. TODOS OS useRef
   // ============================================================
@@ -445,6 +451,55 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const [confirmDeleteProduct, setConfirmDeleteProduct] = useState<Product | null>(null);
 
+  // ── ESTOQUE INTELIGENTE: INVENTÁRIO (ajuste com motivo) ────────
+  const openInventoryModal = (product: Product) => {
+    setInventoryProduct(product);
+    setInventoryCounted(String(product.currentStock));
+    setInventoryReason('Contagem física (inventário)');
+    setIsInventoryModalOpen(true);
+  };
+
+  const handleInventorySave = () => {
+    if (!inventoryProduct) return;
+    const counted = parseFloat(inventoryCounted);
+    if (isNaN(counted) || counted < 0) {
+      addToast('error', 'Informe uma quantidade válida.');
+      posAudio.error();
+      return;
+    }
+    try {
+      const delta = counted - inventoryProduct.currentStock;
+      const updated: Product = {
+        ...inventoryProduct,
+        currentStock: counted,
+        updatedAt: new Date().toISOString(),
+      };
+      storageService.saveProduct(updated);
+      // Registrar movimento de estoque
+      storageService.saveStockMovement({
+        id: crypto.randomUUID(),
+        productId: inventoryProduct.id,
+        productName: inventoryProduct.name,
+        type: delta >= 0 ? 'in' : 'out',
+        quantity: Math.abs(delta),
+        previousStock: inventoryProduct.currentStock,
+        newStock: counted,
+        reason: inventoryReason || 'Contagem física (inventário)',
+        date: new Date().toISOString(),
+        operatorName: user.name,
+        storeBranchId: user.storeBranchId,
+        organizationId: user.organizationId,
+      });
+      posAudio.chime();
+      setIsInventoryModalOpen(false);
+      setInventoryProduct(null);
+      addToast('success', `Estoque de "${inventoryProduct.name}" atualizado para ${counted}.`);
+    } catch (err: any) {
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível ajustar o estoque.'));
+      posAudio.error();
+    }
+  };
+
   const handleConfirmDeleteProduct = () => {
     const product = confirmDeleteProduct;
     if (!product) return;
@@ -556,6 +611,56 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Estoque Inteligente: Painel de Alertas */}
+      {(() => {
+        const lowStockProducts = products.filter((p) => p.currentStock <= p.minStock && p.currentStock > 0);
+        const outOfStockProducts = products.filter((p) => p.currentStock === 0);
+        if (lowStockProducts.length === 0 && outOfStockProducts.length === 0) return null;
+        return (
+          <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 space-y-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <h3 className="text-xs font-bold text-amber-800 dark:text-amber-400">
+                Alertas de Estoque ({lowStockProducts.length + outOfStockProducts.length})
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {outOfStockProducts.slice(0, 3).map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => openInventoryModal(p)}
+                  className="flex items-center gap-2 p-2 rounded-lg bg-rose-100 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-left hover:bg-rose-200 dark:hover:bg-rose-500/20 transition-colors"
+                >
+                  <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-bold text-rose-800 dark:text-rose-400 truncate">{p.name}</p>
+                    <p className="text-[9px] text-rose-600 dark:text-rose-500">ESGOTADO — Toque para ajustar</p>
+                  </div>
+                </button>
+              ))}
+              {lowStockProducts.slice(0, 3).map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => openInventoryModal(p)}
+                  className="flex items-center gap-2 p-2 rounded-lg bg-amber-100 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-left hover:bg-amber-200 dark:hover:bg-amber-500/20 transition-colors"
+                >
+                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-bold text-amber-800 dark:text-amber-400 truncate">{p.name}</p>
+                    <p className="text-[9px] text-amber-600 dark:text-amber-500">{p.currentStock}/{p.minStock} {p.unit} — Toque para ajustar</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            {(lowStockProducts.length + outOfStockProducts.length) > 3 && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-500">
+                +{(lowStockProducts.length + outOfStockProducts.length) - 3} produto(s) em alerta. Use o filtro "Estoque Baixo" para ver todos.
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Filter & Search Bar */}
       <div className="p-4 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm space-y-3">
@@ -1546,12 +1651,82 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       <ConfirmDialog
         isOpen={confirmDeleteProduct !== null}
         title="Excluir produto?"
-        message="O produto será removido do estoque. Você poderá desfazer logo em seguida."
+        message="O produto será removido do estoque. Você poderá desfundo logo em seguida."
         itemName={confirmDeleteProduct?.name}
         confirmLabel="Excluir"
         onConfirm={handleConfirmDeleteProduct}
         onCancel={() => setConfirmDeleteProduct(null)}
       />
+
+      {/* Estoque Inteligente: Modal de Inventário (ajuste com motivo) */}
+      {isInventoryModalOpen && inventoryProduct && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setIsInventoryModalOpen(false)}>
+          <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-200 dark:border-[#27272a]">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Inventário — Ajuste de Estoque</h3>
+              <p className="text-xs text-slate-500 dark:text-[#71717a] mt-1">{inventoryProduct.name}</p>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]">
+                <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">Estoque Atual</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">{inventoryProduct.currentStock} {inventoryProduct.unit}</p>
+                <p className="text-[10px] text-slate-400">Mínimo: {inventoryProduct.minStock} {inventoryProduct.unit}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">Quantidade Contada</label>
+                <input
+                  type="number"
+                  value={inventoryCounted}
+                  onChange={(e) => setInventoryCounted(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-lg font-bold text-slate-900 dark:text-white"
+                  placeholder="0"
+                  autoFocus
+                />
+                {(() => {
+                  const counted = parseFloat(inventoryCounted);
+                  const delta = isNaN(counted) ? 0 : counted - inventoryProduct.currentStock;
+                  if (delta === 0) return <p className="text-[10px] text-slate-400 mt-1">Sem alteração</p>;
+                  return (
+                    <p className={`text-[10px] mt-1 font-bold ${delta > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      {delta > 0 ? `+${delta}` : delta} {inventoryProduct.unit} ({delta > 0 ? 'entrada' : 'saída'})
+                    </p>
+                  );
+                })()}
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">Motivo do Ajuste</label>
+                <select
+                  value={inventoryReason}
+                  onChange={(e) => setInventoryReason(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white"
+                >
+                  <option>Contagem física (inventário)</option>
+                  <option>Correção de divergência</option>
+                  <option>Produto avariado</option>
+                  <option>Perda / Roubo</option>
+                  <option>Devolução para fornecedor</option>
+                  <option>Outro</option>
+                </select>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-200 dark:border-[#27272a] flex justify-end gap-2">
+              <button
+                onClick={() => setIsInventoryModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-[#27272a]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleInventorySave}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                Salvar Ajuste
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

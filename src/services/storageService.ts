@@ -2401,6 +2401,18 @@ class StorageService {
     return this.filterBySelectedBranch(result);
   }
 
+  saveStockMovement(movement: StockMovement) {
+    movement.id = StorageService.ensureUuid(movement.id);
+    movement.organizationId = movement.organizationId || this.getCurrentOrgId();
+    movement.storeBranchId = movement.storeBranchId || this.getSelectedBranchId() || undefined;
+    const all = this.get<StockMovement[]>(KEYS.MOVEMENTS, []);
+    const idx = all.findIndex((m) => m.id === movement.id);
+    if (idx >= 0) all[idx] = movement;
+    else all.unshift(movement);
+    this.set(KEYS.MOVEMENTS, all);
+    this.syncStockMovement(movement);
+  }
+
   // --- CATEGORIES ---
   getCategories(): Category[] {
     const fallback = this.isDefaultOrg() ? INITIAL_CATEGORIES : [];
