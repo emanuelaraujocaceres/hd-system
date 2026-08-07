@@ -3080,21 +3080,26 @@ class StorageService {
   }
 
   // Dá baixa na conta a receber vinculada à venda após salvar/excluir um
-  // pagamento. orig = saldo restante (amount) + o que já foi pago.
+  // pagamento. Usa getFiadoAmount(sale) como valor ORIGINAL (nunca acc.amount,
+  // que já é o restante). remaining = original - totalPaid.
   private updateReceivableFromPayments(saleId: string) {
     try {
       const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
-      let acc = accounts.find((a) => a.id === saleId);
+      const acc = accounts.find((a) => a.id === saleId);
+      const sale = this.get<Sale[]>(KEYS.SALES, []).find((s) => s.id === saleId);
+      const totalPaid = this.getTotalPaidForSale(saleId);
+
+      // Valor original do fiado: usa getFiadoAmount da venda (fonte de verdade)
+      const originalAmount = sale ? this.getFiadoAmount(sale) : (acc ? acc.amount + totalPaid : 0);
+      const remaining = Math.max(0, Math.round((originalAmount - totalPaid) * 100) / 100);
+
       if (!acc) {
-        // Conta ainda não existe localmente (ex.: venda fiado legada) — tenta criar
-        const sale = this.get<Sale[]>(KEYS.SALES, []).find((s) => s.id === saleId);
+        // Conta não existe localmente (ex.: venda fiado legada) — tenta criar
         if (sale) this.createReceivableFromSale(sale);
         return;
       }
       if (acc.status === 'cancelled') return;
-      const totalPaid = this.getTotalPaidForSale(saleId);
-      const orig = Math.round((acc.amount + totalPaid) * 100) / 100;
-      const remaining = Math.max(0, Math.round((orig - totalPaid) * 100) / 100);
+
       if (remaining <= 0.01) {
         acc.status = 'paid';
         acc.amount = 0;
