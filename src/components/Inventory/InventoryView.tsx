@@ -62,7 +62,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
+  const [quickFilter, setQuickFilter] = useState<'all' | 'cardapio' | 'tv'>('all');
   const [isSearching, setIsSearching] = useState(false);
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [sortField, setSortField] = useState<string>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -561,7 +563,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     if (stockFilter === 'low') matchesStock = p.currentStock <= p.minStock && p.currentStock > 0;
     if (stockFilter === 'out') matchesStock = p.currentStock === 0;
 
-    return matchesCategory && matchesSearch && matchesStock;
+    // Quick filter: Cardápio / TV
+    let matchesQuick = true;
+    if (quickFilter === 'cardapio') matchesQuick = p.showOnCardapio === true;
+    if (quickFilter === 'tv') matchesQuick = p.showOnTV === true;
+
+    return matchesCategory && matchesSearch && matchesStock && matchesQuick;
   });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
@@ -713,9 +720,74 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <option value="low">Apenas Estoque Baixo</option>
               <option value="out">Esgotados (Zero)</option>
             </select>
+
+            {/* Quick filters: Cardápio / TV */}
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#09090b] rounded-xl p-1">
+              <button
+                onClick={() => setQuickFilter((prev) => prev === 'cardapio' ? 'all' : 'cardapio')}
+                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors ${
+                  quickFilter === 'cardapio'
+                    ? 'bg-teal-500 text-white'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                Cardápio
+              </button>
+              <button
+                onClick={() => setQuickFilter((prev) => prev === 'tv' ? 'all' : 'tv')}
+                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-colors ${
+                  quickFilter === 'tv'
+                    ? 'bg-amber-500 text-white'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                TV
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Bulk Actions Bar */}
+      {selectedProducts.size > 0 && (
+        <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+            {selectedProducts.size} selecionado(s)
+          </span>
+          <button
+            onClick={async () => {
+              for (const id of selectedProducts) {
+                const product = products.find((p) => p.id === id);
+                if (product) await storageService.saveProduct({ ...product, showOnCardapio: true });
+              }
+              setSelectedProducts(new Set());
+              addToast('success', `${selectedProducts.size} produto(s) ativado(s) no cardápio`);
+            }}
+            className="px-3 py-1.5 rounded-lg bg-teal-500 text-white text-[10px] font-bold"
+          >
+            Exibir no Cardápio
+          </button>
+          <button
+            onClick={async () => {
+              for (const id of selectedProducts) {
+                const product = products.find((p) => p.id === id);
+                if (product) await storageService.saveProduct({ ...product, showOnCardapio: false });
+              }
+              setSelectedProducts(new Set());
+              addToast('info', `${selectedProducts.size} produto(s) removido(s) do cardápio`);
+            }}
+            className="px-3 py-1.5 rounded-lg bg-slate-500 text-white text-[10px] font-bold"
+          >
+            Remover do Cardápio
+          </button>
+          <button
+            onClick={() => setSelectedProducts(new Set())}
+            className="px-3 py-1.5 rounded-lg text-slate-500 text-[10px] font-bold hover:bg-slate-100"
+          >
+            Limpar seleção
+          </button>
+        </div>
+      )}
 
       {/* Products Table — Desktop (md+) */}
       <div className="hidden md:block bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
@@ -723,6 +795,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 dark:bg-[#09090b]/80 border-b border-slate-200 dark:border-[#27272a] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider">
+                <th className="py-3.5 px-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={selectedProducts.size > 0 && selectedProducts.size === sortedProducts.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedProducts(new Set(sortedProducts.map((p) => p.id)));
+                      } else {
+                        setSelectedProducts(new Set());
+                      }
+                    }}
+                    className="rounded text-indigo-600"
+                  />
+                </th>
                 <th className="py-3.5 px-4 cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" onClick={() => handleSort('name')}>
                   <div className="flex items-center gap-1">
                     Produto
@@ -780,6 +866,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     <tr key={p.id} className={`hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors ${
                       highlightedProductId === p.id ? 'animate-pulse bg-indigo-500/5 dark:bg-indigo-500/10' : ''
                     }`}>
+                      <td className="py-3 px-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedProducts.has(p.id)}
+                          onChange={(e) => {
+                            setSelectedProducts((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(p.id);
+                              else next.delete(p.id);
+                              return next;
+                            });
+                          }}
+                          className="rounded text-indigo-600"
+                        />
+                      </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           <img

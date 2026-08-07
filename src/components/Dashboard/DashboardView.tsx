@@ -13,6 +13,8 @@ import {
   PieChart,
   CreditCard,
   Calendar,
+  Clock,
+  Flame,
 } from 'lucide-react';
 import { Product, Sale, UserProfile, FinancialAccount, CashRegisterSession, Category } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -203,6 +205,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         return { ...item, pct: (item.revenue / total) * 100, cumulative };
       });
   }, [periodSales]);
+
+  // ── CARDÁPIO DIGITAL: Produtos mais pedidos + Horários de pico ────
+  const cardapioStats = useMemo(() => {
+    const cardapioSales = sales.filter((s) => s.orderSource === 'cardapio_digital');
+    // Produtos mais pedidos
+    const productCount = new Map<string, { name: string; qty: number; revenue: number }>();
+    const hourCount = new Array(24).fill(0);
+
+    for (const sale of cardapioSales) {
+      const hour = new Date(sale.date).getHours();
+      hourCount[hour]++;
+      for (const item of sale.items || []) {
+        const existing = productCount.get(item.productName);
+        if (existing) {
+          existing.qty += item.quantity;
+          existing.revenue += item.total;
+        } else {
+          productCount.set(item.productName, { name: item.productName, qty: item.quantity, revenue: item.total });
+        }
+      }
+    }
+
+    const topProducts = Array.from(productCount.values())
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 5);
+
+    // Horários de pico (top 3)
+    const peakHours = hourCount
+      .map((count, hour) => ({ hour, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+
+    return { topProducts, peakHours, totalOrders: cardapioSales.length };
+  }, [sales]);
 
   // Delete venda — handler único (usado no desktop e no mobile), com
   // confirmação, tratamento de erro amigável e botão "Desfazer" no toast.
@@ -699,6 +735,78 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             )}
           </div>
         </div>
+      </div>
+
+      {/* BI: Cardápio Digital (produtos mais pedidos + horários de pico) */}
+      <div className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
+        <h3 className="text-xs uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a] mb-4 flex items-center gap-2">
+          <TrendingUp className="w-3.5 h-3.5" />
+          Cardápio Digital
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-teal-500/10 text-teal-600 border border-teal-500/20 ml-auto">
+            {cardapioStats.totalOrders} pedido(s)
+          </span>
+        </h3>
+        {cardapioStats.totalOrders > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Produtos mais pedidos */}
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 dark:text-[#71717a] mb-2 flex items-center gap-1">
+                <Flame className="w-3 h-3 text-orange-500" />
+                Produtos Mais Pedidos
+              </p>
+              <div className="space-y-1.5">
+                {cardapioStats.topProducts.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-[11px]">
+                    <span className={`w-5 h-5 rounded text-[9px] font-bold flex items-center justify-center shrink-0 ${
+                      idx === 0 ? 'bg-amber-500/10 text-amber-600' :
+                      idx === 1 ? 'bg-slate-500/10 text-slate-600' :
+                      'bg-orange-500/10 text-orange-600'
+                    }`}>
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-slate-700 dark:text-slate-300 truncate">{item.name}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-slate-900 dark:text-white">{item.qty}x</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Horários de pico */}
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 dark:text-[#71717a] mb-2 flex items-center gap-1">
+                <Clock className="w-3 h-3 text-blue-500" />
+                Horários de Pico
+              </p>
+              <div className="space-y-1.5">
+                {cardapioStats.peakHours.map((peak, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-[11px]">
+                    <span className={`w-5 h-5 rounded text-[9px] font-bold flex items-center justify-center shrink-0 ${
+                      idx === 0 ? 'bg-blue-500/10 text-blue-600' :
+                      idx === 1 ? 'bg-indigo-500/10 text-indigo-600' :
+                      'bg-slate-500/10 text-slate-600'
+                    }`}>
+                      {idx + 1}
+                    </span>
+                    <div className="flex-1">
+                      <p className="font-medium text-slate-700 dark:text-slate-300">
+                        {String(peak.hour).padStart(2, '0')}:00 - {String(peak.hour + 1).padStart(2, '0')}:00
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-slate-900 dark:text-white">{peak.count} ped.</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400 dark:text-[#71717a]">Sem pedidos do cardápio digital no período</p>
+        )}
       </div>
 
       {/* COLLABORATOR PERFORMANCE — admin only */}
