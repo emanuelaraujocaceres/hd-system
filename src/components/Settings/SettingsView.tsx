@@ -2586,6 +2586,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                       {table.status === 'active' ? 'Ativa' : 'Inativa'}
                     </span>
                     <button
+                      onClick={() => window.open(`${window.location.origin}${window.location.pathname}#/mesa/${table.qrToken}`, '_blank')}
+                      className="p-2 rounded-lg text-teal-500 hover:bg-teal-500/10"
+                      title="Ver Cardápio"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => handlePrintQRCode(table)}
                       className="p-2 rounded-lg text-indigo-500 hover:bg-indigo-500/10"
                       title="Imprimir QR Code"

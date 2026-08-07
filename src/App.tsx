@@ -874,6 +874,27 @@ export const App: React.FC = () => {
         handler: () => { if (canAccess('crm')) goto('crm'); },
         global: true,
       },
+      {
+        key: '5',
+        ctrl: true,
+        shift: true,
+        handler: () => { if (canAccess('comanda')) goto('comanda'); },
+        global: true,
+      },
+      {
+        key: '6',
+        ctrl: true,
+        shift: true,
+        handler: () => { if (canAccess('kds')) goto('kds'); },
+        global: true,
+      },
+      {
+        key: '7',
+        ctrl: true,
+        shift: true,
+        handler: () => { if (canAccess('cardapio_preview')) goto('cardapio_preview'); },
+        global: true,
+      },
     ];
   }, [activeTab, user, handleTabChange]);
 
