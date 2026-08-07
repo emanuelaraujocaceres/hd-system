@@ -50,7 +50,16 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, categories, user }) => {
   const isAdmin = user.role === 'admin';
-  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance' | 'cardapio'>('fiscal');
+  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance' | 'cardapio'>(() => {
+    const saved = sessionStorage.getItem('settings_active_tab');
+    return (saved as typeof activeSubTab) || 'fiscal';
+  });
+
+  // Persist tab on change
+  const handleSetActiveSubTab = (tab: typeof activeSubTab) => {
+    handleSetActiveSubTab(tab);
+    sessionStorage.setItem('settings_active_tab', tab);
+  };
 
   // Inline message state (replaces browser alert())
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -622,6 +631,51 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     setQrModalTable(null);
   };
 
+  // ── Imprimir todos os QR Codes (folha A4) ──────────────────────
+  const handlePrintAllQRCodes = () => {
+    if (tables.length === 0) return;
+    const baseUrl = window.location.origin + window.location.pathname;
+
+    // Generate QR codes using api.qrserver.com
+    const qrCodeSize = 150;
+    const qrCodeCells = tables.map((table) => {
+      const menuUrl = `${baseUrl}#/mesa/${table.qrToken}`;
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrCodeSize}x${qrCodeSize}&data=${encodeURIComponent(menuUrl)}`;
+      return `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px;border:1px dashed #ccc;border-radius:8px;break-inside:avoid;">
+          <img src="${qrUrl}" width="${qrCodeSize}" height="${qrCodeSize}" alt="QR" />
+          <p style="font-size:11px;font-weight:bold;margin:8px 0 4px;">${table.name}</p>
+          <p style="font-size:9px;color:#666;margin:0;">Escaneie para acessar o cardápio</p>
+        </div>
+      `;
+    }).join('');
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Todos os QR Codes</title>
+        <style>
+          @page { size: A4; margin: 15mm; }
+          body { font-family: sans-serif; margin: 0; padding: 0; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 100%; }
+          @media print { .grid { page-break-inside: auto; } }
+        </style>
+      </head>
+      <body>
+        <div class="grid">${qrCodeCells}</div>
+        <script>window.onload = function() { window.print(); }</script>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+    }
+  };
+
   // ── Cardápio Digital: configuração ──────────────────────────────
   const handleSaveMenuConfig = () => {
     setSavingMenuConfig(true);
@@ -849,7 +903,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         {/* Sub-tab pills */}
         <div className="flex flex-wrap items-center gap-1.5 bg-slate-200/80 dark:bg-[#18181b] p-1 rounded-2xl border border-slate-300 dark:border-[#27272a] text-xs font-bold shrink-0">
           <button
-            onClick={() => setActiveSubTab('fiscal')}
+            onClick={() => handleSetActiveSubTab('fiscal')}
             className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
               activeSubTab === 'fiscal'
                 ? 'bg-white dark:bg-[#27272a] text-indigo-600 dark:text-white shadow-sm'
@@ -861,7 +915,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           </button>
 
           <button
-            onClick={() => setActiveSubTab('branches')}
+            onClick={() => handleSetActiveSubTab('branches')}
             className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
               activeSubTab === 'branches'
                 ? 'bg-white dark:bg-[#27272a] text-indigo-600 dark:text-white shadow-sm'
@@ -873,7 +927,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           </button>
 
           <button
-            onClick={() => setActiveSubTab('collaborators')}
+            onClick={() => handleSetActiveSubTab('collaborators')}
             className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
               activeSubTab === 'collaborators'
                 ? 'bg-white dark:bg-[#27272a] text-indigo-600 dark:text-white shadow-sm'
@@ -885,7 +939,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           </button>
 
           <button
-            onClick={() => setActiveSubTab('tv')}
+            onClick={() => handleSetActiveSubTab('tv')}
             className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
               activeSubTab === 'tv'
                 ? 'bg-white dark:bg-[#27272a] text-amber-600 dark:text-amber-400 shadow-sm'
@@ -896,7 +950,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             <span>TV / Vitrine</span>
           </button>
           <button
-            onClick={() => setActiveSubTab('appearance')}
+            onClick={() => handleSetActiveSubTab('appearance')}
             className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
               activeSubTab === 'appearance'
                 ? 'bg-white dark:bg-[#27272a] text-pink-600 dark:text-pink-400 shadow-sm'
@@ -907,7 +961,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             <span>Aparência</span>
           </button>
           <button
-            onClick={() => setActiveSubTab('cardapio')}
+            onClick={() => handleSetActiveSubTab('cardapio')}
             className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
               activeSubTab === 'cardapio'
                 ? 'bg-white dark:bg-[#27272a] text-teal-600 dark:text-teal-400 shadow-sm'
@@ -2583,6 +2637,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 </button>
               </div>
             </div>
+
+            {/* Botão imprimir todos */}
+            {tables.length > 0 && (
+              <button
+                onClick={handlePrintAllQRCodes}
+                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+              >
+                <PrinterIcon className="w-4 h-4" />
+                Imprimir Todos os QR Codes (A4)
+              </button>
+            )}
 
             {/* Lista de mesas */}
             {tables.length > 0 ? (
