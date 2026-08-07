@@ -27,8 +27,10 @@ import {
   Loader2,
   MonitorPlay,
   Palette,
+  UtensilsCrossed,
+  QrCode,
 } from 'lucide-react';
-import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, PrinterRole, MediaDevice, BranchTheme, Category } from '../../types';
+import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, PrinterRole, MediaDevice, BranchTheme, Category, Table, DigitalMenuConfig } from '../../types';
 import { storageService } from '../../services/storageService';
 import { pixConfigService, PixBranchConfig, PixKeyType } from '../../services/pixConfigService';
 import { posAudio } from '../../services/audioService';
@@ -47,7 +49,7 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, categories, user }) => {
   const isAdmin = user.role === 'admin';
-  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance'>('fiscal');
+  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance' | 'cardapio'>('fiscal');
 
   // Inline message state (replaces browser alert())
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -95,6 +97,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [themeAccent, setThemeAccent] = useState(existingTheme?.accentColor || '#f59e0b');
   const [themeBg, setThemeBg] = useState(existingTheme?.bgColor || '#09090b');
   const [savingTheme, setSavingTheme] = useState(false);
+
+  // Cardápio Digital / Mesas State
+  const [tables, setTables] = useState<Table[]>(storageService.getTables());
+  const [menuConfig, setMenuConfig] = useState<DigitalMenuConfig | null>(storageService.getDigitalMenuConfig());
+  const [tableName, setTableName] = useState('');
+  const [tableNumber, setTableNumber] = useState('');
+  const [savingTable, setSavingTable] = useState(false);
+  const [savingMenuConfig, setSavingMenuConfig] = useState(false);
+  const [menuTitle, setMenuTitle] = useState(menuConfig?.title || 'Cardápio Digital');
+  const [menuSubtitle, setMenuSubtitle] = useState(menuConfig?.subtitle || '');
+  const [menuLayout, setMenuLayout] = useState<'grid' | 'list'>(menuConfig?.layoutMode || 'grid');
+  const [menuShowPrices, setMenuShowPrices] = useState(menuConfig?.showPrices !== false);
 
   // Rodapé da TV — mensagens sincronizadas (tabela footer_messages)
   const [footerMessages, setFooterMessages] = useState<FooterMessage[]>(storageService.getFooterMessages());
@@ -574,6 +588,82 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     }
   };
 
+  // ── Cardápio Digital: CRUD de mesas ─────────────────────────────
+  const handleAddTable = () => {
+    if (!tableName.trim()) {
+      setErrorMessage('Informe o nome/número da mesa.');
+      return;
+    }
+    setSavingTable(true);
+    try {
+      const newTable: Table = {
+        id: crypto.randomUUID(),
+        name: tableName.trim(),
+        number: tableNumber ? parseInt(tableNumber) : undefined,
+        qrToken: btoa(`${Date.now()}-${Math.random().toString(36).slice(2)}`),
+        status: 'active',
+        storeBranchId: user.storeBranchId,
+        organizationId: user.organizationId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      storageService.saveTable(newTable);
+      setTables(storageService.getTables());
+      setTableName('');
+      setTableNumber('');
+      posAudio.chime();
+      setSuccessMessage(`Mesa "${newTable.name}" adicionada!`);
+    } catch (err: any) {
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível adicionar a mesa.'));
+      posAudio.error();
+    } finally {
+      setSavingTable(false);
+    }
+  };
+
+  const handleDeleteTable = (id: string) => {
+    try {
+      // Encontrar a mesa antes de deletar para pegar o token
+      const table = tables.find((t) => t.id === id);
+      if (table) {
+        // Usar o método do storageService para deletar (sync com cloud)
+        storageService.deleteTable(id);
+        setTables(storageService.getTables());
+        posAudio.chime();
+        setSuccessMessage(`Mesa "${table.name}" removida.`);
+      }
+    } catch (err: any) {
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível remover a mesa.'));
+      posAudio.error();
+    }
+  };
+
+  // ── Cardápio Digital: configuração ──────────────────────────────
+  const handleSaveMenuConfig = () => {
+    setSavingMenuConfig(true);
+    try {
+      const config: DigitalMenuConfig = {
+        id: menuConfig?.id || crypto.randomUUID(),
+        title: menuTitle || 'Cardápio Digital',
+        subtitle: menuSubtitle || undefined,
+        layoutMode: menuLayout,
+        showPrices: menuShowPrices,
+        storeBranchId: user.storeBranchId,
+        organizationId: user.organizationId,
+        updatedAt: new Date().toISOString(),
+      };
+      storageService.saveDigitalMenuConfig(config);
+      setMenuConfig(config);
+      posAudio.chime();
+      setSuccessMessage('Configurações do cardápio salvas!');
+    } catch (err: any) {
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível salvar as configurações.'));
+      posAudio.error();
+    } finally {
+      setSavingMenuConfig(false);
+    }
+  };
+
   // ── Mensagens do rodapé da TV (footer_messages) ──────────────────────
   const refreshFooterMessages = () => setFooterMessages(storageService.getFooterMessages());
 
@@ -831,6 +921,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           >
             <Palette className="w-4 h-4" />
             <span>Aparência</span>
+          </button>
+          <button
+            onClick={() => setActiveSubTab('cardapio')}
+            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+              activeSubTab === 'cardapio'
+                ? 'bg-white dark:bg-[#27272a] text-teal-600 dark:text-teal-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <UtensilsCrossed className="w-4 h-4" />
+            <span>Cardápio / Mesas</span>
           </button>
         </div>
       </div>
@@ -2477,6 +2578,170 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- TAB 7: CARDÁPIO DIGITAL / MESAS --- */}
+      {activeSubTab === 'cardapio' && (
+        <div className="space-y-6">
+          {/* Configurações do Cardápio */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
+                <UtensilsCrossed className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Configurações do Cardápio Digital</h3>
+                <p className="text-xs text-slate-500 dark:text-[#71717a]">Personalize a aparência do cardápio visto pelos clientes</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1 text-xs">Título do Cardápio</label>
+                <input
+                  type="text"
+                  value={menuTitle}
+                  onChange={(e) => setMenuTitle(e.target.value)}
+                  placeholder="Cardápio Digital"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1 text-xs">Subtítulo</label>
+                <input
+                  type="text"
+                  value={menuSubtitle}
+                  onChange={(e) => setMenuSubtitle(e.target.value)}
+                  placeholder="Escolha seus produtos"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1 text-xs">Layout</label>
+                <select
+                  value={menuLayout}
+                  onChange={(e) => setMenuLayout(e.target.value as 'grid' | 'list')}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white"
+                >
+                  <option value="grid">Grid (Cards)</option>
+                  <option value="list">Lista</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-[#a1a1aa] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={menuShowPrices}
+                    onChange={(e) => setMenuShowPrices(e.target.checked)}
+                    className="w-4 h-4 rounded text-teal-600 cursor-pointer"
+                  />
+                  Exibir preços no cardápio
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-slate-200 dark:border-[#27272a]">
+              <button
+                onClick={handleSaveMenuConfig}
+                disabled={savingMenuConfig}
+                className="min-h-[44px] px-5 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold disabled:opacity-60 flex items-center gap-2 text-xs"
+              >
+                {savingMenuConfig ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
+                ) : (
+                  <><Save className="w-4 h-4" /> Salvar Configurações</>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Gerenciamento de Mesas */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400">
+                <QrCode className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Mesas ({tables.length})</h3>
+                <p className="text-xs text-slate-500 dark:text-[#71717a]">Cada mesa recebe um QR Code único para o cliente acessar o cardápio</p>
+              </div>
+            </div>
+
+            {/* Formulário adicionar mesa */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">Nome/Identificação</label>
+                <input
+                  type="text"
+                  value={tableName}
+                  onChange={(e) => setTableName(e.target.value)}
+                  placeholder="Ex.: Mesa 01, Varanda"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white placeholder:text-slate-400"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">Número (opcional)</label>
+                <input
+                  type="number"
+                  value={tableNumber}
+                  onChange={(e) => setTableNumber(e.target.value)}
+                  placeholder="Ex.: 1"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white placeholder:text-slate-400"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={handleAddTable}
+                  disabled={savingTable || !tableName.trim()}
+                  className="min-h-[44px] w-full px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-xs transition-colors flex items-center justify-center gap-2"
+                >
+                  {savingTable ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
+                  ) : (
+                    <><Plus className="w-4 h-4" /> Adicionar Mesa</>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Lista de mesas */}
+            {tables.length > 0 ? (
+              <div className="space-y-2">
+                {tables.sort((a, b) => (a.number || 0) - (b.number || 0)).map((table) => (
+                  <div key={table.id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]">
+                    <div className="w-10 h-10 rounded-lg bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-600 dark:text-orange-400 shrink-0">
+                      <QrCode className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">{table.name}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-[#71717a] font-mono truncate">
+                        QR: ...{table.qrToken.slice(-12)}
+                      </p>
+                    </div>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                      table.status === 'active'
+                        ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                        : 'bg-slate-500/10 text-slate-500 border border-slate-500/20'
+                    }`}>
+                      {table.status === 'active' ? 'Ativa' : 'Inativa'}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteTable(table.id)}
+                      className="p-2 rounded-lg text-red-500 hover:bg-red-500/10"
+                      title="Remover mesa"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-xs text-slate-400 dark:text-[#52525b]">
+                Nenhuma mesa cadastrada. Adicione a primeira mesa acima.
+              </div>
+            )}
           </div>
         </div>
       )}

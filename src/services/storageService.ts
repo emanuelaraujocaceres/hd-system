@@ -3559,6 +3559,12 @@ class StorageService {
     this.syncTable(table);
   }
 
+  deleteTable(id: string) {
+    const all = this.get<Table[]>(KEYS.TABLES, []).filter((x) => x.id !== id);
+    this.set(KEYS.TABLES, all);
+    syncService.deleteRow('tables', id);
+  }
+
   updateTableFromRemote(row: any) {
     const all = this.get<Table[]>(KEYS.TABLES, []);
     const mapped: Table = {
