@@ -44,49 +44,98 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
 
-   // Load table and products
+    // Load table and products
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Fetch table, config and products via public Edge Function
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-table-by-token?token=${encodeURIComponent(tableToken)}`,
-          { headers: { 'Content-Type': 'application/json' } }
+        const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        // Fetch table by QR token directly from REST API
+        const tableRes = await fetch(
+          `${baseUrl}/rest/v1/tables?qr_token=eq.${encodeURIComponent(tableToken)}&status=eq.active&select=*`,
+          {
+            headers: {
+              'apikey': anonKey,
+              'Authorization': `Bearer ${anonKey}`,
+              'Content-Type': 'application/json',
+            },
+          }
         );
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          setError(errData.error || 'Mesa não encontrada. Verifique o QR Code.');
-          setLoading(false);
-          return;
-        }
-
-        const data = await response.json();
-
-        if (!data.table) {
+        if (!tableRes.ok) {
           setError('Mesa não encontrada. Verifique o QR Code.');
           setLoading(false);
           return;
         }
 
+        const tables = await tableRes.json();
+        if (!tables || tables.length === 0) {
+          setError('Mesa não encontrada. Verifique o QR Code.');
+          setLoading(false);
+          return;
+        }
+
+        const tableData = tables[0];
         const foundTable: Table = {
-          id: data.table.id,
-          name: data.table.name,
-          number: data.table.number || undefined,
+          id: tableData.id,
+          name: tableData.name,
+          number: tableData.number || undefined,
           qrToken: tableToken,
           status: 'active',
-          storeBranchId: data.table.storeBranchId,
-          organizationId: data.table.organizationId,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          storeBranchId: tableData.store_branch_id,
+          organizationId: tableData.organization_id,
+          createdAt: tableData.created_at,
+          updatedAt: tableData.updated_at,
         };
         setTable(foundTable);
 
-        // Set products from response
-        setProducts(data.products || []);
+        // Fetch products for this branch
+        const productsRes = await fetch(
+          `${baseUrl}/rest/v1/products?store_branch_id=eq.${foundTable.storeBranchId}&active=eq.true&show_on_cardapio=eq.true&select=*`,
+          {
+            headers: {
+              'apikey': anonKey,
+              'Authorization': `Bearer ${anonKey}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
 
-        // Set config
-        setConfig(data.config);
+        if (productsRes.ok) {
+          const products = await productsRes.json();
+          setProducts(products || []);
+        }
+
+        // Fetch menu config
+        const configRes = await fetch(
+          `${baseUrl}/rest/v1/digital_menu_config?store_branch_id=eq.${foundTable.storeBranchId}&select=*`,
+          {
+            headers: {
+              'apikey': anonKey,
+              'Authorization': `Bearer ${anonKey}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+
+        if (configRes.ok) {
+          const configs = await configRes.json();
+          if (configs && configs.length > 0) {
+            setConfig({
+              id: configs[0].id,
+              title: configs[0].title,
+              subtitle: configs[0].subtitle,
+              logoUrl: configs[0].logo_url,
+              bannerUrl: configs[0].banner_url,
+              layoutMode: configs[0].layout_mode,
+              showPrices: configs[0].show_prices,
+              storeBranchId: configs[0].store_branch_id,
+              organizationId: configs[0].organization_id,
+              updatedAt: configs[0].updated_at,
+            });
+          }
+        }
 
         // Check for existing session for this device (same celular reutiliza)
         const deviceFingerprint = navigator.userAgent.slice(0, 100) + (screen.width + 'x' + screen.height);
