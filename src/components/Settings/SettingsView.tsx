@@ -57,7 +57,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   // Persist tab on change
   const handleSetActiveSubTab = (tab: typeof activeSubTab) => {
-    handleSetActiveSubTab(tab);
+    setActiveSubTab(tab);
     sessionStorage.setItem('settings_active_tab', tab);
   };
 

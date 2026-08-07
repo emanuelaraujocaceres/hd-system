@@ -774,11 +774,13 @@ class StorageService {
 
   updateCategoryFromRemote(row: any) {
     const categories = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []);
+    const branchId = this.getSelectedBranchId();
     const mapped: Category = {
       id: row.id,
       name: row.name,
       color: row.color || '#6366f1',
       organizationId: row.organization_id || undefined,
+      storeBranchId: row.store_branch_id || branchId,
     };
     const idx = categories.findIndex((c) => c.id === mapped.id);
     if (idx >= 0) categories[idx] = mapped;
@@ -2429,8 +2431,16 @@ class StorageService {
   getCategories(): Category[] {
     const fallback = this.isDefaultOrg() ? INITIAL_CATEGORIES : [];
     const all = this.get<Category[]>(KEYS.CATEGORIES, fallback);
+    // Deduplica por nome (evita mock + banco com mesmo nome) mantendo a do banco quando houver storeBranchId
+    const seen = new Set<string>();
+    const deduped = all.filter((c) => {
+      const key = (c.name || '').toLowerCase().trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     // categories agora tem store_branch_id NOT NULL — filtrar por filial
-    return this.filterBySelectedBranch<Category>(this.filterByOrg<Category>(all));
+    return this.filterBySelectedBranch<Category>(this.filterByOrg<Category>(deduped));
   }
 
   saveCategory(category: Category) {
