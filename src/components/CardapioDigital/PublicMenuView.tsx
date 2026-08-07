@@ -247,6 +247,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
   const [myOrders, setMyOrders] = useState<Sale[]>([]);
   const [showMyComanda, setShowMyComanda] = useState(false);
   const [closingComanda, setClosingComanda] = useState(false);
+  const submittingRef = useRef(false);
 
   // Load my orders on mount and after submit
   const loadMyOrders = useCallback(() => {
@@ -272,6 +273,8 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
 
   const handleSubmitOrder = async () => {
     if (cart.length === 0 || !table) return;
+    if (submittingRef.current) return; // Prevent double-click
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       // Create one sale per batch of items
@@ -334,6 +337,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
       // silent fail
     } finally {
       setSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
