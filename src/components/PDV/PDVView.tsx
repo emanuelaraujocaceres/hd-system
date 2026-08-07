@@ -39,6 +39,7 @@ import { PaymentModal } from './PaymentModal';
 import { ThermalReceiptModal } from './ThermalReceiptModal';
 import { QuickProductModal } from './QuickProductModal';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { useBarcodeKeyboardWedge } from '../../hooks/useBarcodeKeyboardWedge';
 
 interface PDVViewProps {
   products: Product[];
@@ -146,6 +147,8 @@ export const PDVView: React.FC<PDVViewProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [cart, isCaixaOpen]);
+
+
 
   // ─── ATACADO: expande o catálogo ────────────────────────────────────
   // Cada produto com opções de atacado vira o card unitário + um card por
@@ -451,6 +454,19 @@ export const PDVView: React.FC<PDVViewProps> = ({
       posAudio.error();
     }
   };
+
+  // Keyboard-wedge barcode scanner (Bluetooth/USB reader that emulates a keyboard).
+  // Delegates to the same handler as the camera scanner. A ref keeps the
+  // callback stable so the window listener is registered exactly once.
+  const handleBarcodeDetectedRef = useRef(handleBarcodeDetected);
+  handleBarcodeDetectedRef.current = handleBarcodeDetected;
+  const onBarcodeDetected = useCallback((barcode: string) => {
+    handleBarcodeDetectedRef.current(barcode);
+  }, []);
+  useBarcodeKeyboardWedge({
+    onBarcode: onBarcodeDetected,
+    paused: isScannerOpen,
+  });
 
   const handleScanManualSubmit = (barcode: string) => {
     if (barcode.trim()) {
