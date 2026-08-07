@@ -17,6 +17,7 @@ import { Product, Table, DigitalMenuConfig, CustomerSession, Sale } from '../../
 import { storageService } from '../../services/storageService';
 import { printRoutedItems } from '../../services/printService';
 import { routeItemsToPrinters } from '../../services/printerRouting';
+import { supabase } from '../../lib/supabase';
 
 interface PublicMenuViewProps {
   tableToken: string;
@@ -44,13 +45,39 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
 
-  // Load table and products
+   // Load table and products
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Find table by QR token
-        const tables = storageService.getTables();
-        const foundTable = tables.find((t) => t.qrToken === tableToken);
+        // Find table by QR token - try localStorage first, then cloud
+        let foundTable = storageService.getTables().find((t) => t.qrToken === tableToken);
+
+        // If not in localStorage, fetch directly from cloud
+        if (!foundTable) {
+          const { data: tableFromCloud } = await supabase
+            .from('tables')
+            .select('*')
+            .eq('qr_token', tableToken)
+            .eq('status', 'active')
+            .single();
+
+          if (tableFromCloud) {
+            foundTable = {
+              id: tableFromCloud.id,
+              name: tableFromCloud.name,
+              number: tableFromCloud.number || undefined,
+              qrToken: tableFromCloud.qr_token,
+              status: tableFromCloud.status,
+              storeBranchId: tableFromCloud.store_branch_id,
+              organizationId: tableFromCloud.organization_id,
+              createdAt: tableFromCloud.created_at,
+              updatedAt: tableFromCloud.updated_at,
+            };
+            // Save to localStorage for next time
+            storageService.saveTable(foundTable);
+          }
+        }
+
         if (!foundTable) {
           setError('Mesa não encontrada. Verifique o QR Code.');
           setLoading(false);
@@ -175,6 +202,11 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
     const interval = setInterval(loadMyOrders, 5000);
     return () => clearInterval(interval);
   }, [loadMyOrders]);
+
+  const myComandaTotal = myOrders.reduce((sum, s) => {
+    const saleTotal = s.total > 0 ? s.total : (s.items?.reduce((a, i) => a + (i.total || 0), 0) || 0);
+    return sum + saleTotal;
+  }, 0);
 
   const handleSubmitOrder = async () => {
     if (cart.length === 0 || !table) return;
