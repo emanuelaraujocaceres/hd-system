@@ -100,7 +100,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formSalePrice, setFormSalePrice] = useState('');
   const [formCurrentStock, setFormCurrentStock] = useState('');
   const [formMinStock, setFormMinStock] = useState('');
-  const [formMaxStock, setFormMaxStock] = useState('');
   const [formImageUrl, setFormImageUrl] = useState('');
   const [formShowOnTV, setFormShowOnTV] = useState(false);
   const [formShowOnCardapio, setFormShowOnCardapio] = useState(false);
@@ -377,7 +376,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormSalePrice(String(product.salePrice));
     setFormCurrentStock(String(product.currentStock));
     setFormMinStock(String(product.minStock));
-    setFormMaxStock(String(product.maxStock));
     setFormImageUrl(product.imageUrl);
     setFormShowOnTV(product.showOnTV || false);
     setFormShowOnCardapio(product.showOnCardapio || false);
@@ -430,7 +428,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         salePrice,
         currentStock: parseInt(formCurrentStock) || 0,
         minStock: parseInt(formMinStock) || 0,
-        maxStock: parseInt(formMaxStock) || 100,
         imageUrl: formImageUrl || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80',
         active: true,
         updatedAt: new Date().toISOString(),
@@ -1239,19 +1236,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     value={formMinStock}
                     onChange={(e) => setFormMinStock(e.target.value)}
                     placeholder="0"
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none placeholder:text-slate-300 dark:placeholder:text-[#3f3f46]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
-                    Estoque Máximo
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    value={formMaxStock}
-                    onChange={(e) => setFormMaxStock(e.target.value)}
-                    placeholder="100"
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none placeholder:text-slate-300 dark:placeholder:text-[#3f3f46]"
                   />
                 </div>

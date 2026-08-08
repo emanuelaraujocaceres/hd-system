@@ -351,6 +351,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   };
 
   const filteredAccounts = financialAccounts.filter((a) => {
+    // Registros de fiado (contas a receber de vendas fiado e pagamentos de fiado)
+    // NÃO aparecem na lista de contas — são gerenciados na página de Fiados
+    if (a.category === 'fiado' || a.category === 'fiado_payment') return false;
     if (filterType === 'payable') return a.type === 'payable';
     if (filterType === 'receivable') return a.type === 'receivable';
     return true;
