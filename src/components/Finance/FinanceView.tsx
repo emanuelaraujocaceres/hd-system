@@ -554,196 +554,124 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             )}
           </div>
 
-          {/* Desktop accounts table */}
-          <div className="hidden md:block bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-[#09090b]/80 border-b border-slate-200 dark:border-[#27272a] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider">
-                  <th className="py-3.5 px-4">Título / Lançamento</th>
-                  <th className="py-3.5 px-4">Tipo</th>
-                  <th className="py-3.5 px-4">Fornecedor / Favorecido</th>
-                  <th className="py-3.5 px-4">Vencimento</th>
-                  <th className="py-3.5 px-4">Valor (R$)</th>
-                  <th className="py-3.5 px-4">Status</th>
-                  <th className="py-3.5 px-4 text-right">Ação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
-                {filteredAccounts.map((acc) => {
-                  const isPayable = acc.type === 'payable';
-                  const isPaid = acc.status === 'paid';
-
-                  return (
-                    <tr
-                      key={acc.id}
-                      onClick={() => handleOpenEditAccount(acc)}
-                      className="hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors cursor-pointer"
-                    >
-                      <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate">{acc.title}</span>
-                          {acc.isInstallment && (
-                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold text-[9px]">
-                              Parcela
-                            </span>
-                          )}
-                          {acc.isRecurring && (
-                            <span className="shrink-0 px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 font-bold text-[9px]">
-                              Recorrente
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                            isPayable
-                              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                          }`}
-                        >
-                          {isPayable ? 'PAGAR' : 'RECEBER'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-slate-700 dark:text-[#a1a1aa]">{acc.recipientOrPayer}</td>
-                      <td className="py-3 px-4 text-slate-600 dark:text-[#a1a1aa] font-medium">{acc.dueDate}</td>
-                      <td className={`py-3 px-4 font-extrabold ${isPayable ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                        R$ {acc.amount.toFixed(2)}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`px-2 py-1 rounded-lg font-bold text-[10px] ${
-                            isPaid
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                          }`}
-                        >
-                          {isPaid ? 'Pago / Baixado' : 'Pendente'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          {!isPaid && (
-                            <button
-                              onClick={() => handleMarkPaid(acc)}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors min-h-[44px]"
-                            >
-                              Dar Baixa
-                            </button>
-                          )}
-                          {user.role === 'admin' && (
-                            <button
-                              onClick={() => setConfirmDeleteAccount({ id: acc.id, title: acc.title })}
-                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                              title="Excluir Conta"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            </div>
-          </div>
-
-          {/* Mobile accounts cards */}
-          <div className="block md:hidden space-y-3">
-            {filteredAccounts.map((acc) => {
-              const isPayable = acc.type === 'payable';
-              const isPaid = acc.status === 'paid';
-
-              return (
-                <div
-                  key={acc.id}
-                  onClick={() => handleOpenEditAccount(acc)}
-                  className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm p-4 space-y-2.5 cursor-pointer active:scale-[0.98] transition-transform"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-tight truncate">{acc.title}</h4>
-                      {acc.isInstallment && (
-                        <span className="shrink-0 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold text-[9px]">
-                          Parcela
-                        </span>
-                      )}
-                      {acc.isRecurring && (
-                        <span className="shrink-0 px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 font-bold text-[9px]">
-                          Recorrente
-                        </span>
-                      )}
-                    </div>
-                    <span
-                      className={`shrink-0 px-2 py-0.5 rounded font-bold text-[10px] ${
-                        isPayable
-                          ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                          : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                      }`}
-                    >
-                      {isPayable ? 'PAGAR' : 'RECEBER'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                    <div>
-                      <span className="text-slate-400 dark:text-[#52525b]">Fornecedor</span>
-                      <p className="font-medium text-slate-700 dark:text-[#a1a1aa] truncate">{acc.recipientOrPayer}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 dark:text-[#52525b]">Vencimento</span>
-                      <p className="font-medium text-slate-700 dark:text-[#a1a1aa]">{acc.dueDate}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 dark:text-[#52525b]">Status</span>
-                      <p>
-                        <span
-                          className={`px-2 py-0.5 rounded-lg font-bold text-[10px] ${
-                            isPaid
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                          }`}
-                        >
-                          {isPaid ? 'Pago / Baixado' : 'Pendente'}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-[#27272a]">
-                    <span className={`text-lg font-extrabold ${isPayable ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                      R$ {acc.amount.toFixed(2)}
-                    </span>
-                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      {!isPaid && (
-                        <button
-                          onClick={() => handleMarkPaid(acc)}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition-colors min-h-[44px]"
-                        >
-                          Dar Baixa
-                        </button>
-                      )}
-                      {user.role === 'admin' && (
-                        <button
-                          onClick={() => setConfirmDeleteAccount({ id: acc.id, title: acc.title })}
-                          className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
-                          title="Excluir Conta"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            {filteredAccounts.length === 0 && (
-              <div className="py-8 text-center text-slate-400 dark:text-[#52525b] text-xs">
+          {/* Accounts list - card layout */}
+          <div className="space-y-3">
+            {filteredAccounts.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-sm">
                 Nenhuma conta financeira registrada
               </div>
+            ) : (
+              filteredAccounts.map((acc) => {
+                const isExpanded = expandedAccountId === acc.id;
+                const pendingRecurrences = acc.recurrences?.filter((r) => r.status === 'pending') || [];
+                const pendingInstallments = acc.installments?.filter((i) => i.status === 'pending') || [];
+                const totalPending = acc.isRecurring ? pendingRecurrences.length : acc.isInstallment ? pendingInstallments.length : (acc.status === 'pending' ? 1 : 0);
+                const totalPaid = acc.isRecurring ? (acc.recurrences?.filter((r) => r.status === 'paid').length || 0) : acc.isInstallment ? (acc.installments?.filter((i) => i.status === 'paid').length || 0) : 0;
+
+                return (
+                  <div
+                    key={acc.id}
+                    className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden"
+                  >
+                    {/* Main card - clickable to expand */}
+                    <div
+                      onClick={() => setExpandedAccountId(isExpanded ? null : acc.id)}
+                      className="p-4 cursor-pointer hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-bold text-sm text-slate-900 dark:text-white truncate">{acc.title}</h4>
+                            {acc.isRecurring && (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 font-bold text-[9px]">
+                                Recorrente
+                              </span>
+                            )}
+                            {acc.isInstallment && (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 font-bold text-[9px]">
+                                Parcelada
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500">{acc.recipientOrPayer}</p>
+                          <div className="flex items-center gap-3 mt-2">
+                            <span className="text-xs text-slate-400">Venc: {acc.dueDate}</span>
+                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                              Pago: {totalPaid}
+                            </span>
+                            <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                              Pendente: {totalPending}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-lg font-extrabold text-rose-600 dark:text-rose-400">
+                            R$ {acc.amount.toFixed(2)}
+                          </p>
+                          {acc.status === 'paid' ? (
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Pago</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">Pendente</span>
+                          )}
+                          <div className="mt-1">
+                            {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400 ml-auto" /> : <ChevronDown className="w-4 h-4 text-slate-400 ml-auto" />}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expanded details - recurrences/installments */}
+                    {isExpanded && (
+                      <div className="border-t border-slate-200 dark:border-[#27272a] p-3 bg-slate-50/50 dark:bg-[#09090b]/30">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">
+                          Próximas ocorrências/parcelas pendentes
+                        </p>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {acc.isRecurring && pendingRecurrences.slice(0, 5).map((rec) => (
+                            <div key={rec.id} className="flex items-center justify-between px-3 py-2 bg-white dark:bg-[#18181b] rounded-lg border border-slate-200 dark:border-[#27272a]">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-600 dark:text-[#a1a1aa]">#{rec.number}</span>
+                                <span className="text-xs text-slate-500">{rec.dueDate}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-rose-600">R$ {acc.amount.toFixed(2)}</span>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleMarkRecurrencePaid(acc, rec.id); }}
+                                  className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition-colors"
+                                >
+                                  Baixa
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {acc.isInstallment && pendingInstallments.slice(0, 5).map((inst) => (
+                            <div key={inst.id} className="flex items-center justify-between px-3 py-2 bg-white dark:bg-[#18181b] rounded-lg border border-slate-200 dark:border-[#27272a]">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-600 dark:text-[#a1a1aa]">#{inst.number}</span>
+                                <span className="text-xs text-slate-500">{inst.dueDate}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-rose-600">R$ {inst.amount.toFixed(2)}</span>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleMarkInstallmentPaid(acc, inst.id); }}
+                                  className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition-colors"
+                                >
+                                  Baixa
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {totalPending > 5 && (
+                            <p className="text-[10px] text-center text-slate-400 pt-1">
+                              + {totalPending - 5} mais (role para ver)
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
 
