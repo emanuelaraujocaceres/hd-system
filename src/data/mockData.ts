@@ -25,6 +25,7 @@ export const BRANCH_UUIDS = {
 
 export const USER_UUIDS = {
   'usr-01': '4d7310f0-3097-526b-a3c5-1dc697dc2a89',
+  'usr-02': 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
 } as const;
 
 export const CATEGORY_UUIDS = {
@@ -141,6 +142,27 @@ export const INITIAL_USERS: UserProfile[] = [
     active: true,
     superadmin: true,
     createdAt: '2026-01-01',
+  },
+  {
+    id: USER_UUIDS['usr-02'],
+    name: 'Maria Silva',
+    email: 'maria@gmail.com',
+    password: 'maria123',
+    role: 'admin',
+    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+    organizationId: '361fb95a-3e9f-43be-a43c-0dc91f851f31',
+    storeBranchId: BRANCH_UUIDS['br-02'],
+    permissions: {
+      pdv: true,
+      inventory: true,
+      crm: true,
+      finance: true,
+      dashboard: true,
+      settings: true,
+    },
+    active: true,
+    superadmin: false,
+    createdAt: '2026-01-15',
   },
 ];
 
