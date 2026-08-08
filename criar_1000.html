@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head><title>Criar 1000 Recorrências</title></head>
+<body>
+<h1>Criando 1000 recorrências...</h1>
+<script>
+  const account = {
+    id: 'fin-test-1000',
+    title: 'aluguel',
+    type: 'payable',
+    category: 'conta_pagar',
+    amount: 1000,
+    dueDate: '2026-08-08',
+    status: 'pending',
+    recipientOrPayer: 'Noel',
+    storeBranchId: 'e5085eba-4398-4c31-ae13-8082b46561ee',
+    organizationId: '361fb95a-3e9f-43be-a43c-0dc91f851f31',
+    isRecurring: true,
+    recurrenceType: 'monthly',
+    recurrenceCount: 1000,
+    recurrences: []
+  };
+  
+  for (let i = 0; i < 1000; i++) {
+    const d = new Date('2026-08-08');
+    d.setMonth(d.getMonth() + i);
+    account.recurrences.push({
+      id: account.id + '-' + (i + 1),
+      number: i + 1,
+      dueDate: d.toISOString().slice(0, 10),
+      status: 'pending'
+    });
+  }
+  
+  const key = 'hd_system_financial_accounts';
+  let existing = JSON.parse(localStorage.getItem(key) || '[]');
+  existing = existing.filter(a => a.id !== account.id);
+  existing.unshift(account);
+  localStorage.setItem(key, JSON.stringify(existing));
+  
+  alert('1000 recorrências criadas! Voltando...');
+  window.location.href = 'http://localhost:3000/';
+</script>
+</body>
+</html>

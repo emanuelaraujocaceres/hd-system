@@ -623,11 +623,13 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                     {/* Expanded details - recurrences/installments */}
                     {isExpanded && (acc.isRecurring || acc.isInstallment) && (pendingRecurrences.length > 0 || pendingInstallments.length > 0) && (
                       <div className="border-t border-slate-200 dark:border-[#27272a] p-3 bg-slate-50/50 dark:bg-[#09090b]/30">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">
-                          Próximas ocorrências/parcelas pendentes
-                        </p>
-                        <div className="space-y-2 max-h-32 overflow-y-auto">
-                          {acc.isRecurring && pendingRecurrences.slice(0, 3).map((rec) => (
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase">
+                            Próximas ocorrências/parcelas pendentes ({totalPending})
+                          </p>
+                        </div>
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {acc.isRecurring && pendingRecurrences.map((rec) => (
                             <div key={rec.id} className="flex items-center justify-between px-3 py-2 bg-white dark:bg-[#18181b] rounded-lg border border-slate-200 dark:border-[#27272a]">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold text-slate-600 dark:text-[#a1a1aa]">#{rec.number}</span>
@@ -644,7 +646,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                               </div>
                             </div>
                           ))}
-                          {acc.isInstallment && pendingInstallments.slice(0, 3).map((inst) => (
+                          {acc.isInstallment && pendingInstallments.map((inst) => (
                             <div key={inst.id} className="flex items-center justify-between px-3 py-2 bg-white dark:bg-[#18181b] rounded-lg border border-slate-200 dark:border-[#27272a]">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold text-slate-600 dark:text-[#a1a1aa]">#{inst.number}</span>
@@ -661,11 +663,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                               </div>
                             </div>
                           ))}
-                          {totalPending > 3 && (
-                            <p className="text-[10px] text-center text-slate-400 pt-1">
-                              + {totalPending - 3} mais (role para ver)
-                            </p>
-                          )}
                         </div>
                       </div>
                     )}
