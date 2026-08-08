@@ -15,8 +15,9 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
+  Banknote,
 } from 'lucide-react';
-import { Sale, Customer, UserProfile } from '../../types';
+import { Sale, Customer, UserProfile, CashRegisterSession } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
@@ -56,16 +57,19 @@ interface FiadosViewProps {
   sales: Sale[];
   customers: Customer[];
   user: UserProfile;
+  caixaSession: CashRegisterSession;
 }
 
 // ─── Component ──────────────────────────────────────────────────
-export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }) => {
+export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, caixaSession }) => {
   const isAdmin = user.role === 'admin';
+  const isCaixaOpen = caixaSession && caixaSession.status === 'open';
   const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [creditPayments, setCreditPayments] = useState<CreditPayment[]>(storageService.getCreditPayments());
   const [paymentModalSaleId, setPaymentModalSaleId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'pix' | 'credit_card' | 'debit_card'>('cash');
   const [registeringPayment, setRegisteringPayment] = useState(false);
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
 
@@ -271,6 +275,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
             customerId,
             amount: Math.round(apply * 100) / 100,
             date: new Date().toISOString(),
+            paymentMethod,
           });
 
           remaining = Math.round((remaining - apply) * 100) / 100;
@@ -281,8 +286,31 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
           setCreditPayments(updated);
           // Sincroniza cada pagamento com o banco (aparece em todos os dispositivos)
           newPayments.forEach((p) => storageService.saveCreditPayment(p));
+
+          // ── Registra no caixa (se pagamento em dinheiro e caixa aberto) ──
+          if (paymentMethod === 'cash' && isCaixaOpen) {
+            storageService.addSuprimento(amount, `Pagamento fiado - ${debt.customer.name}`);
+          }
+
+          // ── Registra no financeiro (financial_transaction de entrada) ──
+          const sale = sales.find((s) => s.id === newPayments[0].saleId);
+          storageService.saveFinancialAccount({
+            id: `ft-payment-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+            title: `Pagamento Fiado - ${debt.customer.name}`,
+            type: 'income',
+            category: 'fiado_payment',
+            amount,
+            dueDate: new Date().toISOString().slice(0, 10),
+            status: 'paid',
+            paidDate: new Date().toISOString(),
+            recipientOrPayer: debt.customer.name,
+            storeBranchId: sale?.storeBranchId || storageService.getSelectedBranchId(),
+            organizationId: storageService.getCurrentOrgId(),
+            notes: `Pagamento fiado via ${paymentMethod} - Venda ${sale?.code || ''}`,
+          });
+
           posAudio.chime();
-          addToast('success', `Pagamento de ${formatCurrency(amount)} registrado com sucesso.`);
+          addToast('success', `Pagamento de ${formatCurrency(amount)} registrado via ${paymentMethod === 'cash' ? 'dinheiro' : paymentMethod === 'pix' ? 'PIX' : paymentMethod}.`);
         } else {
           addToast('warning', 'Nenhum valor pendente para esta dívida.');
           posAudio.error();
@@ -296,7 +324,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
         setPaymentModalSaleId(null);
       }
     },
-    [paymentAmount, creditPayments, customerDebts, sales, addToast]
+    [paymentAmount, paymentMethod, creditPayments, customerDebts, sales, addToast, isCaixaOpen]
   );
 
   // ── Delete credit payment handler (admin only) ──────────────────
@@ -693,6 +721,54 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user }
                 autoFocus
                 className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
               />
+            </div>
+
+            {/* Forma de Pagamento */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                Forma de Pagamento
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: 'cash', label: 'Dinheiro', icon: Banknote, color: 'emerald' },
+                  { id: 'pix', label: 'PIX', icon: DollarSign, color: 'blue' },
+                  { id: 'credit_card', label: 'Crédito', icon: CreditCard, color: 'purple' },
+                  { id: 'debit_card', label: 'Débito', icon: CreditCard, color: 'orange' },
+                ].map((method) => {
+                  const Icon = method.icon;
+                  const isSelected = paymentMethod === method.id;
+                  return (
+                    <button
+                      key={method.id}
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod(method.id as typeof paymentMethod);
+                        posAudio.click();
+                      }}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${
+                        isSelected
+                          ? method.color === 'emerald'
+                            ? 'bg-emerald-500/10 border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                            : method.color === 'blue'
+                            ? 'bg-blue-500/10 border-blue-500 text-blue-600 dark:text-blue-400'
+                            : method.color === 'purple'
+                            ? 'bg-purple-500/10 border-purple-500 text-purple-600 dark:text-purple-400'
+                            : 'bg-orange-500/10 border-orange-500 text-orange-600 dark:text-orange-400'
+                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#27272a]'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {method.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {paymentMethod === 'cash' && !isCaixaOpen && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Caixa fechado — pagamento será registrado apenas no financeiro.
+                </p>
+              )}
             </div>
 
             {/* Quick amount buttons */}

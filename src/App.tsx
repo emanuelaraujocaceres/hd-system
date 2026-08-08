@@ -1131,7 +1131,7 @@ export const App: React.FC = () => {
               )}
 
               {activeTab === 'fiados' && (
-                <FiadosView sales={sales} customers={customers} user={user} />
+                <FiadosView sales={sales} customers={customers} user={user} caixaSession={caixaSession} />
               )}
 
               {activeTab === 'comanda' && (
