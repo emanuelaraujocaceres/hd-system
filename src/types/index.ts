@@ -212,25 +212,45 @@ export interface FinancialAccount {
   id: string;
   title: string;
   type: 'payable' | 'receivable';
-  category?: string; // opcional — não é mais exibida no app
-  amount: number;
+  category?: string;
+  amount: number; // Para parcelado: valor total. Para recorrência: valor fixo por ocorrência.
   dueDate: string;
   paidDate?: string;
   status: 'pending' | 'paid' | 'overdue' | 'cancelled';
   recipientOrPayer: string;
   notes?: string;
   storeBranchId?: string;
-  organizationId?: string; // multi-tenant
-  // Recorrência / Parcelamento (sincronizado — colunas em financial_transactions)
-  // RECORRENTE (isRecurring): valor FIXO que se repete a cada período — não é
-  // um montante dividido. Só ocorrências do período atual contam nos totais.
-  // PARCELADA (isInstallment): o montante digitado é dividido em N parcelas.
+  organizationId?: string;
+  // Recorrência / Parcelamento
   isRecurring?: boolean;
   isInstallment?: boolean;
   recurrenceType?: 'monthly' | 'weekly' | 'biweekly';
   recurrenceCount?: number;
-  recurrenceParentId?: string; // ID da parcela "mãe" (para agrupar parcelas)
-  installmentNumber?: number;  // Número desta parcela (1, 2, 3...)
+  recurrenceParentId?: string;
+  installmentNumber?: number;
+  // Parcelas (para contas parceladas) — cada parcela tem seu próprio status/baixa
+  installments?: FinancialInstallment[];
+  // Ocorrências (para contas recorrentes) — cada ocorrência tem seu próprio status/baixa
+  recurrences?: FinancialRecurrence[];
+}
+
+// Parcela individual de uma conta parcelada
+export interface FinancialInstallment {
+  id: string;
+  number: number; // 1, 2, 3...
+  amount: number;
+  dueDate: string;
+  status: 'pending' | 'paid' | 'overdue';
+  paidDate?: string;
+}
+
+// Ocorrência individual de uma conta recorrente
+export interface FinancialRecurrence {
+  id: string;
+  number: number; // 1, 2, 3...
+  dueDate: string;
+  status: 'pending' | 'paid' | 'overdue';
+  paidDate?: string;
 }
 
 // Histórico de boletos escaneados (sincronizado — tabela scanned_boletos)

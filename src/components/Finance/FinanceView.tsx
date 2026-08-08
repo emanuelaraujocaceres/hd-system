@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileBarChart,
+  Search,
 } from 'lucide-react';
 import { FinancialAccount, Sale, Product, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -45,6 +46,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'contas' | 'dre'>('contas');
   const [filterType, setFilterType] = useState<'all' | 'payable' | 'receivable'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [isReportOpen, setIsReportOpen] = useState(false);
 
   // Modal
@@ -104,6 +106,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     }
     setIsSaving(true);
     try {
+      const branchId = storageService.getSelectedBranchId() || undefined;
+      const orgId = storageService.getCurrentOrgId();
+
       if (editingAccount) {
         // Editar conta existente (sem suporte a recorrência na edição)
         const newAcc: FinancialAccount = {
@@ -121,7 +126,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         addToast('success', `Conta "${newAcc.title}" atualizada com sucesso.`);
       } else if (formMode === 'single') {
         // CONTA ÚNICA: cria uma única conta (pagar ou receber)
-        const branchId = storageService.getSelectedBranchId() || undefined;
         const newAcc: FinancialAccount = {
           id: `fin-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
           title: formTitle.trim(),
@@ -132,81 +136,96 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           status: 'pending',
           recipientOrPayer: formRecipient.trim(),
           storeBranchId: branchId,
-          organizationId: storageService.getCurrentOrgId(),
+          organizationId: orgId,
         };
         storageService.saveFinancialAccount(newAcc);
         posAudio.chime();
         setIsModalOpen(false);
         addToast('success', `Conta "${newAcc.title}" salva com sucesso.`);
       } else if (formMode === 'installment' && recurrenceCount > 0) {
-        // PARCELADA: o montante digitado é DIVIDIDO em N parcelas
+        // PARCELADA: cria 1 registro com array de parcelas
         const parentId = `fin-${Date.now()}`;
-        const branchId = storageService.getSelectedBranchId() || undefined;
         const perInstallment = Math.round((amountValue / recurrenceCount) * 100) / 100;
+        const installments = [];
         for (let i = 0; i < recurrenceCount; i++) {
           const dueDate = computeInstallmentDate(formDueDate, formRecurrenceType, i);
-          // Última parcela absorve a sobra do arredondamento (ex.: 100/3 → 33,34 + 33,33 + 33,33)
-          const amount = i === recurrenceCount - 1
+          // Última parcela absorve a sobra do arredondamento
+          const instAmount = i === recurrenceCount - 1
             ? Math.round((amountValue - perInstallment * (recurrenceCount - 1)) * 100) / 100
             : perInstallment;
-          const installment: FinancialAccount = {
-            id: i === 0 ? parentId : `fin-${Date.now()}-${i}`,
-            title: `${formTitle.trim()} (${i + 1}/${recurrenceCount})`,
-            type: formType,
-            amount,
+          installments.push({
+            id: `${parentId}-${i + 1}`,
+            number: i + 1,
+            amount: instAmount,
             dueDate,
-            status: 'pending',
-            recipientOrPayer: formRecipient.trim(),
-            storeBranchId: branchId,
-            isInstallment: true,
-            isRecurring: false,
-            recurrenceType: formRecurrenceType,
-            recurrenceCount,
-            recurrenceParentId: parentId,
-            installmentNumber: i + 1,
-          };
-          storageService.saveFinancialAccount(installment);
+            status: 'pending' as const,
+          });
         }
+        const newAcc: FinancialAccount = {
+          id: parentId,
+          title: formTitle.trim(),
+          type: formType,
+          category: formType === 'payable' ? 'conta_pagar' : 'conta_receber',
+          amount: amountValue, // Valor total (soma das parcelas)
+          dueDate: formDueDate,
+          status: 'pending',
+          recipientOrPayer: formRecipient.trim(),
+          storeBranchId: branchId,
+          organizationId: orgId,
+          isInstallment: true,
+          recurrenceType: formRecurrenceType,
+          recurrenceCount,
+          installments,
+        };
+        storageService.saveFinancialAccount(newAcc);
         posAudio.chime();
         setIsModalOpen(false);
-        addToast('success', `${recurrenceCount} parcelas de R$ ${perInstallment.toFixed(2).replace('.', ',')} criadas para "${formTitle.trim()}".`);
+        addToast('success', `Conta parcelada "${formTitle.trim()}" criada com ${recurrenceCount} parcelas de R$ ${perInstallment.toFixed(2).replace('.', ',')}.`);
       } else if (formMode === 'recurring' && recurrenceCount > 0) {
-        // RECORRENTE: valor FIXO se repete a cada período (NÃO é montante dividido)
+        // RECORRENTE: cria 1 registro com array de ocorrências
         const parentId = `fin-${Date.now()}`;
-        const branchId = storageService.getSelectedBranchId() || undefined;
+        const recurrences = [];
         for (let i = 0; i < recurrenceCount; i++) {
           const dueDate = computeInstallmentDate(formDueDate, formRecurrenceType, i);
-          const installment: FinancialAccount = {
-            id: i === 0 ? parentId : `fin-${Date.now()}-${i}`,
-            title: `${formTitle.trim()} (${i + 1}/${recurrenceCount})`,
-            type: formType,
-            amount: amountValue,
+          recurrences.push({
+            id: `${parentId}-${i + 1}`,
+            number: i + 1,
             dueDate,
-            status: 'pending',
-            recipientOrPayer: formRecipient.trim(),
-            storeBranchId: branchId,
-            isRecurring: true,
-            isInstallment: false,
-            recurrenceType: formRecurrenceType,
-            recurrenceCount,
-            recurrenceParentId: parentId,
-            installmentNumber: i + 1,
-          };
-          storageService.saveFinancialAccount(installment);
+            status: 'pending' as const,
+          });
         }
+        const newAcc: FinancialAccount = {
+          id: parentId,
+          title: formTitle.trim(),
+          type: formType,
+          category: formType === 'payable' ? 'conta_pagar' : 'conta_receber',
+          amount: amountValue, // Valor fixo por ocorrência
+          dueDate: formDueDate,
+          status: 'pending',
+          recipientOrPayer: formRecipient.trim(),
+          storeBranchId: branchId,
+          organizationId: orgId,
+          isRecurring: true,
+          recurrenceType: formRecurrenceType,
+          recurrenceCount,
+          recurrences,
+        };
+        storageService.saveFinancialAccount(newAcc);
         posAudio.chime();
         setIsModalOpen(false);
-        addToast('success', `${recurrenceCount} ocorrências recorrentes de R$ ${amountValue.toFixed(2).replace('.', ',')} criadas para "${formTitle.trim()}".`);
+        addToast('success', `Conta recorrente "${formTitle.trim()}" criada com ${recurrenceCount} repetições de R$ ${amountValue.toFixed(2).replace('.', ',')} cada.`);
       } else {
-        // Conta única (sem recorrência)
+        // Fallback: conta única
         const newAcc: FinancialAccount = {
-          id: `fin-${Date.now()}`,
+          id: `fin-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
           title: formTitle.trim(),
           type: formType,
           amount: amountValue,
           dueDate: formDueDate,
           status: 'pending',
           recipientOrPayer: formRecipient.trim(),
+          storeBranchId: branchId,
+          organizationId: orgId,
         };
         storageService.saveFinancialAccount(newAcc);
         posAudio.chime();
@@ -221,8 +240,47 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     }
   };
 
-  const handleMarkPaid = (account: FinancialAccount) => {
-    if (account.status === 'paid') return;
+  // ── Dar baixa em parcela individual ─────────────────────────────
+  const handleMarkInstallmentPaid = useCallback(
+    (account: FinancialAccount, installmentId: string) => {
+      if (!account.installments) return;
+      const updated = {
+        ...account,
+        installments: account.installments.map((inst) =>
+          inst.id === installmentId ? { ...inst, status: 'paid' as const, paidDate: new Date().toISOString().slice(0, 10) } : inst
+        ),
+      };
+      // Se todas as parcelas pagas, marca conta como paga
+      if (updated.installments.every((i) => i.status === 'paid')) {
+        updated.status = 'paid';
+      }
+      storageService.saveFinancialAccount(updated);
+      posAudio.chime();
+      addToast('success', `Parcela marcada como paga.`);
+    },
+    [addToast]
+  );
+
+  // ── Dar baixa em ocorrência individual ─────────────────────────
+  const handleMarkRecurrencePaid = useCallback(
+    (account: FinancialAccount, recurrenceId: string) => {
+      if (!account.recurrences) return;
+      const updated = {
+        ...account,
+        recurrences: account.recurrences.map((rec) =>
+          rec.id === recurrenceId ? { ...rec, status: 'paid' as const, paidDate: new Date().toISOString().slice(0, 10) } : rec
+        ),
+      };
+      // Se todas as ocorrências pagas, marca conta como paga
+      if (updated.recurrences.every((r) => r.status === 'paid')) {
+        updated.status = 'paid';
+      }
+      storageService.saveFinancialAccount(updated);
+      posAudio.chime();
+      addToast('success', `Ocorrência marcada como paga.`);
+    },
+    [addToast]
+  );
     try {
       const updated: FinancialAccount = {
         ...account,
@@ -312,13 +370,49 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   };
 
   // Calculations for Financial Accounts
+  // Para contas parceladas/recorrentes, conta apenas parcelas/ocorrências do mês vigente
+  const getCurrentMonthPending = (a: FinancialAccount): number => {
+    if (a.status === 'paid' || a.status === 'cancelled') return 0;
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // Conta parcelada: soma apenas parcelas pendentes do mês vigente
+    if (a.isInstallment && a.installments) {
+      return a.installments
+        .filter((inst) => {
+          if (inst.status !== 'pending') return false;
+          const d = new Date(inst.dueDate + 'T12:00:00');
+          return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        })
+        .reduce((sum, inst) => sum + inst.amount, 0);
+    }
+
+    // Conta recorrente: conta apenas ocorrências pendentes do mês vigente
+    if (a.isRecurring && a.recurrences) {
+      return a.recurrences
+        .filter((rec) => {
+          if (rec.status !== 'pending') return false;
+          const d = new Date(rec.dueDate + 'T12:00:00');
+          return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        })
+        .reduce((sum) => sum + a.amount, 0); // valor fixo por ocorrência
+    }
+
+    // Conta única: verifica se vence no mês vigente
+    if (countsInCurrentPeriod(a)) {
+      return a.amount;
+    }
+    return 0;
+  };
+
   const totalPayablePending = financialAccounts
-    .filter((a) => a.type === 'payable' && a.status === 'pending' && countsInCurrentPeriod(a))
-    .reduce((acc, a) => acc + a.amount, 0);
+    .filter((a) => a.type === 'payable' && a.category !== 'fiado' && a.category !== 'fiado_payment')
+    .reduce((acc, a) => acc + getCurrentMonthPending(a), 0);
 
   const totalReceivablePending = financialAccounts
-    .filter((a) => a.type === 'receivable' && a.status === 'pending' && countsInCurrentPeriod(a))
-    .reduce((acc, a) => acc + a.amount, 0);
+    .filter((a) => a.type === 'receivable' && a.category !== 'fiado' && a.category !== 'fiado_payment')
+    .reduce((acc, a) => acc + getCurrentMonthPending(a), 0);
 
   // DRE CALCULATIONS
   // Defensive: compute total from items when sale.total is 0
@@ -373,7 +467,17 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     // Registros de fiado (contas a receber de vendas fiado e pagamentos de fiado)
     // NÃO aparecem na lista de contas — são gerenciados na página de Fiados
     if (a.category === 'fiado' || a.category === 'fiado_payment') return false;
-    if (filterType === 'payable') return a.type === 'payable';
+    // Filtro de tipo: agora só mostra contas a pagar (payable)
+    if (a.type !== 'payable') return false;
+    // Campo de pesquisa: busca por título, favorecido, ID ou notas
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      const matchTitle = (a.title || '').toLowerCase().includes(term);
+      const matchRecipient = (a.recipientOrPayer || '').toLowerCase().includes(term);
+      const matchId = (a.id || '').toLowerCase().includes(term);
+      const matchNotes = (a.notes || '').toLowerCase().includes(term);
+      if (!matchTitle && !matchRecipient && !matchId && !matchNotes) return false;
+    }
     return true;
   });
 
@@ -464,30 +568,29 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       </div>
 
-      {/* SUB-TAB 1: CONTAS A PAGAR / RECEBER */}
+      {/* SUB-TAB 1: CONTAS A PAGAR */}
       {activeSubTab === 'contas' && (
         <div className="space-y-4">
+          {/* Campo de pesquisa */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setFilterType('all')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border min-h-[44px] ${
-                filterType === 'all'
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'bg-white dark:bg-[#18181b] border-slate-200 dark:border-[#27272a] text-slate-600 dark:text-[#a1a1aa]'
-              }`}
-            >
-              Todas
-            </button>
-            <button
-              onClick={() => setFilterType('payable')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border min-h-[44px] ${
-                filterType === 'payable'
-                  ? 'bg-rose-600 text-white border-rose-600'
-                  : 'bg-white dark:bg-[#18181b] border-slate-200 dark:border-[#27272a] text-slate-600 dark:text-[#a1a1aa]'
-              }`}
-            >
-              Contas a Pagar
-            </button>
+            <div className="relative flex-1 max-w-sm">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Pesquisar por título, favorecido, ID..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-[#27272a] text-xs font-bold text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                Limpar
+              </button>
+            )}
           </div>
 
           {/* Desktop accounts table */}
@@ -1313,4 +1416,4 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       )}
     </div>
   );
-};
+}
