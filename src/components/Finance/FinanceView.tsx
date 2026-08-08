@@ -119,6 +119,25 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         setIsModalOpen(false);
         setEditingAccount(null);
         addToast('success', `Conta "${newAcc.title}" atualizada com sucesso.`);
+      } else if (formMode === 'single') {
+        // CONTA ÚNICA: cria uma única conta (pagar ou receber)
+        const branchId = storageService.getSelectedBranchId() || undefined;
+        const newAcc: FinancialAccount = {
+          id: `fin-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          title: formTitle.trim(),
+          type: formType,
+          category: formType === 'payable' ? 'conta_pagar' : 'conta_receber',
+          amount: amountValue,
+          dueDate: formDueDate,
+          status: 'pending',
+          recipientOrPayer: formRecipient.trim(),
+          storeBranchId: branchId,
+          organizationId: storageService.getCurrentOrgId(),
+        };
+        storageService.saveFinancialAccount(newAcc);
+        posAudio.chime();
+        setIsModalOpen(false);
+        addToast('success', `Conta "${newAcc.title}" salva com sucesso.`);
       } else if (formMode === 'installment' && recurrenceCount > 0) {
         // PARCELADA: o montante digitado é DIVIDIDO em N parcelas
         const parentId = `fin-${Date.now()}`;
@@ -355,7 +374,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     // NÃO aparecem na lista de contas — são gerenciados na página de Fiados
     if (a.category === 'fiado' || a.category === 'fiado_payment') return false;
     if (filterType === 'payable') return a.type === 'payable';
-    if (filterType === 'receivable') return a.type === 'receivable';
     return true;
   });
 
@@ -469,16 +487,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               }`}
             >
               Contas a Pagar
-            </button>
-            <button
-              onClick={() => setFilterType('receivable')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold border min-h-[44px] ${
-                filterType === 'receivable'
-                  ? 'bg-emerald-600 text-white border-emerald-600'
-                  : 'bg-white dark:bg-[#18181b] border-slate-200 dark:border-[#27272a] text-slate-600 dark:text-[#a1a1aa]'
-              }`}
-            >
-              Contas a Receber
             </button>
           </div>
 
