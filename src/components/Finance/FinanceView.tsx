@@ -19,7 +19,7 @@ import {
   FileBarChart,
   Search,
 } from 'lucide-react';
-import { FinancialAccount, Sale, Product, UserProfile } from '../../types';
+import { FinancialAccount, FinancialInstallment, FinancialRecurrence, Sale, Product, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
@@ -47,6 +47,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<'contas' | 'dre'>('contas');
   const [filterType, setFilterType] = useState<'all' | 'payable' | 'receivable'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
 
   // Modal
@@ -141,64 +142,76 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         setIsModalOpen(false);
         addToast('success', `Conta "${newAcc.title}" salva com sucesso.`);
       } else if (formMode === 'installment' && recurrenceCount > 0) {
-        // PARCELADA: o montante digitado é DIVIDIDO em N parcelas
+        // PARCELADA: cria 1 registro com array de parcelas
         const parentId = `fin-${Date.now()}`;
-        const branchId = storageService.getSelectedBranchId() || undefined;
         const perInstallment = Math.round((amountValue / recurrenceCount) * 100) / 100;
+        const installments: FinancialInstallment[] = [];
         for (let i = 0; i < recurrenceCount; i++) {
           const dueDate = computeInstallmentDate(formDueDate, formRecurrenceType, i);
-          // Última parcela absorve a sobra do arredondamento (ex.: 100/3 → 33,34 + 33,33 + 33,33)
-          const amount = i === recurrenceCount - 1
+          const instAmount = i === recurrenceCount - 1
             ? Math.round((amountValue - perInstallment * (recurrenceCount - 1)) * 100) / 100
             : perInstallment;
-          const installment: FinancialAccount = {
-            id: i === 0 ? parentId : `fin-${Date.now()}-${i}`,
-            title: `${formTitle.trim()} (${i + 1}/${recurrenceCount})`,
-            type: formType,
-            amount,
+          installments.push({
+            id: `${parentId}-${i + 1}`,
+            number: i + 1,
+            amount: instAmount,
             dueDate,
             status: 'pending',
-            recipientOrPayer: formRecipient.trim(),
-            storeBranchId: branchId,
-            isInstallment: true,
-            isRecurring: false,
-            recurrenceType: formRecurrenceType,
-            recurrenceCount,
-            recurrenceParentId: parentId,
-            installmentNumber: i + 1,
-          };
-          storageService.saveFinancialAccount(installment);
+          });
         }
+        const newAcc: FinancialAccount = {
+          id: parentId,
+          title: formTitle.trim(),
+          type: formType,
+          category: formType === 'payable' ? 'conta_pagar' : 'conta_receber',
+          amount: amountValue,
+          dueDate: formDueDate,
+          status: 'pending',
+          recipientOrPayer: formRecipient.trim(),
+          storeBranchId: branchId,
+          organizationId: orgId,
+          isInstallment: true,
+          recurrenceType: formRecurrenceType,
+          recurrenceCount,
+          installments,
+        };
+        storageService.saveFinancialAccount(newAcc);
         posAudio.chime();
         setIsModalOpen(false);
-        addToast('success', `${recurrenceCount} parcelas de R$ ${perInstallment.toFixed(2).replace('.', ',')} criadas para "${formTitle.trim()}".`);
+        addToast('success', `Conta parcelada "${formTitle.trim()}" criada com ${recurrenceCount} parcelas de R$ ${perInstallment.toFixed(2).replace('.', ',')}.`);
       } else if (formMode === 'recurring' && recurrenceCount > 0) {
-        // RECORRENTE: valor FIXO se repete a cada período (NÃO é montante dividido)
+        // RECORRENTE: cria 1 registro com array de ocorrências
         const parentId = `fin-${Date.now()}`;
-        const branchId = storageService.getSelectedBranchId() || undefined;
+        const recurrences: FinancialRecurrence[] = [];
         for (let i = 0; i < recurrenceCount; i++) {
           const dueDate = computeInstallmentDate(formDueDate, formRecurrenceType, i);
-          const installment: FinancialAccount = {
-            id: i === 0 ? parentId : `fin-${Date.now()}-${i}`,
-            title: `${formTitle.trim()} (${i + 1}/${recurrenceCount})`,
-            type: formType,
-            amount: amountValue,
+          recurrences.push({
+            id: `${parentId}-${i + 1}`,
+            number: i + 1,
             dueDate,
             status: 'pending',
-            recipientOrPayer: formRecipient.trim(),
-            storeBranchId: branchId,
-            isRecurring: true,
-            isInstallment: false,
-            recurrenceType: formRecurrenceType,
-            recurrenceCount,
-            recurrenceParentId: parentId,
-            installmentNumber: i + 1,
-          };
-          storageService.saveFinancialAccount(installment);
+          });
         }
+        const newAcc: FinancialAccount = {
+          id: parentId,
+          title: formTitle.trim(),
+          type: formType,
+          category: formType === 'payable' ? 'conta_pagar' : 'conta_receber',
+          amount: amountValue,
+          dueDate: formDueDate,
+          status: 'pending',
+          recipientOrPayer: formRecipient.trim(),
+          storeBranchId: branchId,
+          organizationId: orgId,
+          isRecurring: true,
+          recurrenceType: formRecurrenceType,
+          recurrenceCount,
+          recurrences,
+        };
+        storageService.saveFinancialAccount(newAcc);
         posAudio.chime();
         setIsModalOpen(false);
-        addToast('success', `${recurrenceCount} ocorrências recorrentes de R$ ${amountValue.toFixed(2).replace('.', ',')} criadas para "${formTitle.trim()}".`);
+        addToast('success', `Conta recorrente "${formTitle.trim()}" criada com ${recurrenceCount} repetições de R$ ${amountValue.toFixed(2).replace('.', ',')} cada.`);
       } else {
         // Conta única (sem recorrência)
         const newAcc: FinancialAccount = {
@@ -239,6 +252,46 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       posAudio.error();
     }
   };
+
+  // ── Dar baixa em ocorrência individual (recorrência) ──────────
+  const handleMarkRecurrencePaid = useCallback(
+    (account: FinancialAccount, recurrenceId: string) => {
+      if (!account.recurrences) return;
+      const updated = {
+        ...account,
+        recurrences: account.recurrences.map((rec) =>
+          rec.id === recurrenceId ? { ...rec, status: 'paid' as const, paidDate: new Date().toISOString().slice(0, 10) } : rec
+        ),
+      };
+      if (updated.recurrences.every((r) => r.status === 'paid')) {
+        updated.status = 'paid';
+      }
+      storageService.saveFinancialAccount(updated);
+      posAudio.chime();
+      addToast('success', `Ocorrência marcada como paga.`);
+    },
+    [addToast]
+  );
+
+  // ── Dar baixa em parcela individual ─────────────────────────────
+  const handleMarkInstallmentPaid = useCallback(
+    (account: FinancialAccount, installmentId: string) => {
+      if (!account.installments) return;
+      const updated = {
+        ...account,
+        installments: account.installments.map((inst) =>
+          inst.id === installmentId ? { ...inst, status: 'paid' as const, paidDate: new Date().toISOString().slice(0, 10) } : inst
+        ),
+      };
+      if (updated.installments.every((i) => i.status === 'paid')) {
+        updated.status = 'paid';
+      }
+      storageService.saveFinancialAccount(updated);
+      posAudio.chime();
+      addToast('success', `Parcela marcada como paga.`);
+    },
+    [addToast]
+  );
 
   const handleOpenEditAccount = (account: FinancialAccount) => {
     setEditingAccount(account);
@@ -372,19 +425,19 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   };
 
   const filteredAccounts = financialAccounts.filter((a) => {
-    // Registros de fiado (contas a receber de vendas fiado e pagamentos de fiado)
-    // NÃO aparecem na lista de contas — são gerenciados na página de Fiados
+    // Registros de fiado NÃO aparecem — gerenciados na página Fiados
     if (a.category === 'fiado' || a.category === 'fiado_payment') return false;
-    // Agora só mostra contas a pagar (payable)
+    // Agora só mostra contas a pagar
     if (a.type !== 'payable') return false;
-    // Campo de pesquisa: busca por título, favorecido, ID ou notas
+    // Campo de pesquisa
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      const matchTitle = (a.title || '').toLowerCase().includes(term);
-      const matchRecipient = (a.recipientOrPayer || '').toLowerCase().includes(term);
-      const matchId = (a.id || '').toLowerCase().includes(term);
-      const matchNotes = (a.notes || '').toLowerCase().includes(term);
-      if (!matchTitle && !matchRecipient && !matchId && !matchNotes) return false;
+      return (
+        (a.title || '').toLowerCase().includes(term) ||
+        (a.recipientOrPayer || '').toLowerCase().includes(term) ||
+        (a.id || '').toLowerCase().includes(term) ||
+        (a.notes || '').toLowerCase().includes(term)
+      );
     }
     return true;
   });
