@@ -43,3 +43,21 @@ export function mapRows<T>(rows: unknown, mapper: (r: any) => T, label = 'row'):
 export function isValidRemoteRow(row: unknown): row is Record<string, any> {
   return !!row && typeof row === 'object' && !Array.isArray(row);
 }
+
+/**
+ * Parse JSON seguro — se o valor já é um objeto, retorna como está.
+ * Se é string, faz JSON.parse. Se falhar, retorna null.
+ * Previne: SyntaxError: "[object Object]" is not valid JSON
+ */
+export function safeParseJson(value: any): any {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'object') return value; // Já é objeto, não precisa parsear
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}

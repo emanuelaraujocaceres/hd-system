@@ -48,7 +48,7 @@ import {
 import { syncService } from './syncService';
 import { supabase } from '../lib/supabase';
 import { undoManager } from '../lib/undoManager';
-import { asArray, mapRows } from '../lib/safeSync';
+import { asArray, mapRows, safeParseJson } from '../lib/safeSync';
 
 const KEYS = {
   PRODUCTS: 'hd_system_products',
@@ -860,7 +860,7 @@ class StorageService {
       discount: row.discount !== undefined && row.discount !== null ? parseFloat(row.discount) : (existing?.discount ?? 0),
       total: row.total !== undefined && row.total !== null ? parseFloat(row.total) : (existing?.total ?? 0),
       payments: row.payments_json
-        ? JSON.parse(row.payments_json).map((p: any) => ({
+        ? safeParseJson(row.payments_json).map((p: any) => ({
             method: p.method || 'cash',
             amount: parseFloat(p.amount) || 0,
             cashGiven: p.cashGiven,
@@ -1543,7 +1543,7 @@ class StorageService {
               subtotal: parseFloat(r.subtotal) || fixedTotal, discount: parseFloat(r.discount) || 0,
               total: fixedTotal,
               payments: r.payments_json
-                ? JSON.parse(r.payments_json).map((p: any) => ({
+                ? safeParseJson(r.payments_json).map((p: any) => ({
                     method: p.method || 'cash',
                     amount: parseFloat(p.amount) || 0,
                     cashGiven: p.cashGiven,
@@ -1586,7 +1586,7 @@ class StorageService {
               subtotal: fixedSubtotal, discount: parseFloat(r.discount) || 0,
               total: fixedTotal,
               payments: r.payments_json
-                ? JSON.parse(r.payments_json).map((p: any) => ({
+                ? safeParseJson(r.payments_json).map((p: any) => ({
                     method: p.method || 'cash',
                     amount: parseFloat(p.amount) || 0,
                     cashGiven: p.cashGiven,
