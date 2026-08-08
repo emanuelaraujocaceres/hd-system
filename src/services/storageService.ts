@@ -531,6 +531,14 @@ class StorageService {
         discount: s.discount,
         total: s.total,
         payment_method: s.payments[0]?.method || 'cash',
+        payments_json: (s.payments && s.payments.length > 0)
+          ? JSON.stringify(s.payments.map((p: any) => ({
+              method: p.method,
+              amount: p.amount,
+              cashGiven: p.cashGiven,
+              changeDue: p.changeDue,
+            })))
+          : JSON.stringify([{ method: 'cash', amount: s.total || 0 }]),
         order_source: s.orderSource || 'pdv',
         kitchen_status: s.kitchenStatus || 'pending',
         status: s.status,
@@ -851,7 +859,14 @@ class StorageService {
       subtotal: row.subtotal !== undefined && row.subtotal !== null ? parseFloat(row.subtotal) : (existing?.subtotal ?? 0),
       discount: row.discount !== undefined && row.discount !== null ? parseFloat(row.discount) : (existing?.discount ?? 0),
       total: row.total !== undefined && row.total !== null ? parseFloat(row.total) : (existing?.total ?? 0),
-      payments: existing?.payments || [{ method: (row.payment_method as any) || 'cash', amount: parseFloat(row.total) || 0 }],
+      payments: row.payments_json
+        ? JSON.parse(row.payments_json).map((p: any) => ({
+            method: p.method || 'cash',
+            amount: parseFloat(p.amount) || 0,
+            cashGiven: p.cashGiven,
+            changeDue: p.changeDue,
+          }))
+        : (existing?.payments || [{ method: (row.payment_method as any) || 'cash', amount: parseFloat(row.total) || 0 }]),
       orderSource: row.order_source || existing?.orderSource || 'pdv',
       kitchenStatus: row.kitchen_status || existing?.kitchenStatus || 'pending',
       status: row.status || 'completed',
@@ -1527,7 +1542,14 @@ class StorageService {
               items: cloudItems,
               subtotal: parseFloat(r.subtotal) || fixedTotal, discount: parseFloat(r.discount) || 0,
               total: fixedTotal,
-              payments: [{ method: r.payment_method || 'cash', amount: fixedTotal }],
+              payments: r.payments_json
+                ? JSON.parse(r.payments_json).map((p: any) => ({
+                    method: p.method || 'cash',
+                    amount: parseFloat(p.amount) || 0,
+                    cashGiven: p.cashGiven,
+                    changeDue: p.changeDue,
+                  }))
+                : [{ method: r.payment_method || 'cash', amount: fixedTotal }],
               status: r.status || 'completed',
               updatedAt: r.updated_at || new Date().toISOString(),
             };
@@ -1563,7 +1585,14 @@ class StorageService {
               items,
               subtotal: fixedSubtotal, discount: parseFloat(r.discount) || 0,
               total: fixedTotal,
-              payments: [{ method: r.payment_method || 'cash', amount: fixedTotal }],
+              payments: r.payments_json
+                ? JSON.parse(r.payments_json).map((p: any) => ({
+                    method: p.method || 'cash',
+                    amount: parseFloat(p.amount) || 0,
+                    cashGiven: p.cashGiven,
+                    changeDue: p.changeDue,
+                  }))
+                : [{ method: r.payment_method || 'cash', amount: fixedTotal }],
               status: r.status || 'completed',
               updatedAt: r.updated_at || new Date().toISOString(),
             };
