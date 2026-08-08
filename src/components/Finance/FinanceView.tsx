@@ -106,9 +106,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     }
     setIsSaving(true);
     try {
-      const branchId = storageService.getSelectedBranchId() || undefined;
-      const orgId = storageService.getCurrentOrgId();
-
       if (editingAccount) {
         // Editar conta existente (sem suporte a recorrência na edição)
         const newAcc: FinancialAccount = {
@@ -126,6 +123,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         addToast('success', `Conta "${newAcc.title}" atualizada com sucesso.`);
       } else if (formMode === 'single') {
         // CONTA ÚNICA: cria uma única conta (pagar ou receber)
+        const branchId = storageService.getSelectedBranchId() || undefined;
         const newAcc: FinancialAccount = {
           id: `fin-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
           title: formTitle.trim(),
@@ -136,96 +134,81 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           status: 'pending',
           recipientOrPayer: formRecipient.trim(),
           storeBranchId: branchId,
-          organizationId: orgId,
+          organizationId: storageService.getCurrentOrgId(),
         };
         storageService.saveFinancialAccount(newAcc);
         posAudio.chime();
         setIsModalOpen(false);
         addToast('success', `Conta "${newAcc.title}" salva com sucesso.`);
       } else if (formMode === 'installment' && recurrenceCount > 0) {
-        // PARCELADA: cria 1 registro com array de parcelas
+        // PARCELADA: o montante digitado é DIVIDIDO em N parcelas
         const parentId = `fin-${Date.now()}`;
+        const branchId = storageService.getSelectedBranchId() || undefined;
         const perInstallment = Math.round((amountValue / recurrenceCount) * 100) / 100;
-        const installments = [];
         for (let i = 0; i < recurrenceCount; i++) {
           const dueDate = computeInstallmentDate(formDueDate, formRecurrenceType, i);
-          // Última parcela absorve a sobra do arredondamento
-          const instAmount = i === recurrenceCount - 1
+          // Última parcela absorve a sobra do arredondamento (ex.: 100/3 → 33,34 + 33,33 + 33,33)
+          const amount = i === recurrenceCount - 1
             ? Math.round((amountValue - perInstallment * (recurrenceCount - 1)) * 100) / 100
             : perInstallment;
-          installments.push({
-            id: `${parentId}-${i + 1}`,
-            number: i + 1,
-            amount: instAmount,
+          const installment: FinancialAccount = {
+            id: i === 0 ? parentId : `fin-${Date.now()}-${i}`,
+            title: `${formTitle.trim()} (${i + 1}/${recurrenceCount})`,
+            type: formType,
+            amount,
             dueDate,
-            status: 'pending' as const,
-          });
+            status: 'pending',
+            recipientOrPayer: formRecipient.trim(),
+            storeBranchId: branchId,
+            isInstallment: true,
+            isRecurring: false,
+            recurrenceType: formRecurrenceType,
+            recurrenceCount,
+            recurrenceParentId: parentId,
+            installmentNumber: i + 1,
+          };
+          storageService.saveFinancialAccount(installment);
         }
-        const newAcc: FinancialAccount = {
-          id: parentId,
-          title: formTitle.trim(),
-          type: formType,
-          category: formType === 'payable' ? 'conta_pagar' : 'conta_receber',
-          amount: amountValue, // Valor total (soma das parcelas)
-          dueDate: formDueDate,
-          status: 'pending',
-          recipientOrPayer: formRecipient.trim(),
-          storeBranchId: branchId,
-          organizationId: orgId,
-          isInstallment: true,
-          recurrenceType: formRecurrenceType,
-          recurrenceCount,
-          installments,
-        };
-        storageService.saveFinancialAccount(newAcc);
         posAudio.chime();
         setIsModalOpen(false);
-        addToast('success', `Conta parcelada "${formTitle.trim()}" criada com ${recurrenceCount} parcelas de R$ ${perInstallment.toFixed(2).replace('.', ',')}.`);
+        addToast('success', `${recurrenceCount} parcelas de R$ ${perInstallment.toFixed(2).replace('.', ',')} criadas para "${formTitle.trim()}".`);
       } else if (formMode === 'recurring' && recurrenceCount > 0) {
-        // RECORRENTE: cria 1 registro com array de ocorrências
+        // RECORRENTE: valor FIXO se repete a cada período (NÃO é montante dividido)
         const parentId = `fin-${Date.now()}`;
-        const recurrences = [];
+        const branchId = storageService.getSelectedBranchId() || undefined;
         for (let i = 0; i < recurrenceCount; i++) {
           const dueDate = computeInstallmentDate(formDueDate, formRecurrenceType, i);
-          recurrences.push({
-            id: `${parentId}-${i + 1}`,
-            number: i + 1,
+          const installment: FinancialAccount = {
+            id: i === 0 ? parentId : `fin-${Date.now()}-${i}`,
+            title: `${formTitle.trim()} (${i + 1}/${recurrenceCount})`,
+            type: formType,
+            amount: amountValue,
             dueDate,
-            status: 'pending' as const,
-          });
+            status: 'pending',
+            recipientOrPayer: formRecipient.trim(),
+            storeBranchId: branchId,
+            isRecurring: true,
+            isInstallment: false,
+            recurrenceType: formRecurrenceType,
+            recurrenceCount,
+            recurrenceParentId: parentId,
+            installmentNumber: i + 1,
+          };
+          storageService.saveFinancialAccount(installment);
         }
-        const newAcc: FinancialAccount = {
-          id: parentId,
-          title: formTitle.trim(),
-          type: formType,
-          category: formType === 'payable' ? 'conta_pagar' : 'conta_receber',
-          amount: amountValue, // Valor fixo por ocorrência
-          dueDate: formDueDate,
-          status: 'pending',
-          recipientOrPayer: formRecipient.trim(),
-          storeBranchId: branchId,
-          organizationId: orgId,
-          isRecurring: true,
-          recurrenceType: formRecurrenceType,
-          recurrenceCount,
-          recurrences,
-        };
-        storageService.saveFinancialAccount(newAcc);
         posAudio.chime();
         setIsModalOpen(false);
-        addToast('success', `Conta recorrente "${formTitle.trim()}" criada com ${recurrenceCount} repetições de R$ ${amountValue.toFixed(2).replace('.', ',')} cada.`);
+        addToast('success', `${recurrenceCount} ocorrências recorrentes de R$ ${amountValue.toFixed(2).replace('.', ',')} criadas para "${formTitle.trim()}".`);
       } else {
-        // Fallback: conta única
+        // Conta única (sem recorrência)
         const newAcc: FinancialAccount = {
-          id: `fin-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          id: `fin-${Date.now()}`,
           title: formTitle.trim(),
           type: formType,
           amount: amountValue,
           dueDate: formDueDate,
           status: 'pending',
           recipientOrPayer: formRecipient.trim(),
-          storeBranchId: branchId,
-          organizationId: orgId,
         };
         storageService.saveFinancialAccount(newAcc);
         posAudio.chime();
@@ -240,47 +223,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     }
   };
 
-  // ── Dar baixa em parcela individual ─────────────────────────────
-  const handleMarkInstallmentPaid = useCallback(
-    (account: FinancialAccount, installmentId: string) => {
-      if (!account.installments) return;
-      const updated = {
-        ...account,
-        installments: account.installments.map((inst) =>
-          inst.id === installmentId ? { ...inst, status: 'paid' as const, paidDate: new Date().toISOString().slice(0, 10) } : inst
-        ),
-      };
-      // Se todas as parcelas pagas, marca conta como paga
-      if (updated.installments.every((i) => i.status === 'paid')) {
-        updated.status = 'paid';
-      }
-      storageService.saveFinancialAccount(updated);
-      posAudio.chime();
-      addToast('success', `Parcela marcada como paga.`);
-    },
-    [addToast]
-  );
-
-  // ── Dar baixa em ocorrência individual ─────────────────────────
-  const handleMarkRecurrencePaid = useCallback(
-    (account: FinancialAccount, recurrenceId: string) => {
-      if (!account.recurrences) return;
-      const updated = {
-        ...account,
-        recurrences: account.recurrences.map((rec) =>
-          rec.id === recurrenceId ? { ...rec, status: 'paid' as const, paidDate: new Date().toISOString().slice(0, 10) } : rec
-        ),
-      };
-      // Se todas as ocorrências pagas, marca conta como paga
-      if (updated.recurrences.every((r) => r.status === 'paid')) {
-        updated.status = 'paid';
-      }
-      storageService.saveFinancialAccount(updated);
-      posAudio.chime();
-      addToast('success', `Ocorrência marcada como paga.`);
-    },
-    [addToast]
-  );
+  const handleMarkPaid = (account: FinancialAccount) => {
+    if (account.status === 'paid') return;
     try {
       const updated: FinancialAccount = {
         ...account,
@@ -370,49 +314,13 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   };
 
   // Calculations for Financial Accounts
-  // Para contas parceladas/recorrentes, conta apenas parcelas/ocorrências do mês vigente
-  const getCurrentMonthPending = (a: FinancialAccount): number => {
-    if (a.status === 'paid' || a.status === 'cancelled') return 0;
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    // Conta parcelada: soma apenas parcelas pendentes do mês vigente
-    if (a.isInstallment && a.installments) {
-      return a.installments
-        .filter((inst) => {
-          if (inst.status !== 'pending') return false;
-          const d = new Date(inst.dueDate + 'T12:00:00');
-          return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-        })
-        .reduce((sum, inst) => sum + inst.amount, 0);
-    }
-
-    // Conta recorrente: conta apenas ocorrências pendentes do mês vigente
-    if (a.isRecurring && a.recurrences) {
-      return a.recurrences
-        .filter((rec) => {
-          if (rec.status !== 'pending') return false;
-          const d = new Date(rec.dueDate + 'T12:00:00');
-          return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-        })
-        .reduce((sum) => sum + a.amount, 0); // valor fixo por ocorrência
-    }
-
-    // Conta única: verifica se vence no mês vigente
-    if (countsInCurrentPeriod(a)) {
-      return a.amount;
-    }
-    return 0;
-  };
-
   const totalPayablePending = financialAccounts
-    .filter((a) => a.type === 'payable' && a.category !== 'fiado' && a.category !== 'fiado_payment')
-    .reduce((acc, a) => acc + getCurrentMonthPending(a), 0);
+    .filter((a) => a.type === 'payable' && a.status === 'pending' && countsInCurrentPeriod(a))
+    .reduce((acc, a) => acc + a.amount, 0);
 
   const totalReceivablePending = financialAccounts
-    .filter((a) => a.type === 'receivable' && a.category !== 'fiado' && a.category !== 'fiado_payment')
-    .reduce((acc, a) => acc + getCurrentMonthPending(a), 0);
+    .filter((a) => a.type === 'receivable' && a.status === 'pending' && countsInCurrentPeriod(a))
+    .reduce((acc, a) => acc + a.amount, 0);
 
   // DRE CALCULATIONS
   // Defensive: compute total from items when sale.total is 0
@@ -467,7 +375,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     // Registros de fiado (contas a receber de vendas fiado e pagamentos de fiado)
     // NÃO aparecem na lista de contas — são gerenciados na página de Fiados
     if (a.category === 'fiado' || a.category === 'fiado_payment') return false;
-    // Filtro de tipo: agora só mostra contas a pagar (payable)
+    // Agora só mostra contas a pagar (payable)
     if (a.type !== 'payable') return false;
     // Campo de pesquisa: busca por título, favorecido, ID ou notas
     if (searchTerm.trim()) {
@@ -1416,4 +1324,4 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       )}
     </div>
   );
-}
+};
