@@ -158,6 +158,21 @@ export const App: React.FC = () => {
       setUser(storageService.getUserProfile());
     };
 
+    // ── Limpar registros financeiros antigos (formato "X/Y") ──
+    // Registros criados antes da correção de recorrências/parcelas
+    // devem ser removidos para não poluir a lista.
+    const cleanOldFinancialAccounts = () => {
+      const accounts = storageService.getFinancialAccounts();
+      const hasOldFormat = accounts.some((a) => /\(\d+\/\d+\)/.test(a.title || ''));
+      if (hasOldFormat) {
+        const cleaned = accounts.filter((a) => !/\(\d+\/\d+\)/.test(a.title || ''));
+        if (cleaned.length !== accounts.length) {
+          storageService.saveFinancialAccounts(cleaned);
+        }
+      }
+    };
+    cleanOldFinancialAccounts();
+
     refreshState();
     const unsubscribe = storageService.subscribe(refreshState);
 

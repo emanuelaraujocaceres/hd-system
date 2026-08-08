@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpar Dados Financeiros</title>
+    <style>
+        body { font-family: system-ui; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #09090b; color: #fafafa; }
+        .container { text-align: center; padding: 2rem; }
+        button { padding: 1rem 2rem; font-size: 1rem; background: #dc2626; color: white; border: none; border-radius: 0.5rem; cursor: pointer; }
+        button:hover { background: #b91c1c; }
+        .msg { margin-top: 1rem; padding: 1rem; border-radius: 0.5rem; display: none; }
+        .success { background: #16a34a; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Limpar Dados Financeiros Antigos</h1>
+        <p>Isso vai remover os 1000 registros antigos de recorrência</p>
+        <button onclick="limpar()">LIMPAR E RECARREGAR</button>
+        <div id="msg" class="msg"></div>
+    </div>
+    <script>
+        function limpar() {
+            localStorage.removeItem('hd_system_financial_accounts');
+            document.getElementById('msg').className = 'msg success';
+            document.getElementById('msg').style.display = 'block';
+            document.getElementById('msg').textContent = 'Dados limpos! Redirecionando...';
+            setTimeout(() => window.location.href = 'http://localhost:3000/', 1500);
+        }
+    </script>
+</body>
+</html>

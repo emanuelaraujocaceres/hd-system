@@ -3031,6 +3031,10 @@ class StorageService {
     return this.filterBySelectedBranch(result);
   }
 
+  saveFinancialAccounts(accounts: FinancialAccount[]) {
+    this.set(KEYS.FINANCIAL, accounts);
+  }
+
   saveFinancialAccount(acc: FinancialAccount) {
     acc.id = StorageService.ensureUuid(acc.id);
     acc.organizationId = this.getCurrentOrgId();
