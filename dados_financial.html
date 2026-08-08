@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head><title>Dados Financial</title></head>
+<body>
+<h1>Financial Accounts</h1>
+<div id="data" style="font-family: monospace; white-space: pre-wrap;"></div>
+<script>
+  const data = JSON.parse(localStorage.getItem('hd_system_financial_accounts') || '[]');
+  let html = '';
+  data.forEach((a, i) => {
+    html += `--- Conta ${i+1} ---\n`;
+    html += `ID: ${a.id}\n`;
+    html += `Title: ${a.title}\n`;
+    html += `isRecurring: ${a.isRecurring}\n`;
+    html += `isInstallment: ${a.isInstallment}\n`;
+    html += `Recurrences: ${a.recurrences?.length || 0}\n`;
+    html += `Installments: ${a.installments?.length || 0}\n`;
+    html += `Status: ${a.status}\n\n`;
+  });
+  document.getElementById('data').textContent = html;
+</script>
+</body>
+</html>
