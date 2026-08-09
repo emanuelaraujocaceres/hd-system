@@ -1636,6 +1636,7 @@ class StorageService {
       // ── FINANCIAL ACCOUNTS ────────────────────────────────────────
       {
          const local = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
+         console.log(`[HD-Sync] 📊 Financial hydration: local=${local.length}, cloud=${financial.length}`);
          // Contas cuja recorrência existe só no local (criadas antes da migração
          // 20260810) precisam ser re-enviadas ao cloud após o merge preservá-la.
          const needsRecurrenceResync: FinancialAccount[] = [];
