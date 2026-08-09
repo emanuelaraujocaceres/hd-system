@@ -427,7 +427,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const totalPayrollExpenses = users
     .filter((u) => u.storeBranchId === selectedBranchId && u.active)
     .reduce((acc, u) => {
-      const benefits = (u.salary || 0) + (u.transportationAllowance || 0) + (u.mealAllowance || 0) + (u.healthInsurance || 0) + (u.otherBenefits || 0);
+      const benefits = (u.salary || 0) + (u.transportationAllowance || 0) + (u.mealAllowance || 0) + (u.otherBenefits || 0);
       const discounts = (u.inssDiscount || 0) + (u.irDiscount || 0) + (u.otherDiscounts || 0);
       return acc + (benefits - discounts);
     }, 0);

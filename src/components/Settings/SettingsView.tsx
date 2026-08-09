@@ -176,7 +176,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [holeriteSalary, setHoleriteSalary] = useState(0);
   const [holeriteTransportation, setHoleriteTransportation] = useState(0);
   const [holeriteMeal, setHoleriteMeal] = useState(0);
-  const [holeriteHealth, setHoleriteHealth] = useState(0);
   const [holeriteOtherBenefits, setHoleriteOtherBenefits] = useState(0);
   const [holeriteInss, setHoleriteInss] = useState(0);
   const [holeriteIr, setHoleriteIr] = useState(0);
@@ -401,7 +400,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     setHoleriteSalary(u.salary || 0);
     setHoleriteTransportation(u.transportationAllowance || 0);
     setHoleriteMeal(u.mealAllowance || 0);
-    setHoleriteHealth(u.healthInsurance || 0);
     setHoleriteOtherBenefits(u.otherBenefits || 0);
     setHoleriteInss(u.inssDiscount || 0);
     setHoleriteIr(u.irDiscount || 0);
@@ -416,7 +414,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       salary: holeriteSalary,
       transportationAllowance: holeriteTransportation,
       mealAllowance: holeriteMeal,
-      healthInsurance: holeriteHealth,
       otherBenefits: holeriteOtherBenefits,
       inssDiscount: holeriteInss,
       irDiscount: holeriteIr,
@@ -435,14 +432,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       addToast('error', 'WhatsApp não cadastrado para este colaborador.');
       return;
     }
-    const totalBenefits = holeriteSalary + holeriteTransportation + holeriteMeal + holeriteHealth + holeriteOtherBenefits;
+    const totalBenefits = holeriteSalary + holeriteTransportation + holeriteMeal + holeriteOtherBenefits;
     const totalDiscounts = holeriteInss + holeriteIr + holeriteOtherDiscounts;
     const netValue = totalBenefits - totalDiscounts;
     const msg = `*Holerite - ${holeriteUser.name}*\n\n` +
       `💰 Salário: R$ ${holeriteSalary.toFixed(2)}\n` +
       `🚌 VT: R$ ${holeriteTransportation.toFixed(2)}\n` +
       `🍽️ VR: R$ ${holeriteMeal.toFixed(2)}\n` +
-      `🏥 Saúde: R$ ${holeriteHealth.toFixed(2)}\n` +
       `📦 Outros: R$ ${holeriteOtherBenefits.toFixed(2)}\n` +
       `─────────────────\n` +
       `➕ Total Bruto: R$ ${totalBenefits.toFixed(2)}\n` +
@@ -455,7 +451,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   const handleGeneratePDF = () => {
     if (!holeriteUser) return;
-    const totalBenefits = holeriteSalary + holeriteTransportation + holeriteMeal + holeriteHealth + holeriteOtherBenefits;
+    const totalBenefits = holeriteSalary + holeriteTransportation + holeriteMeal + holeriteOtherBenefits;
     const totalDiscounts = holeriteInss + holeriteIr + holeriteOtherDiscounts;
     const netValue = totalBenefits - totalDiscounts;
     
@@ -492,7 +488,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           <div class="row"><span class="label">Salário Base</span><span class="value">R$ ${holeriteSalary.toFixed(2)}</span></div>
           <div class="row"><span class="label">Vale Transporte</span><span class="value">R$ ${holeriteTransportation.toFixed(2)}</span></div>
           <div class="row"><span class="label">Vale Refeição</span><span class="value">R$ ${holeriteMeal.toFixed(2)}</span></div>
-          <div class="row"><span class="label">Plano de Saúde</span><span class="value">R$ ${holeriteHealth.toFixed(2)}</span></div>
           <div class="row"><span class="label">Outros Benefícios</span><span class="value">R$ ${holeriteOtherBenefits.toFixed(2)}</span></div>
         </div>
         <div class="section">
@@ -2309,25 +2304,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Plano de Saúde (R$)</label>
-                    <input
-                      type="number"
-                      value={holeriteHealth}
-                      onChange={(e) => setHoleriteHealth(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-semibold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Outros Benefícios (R$)</label>
-                    <input
-                      type="number"
-                      value={holeriteOtherBenefits}
-                      onChange={(e) => setHoleriteOtherBenefits(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-semibold"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 mb-1">Outros Benefícios (R$)</label>
+                  <input
+                    type="number"
+                    value={holeriteOtherBenefits}
+                    onChange={(e) => setHoleriteOtherBenefits(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-semibold"
+                  />
                 </div>
               </div>
             </div>
@@ -2372,7 +2356,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500">Total Bruto:</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">R$ {(holeriteSalary + holeriteTransportation + holeriteMeal + holeriteHealth + holeriteOtherBenefits).toFixed(2)}</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">R$ {(holeriteSalary + holeriteTransportation + holeriteMeal + holeriteOtherBenefits).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-slate-500">Total Descontos:</span>
@@ -2380,7 +2364,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               </div>
               <div className="flex justify-between text-sm border-t border-emerald-500/30 pt-2">
                 <span className="font-bold text-slate-900 dark:text-white">Líquido:</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">R$ {((holeriteSalary + holeriteTransportation + holeriteMeal + holeriteHealth + holeriteOtherBenefits) - (holeriteInss + holeriteIr + holeriteOtherDiscounts)).toFixed(2)}</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">R$ {((holeriteSalary + holeriteTransportation + holeriteMeal + holeriteOtherBenefits) - (holeriteInss + holeriteIr + holeriteOtherDiscounts)).toFixed(2)}</span>
               </div>
             </div>
 

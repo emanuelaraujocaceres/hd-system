@@ -31,7 +31,6 @@ export interface UserProfile {
   salary?: number;
   transportationAllowance?: number;
   mealAllowance?: number;
-  healthInsurance?: number;
   otherBenefits?: number;
   inssDiscount?: number;
   irDiscount?: number;
