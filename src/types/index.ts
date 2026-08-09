@@ -16,7 +16,7 @@ export interface UserPermissions {
 export interface UserProfile {
   id: string;
   name: string;
-  email: string; // E-mail da conta do Google
+  email: string;
   role: Role;
   avatarUrl?: string;
   organizationId: string;
@@ -25,7 +25,17 @@ export interface UserProfile {
   active: boolean;
   createdAt?: string;
   password?: string;
-  superadmin?: boolean;
+  superadmin?: string;
+  // Holerite / Payroll
+  whatsapp?: string;
+  salary?: number;
+  transportationAllowance?: number;
+  mealAllowance?: number;
+  healthInsurance?: number;
+  otherBenefits?: number;
+  inssDiscount?: number;
+  irDiscount?: number;
+  otherDiscounts?: number;
 }
 
 export interface StoreBranch {

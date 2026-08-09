@@ -17,6 +17,7 @@ import {
   Lock,
   Mail,
   UserPlus,
+  MessageCircle,
   Tv,
   Smartphone,
   Copy,
@@ -164,6 +165,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState<Role>('collaborator');
+  const [userWhatsapp, setUserWhatsapp] = useState('');
   const [userBranchId, setUserBranchId] = useState(branches[0]?.id || 'br-01');
   const [userPermissions, setUserPermissions] = useState<UserPermissions>({
     pdv: true,
@@ -1827,14 +1829,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         </div>
       )}
 
-      {/* --- MODAL COLLABORATOR (COLABORADOR GOOGLE) --- */}
+      {/* --- MODAL COLLABORATOR --- */}
       {isUserModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#27272a] pb-3">
               <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-emerald-500" />
-                <span>{editingUser ? 'Editar Colaborador Google' : 'Novo Colaborador Google'}</span>
+                <span>{editingUser ? 'Editar Colaborador/Administrador' : 'Novo Colaborador/Administrador'}</span>
               </h3>
               <button
                 onClick={() => setIsUserModalOpen(false)}
@@ -1897,7 +1899,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  E-mail da Conta do Google (Google Login):
+                  E-mail:
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
@@ -1911,7 +1913,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                   />
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1">
-                  O colaborador usará este e-mail do Google para fazer login no sistema.
+                  E-mail para login no sistema.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  WhatsApp (com DDD):
+                </label>
+                <div className="relative">
+                  <MessageCircle className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="tel"
+                    placeholder="ex: 11999999999"
+                    value={userWhatsapp || ''}
+                    onChange={(e) => setUserWhatsapp(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-medium"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Número do WhatsApp para compartilhar holerite.
                 </p>
               </div>
 
