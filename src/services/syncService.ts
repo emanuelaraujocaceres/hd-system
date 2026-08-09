@@ -66,6 +66,8 @@ const BRANCH_REQUIRED_TABLES: TableName[] = [
   // Delivery (2026): tabelas escopadas por filial
   'delivery_settings', 'delivery_neighborhoods', 'delivery_distance_rates',
   'delivery_orders',
+  // Visibilidade de Módulos (2026): tabela escopada por filial
+  'module_visibility',
 ];
 
 /**
@@ -106,7 +108,9 @@ export type TableName =
   | 'delivery_settings'
   | 'delivery_neighborhoods'
   | 'delivery_distance_rates'
-  | 'delivery_orders';
+  | 'delivery_orders'
+  // Visibilidade de Módulos (2026)
+  | 'module_visibility';
 
 type SyncChangeCallback = (table: TableName, payload: any) => void;
 type ConnectionListener = (online: boolean) => void;
@@ -270,6 +274,8 @@ class SupabaseSyncService {
       'delivery_neighborhoods',
       'delivery_distance_rates',
       'delivery_orders',
+      // Visibilidade de Módulos (2026)
+      'module_visibility',
     ];
 
     this.channel = supabase.channel('hd-system-realtime');

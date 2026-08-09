@@ -49,6 +49,14 @@ export interface StoreBranch {
   isHeadquarters: boolean;
   active: boolean;
   organizationId?: string; // multi-tenant: qual organização esta filial pertence
+  
+  // Campos para Delivery (2026)
+  fullAddress?: string; // Endereço completo para exibição e mapa
+  whatsappPhone?: string; // WhatsApp para pedidos PIX do delivery
+  latitude?: number; // Latitude para cálculo de distância
+  longitude?: number; // Longitude para cálculo de distância
+  deliveryEnabled?: boolean; // Delivery habilitado por filial
+  pickupEnabled?: boolean; // Retirada habilitada por filial
 }
 
 export interface Product {
@@ -135,6 +143,20 @@ export interface Customer {
   createdAt: string;
   storeBranchId?: string; // isolamento por filial
   organizationId?: string; // multi-tenant
+  
+  // Campos para Delivery (2026)
+  birthDate?: string; // Data de nascimento (para recuperação de senha)
+  whatsapp?: string; // WhatsApp para contato
+  addressStreet?: string;
+  addressNumber?: string;
+  addressComplement?: string;
+  addressNeighborhood?: string;
+  addressCity?: string;
+  addressState?: string;
+  addressZip?: string;
+  googleId?: string; // ID do Google para login OAuth
+  passwordHash?: string; // Senha para login manual do cliente
+  customerType?: 'walkin' | 'delivery' | 'both'; // Tipo de cliente
 }
 
 export interface Supplier {

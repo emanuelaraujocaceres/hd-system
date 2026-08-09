@@ -538,6 +538,10 @@ export const App: React.FC = () => {
           if (event === 'DELETE') storageService.removeDeliveryOrderFromRemote(row.id);
           else storageService.updateDeliveryOrderFromRemote(row);
           break;
+        case 'module_visibility':
+          if (event === 'DELETE') storageService.removeModuleVisibilityFromRemote(row.id);
+          else storageService.updateModuleVisibilityFromRemote(row);
+          break;
         case 'cash_sessions':
           if (event === 'DELETE') storageService.removeCaixaFromRemote(row.id);
           else storageService.updateCaixaFromRemote(row);

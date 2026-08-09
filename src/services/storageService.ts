@@ -1000,11 +1000,24 @@ class StorageService {
       creditLimit: parseFloat(row.credit_limit) || 0,
       currentBalance: 0,
       loyaltyPoints: 0,
-      city: '',
-      state: '',
+      city: row.address_city || row.city || '',
+      state: row.address_state || row.state || '',
       createdAt: row.created_at || new Date().toISOString(),
       storeBranchId: row.store_branch_id || undefined,
       organizationId: row.organization_id || undefined,
+      // Campos de Delivery (2026)
+      birthDate: row.birth_date || undefined,
+      whatsapp: row.whatsapp || '',
+      addressStreet: row.address_street || '',
+      addressNumber: row.address_number || '',
+      addressComplement: row.address_complement || '',
+      addressNeighborhood: row.address_neighborhood || '',
+      addressCity: row.address_city || '',
+      addressState: row.address_state || '',
+      addressZip: row.address_zip || '',
+      googleId: row.google_id || undefined,
+      passwordHash: row.password_hash || undefined,
+      customerType: row.customer_type || 'walkin',
     };
     const idx = customers.findIndex((c) => c.id === mapped.id);
     if (idx >= 0) customers[idx] = mapped;
@@ -1173,6 +1186,13 @@ class StorageService {
       isHeadquarters: row.is_headquarters || false,
       active: row.active !== false,
       organizationId: row.organization_id || undefined,
+      // Campos de Delivery (2026)
+      fullAddress: row.full_address || undefined,
+      whatsappPhone: row.whatsapp_phone || undefined,
+      latitude: row.latitude || undefined,
+      longitude: row.longitude || undefined,
+      deliveryEnabled: row.delivery_enabled || false,
+      pickupEnabled: row.pickup_enabled !== false,
     };
     const idx = branches.findIndex((b) => b.id === mapped.id);
     if (idx >= 0) branches[idx] = mapped;
@@ -1334,7 +1354,7 @@ class StorageService {
       // PASSO 3: Buscar todos os dados filtrados pela filial
       // Todas as tabelas agora têm store_branch_id NOT NULL (banco convertido).
       // store_branches: já buscado no PASSO 1 (precisamos de TODAS para o seletor)
-      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders] =
+      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders, moduleVisibility] =
         await Promise.all([
           syncService.fetchRows('products', resolvedBranchId),
           syncService.fetchRows('categories', resolvedBranchId),
@@ -1364,6 +1384,8 @@ class StorageService {
           syncService.fetchRows('delivery_neighborhoods', resolvedBranchId),
           syncService.fetchRows('delivery_distance_rates', resolvedBranchId),
           syncService.fetchRows('delivery_orders', resolvedBranchId),
+          // Visibilidade de Módulos (2026)
+          syncService.fetchRows('module_visibility', resolvedBranchId),
         ]);
 
       // ── HELPER: merge cloud rows into local data by ID ──────────
@@ -1934,6 +1956,34 @@ class StorageService {
           (k) => this.syncApiKey(k),
         );
         if (merged !== null) this.set(KEYS.API_KEYS, merged);
+      }
+
+      // ── MODULE VISIBILITY (visibilidade de módulos por filial) ──
+      {
+        const local = this.get<any | null>('hd_system_module_visibility', null);
+        const settings = moduleVisibility.length > 0 ? moduleVisibility[0] : null;
+        if (settings) {
+          const mapped = {
+            id: settings.id,
+            organizationId: settings.organization_id || this.getCurrentOrgId(),
+            storeBranchId: settings.store_branch_id || '',
+            modulePdv: settings.module_pdv ?? true,
+            moduleInventory: settings.module_inventory ?? true,
+            moduleFiado: settings.module_fiado ?? false,
+            moduleCrm: settings.module_crm ?? false,
+            moduleDashboard: settings.module_dashboard ?? true,
+            moduleFinance: settings.module_finance ?? false,
+            moduleKds: settings.module_kds ?? false,
+            moduleDelivery: settings.module_delivery ?? false,
+            moduleCardapioDigital: settings.module_cardapio_digital ?? false,
+            moduleCardapioPreview: settings.module_cardapio_preview ?? false,
+            moduleTvShowcase: settings.module_tv_showcase ?? false,
+            moduleTvConnect: settings.module_tv_connect ?? false,
+          };
+          this.set('hd_system_module_visibility', mapped);
+        } else if (local) {
+          this.set('hd_system_module_visibility', local);
+        }
       }
 
       // ── DELIVERY SETTINGS (configurações de delivery por filial) ──
@@ -4333,6 +4383,61 @@ class StorageService {
   removeDeliveryOrderFromRemote(id: string) {
     const all = this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []).filter((x) => x.id !== id);
     this.set(KEYS.DELIVERY_ORDERS, all);
+    this.notify();
+  }
+
+  // --- MODULE VISIBILITY ---
+  getModuleVisibility(): any | null {
+    return this.get<any | null>('hd_system_module_visibility', null);
+  }
+
+  saveModuleVisibility(settings: any) {
+    settings.id = StorageService.ensureUuid(settings.id);
+    settings.organizationId = this.getCurrentOrgId();
+    this.set('hd_system_module_visibility', settings);
+    syncService.upsertRow('module_visibility', {
+      id: settings.id,
+      organization_id: settings.organizationId,
+      store_branch_id: settings.storeBranchId,
+      module_pdv: settings.modulePdv ?? true,
+      module_inventory: settings.moduleInventory ?? true,
+      module_fiado: settings.moduleFiado ?? false,
+      module_crm: settings.moduleCrm ?? false,
+      module_dashboard: settings.moduleDashboard ?? true,
+      module_finance: settings.moduleFinance ?? false,
+      module_kds: settings.moduleKds ?? false,
+      module_delivery: settings.moduleDelivery ?? false,
+      module_cardapio_digital: settings.moduleCardapioDigital ?? false,
+      module_cardapio_preview: settings.moduleCardapioPreview ?? false,
+      module_tv_showcase: settings.moduleTvShowcase ?? false,
+      module_tv_connect: settings.moduleTvConnect ?? false,
+    });
+  }
+
+  updateModuleVisibilityFromRemote(row: any) {
+    const mapped = {
+      id: row.id,
+      organizationId: row.organization_id || this.getCurrentOrgId(),
+      storeBranchId: row.store_branch_id || '',
+      modulePdv: row.module_pdv ?? true,
+      moduleInventory: row.module_inventory ?? true,
+      moduleFiado: row.module_fiado ?? false,
+      moduleCrm: row.module_crm ?? false,
+      moduleDashboard: row.module_dashboard ?? true,
+      moduleFinance: row.module_finance ?? false,
+      moduleKds: row.module_kds ?? false,
+      moduleDelivery: row.module_delivery ?? false,
+      moduleCardapioDigital: row.module_cardapio_digital ?? false,
+      moduleCardapioPreview: row.module_cardapio_preview ?? false,
+      moduleTvShowcase: row.module_tv_showcase ?? false,
+      moduleTvConnect: row.module_tv_connect ?? false,
+    };
+    this.set('hd_system_module_visibility', mapped);
+    this.notify();
+  }
+
+  removeModuleVisibilityFromRemote(id: string) {
+    localStorage.removeItem('hd_system_module_visibility');
     this.notify();
   }
 
