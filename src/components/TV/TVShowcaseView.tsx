@@ -78,17 +78,18 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
   }, []);
 
   // Rodapé dinâmico: mensagens de footer_messages sincronizadas do cloud.
-  // Polling leve + eventos storage/focus — o App grava no localStorage ao
-  // receber UPDATE do Realtime, então esta janela (ou outra aba) re-renderiza.
+  // Usa storageService.subscribe() para atualizar em tempo real + polling como fallback
   useEffect(() => {
     const loadFooters = () => {
       setFooterMessages(storageService.getFooterMessages());
     };
     loadFooters();
+    const unsub = storageService.subscribe(loadFooters);
     const timer = setInterval(loadFooters, 5000);
     window.addEventListener('storage', loadFooters);
     window.addEventListener('focus', loadFooters);
     return () => {
+      unsub();
       clearInterval(timer);
       window.removeEventListener('storage', loadFooters);
       window.removeEventListener('focus', loadFooters);
