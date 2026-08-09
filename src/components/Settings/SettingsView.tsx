@@ -1598,129 +1598,82 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             </button>
           </div>
 
-          {/* Desktop Table (md+) */}
-          <div className="hidden md:block bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl shadow-sm overflow-hidden">
+          {/* Tabela responsiva - scroll horizontal em telas menores */}
+          <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-[600px]">
                 <thead className="bg-slate-50 dark:bg-[#09090b] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider border-b border-slate-200 dark:border-[#27272a]">
                   <tr>
-                    <th className="px-5 py-3.5">Colaborador</th>
-                    <th className="px-5 py-3.5">Conta Google</th>
-                    <th className="px-5 py-3.5">Cargo</th>
-                    <th className="px-5 py-3.5">Permissões de Acesso</th>
-                    <th className="px-5 py-3.5 text-right">Ações</th>
+                    <th className="px-4 py-3.5">Colaborador</th>
+                    <th className="px-4 py-3.5">E-mail</th>
+                    <th className="px-4 py-3.5">Cargo</th>
+                    <th className="px-4 py-3.5 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
                   {usersList.map((u) => {
                     const isAdmin = u.role === 'admin';
-                    const perms = u.permissions || { pdv: true, inventory: true, crm: true, finance: true, dashboard: true, settings: true };
                     return (
                       <tr
                         key={u.id}
-                        onClick={() => handleOpenUserModal(u)}
-                        className="hover:bg-slate-50/50 dark:hover:bg-[#27272a]/30 transition-colors cursor-pointer"
+                        className="hover:bg-slate-50/50 dark:hover:bg-[#27272a]/30 transition-colors"
                       >
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
                             <img
                               src={u.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
                               alt={u.name}
-                              className="w-9 h-9 rounded-full object-cover ring-2 ring-slate-200 dark:ring-slate-800"
+                              className="w-8 h-8 rounded-full object-cover ring-2 ring-slate-200 dark:ring-slate-800"
                             />
-                            <div>
-                              <p className="font-bold text-slate-900 dark:text-white text-xs">{u.name}</p>
-                              <span className="text-[10px] text-slate-400">
-                                Cadastrado em {u.createdAt || '2026-01-01'}
-                              </span>
-                            </div>
+                            <span className="font-bold text-slate-900 dark:text-white whitespace-nowrap">{u.name}</span>
                           </div>
                         </td>
-
-                        <td className="px-5 py-4 font-mono font-medium text-slate-700 dark:text-slate-300">
-                          <div className="flex items-center gap-1.5">
-                            <Mail className="w-3.5 h-3.5 text-indigo-500" />
-                            <span>{u.email}</span>
-                          </div>
+                        <td className="px-4 py-3 text-slate-600 dark:text-[#a1a1aa]">
+                          <span className="truncate max-w-[150px] block">{u.email}</span>
                         </td>
-
-                        <td className="px-5 py-4">
+                        <td className="px-4 py-3">
                           <span
-                            className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${
+                            className={`text-[9px] font-extrabold px-2 py-1 rounded-full border ${
                               isAdmin
                                 ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30'
                                 : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
                             }`}
                           >
-                            {isAdmin ? 'ADMINISTRADOR' : 'COLABORADOR'}
+                            {isAdmin ? 'ADMIN' : 'COLAB'}
                           </span>
                         </td>
-
-                        <td className="px-5 py-4">
-                          {isAdmin ? (
-                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                              <CheckCircle className="w-3.5 h-3.5" /> Acesso Total Liberado
-                            </span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1">
-                              {perms.pdv && (
-                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                                  PDV / Vendas
-                                </span>
-                              )}
-                              {perms.inventory && (
-                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                                  Estoque & Produtos
-                                </span>
-                              )}
-                              {perms.crm && (
-                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                                  Clientes & CRM
-                                </span>
-                              )}
-                              {perms.finance && (
-                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                                  Financeiro
-                                </span>
-                              )}
-                              {perms.dashboard && (
-                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                                  Dashboard
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-
-                         <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                           <div className="flex items-center justify-end gap-1.5">
-                             <button
-                               onClick={() => handleOpenHoleriteModal(u)}
-                               className="min-h-[44px] min-w-[44px] p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
-                               title="Holerite"
-                             >
-                               <FileText className="w-3.5 h-3.5" />
-                             </button>
-                             <button
-                               onClick={() => handleOpenUserModal(u)}
-                               className="min-h-[44px] min-w-[44px] p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
-                               title="Editar Permissões"
-                             >
-                               <Edit2 className="w-3.5 h-3.5" />
-                             </button>
+                        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleOpenHoleriteModal(u)}
+                              className="p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
+                              title="Holerite"
+                            >
+                              <FileText className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleOpenUserModal(u)}
+                              className="p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
+                              title="Editar"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
                             {isAdmin && (
                               <button
-                                onClick={() => setConfirmDeleteUser(u)}
-                                className="min-h-[44px] min-w-[44px] p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-rose-500/10 text-slate-700 dark:text-slate-200 hover:text-rose-500 transition-colors"
-                                title="Excluir Colaborador"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDeleteUser({ id: u.id, name: u.name });
+                                }}
+                                className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors"
+                                title="Excluir"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             )}
                           </div>
                         </td>
-                      </tr>
-                    );
+                       </tr>
+                     );
                   })}
                 </tbody>
               </table>
