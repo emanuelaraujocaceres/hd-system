@@ -41,7 +41,7 @@ async function startServer() {
   app.get("/api/health", (_req, res) => {
     res.json({
       status: "ok",
-      appName: "HD-System ERP",
+      appName: "HD-System",
       supabaseAdminConfigured: !!supabaseAdmin,
     });
   });
@@ -334,7 +334,7 @@ Retorne ESTRITAMENTE um objeto JSON válido sem Markdown:
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[HD-System ERP] Server running on http://0.0.0.0:${PORT}`);
+    console.log(`[HD-System] Server running on http://0.0.0.0:${PORT}`);
   });
 }
 

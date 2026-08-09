@@ -6,7 +6,7 @@ export async function onRequestGet(context: any) {
 
   return new Response(JSON.stringify({
     status: 'ok',
-    appName: 'HD-System ERP',
+    appName: 'HD-System',
     platform: 'cloudflare-pages',
   }), {
     status: 200,

@@ -76,7 +76,7 @@ export const Header: React.FC<HeaderProps> = ({
     settings: { title: 'Configurações', subtitle: 'Dados da empresa, impressoras e filiais' },
   };
 
-  const currentInfo = tabTitles[currentTab] || { title: 'HD-System ERP', subtitle: 'Sistema de Gestão & PDV' };
+  const currentInfo = tabTitles[currentTab] || { title: 'HD-System', subtitle: 'Sistema de Gestão & PDV' };
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {

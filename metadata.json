@@ -1,6 +1,6 @@
 {
-  "name": "HD-System ERP",
-  "description": "Sistema HD-System ERP e PDV completo com gestão de filiais, equipe, controle de estoque, caixa, CRM e finanças.",
+  "name": "HD-System",
+  "description": "Sistema HD-System e PDV completo com gestão de filiais, equipe, controle de estoque, caixa, CRM e finanças.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
