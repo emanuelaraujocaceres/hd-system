@@ -393,6 +393,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     s.status === 'completed' && s.storeBranchId === selectedBranchId
   );
 
+  // Usuários da filial para cálculo de holerite
+  const users = storageService.getUsers().filter((u) => u.storeBranchId === selectedBranchId);
+
   const totalSalesRevenue = filteredSales.reduce((acc, s) => acc + getSaleTotal(s), 0);
   const estimatedTaxes = totalSalesRevenue * 0.06; // 6% Simples Nacional
   const netSalesRevenue = totalSalesRevenue - estimatedTaxes;
@@ -420,8 +423,17 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     .filter((a) => a.type === 'payable' && a.status === 'paid')
     .reduce((acc, a) => acc + a.amount, 0);
 
-  const netOperatingProfitAccrual = grossProfit - totalExpensesAccrual;
-  const netOperatingProfitCash = grossProfit - totalExpensesCash;
+  // Despesas com Pessoal (Holerite) - apenas colaboradores ativos da filial
+  const totalPayrollExpenses = users
+    .filter((u) => u.storeBranchId === selectedBranchId && u.active)
+    .reduce((acc, u) => {
+      const benefits = (u.salary || 0) + (u.transportationAllowance || 0) + (u.mealAllowance || 0) + (u.healthInsurance || 0) + (u.otherBenefits || 0);
+      const discounts = (u.inssDiscount || 0) + (u.irDiscount || 0) + (u.otherDiscounts || 0);
+      return acc + (benefits - discounts);
+    }, 0);
+
+  const netOperatingProfitAccrual = grossProfit - totalExpensesAccrual - totalPayrollExpenses;
+  const netOperatingProfitCash = grossProfit - totalExpensesCash - totalPayrollExpenses;
 
   const paymentMethodLabel = (method: string) => {
     const labels: Record<string, string> = {
