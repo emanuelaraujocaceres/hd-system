@@ -11,10 +11,12 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { RefreshCw, Clock, CheckCircle, Truck, Package, MapPin, Phone, DollarSign, CreditCard, Banknote, Loader2 } from 'lucide-react';
+import { RefreshCw, Clock, CheckCircle, Truck, Package, MapPin, Phone, DollarSign, CreditCard, Banknote, Loader2, Bell } from 'lucide-react';
 import { DeliveryOrder } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { useDeliveryNotifications } from '../../hooks/useDeliveryNotifications';
+import { NotificationBanner } from './NotificationBanner';
 
 interface DeliveryBoardViewProps {
   user: any;
@@ -43,6 +45,18 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
   const [orders, setOrders] = useState<DeliveryOrder[]>([]);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [isDeliveryWorker, setIsDeliveryWorker] = useState(false);
+  const [showBanner, setShowBanner] = useState(true);
+  const [newOrderAlert, setNewOrderAlert] = useState<DeliveryOrder | null>(null);
+
+  // Notificações push
+  const { permission, isSupported, requestPermission } = useDeliveryNotifications({
+    enabled: true,
+    onNewPedido: (pedido) => {
+      setNewOrderAlert(pedido);
+      posAudio.chime();
+      loadOrders();
+    },
+  });
 
   useEffect(() => {
     loadOrders();
@@ -182,6 +196,32 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
 
   return (
     <div className="p-3 sm:p-4 md:p-6 space-y-4 max-w-7xl mx-auto">
+      {/* Notification Banner */}
+      {showBanner && (
+        <NotificationBanner
+          permission={permission}
+          isSupported={isSupported}
+          onRequestPermission={requestPermission}
+          onDismiss={() => setShowBanner(false)}
+        />
+      )}
+
+      {/* New Order Alert */}
+      {newOrderAlert && (
+        <div className="p-4 rounded-xl bg-orange-500 border border-orange-600 text-white flex items-center justify-between animate-[slideIn_0.3s_ease-out]">
+          <div className="flex items-center gap-3">
+            <Bell className="w-5 h-5 animate-pulse" />
+            <div>
+              <p className="text-sm font-bold">Novo Pedido! #{newOrderAlert.orderNumber}</p>
+              <p className="text-xs opacity-80">{newOrderAlert.customerName} - R$ {newOrderAlert.total.toFixed(2)}</p>
+            </div>
+          </div>
+          <button onClick={() => setNewOrderAlert(null)} className="p-1 hover:bg-white/20 rounded">
+            <span className="text-lg">×</span>
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
