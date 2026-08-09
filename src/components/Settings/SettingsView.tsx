@@ -167,6 +167,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [userRole, setUserRole] = useState<Role>('collaborator');
   const [userWhatsapp, setUserWhatsapp] = useState('');
   const [userBranchId, setUserBranchId] = useState(branches[0]?.id || 'br-01');
+
+  // Holerite Modal State
+  const [isHoleriteModalOpen, setIsHoleriteModalOpen] = useState(false);
+  const [holeriteUser, setHoleriteUser] = useState<UserProfile | null>(null);
+  const [holeriteSalary, setHoleriteSalary] = useState(0);
+  const [holeriteTransportation, setHoleriteTransportation] = useState(0);
+  const [holeriteMeal, setHoleriteMeal] = useState(0);
+  const [holeriteHealth, setHoleriteHealth] = useState(0);
+  const [holeriteOtherBenefits, setHoleriteOtherBenefits] = useState(0);
+  const [holeriteInss, setHoleriteInss] = useState(0);
+  const [holeriteIr, setHoleriteIr] = useState(0);
+  const [holeriteOtherDiscounts, setHoleriteOtherDiscounts] = useState(0);
   const [userPermissions, setUserPermissions] = useState<UserPermissions>({
     pdv: true,
     inventory: true,
@@ -381,6 +393,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     setIsUserModalOpen(true);
   };
 
+  // ── Holerite Modal ─────────────────────────────────────────────
+  const handleOpenHoleriteModal = (u: UserProfile) => {
+    setHoleriteUser(u);
+    setHoleriteSalary(u.salary || 0);
+    setHoleriteTransportation(u.transportationAllowance || 0);
+    setHoleriteMeal(u.mealAllowance || 0);
+    setHoleriteHealth(u.healthInsurance || 0);
+    setHoleriteOtherBenefits(u.otherBenefits || 0);
+    setHoleriteInss(u.inssDiscount || 0);
+    setHoleriteIr(u.irDiscount || 0);
+    setHoleriteOtherDiscounts(u.otherDiscounts || 0);
+    setIsHoleriteModalOpen(true);
+  };
+
+  const handleSaveHolerite = () => {
+    if (!holeriteUser) return;
+    const updated: UserProfile = {
+      ...holeriteUser,
+      salary: holeriteSalary,
+      transportationAllowance: holeriteTransportation,
+      mealAllowance: holeriteMeal,
+      healthInsurance: holeriteHealth,
+      otherBenefits: holeriteOtherBenefits,
+      inssDiscount: holeriteInss,
+      irDiscount: holeriteIr,
+      otherDiscounts: holeriteOtherDiscounts,
+    };
+    storageService.saveUserProfile(updated);
+    setIsHoleriteModalOpen(false);
+    setHoleriteUser(null);
+    refreshUsersList();
+    posAudio.chime();
+    addToast('success', `Holerite de ${updated.name} salvo com sucesso.`);
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!holeriteUser?.whatsapp) {
+      addToast('error', 'WhatsApp não cadastrado para este colaborador.');
+      return;
+    }
+    const totalBenefits = holeriteSalary + holeriteTransportation + holeriteMeal + holeriteHealth + holeriteOtherBenefits;
+    const totalDiscounts = holeriteInss + holeriteIr + holeriteOtherDiscounts;
+    const netValue = totalBenefits - totalDiscounts;
+    const msg = `*Holerite - ${holeriteUser.name}*\n\n` +
+      `💰 Salário: R$ ${holeriteSalary.toFixed(2)}\n` +
+      `🚌 VT: R$ ${holeriteTransportation.toFixed(2)}\n` +
+      `🍽️ VR: R$ ${holeriteMeal.toFixed(2)}\n` +
+      `🏥 Saúde: R$ ${holeriteHealth.toFixed(2)}\n` +
+      `📦 Outros: R$ ${holeriteOtherBenefits.toFixed(2)}\n` +
+      `─────────────────\n` +
+      `➕ Total Bruto: R$ ${totalBenefits.toFixed(2)}\n` +
+      `➖ Descontos: R$ ${totalDiscounts.toFixed(2)}\n` +
+      `─────────────────\n` +
+      `💵 Líquido: R$ ${netValue.toFixed(2)}`;
+    const url = `https://wa.me/55${holeriteUser.whatsapp}?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
+  };
+
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userName.trim()) {
@@ -403,6 +473,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         avatarUrl: editingUser?.avatarUrl || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`,
         organizationId: orgId,
         storeBranchId: userBranchId,
+        whatsapp: userWhatsapp.trim() || undefined,
         permissions: userRole === 'admin' ? {
           pdv: true,
           inventory: true,
@@ -1554,15 +1625,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                           )}
                         </td>
 
-                        <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => handleOpenUserModal(u)}
-                              className="min-h-[44px] min-w-[44px] p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
-                              title="Editar Permissões"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
+                         <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
+                           <div className="flex items-center justify-end gap-1.5">
+                             <button
+                               onClick={() => handleOpenHoleriteModal(u)}
+                               className="min-h-[44px] min-w-[44px] p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
+                               title="Holerite"
+                             >
+                               <FileText className="w-3.5 h-3.5" />
+                             </button>
+                             <button
+                               onClick={() => handleOpenUserModal(u)}
+                               className="min-h-[44px] min-w-[44px] p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
+                               title="Editar Permissões"
+                             >
+                               <Edit2 className="w-3.5 h-3.5" />
+                             </button>
                             {isAdmin && (
                               <button
                                 onClick={() => setConfirmDeleteUser(u)}
@@ -2099,6 +2177,168 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               </div>
             </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL HOLERITE --- */}
+      {isHoleriteModalOpen && holeriteUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#27272a] pb-3">
+              <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-500" />
+                <span>Holerite - {holeriteUser.name}</span>
+              </h3>
+              <button
+                onClick={() => setIsHoleriteModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* WhatsApp */}
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]">
+              <p className="text-[10px] text-slate-400 mb-1">WhatsApp</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-white">{holeriteUser.whatsapp || 'Não cadastrado'}</p>
+            </div>
+
+            {/* Benefícios */}
+            <div>
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-3">BENEFÍCIOS</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 mb-1">Salário Base (R$)</label>
+                  <input
+                    type="number"
+                    value={holeriteSalary}
+                    onChange={(e) => setHoleriteSalary(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-semibold"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Vale Transporte (R$)</label>
+                    <input
+                      type="number"
+                      value={holeriteTransportation}
+                      onChange={(e) => setHoleriteTransportation(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Vale Refeição (R$)</label>
+                    <input
+                      type="number"
+                      value={holeriteMeal}
+                      onChange={(e) => setHoleriteMeal(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-semibold"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Plano de Saúde (R$)</label>
+                    <input
+                      type="number"
+                      value={holeriteHealth}
+                      onChange={(e) => setHoleriteHealth(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Outros Benefícios (R$)</label>
+                    <input
+                      type="number"
+                      value={holeriteOtherBenefits}
+                      onChange={(e) => setHoleriteOtherBenefits(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-semibold"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Descontos */}
+            <div>
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-3">DESCONTOS</p>
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">INSS (R$)</label>
+                    <input
+                      type="number"
+                      value={holeriteInss}
+                      onChange={(e) => setHoleriteInss(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">IR (R$)</label>
+                    <input
+                      type="number"
+                      value={holeriteIr}
+                      onChange={(e) => setHoleriteIr(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-500 mb-1">Outros (R$)</label>
+                    <input
+                      type="number"
+                      value={holeriteOtherDiscounts}
+                      onChange={(e) => setHoleriteOtherDiscounts(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] text-slate-900 dark:text-white font-semibold"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Resumo */}
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Total Bruto:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">R$ {(holeriteSalary + holeriteTransportation + holeriteMeal + holeriteHealth + holeriteOtherBenefits).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Total Descontos:</span>
+                <span className="font-bold text-rose-600">R$ {(holeriteInss + holeriteIr + holeriteOtherDiscounts).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm border-t border-emerald-500/30 pt-2">
+                <span className="font-bold text-slate-900 dark:text-white">Líquido:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">R$ {((holeriteSalary + holeriteTransportation + holeriteMeal + holeriteHealth + holeriteOtherBenefits) - (holeriteInss + holeriteIr + holeriteOtherDiscounts)).toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Botões */}
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-[#27272a]">
+              {holeriteUser.whatsapp && (
+                <button
+                  type="button"
+                  onClick={handleShareWhatsApp}
+                  className="px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-xs flex items-center gap-2"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  WhatsApp
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsHoleriteModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-[#27272a]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveHolerite}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
+              >
+                Salvar Holerite
+              </button>
+            </div>
           </div>
         </div>
       )}
