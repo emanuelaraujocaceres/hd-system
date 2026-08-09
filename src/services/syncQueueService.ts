@@ -35,7 +35,12 @@ type TableName =
   | 'customer_sessions'
   | 'digital_menu_config'
   | 'branch_themes'
-  | 'api_keys';
+  | 'api_keys'
+  // Delivery (2026)
+  | 'delivery_settings'
+  | 'delivery_neighborhoods'
+  | 'delivery_distance_rates'
+  | 'delivery_orders';
 
 type QueueAction = 'upsert' | 'delete' | 'upsert_batch';
 

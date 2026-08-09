@@ -523,6 +523,21 @@ export const App: React.FC = () => {
           if (event === 'DELETE') storageService.removeApiKeyFromRemote(row.id);
           else storageService.updateApiKeyFromRemote(row);
           break;
+        case 'delivery_settings':
+          storageService.updateDeliverySettingsFromRemote(row);
+          break;
+        case 'delivery_neighborhoods':
+          if (event === 'DELETE') storageService.removeDeliveryNeighborhoodFromRemote(row.id);
+          else storageService.updateDeliveryNeighborhoodFromRemote(row);
+          break;
+        case 'delivery_distance_rates':
+          if (event === 'DELETE') storageService.removeDeliveryDistanceRateFromRemote(row.id);
+          else storageService.updateDeliveryDistanceRateFromRemote(row);
+          break;
+        case 'delivery_orders':
+          if (event === 'DELETE') storageService.removeDeliveryOrderFromRemote(row.id);
+          else storageService.updateDeliveryOrderFromRemote(row);
+          break;
         case 'cash_sessions':
           if (event === 'DELETE') storageService.removeCaixaFromRemote(row.id);
           else storageService.updateCaixaFromRemote(row);

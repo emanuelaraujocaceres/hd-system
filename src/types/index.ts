@@ -446,3 +446,113 @@ export interface ApiKey {
   storeBranchId: string;
   organizationId: string;
 }
+
+// ─── DELIVERY (2026) ──────────────────────────────────────────────────────────
+
+// Configurações de delivery por filial (tabela delivery_settings)
+export interface DeliverySettings {
+  id: string;
+  organizationId: string;
+  storeBranchId: string;
+  isActive: boolean;
+  deliveryEnabled: boolean;
+  pickupEnabled: boolean;
+  operatingHours: Record<string, { open: string; close: string }>;
+  feeCalculationType: 'fixed' | 'neighborhood' | 'distance' | 'free';
+  fixedFee: number;
+  minimumOrderValue: number;
+  estimatedDeliveryTime: number;
+  maxDeliveryDistanceKm: number;
+  branchLatitude?: number;
+  branchLongitude?: number;
+  whatsappPhone?: string;
+  fullAddress?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Bairro com taxa de entrega (tabela delivery_neighborhoods)
+export interface DeliveryNeighborhood {
+  id: string;
+  organizationId: string;
+  storeBranchId: string;
+  neighborhood: string;
+  fee: number;
+  estimatedTimeMinutes: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Faixa de distância com taxa de entrega (tabela delivery_distance_rates)
+export interface DeliveryDistanceRate {
+  id: string;
+  organizationId: string;
+  storeBranchId: string;
+  minKm: number;
+  maxKm: number;
+  fee: number;
+  estimatedTimeMinutes: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Endereço de entrega
+export interface DeliveryAddress {
+  street: string;
+  number: string;
+  complement?: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  zip?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+// Item do pedido de delivery
+export interface DeliveryOrderItem {
+  productId: string;
+  productName: string;
+  unitPrice: number;
+  quantity: number;
+  total: number;
+  notes?: string;
+}
+
+// Pedido de delivery (tabela delivery_orders)
+export interface DeliveryOrder {
+  id: string;
+  organizationId: string;
+  storeBranchId: string;
+  customerId?: string;
+  orderNumber: number;
+  orderType: 'delivery' | 'pickup';
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'cancelled';
+  items: DeliveryOrderItem[];
+  subtotal: number;
+  deliveryFee: number;
+  discount: number;
+  total: number;
+  paymentMethod?: 'cash' | 'credit_card' | 'debit_card' | 'pix';
+  changeAmount?: number;
+  deliveryAddress?: DeliveryAddress;
+  customerName: string;
+  customerWhatsapp?: string;
+  customerEmail?: string;
+  notes?: string;
+  estimatedDeliveryTime?: number;
+  confirmedAt?: string;
+  preparingAt?: string;
+  readyAt?: string;
+  outForDeliveryAt?: string;
+  deliveredAt?: string;
+  cancelledAt?: string;
+  cancelledReason?: string;
+  whatsappSent: boolean;
+  whatsappSentAt?: string;
+  deliveredBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}

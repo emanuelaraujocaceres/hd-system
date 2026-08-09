@@ -79,6 +79,11 @@ const KEYS = {
   DIGITAL_MENU_CONFIG: 'hd_system_digital_menu_config',
   BRANCH_THEMES: 'hd_system_branch_themes',
   API_KEYS: 'hd_system_api_keys',
+  // Delivery (2026)
+  DELIVERY_SETTINGS: 'hd_system_delivery_settings',
+  DELIVERY_NEIGHBORHOODS: 'hd_system_delivery_neighborhoods',
+  DELIVERY_DISTANCE_RATES: 'hd_system_delivery_distance_rates',
+  DELIVERY_ORDERS: 'hd_system_delivery_orders',
   VIEWING_ORG: 'hd_system_viewing_org',
 };
 
@@ -1329,7 +1334,7 @@ class StorageService {
       // PASSO 3: Buscar todos os dados filtrados pela filial
       // Todas as tabelas agora têm store_branch_id NOT NULL (banco convertido).
       // store_branches: já buscado no PASSO 1 (precisamos de TODAS para o seletor)
-      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys] =
+      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders] =
         await Promise.all([
           syncService.fetchRows('products', resolvedBranchId),
           syncService.fetchRows('categories', resolvedBranchId),
@@ -1354,6 +1359,11 @@ class StorageService {
           syncService.fetchRows('digital_menu_config', resolvedBranchId),
           syncService.fetchRows('branch_themes', resolvedBranchId),
           syncService.fetchRows('api_keys', resolvedBranchId),
+          // Delivery (2026)
+          syncService.fetchRows('delivery_settings', resolvedBranchId),
+          syncService.fetchRows('delivery_neighborhoods', resolvedBranchId),
+          syncService.fetchRows('delivery_distance_rates', resolvedBranchId),
+          syncService.fetchRows('delivery_orders', resolvedBranchId),
         ]);
 
       // ── HELPER: merge cloud rows into local data by ID ──────────
@@ -1924,6 +1934,122 @@ class StorageService {
           (k) => this.syncApiKey(k),
         );
         if (merged !== null) this.set(KEYS.API_KEYS, merged);
+      }
+
+      // ── DELIVERY SETTINGS (configurações de delivery por filial) ──
+      {
+        const local = this.get<DeliverySettings | null>(KEYS.DELIVERY_SETTINGS, null);
+        const settings = deliverySettings.length > 0 ? deliverySettings[0] : null;
+        if (settings) {
+          const mapped: DeliverySettings = {
+            id: settings.id,
+            organizationId: settings.organization_id || this.getCurrentOrgId(),
+            storeBranchId: settings.store_branch_id || '',
+            isActive: settings.is_active !== false,
+            deliveryEnabled: settings.delivery_enabled !== false,
+            pickupEnabled: settings.pickup_enabled !== false,
+            operatingHours: settings.operating_hours || {},
+            feeCalculationType: settings.fee_calculation_type || 'free',
+            fixedFee: parseFloat(settings.fixed_fee) || 0,
+            minimumOrderValue: parseFloat(settings.minimum_order_value) || 0,
+            estimatedDeliveryTime: settings.estimated_delivery_time || 45,
+            maxDeliveryDistanceKm: settings.max_delivery_distance_km || 15,
+            branchLatitude: settings.branch_latitude || undefined,
+            branchLongitude: settings.branch_longitude || undefined,
+            whatsappPhone: settings.whatsapp_phone || undefined,
+            fullAddress: settings.full_address || undefined,
+            createdAt: settings.created_at || new Date().toISOString(),
+            updatedAt: settings.updated_at || new Date().toISOString(),
+          };
+          this.set(KEYS.DELIVERY_SETTINGS, mapped);
+        } else if (local) {
+          // Não sobrescrever config local se cloud não tem
+          this.set(KEYS.DELIVERY_SETTINGS, local);
+        }
+      }
+
+      // ── DELIVERY NEIGHBORHOODS (bairros com taxas) ───────────────
+      {
+        const local = this.get<DeliveryNeighborhood[]>(KEYS.DELIVERY_NEIGHBORHOODS, []);
+        const merged = mergeBy(KEYS.DELIVERY_NEIGHBORHOODS, local, deliveryNeighborhoods,
+          (r: any): DeliveryNeighborhood => ({
+            id: r.id,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
+            storeBranchId: r.store_branch_id || '',
+            neighborhood: r.neighborhood || '',
+            fee: parseFloat(r.fee) || 0,
+            estimatedTimeMinutes: r.estimated_time_minutes || 45,
+            isActive: r.is_active !== false,
+            createdAt: r.created_at || new Date().toISOString(),
+            updatedAt: r.updated_at || new Date().toISOString(),
+          }),
+          (n) => this.syncDeliveryNeighborhood(n),
+        );
+        if (merged !== null) this.set(KEYS.DELIVERY_NEIGHBORHOODS, merged);
+      }
+
+      // ── DELIVERY DISTANCE RATES (faixas de distância) ─────────────
+      {
+        const local = this.get<DeliveryDistanceRate[]>(KEYS.DELIVERY_DISTANCE_RATES, []);
+        const merged = mergeBy(KEYS.DELIVERY_DISTANCE_RATES, local, deliveryDistanceRates,
+          (r: any): DeliveryDistanceRate => ({
+            id: r.id,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
+            storeBranchId: r.store_branch_id || '',
+            minKm: parseFloat(r.min_km) || 0,
+            maxKm: parseFloat(r.max_km) || 0,
+            fee: parseFloat(r.fee) || 0,
+            estimatedTimeMinutes: r.estimated_time_minutes || 45,
+            isActive: r.is_active !== false,
+            createdAt: r.created_at || new Date().toISOString(),
+            updatedAt: r.updated_at || new Date().toISOString(),
+          }),
+          (r) => this.syncDeliveryDistanceRate(r),
+        );
+        if (merged !== null) this.set(KEYS.DELIVERY_DISTANCE_RATES, merged);
+      }
+
+      // ── DELIVERY ORDERS (pedidos de delivery) ─────────────────────
+      {
+        const local = this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []);
+        const merged = mergeBy(KEYS.DELIVERY_ORDERS, local, deliveryOrders,
+          (r: any): DeliveryOrder => ({
+            id: r.id,
+            organizationId: r.organization_id || this.getCurrentOrgId(),
+            storeBranchId: r.store_branch_id || '',
+            customerId: r.customer_id || undefined,
+            orderNumber: r.order_number || 0,
+            orderType: r.order_type || 'delivery',
+            status: r.status || 'pending',
+            items: r.items_json || [],
+            subtotal: parseFloat(r.subtotal) || 0,
+            deliveryFee: parseFloat(r.delivery_fee) || 0,
+            discount: parseFloat(r.discount) || 0,
+            total: parseFloat(r.total) || 0,
+            paymentMethod: r.payment_method || undefined,
+            changeAmount: parseFloat(r.change_amount) || undefined,
+            deliveryAddress: r.delivery_address || undefined,
+            customerName: r.customer_name || '',
+            customerWhatsapp: r.customer_whatsapp || undefined,
+            customerEmail: r.customer_email || undefined,
+            notes: r.notes || undefined,
+            estimatedDeliveryTime: r.estimated_delivery_time || undefined,
+            confirmedAt: r.confirmed_at || undefined,
+            preparingAt: r.preparing_at || undefined,
+            readyAt: r.ready_at || undefined,
+            outForDeliveryAt: r.out_for_delivery_at || undefined,
+            deliveredAt: r.delivered_at || undefined,
+            cancelledAt: r.cancelled_at || undefined,
+            cancelledReason: r.cancelled_reason || undefined,
+            whatsappSent: r.whatsapp_sent || false,
+            whatsappSentAt: r.whatsapp_sent_at || undefined,
+            deliveredBy: r.delivered_by || undefined,
+            createdAt: r.created_at || new Date().toISOString(),
+            updatedAt: r.updated_at || new Date().toISOString(),
+          }),
+          (o) => this.syncDeliveryOrder(o),
+        );
+        if (merged !== null) this.set(KEYS.DELIVERY_ORDERS, merged);
       }
 
       // ── USERS ─────────────────────────────────────────────────────
@@ -3663,6 +3789,79 @@ class StorageService {
     });
   }
 
+  // ── DELIVERY SYNC METHODS ──────────────────────────────────────────
+  private syncDeliverySettings(s: DeliverySettings) {
+    syncService.upsertRow('delivery_settings', {
+      id: s.id,
+      organization_id: s.organizationId,
+      store_branch_id: s.storeBranchId,
+      is_active: s.isActive,
+      delivery_enabled: s.deliveryEnabled,
+      pickup_enabled: s.pickupEnabled,
+      operating_hours: JSON.stringify(s.operatingHours),
+      fee_calculation_type: s.feeCalculationType,
+      fixed_fee: s.fixedFee,
+      minimum_order_value: s.minimumOrderValue,
+      estimated_delivery_time: s.estimatedDeliveryTime,
+      max_delivery_distance_km: s.maxDeliveryDistanceKm,
+      branch_latitude: s.branchLatitude || null,
+      branch_longitude: s.branchLongitude || null,
+      whatsapp_phone: s.whatsappPhone || null,
+      full_address: s.fullAddress || null,
+    });
+  }
+
+  private syncDeliveryNeighborhood(n: DeliveryNeighborhood) {
+    syncService.upsertRow('delivery_neighborhoods', {
+      id: n.id,
+      organization_id: n.organizationId,
+      store_branch_id: n.storeBranchId,
+      neighborhood: n.neighborhood,
+      fee: n.fee,
+      estimated_time_minutes: n.estimatedTimeMinutes,
+      is_active: n.isActive,
+    });
+  }
+
+  private syncDeliveryDistanceRate(r: DeliveryDistanceRate) {
+    syncService.upsertRow('delivery_distance_rates', {
+      id: r.id,
+      organization_id: r.organizationId,
+      store_branch_id: r.storeBranchId,
+      min_km: r.minKm,
+      max_km: r.maxKm,
+      fee: r.fee,
+      estimated_time_minutes: r.estimatedTimeMinutes,
+      is_active: r.isActive,
+    });
+  }
+
+  private syncDeliveryOrder(o: DeliveryOrder) {
+    syncService.upsertRow('delivery_orders', {
+      id: o.id,
+      organization_id: o.organizationId,
+      store_branch_id: o.storeBranchId,
+      customer_id: o.customerId || null,
+      order_type: o.orderType,
+      status: o.status,
+      items_json: JSON.stringify(o.items),
+      subtotal: o.subtotal,
+      delivery_fee: o.deliveryFee,
+      discount: o.discount,
+      total: o.total,
+      payment_method: o.paymentMethod || null,
+      change_amount: o.changeAmount || null,
+      delivery_address: o.deliveryAddress ? JSON.stringify(o.deliveryAddress) : null,
+      customer_name: o.customerName,
+      customer_whatsapp: o.customerWhatsapp || null,
+      customer_email: o.customerEmail || null,
+      notes: o.notes || null,
+      estimated_delivery_time: o.estimatedDeliveryTime || null,
+      whatsapp_sent: o.whatsappSent,
+      delivered_by: o.deliveredBy || null,
+    });
+  }
+
   updatePrinterFromRemote(row: any) {
     const all = this.get<Printer[]>(KEYS.PRINTERS, []);
     const mapped: Printer = {
@@ -3911,6 +4110,229 @@ class StorageService {
   removeApiKeyFromRemote(id: string) {
     const all = this.get<ApiKey[]>(KEYS.API_KEYS, []).filter((x) => x.id !== id);
     this.set(KEYS.API_KEYS, all);
+    this.notify();
+  }
+
+  // --- DELIVERY SETTINGS ---
+  getDeliverySettings(): DeliverySettings | null {
+    return this.get<DeliverySettings | null>(KEYS.DELIVERY_SETTINGS, null);
+  }
+
+  saveDeliverySettings(settings: DeliverySettings) {
+    settings.id = StorageService.ensureUuid(settings.id);
+    settings.organizationId = this.getCurrentOrgId();
+    this.set(KEYS.DELIVERY_SETTINGS, settings);
+    this.syncDeliverySettings(settings);
+  }
+
+  updateDeliverySettingsFromRemote(row: any) {
+    const mapped: DeliverySettings = {
+      id: row.id,
+      organizationId: row.organization_id || this.getCurrentOrgId(),
+      storeBranchId: row.store_branch_id || '',
+      isActive: row.is_active !== false,
+      deliveryEnabled: row.delivery_enabled !== false,
+      pickupEnabled: row.pickup_enabled !== false,
+      operatingHours: row.operating_hours || {},
+      feeCalculationType: row.fee_calculation_type || 'free',
+      fixedFee: parseFloat(row.fixed_fee) || 0,
+      minimumOrderValue: parseFloat(row.minimum_order_value) || 0,
+      estimatedDeliveryTime: row.estimated_delivery_time || 45,
+      maxDeliveryDistanceKm: row.max_delivery_distance_km || 15,
+      branchLatitude: row.branch_latitude || undefined,
+      branchLongitude: row.branch_longitude || undefined,
+      whatsappPhone: row.whatsapp_phone || undefined,
+      fullAddress: row.full_address || undefined,
+      createdAt: row.created_at || new Date().toISOString(),
+      updatedAt: row.updated_at || new Date().toISOString(),
+    };
+    this.set(KEYS.DELIVERY_SETTINGS, mapped);
+    this.notify();
+  }
+
+  // --- DELIVERY NEIGHBORHOODS ---
+  getDeliveryNeighborhoods(): DeliveryNeighborhood[] {
+    return this.get<DeliveryNeighborhood[]>(KEYS.DELIVERY_NEIGHBORHOODS, []);
+  }
+
+  saveDeliveryNeighborhood(neighborhood: DeliveryNeighborhood) {
+    neighborhood.id = StorageService.ensureUuid(neighborhood.id);
+    neighborhood.organizationId = this.getCurrentOrgId();
+    const all = this.get<DeliveryNeighborhood[]>(KEYS.DELIVERY_NEIGHBORHOODS, []);
+    const idx = all.findIndex((n) => n.id === neighborhood.id);
+    if (idx >= 0) all[idx] = neighborhood;
+    else all.push(neighborhood);
+    this.set(KEYS.DELIVERY_NEIGHBORHOODS, all);
+    this.syncDeliveryNeighborhood(neighborhood);
+  }
+
+  deleteDeliveryNeighborhood(id: string) {
+    const all = this.get<DeliveryNeighborhood[]>(KEYS.DELIVERY_NEIGHBORHOODS, []).filter((x) => x.id !== id);
+    this.set(KEYS.DELIVERY_NEIGHBORHOODS, all);
+    syncService.deleteRow('delivery_neighborhoods', id);
+  }
+
+  updateDeliveryNeighborhoodFromRemote(row: any) {
+    const all = this.get<DeliveryNeighborhood[]>(KEYS.DELIVERY_NEIGHBORHOODS, []);
+    const mapped: DeliveryNeighborhood = {
+      id: row.id,
+      organizationId: row.organization_id || this.getCurrentOrgId(),
+      storeBranchId: row.store_branch_id || '',
+      neighborhood: row.neighborhood || '',
+      fee: parseFloat(row.fee) || 0,
+      estimatedTimeMinutes: row.estimated_time_minutes || 45,
+      isActive: row.is_active !== false,
+      createdAt: row.created_at || new Date().toISOString(),
+      updatedAt: row.updated_at || new Date().toISOString(),
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.DELIVERY_NEIGHBORHOODS, all);
+    this.notify();
+  }
+
+  removeDeliveryNeighborhoodFromRemote(id: string) {
+    const all = this.get<DeliveryNeighborhood[]>(KEYS.DELIVERY_NEIGHBORHOODS, []).filter((x) => x.id !== id);
+    this.set(KEYS.DELIVERY_NEIGHBORHOODS, all);
+    this.notify();
+  }
+
+  // --- DELIVERY DISTANCE RATES ---
+  getDeliveryDistanceRates(): DeliveryDistanceRate[] {
+    return this.get<DeliveryDistanceRate[]>(KEYS.DELIVERY_DISTANCE_RATES, []);
+  }
+
+  saveDeliveryDistanceRate(rate: DeliveryDistanceRate) {
+    rate.id = StorageService.ensureUuid(rate.id);
+    rate.organizationId = this.getCurrentOrgId();
+    const all = this.get<DeliveryDistanceRate[]>(KEYS.DELIVERY_DISTANCE_RATES, []);
+    const idx = all.findIndex((r) => r.id === rate.id);
+    if (idx >= 0) all[idx] = rate;
+    else all.push(rate);
+    this.set(KEYS.DELIVERY_DISTANCE_RATES, all);
+    this.syncDeliveryDistanceRate(rate);
+  }
+
+  deleteDeliveryDistanceRate(id: string) {
+    const all = this.get<DeliveryDistanceRate[]>(KEYS.DELIVERY_DISTANCE_RATES, []).filter((x) => x.id !== id);
+    this.set(KEYS.DELIVERY_DISTANCE_RATES, all);
+    syncService.deleteRow('delivery_distance_rates', id);
+  }
+
+  updateDeliveryDistanceRateFromRemote(row: any) {
+    const all = this.get<DeliveryDistanceRate[]>(KEYS.DELIVERY_DISTANCE_RATES, []);
+    const mapped: DeliveryDistanceRate = {
+      id: row.id,
+      organizationId: row.organization_id || this.getCurrentOrgId(),
+      storeBranchId: row.store_branch_id || '',
+      minKm: parseFloat(row.min_km) || 0,
+      maxKm: parseFloat(row.max_km) || 0,
+      fee: parseFloat(row.fee) || 0,
+      estimatedTimeMinutes: row.estimated_time_minutes || 45,
+      isActive: row.is_active !== false,
+      createdAt: row.created_at || new Date().toISOString(),
+      updatedAt: row.updated_at || new Date().toISOString(),
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.DELIVERY_DISTANCE_RATES, all);
+    this.notify();
+  }
+
+  removeDeliveryDistanceRateFromRemote(id: string) {
+    const all = this.get<DeliveryDistanceRate[]>(KEYS.DELIVERY_DISTANCE_RATES, []).filter((x) => x.id !== id);
+    this.set(KEYS.DELIVERY_DISTANCE_RATES, all);
+    this.notify();
+  }
+
+  // --- DELIVERY ORDERS ---
+  getDeliveryOrders(): DeliveryOrder[] {
+    return this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []);
+  }
+
+  getDeliveryOrdersByCustomer(customerId: string): DeliveryOrder[] {
+    return this.getDeliveryOrders().filter((o) => o.customerId === customerId);
+  }
+
+  getDeliveryOrdersByStatus(status: string): DeliveryOrder[] {
+    return this.getDeliveryOrders().filter((o) => o.status === status);
+  }
+
+  saveDeliveryOrder(order: DeliveryOrder) {
+    order.id = StorageService.ensureUuid(order.id);
+    order.organizationId = this.getCurrentOrgId();
+    const all = this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []);
+    const idx = all.findIndex((o) => o.id === order.id);
+    if (idx >= 0) all[idx] = order;
+    else all.unshift(order);
+    this.set(KEYS.DELIVERY_ORDERS, all);
+    this.syncDeliveryOrder(order);
+  }
+
+  updateDeliveryOrderStatus(orderId: string, status: string, extraData?: Partial<DeliveryOrder>) {
+    const all = this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []);
+    const idx = all.findIndex((o) => o.id === orderId);
+    if (idx >= 0) {
+      all[idx] = { ...all[idx], status, ...extraData, updatedAt: new Date().toISOString() };
+      this.set(KEYS.DELIVERY_ORDERS, all);
+      this.syncDeliveryOrder(all[idx]);
+    }
+  }
+
+  deleteDeliveryOrder(id: string) {
+    const all = this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []).filter((x) => x.id !== id);
+    this.set(KEYS.DELIVERY_ORDERS, all);
+    syncService.deleteRow('delivery_orders', id);
+  }
+
+  updateDeliveryOrderFromRemote(row: any) {
+    const all = this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []);
+    const mapped: DeliveryOrder = {
+      id: row.id,
+      organizationId: row.organization_id || this.getCurrentOrgId(),
+      storeBranchId: row.store_branch_id || '',
+      customerId: row.customer_id || undefined,
+      orderNumber: row.order_number || 0,
+      orderType: row.order_type || 'delivery',
+      status: row.status || 'pending',
+      items: row.items_json || [],
+      subtotal: parseFloat(row.subtotal) || 0,
+      deliveryFee: parseFloat(row.delivery_fee) || 0,
+      discount: parseFloat(row.discount) || 0,
+      total: parseFloat(row.total) || 0,
+      paymentMethod: row.payment_method || undefined,
+      changeAmount: parseFloat(row.change_amount) || undefined,
+      deliveryAddress: row.delivery_address || undefined,
+      customerName: row.customer_name || '',
+      customerWhatsapp: row.customer_whatsapp || undefined,
+      customerEmail: row.customer_email || undefined,
+      notes: row.notes || undefined,
+      estimatedDeliveryTime: row.estimated_delivery_time || undefined,
+      confirmedAt: row.confirmed_at || undefined,
+      preparingAt: row.preparing_at || undefined,
+      readyAt: row.ready_at || undefined,
+      outForDeliveryAt: row.out_for_delivery_at || undefined,
+      deliveredAt: row.delivered_at || undefined,
+      cancelledAt: row.cancelled_at || undefined,
+      cancelledReason: row.cancelled_reason || undefined,
+      whatsappSent: row.whatsapp_sent || false,
+      whatsappSentAt: row.whatsapp_sent_at || undefined,
+      deliveredBy: row.delivered_by || undefined,
+      createdAt: row.created_at || new Date().toISOString(),
+      updatedAt: row.updated_at || new Date().toISOString(),
+    };
+    const idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEYS.DELIVERY_ORDERS, all);
+    this.notify();
+  }
+
+  removeDeliveryOrderFromRemote(id: string) {
+    const all = this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []).filter((x) => x.id !== id);
+    this.set(KEYS.DELIVERY_ORDERS, all);
     this.notify();
   }
 

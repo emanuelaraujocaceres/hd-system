@@ -63,6 +63,9 @@ const BRANCH_REQUIRED_TABLES: TableName[] = [
   // Cardápio Digital / Comandas (2026): tabelas escopadas por filial
   'tables', 'customer_sessions', 'digital_menu_config',
   'branch_themes', 'api_keys',
+  // Delivery (2026): tabelas escopadas por filial
+  'delivery_settings', 'delivery_neighborhoods', 'delivery_distance_rates',
+  'delivery_orders',
 ];
 
 /**
@@ -98,7 +101,12 @@ export type TableName =
   | 'customer_sessions'
   | 'digital_menu_config'
   | 'branch_themes'
-  | 'api_keys';
+  | 'api_keys'
+  // Delivery (2026)
+  | 'delivery_settings'
+  | 'delivery_neighborhoods'
+  | 'delivery_distance_rates'
+  | 'delivery_orders';
 
 type SyncChangeCallback = (table: TableName, payload: any) => void;
 type ConnectionListener = (online: boolean) => void;
@@ -257,6 +265,11 @@ class SupabaseSyncService {
       'digital_menu_config',
       'branch_themes',
       'api_keys',
+      // Delivery (2026)
+      'delivery_settings',
+      'delivery_neighborhoods',
+      'delivery_distance_rates',
+      'delivery_orders',
     ];
 
     this.channel = supabase.channel('hd-system-realtime');
@@ -483,6 +496,8 @@ class SupabaseSyncService {
     'footer_messages', 'media_devices', 'printers',
     // Cardápio Digital / Comandas: têm updated_at
     'tables', 'customer_sessions', 'digital_menu_config', 'branch_themes',
+    // Delivery (2026): têm updated_at
+    'delivery_settings', 'delivery_neighborhoods', 'delivery_distance_rates', 'delivery_orders',
   ];
 
   /**
