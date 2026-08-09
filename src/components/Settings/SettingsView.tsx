@@ -33,6 +33,7 @@ import {
   QrCode,
   Eye,
   FileText,
+  Download,
 } from 'lucide-react';
 import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, PrinterRole, MediaDevice, BranchTheme, Category, Table, DigitalMenuConfig } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -450,6 +451,76 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       `💵 Líquido: R$ ${netValue.toFixed(2)}`;
     const url = `https://wa.me/55${holeriteUser.whatsapp}?text=${encodeURIComponent(msg)}`;
     window.open(url, '_blank');
+  };
+
+  const handleGeneratePDF = () => {
+    if (!holeriteUser) return;
+    const totalBenefits = holeriteSalary + holeriteTransportation + holeriteMeal + holeriteHealth + holeriteOtherBenefits;
+    const totalDiscounts = holeriteInss + holeriteIr + holeriteOtherDiscounts;
+    const netValue = totalBenefits - totalDiscounts;
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Holerite - ${holeriteUser.name}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
+          h1 { color: #059669; border-bottom: 2px solid #059669; padding-bottom: 10px; }
+          .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
+          .section { margin-bottom: 20px; }
+          .section h2 { color: #059669; font-size: 14px; margin-bottom: 10px; }
+          .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+          .row:last-child { border-bottom: none; }
+          .label { color: #6b7280; }
+          .value { font-weight: bold; }
+          .total-bruto { color: #059669; }
+          .total-descontos { color: #dc2626; }
+          .liquido { color: #059669; font-size: 18px; border-top: 2px solid #059669; padding-top: 10px; margin-top: 20px; }
+          .footer { margin-top: 40px; text-align: center; color: #9ca3af; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <h1>🧾 Holerite</h1>
+        <div class="header">
+          <div><strong>Colaborador:</strong> ${holeriteUser.name}</div>
+          <div><strong>Data:</strong> ${new Date().toLocaleDateString('pt-BR')}</div>
+        </div>
+        <div class="section">
+          <h2>BENEFÍCIOS</h2>
+          <div class="row"><span class="label">Salário Base</span><span class="value">R$ ${holeriteSalary.toFixed(2)}</span></div>
+          <div class="row"><span class="label">Vale Transporte</span><span class="value">R$ ${holeriteTransportation.toFixed(2)}</span></div>
+          <div class="row"><span class="label">Vale Refeição</span><span class="value">R$ ${holeriteMeal.toFixed(2)}</span></div>
+          <div class="row"><span class="label">Plano de Saúde</span><span class="value">R$ ${holeriteHealth.toFixed(2)}</span></div>
+          <div class="row"><span class="label">Outros Benefícios</span><span class="value">R$ ${holeriteOtherBenefits.toFixed(2)}</span></div>
+        </div>
+        <div class="section">
+          <h2>DESCONTOS</h2>
+          <div class="row"><span class="label">INSS</span><span class="value">- R$ ${holeriteInss.toFixed(2)}</span></div>
+          <div class="row"><span class="label">Imposto de Renda</span><span class="value">- R$ ${holeriteIr.toFixed(2)}</span></div>
+          <div class="row"><span class="label">Outros Descontos</span><span class="value">- R$ ${holeriteOtherDiscounts.toFixed(2)}</span></div>
+        </div>
+        <div class="liquido">
+          <div class="row"><span class="label">Total Bruto</span><span class="value total-bruto">R$ ${totalBenefits.toFixed(2)}</span></div>
+          <div class="row"><span class="label">Total Descontos</span><span class="value total-descontos">- R$ ${totalDiscounts.toFixed(2)}</span></div>
+          <div class="row"><span class="label">LÍQUIDO A RECEBER</span><span class="value">R$ ${netValue.toFixed(2)}</span></div>
+        </div>
+        <div class="footer">
+          <p>Documento gerado automaticamente pelo HD-System</p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+    }
   };
 
   const handleSaveUser = async (e: React.FormEvent) => {
@@ -2315,6 +2386,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
             {/* Botões */}
             <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-[#27272a]">
+              <button
+                type="button"
+                onClick={handleGeneratePDF}
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                PDF
+              </button>
               {holeriteUser.whatsapp && (
                 <button
                   type="button"
