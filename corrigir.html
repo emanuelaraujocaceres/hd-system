@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head><title>Corrigir Duplicadas</title></head>
+<body>
+<h1>Corrigindo contas duplicadas...</h1>
+<script>
+  // Limpar tudo e recriar apenas a conta recorrente correta
+  const account = {
+    id: 'fin-recorrente-1000',
+    title: 'aluguel',
+    type: 'payable',
+    category: 'conta_pagar',
+    amount: 1000,
+    dueDate: '2026-08-08',
+    status: 'pending',
+    recipientOrPayer: 'Noel',
+    storeBranchId: 'e5085eba-4398-4c31-ae13-8082b46561ee',
+    organizationId: '361fb95a-3e9f-43be-a43c-0dc91f851f31',
+    isRecurring: true,
+    isInstallment: false,
+    recurrenceType: 'monthly',
+    recurrenceCount: 1000,
+    recurrences: []
+  };
+  
+  // Criar 1000 ocorrências
+  const start = new Date('2026-08-08');
+  for (let i = 0; i < 1000; i++) {
+    const d = new Date(start);
+    d.setMonth(d.getMonth() + i);
+    account.recurrences.push({
+      id: account.id + '-' + (i + 1),
+      number: i + 1,
+      dueDate: d.toISOString().slice(0, 10),
+      status: 'pending'
+    });
+  }
+  
+  // Salvar apenas esta conta
+  localStorage.setItem('hd_system_financial_accounts', JSON.stringify([account]));
+  
+  alert('Conta recorrente de 1000x criada! Redirecionando...');
+  window.location.href = 'http://localhost:3000/';
+</script>
+</body>
+</html>

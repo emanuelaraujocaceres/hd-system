@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head><title>Remover Duplicada</title></head>
+<body>
+<h1>Removendo conta duplicada...</h1>
+<script>
+  const key = 'hd_system_financial_accounts';
+  let accounts = JSON.parse(localStorage.getItem(key) || '[]');
+  
+  // Encontrar as contas "aluguel"
+  const aluguelAccounts = accounts.filter(a => a.title === 'aluguel');
+  console.log('Contas aluguel encontradas:', aluguelAccounts.length);
+  
+  if (aluguelAccounts.length > 1) {
+    // Remover a conta única (não recorrente), manter a recorrente
+    const recurring = accounts.find(a => a.title === 'aluguel' && a.isRecurring);
+    accounts = accounts.filter(a => !(a.title === 'aluguel' && !a.isRecurring));
+    if (recurring && !accounts.find(a => a.id === recurring.id)) {
+      accounts.unshift(recurring);
+    }
+  }
+  
+  localStorage.setItem(key, JSON.stringify(accounts));
+  alert('Conta duplicada removida! Redirecionando...');
+  window.location.href = 'http://localhost:3000/';
+</script>
+</body>
+</html>
