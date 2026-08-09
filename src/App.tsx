@@ -560,6 +560,11 @@ export const App: React.FC = () => {
           break;
       }
 
+      // Notificar componentes sobre mudança remota (atualiza UI em tempo real)
+      window.dispatchEvent(new CustomEvent('hd:remote-change', {
+        detail: { table, event, row },
+      }));
+
       setLastSyncTime(new Date());
     };
 

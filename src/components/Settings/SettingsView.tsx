@@ -112,6 +112,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   // Cardápio Digital / Mesas State
   const [tables, setTables] = useState<Table[]>(storageService.getTables());
+
+  // Listener para atualizar UI quando Realtime receber mudanças de outros dispositivos
+  // Usa storageService.subscribe() para ser notificado quando *FromRemote() chamar this.notify()
+  useEffect(() => {
+    const unsub = storageService.subscribe(() => {
+      setTables(storageService.getTables());
+      setMenuConfig(storageService.getDigitalMenuConfig());
+      setFooterMessages(storageService.getFooterMessages());
+      setMediaDevicesList(storageService.getMediaDevices());
+      setPrintersList(storageService.getPrinters());
+      setUsersList(storageService.getUsers());
+    });
+    return () => { unsub(); };
+  }, []);
   const [menuConfig, setMenuConfig] = useState<DigitalMenuConfig | null>(storageService.getDigitalMenuConfig());
   const [tableName, setTableName] = useState('');
   const [tableNumber, setTableNumber] = useState('');

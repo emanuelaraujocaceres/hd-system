@@ -757,16 +757,19 @@ class StorageService {
       products.unshift(mapped);
     }
     this.set(KEYS.PRODUCTS, products);
+    this.notify();
   }
 
   removeProductFromRemote(id: string) {
     const products = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []).filter((p) => p.id !== id);
     this.set(KEYS.PRODUCTS, products);
+    this.notify();
   }
 
   removeSaleFromRemote(id: string) {
     const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []).filter((s) => s.id !== id);
     this.set(KEYS.SALES, sales);
+    this.notify();
   }
 
   removeCaixaFromRemote(id: string) {
@@ -774,12 +777,14 @@ class StorageService {
     const session = this.getActiveCaixaSession();
     if (session && session.id === id) {
       this.set(KEYS.CAIXA, { ...session, status: 'closed' });
+      this.notify();
     }
   }
 
   removeUserFromRemote(id: string) {
     const users = this.get<UserProfile[]>(KEYS.USERS_LIST, []).filter((u) => u.id !== id);
     this.set(KEYS.USERS_LIST, users);
+    this.notify();
   }
 
   updateCategoryFromRemote(row: any) {
@@ -796,11 +801,13 @@ class StorageService {
     if (idx >= 0) categories[idx] = mapped;
     else categories.push(mapped);
     this.set(KEYS.CATEGORIES, categories);
+    this.notify();
   }
 
   removeCategoryFromRemote(id: string) {
     const categories = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []).filter((c) => c.id !== id);
     this.set(KEYS.CATEGORIES, categories);
+    this.notify();
   }
 
   updateSaleFromRemote(row: any) {
@@ -879,6 +886,7 @@ class StorageService {
     if (idx >= 0) sales[idx] = mapped;
     else sales.unshift(mapped);
     this.set(KEYS.SALES, sales);
+    this.notify();
 
     // ── Update caixa session in real-time ──────────────────
     // When a sale is synced from another device, update the
@@ -997,11 +1005,13 @@ class StorageService {
     if (idx >= 0) customers[idx] = mapped;
     else customers.unshift(mapped);
     this.set(KEYS.CUSTOMERS, customers);
+    this.notify();
   }
 
   removeCustomerFromRemote(id: string) {
     const customers = this.get<Customer[]>(KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : []).filter((c) => c.id !== id);
     this.set(KEYS.CUSTOMERS, customers);
+    this.notify();
   }
 
   updateSupplierFromRemote(row: any) {
@@ -1021,11 +1031,13 @@ class StorageService {
     if (idx >= 0) suppliers[idx] = mapped;
     else suppliers.unshift(mapped);
     this.set(KEYS.SUPPLIERS, suppliers);
+    this.notify();
   }
 
   removeSupplierFromRemote(id: string) {
     const suppliers = this.get<Supplier[]>(KEYS.SUPPLIERS, this.isDefaultOrg() ? INITIAL_SUPPLIERS : []).filter((s) => s.id !== id);
     this.set(KEYS.SUPPLIERS, suppliers);
+    this.notify();
   }
 
   updateFinancialFromRemote(row: any) {
@@ -1054,11 +1066,13 @@ class StorageService {
     if (idx >= 0) accounts[idx] = mapped;
     else accounts.unshift(mapped);
     this.set(KEYS.FINANCIAL, accounts);
+    this.notify();
   }
 
   removeFinancialFromRemote(id: string) {
     const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []).filter((a) => a.id !== id);
     this.set(KEYS.FINANCIAL, accounts);
+    this.notify();
   }
 
   updateCaixaFromRemote(row: any) {
@@ -1112,6 +1126,7 @@ class StorageService {
         ? (parseFloat(row.expected_balance) || adopted.currentCashBalance)
         : adopted.initialCash + adopted.totalSalesCash + adopted.suprimentos - adopted.sangrias;
       this.set(KEYS.CAIXA, adopted);
+      this.notify();
       console.log(`[HD-Sync] 🔄 Caixa ${remoteClosed ? 'FECHADO via cloud' : 'adotado do cloud'}: cash=R$${adopted.totalSalesCash.toFixed(2)} pix=R$${adopted.totalSalesPix.toFixed(2)} card=R$${adopted.totalSalesCard.toFixed(2)}`);
       return;
     }
@@ -1136,6 +1151,7 @@ class StorageService {
       organizationId: row.organization_id || undefined,
     };
     this.set(KEYS.CAIXA, session);
+    this.notify();
   }
 
   updateBranchFromRemote(row: any) {
@@ -1157,16 +1173,19 @@ class StorageService {
     if (idx >= 0) branches[idx] = mapped;
     else branches.push(mapped);
     this.set(KEYS.BRANCHES, branches);
+    this.notify();
   }
 
   removeBranchFromRemote(id: string) {
     const branches = this.get<StoreBranch[]>(KEYS.BRANCHES, this.isDefaultOrg() ? INITIAL_BRANCHES : []).filter((b) => b.id !== id);
     this.set(KEYS.BRANCHES, branches);
+    this.notify();
   }
 
   updateSettingsFromRemote(row: any) {
     if (row.settings) {
       this.set(KEYS.SETTINGS, row.settings);
+      this.notify();
     }
   }
 
@@ -1196,11 +1215,13 @@ class StorageService {
     if (idx >= 0) movements[idx] = mapped;
     else movements.unshift(mapped);
     this.set(KEYS.MOVEMENTS, movements);
+    this.notify();
   }
 
   removeStockMovementFromRemote(id: string) {
     const movements = this.getMovements().filter((m) => m.id !== id);
     this.set(KEYS.MOVEMENTS, movements);
+    this.notify();
   }
 
   updateUserFromRemote(row: any) {
@@ -1241,6 +1262,7 @@ class StorageService {
       users.unshift(mapped);
     }
     this.set(KEYS.USERS_LIST, users);
+    this.notify();
 
     // Se o usuário atualizado é o logado, atualiza também o perfil dedicado
     // (KEYS.USER) — ex: foto de perfil trocada em outro dispositivo aparece
@@ -3259,11 +3281,13 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.SCANNED_BOLETOS, all);
+    this.notify();
   }
 
   removeScannedBoletoFromRemote(id: string) {
     const all = this.get<ScannedBoleto[]>(KEYS.SCANNED_BOLETOS, []).filter((x) => x.id !== id);
     this.set(KEYS.SCANNED_BOLETOS, all);
+    this.notify();
   }
 
   // --- CREDIT PAYMENTS (pagamentos de fiado) ---
@@ -3319,11 +3343,13 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.CREDIT_PAYMENTS, all);
+    this.notify();
   }
 
   removeCreditPaymentFromRemote(id: string) {
     const all = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []).filter((x) => x.id !== id);
     this.set(KEYS.CREDIT_PAYMENTS, all);
+    this.notify();
   }
 
   // --- NF RECORDS (notas fiscais importadas) ---
@@ -3379,11 +3405,13 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.NF_RECORDS, all);
+    this.notify();
   }
 
   removeNFRecordFromRemote(id: string) {
     const all = this.get<NFRecord[]>(KEYS.NF_RECORDS, []).filter((x) => x.id !== id);
     this.set(KEYS.NF_RECORDS, all);
+    this.notify();
   }
 
   // --- FOOTER MESSAGES (rodapé da vitrine de TV) ---
@@ -3435,11 +3463,13 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.FOOTER_MESSAGES, all);
+    this.notify();
   }
 
   removeFooterMessageFromRemote(id: string) {
     const all = this.get<FooterMessage[]>(KEYS.FOOTER_MESSAGES, []).filter((x) => x.id !== id);
     this.set(KEYS.FOOTER_MESSAGES, all);
+    this.notify();
   }
 
   // --- MEDIA DEVICES (TVs/vitrines pareadas) ---
@@ -3514,11 +3544,13 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.MEDIA_DEVICES, all);
+    this.notify();
   }
 
   removeMediaDeviceFromRemote(id: string) {
     const all = this.get<MediaDevice[]>(KEYS.MEDIA_DEVICES, []).filter((x) => x.id !== id);
     this.set(KEYS.MEDIA_DEVICES, all);
+    this.notify();
   }
 
   // --- PRINTERS (impressoras configuradas) ---
@@ -3651,11 +3683,13 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.PRINTERS, all);
+    this.notify();
   }
 
   removePrinterFromRemote(id: string) {
     const all = this.get<Printer[]>(KEYS.PRINTERS, []).filter((x) => x.id !== id);
     this.set(KEYS.PRINTERS, all);
+    this.notify();
   }
 
   // --- TABLES (mesas) ---
@@ -3696,11 +3730,13 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.TABLES, all);
+    this.notify(); // Notificar listeners (UI atualiza em tempo real)
   }
 
   removeTableFromRemote(id: string) {
     const all = this.get<Table[]>(KEYS.TABLES, []).filter((x) => x.id !== id);
     this.set(KEYS.TABLES, all);
+    this.notify(); // Notificar listeners (UI atualiza em tempo real)
   }
 
   // --- CUSTOMER SESSIONS ---
@@ -3738,11 +3774,13 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.CUSTOMER_SESSIONS, all);
+    this.notify();
   }
 
   removeCustomerSessionFromRemote(id: string) {
     const all = this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, []).filter((x) => x.id !== id);
     this.set(KEYS.CUSTOMER_SESSIONS, all);
+    this.notify();
   }
 
   // --- DIGITAL MENU CONFIG ---
@@ -3779,11 +3817,13 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.DIGITAL_MENU_CONFIG, all);
+    this.notify();
   }
 
   removeDigitalMenuConfigFromRemote(id: string) {
     const all = this.get<DigitalMenuConfig[]>(KEYS.DIGITAL_MENU_CONFIG, []).filter((x) => x.id !== id);
     this.set(KEYS.DIGITAL_MENU_CONFIG, all);
+    this.notify();
   }
 
   // --- BRANCH THEMES ---
@@ -3821,11 +3861,13 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.BRANCH_THEMES, all);
+    this.notify();
   }
 
   removeBranchThemeFromRemote(id: string) {
     const all = this.get<BranchTheme[]>(KEYS.BRANCH_THEMES, []).filter((x) => x.id !== id);
     this.set(KEYS.BRANCH_THEMES, all);
+    this.notify();
   }
 
   // --- API KEYS ---
@@ -3863,11 +3905,13 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.API_KEYS, all);
+    this.notify();
   }
 
   removeApiKeyFromRemote(id: string) {
     const all = this.get<ApiKey[]>(KEYS.API_KEYS, []).filter((x) => x.id !== id);
     this.set(KEYS.API_KEYS, all);
+    this.notify();
   }
 
   // --- BRANCHES ---

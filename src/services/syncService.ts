@@ -481,6 +481,8 @@ class SupabaseSyncService {
     'stock_movements', 'store_branches', 'system_users', 'system_settings',
     // Frentes TV/impressora: têm updated_at + trigger fn_update_updated_at
     'footer_messages', 'media_devices', 'printers',
+    // Cardápio Digital / Comandas: têm updated_at
+    'tables', 'customer_sessions', 'digital_menu_config', 'branch_themes',
   ];
 
   /**
