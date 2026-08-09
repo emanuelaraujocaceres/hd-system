@@ -107,6 +107,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     }
     setIsSaving(true);
     try {
+      const branchId = storageService.getSelectedBranchId() || undefined;
+      const orgId = storageService.getCurrentOrgId();
+
       if (editingAccount) {
         // Editar conta existente (sem suporte a recorrência na edição)
         const newAcc: FinancialAccount = {
@@ -124,7 +127,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         addToast('success', `Conta "${newAcc.title}" atualizada com sucesso.`);
       } else if (formMode === 'single') {
         // CONTA ÚNICA: cria uma única conta (pagar ou receber)
-        const branchId = storageService.getSelectedBranchId() || undefined;
         const newAcc: FinancialAccount = {
           id: `fin-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
           title: formTitle.trim(),
