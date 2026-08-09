@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head><title>Criar Conta Recorrente</title></head>
+<body>
+<h1>Criando conta recorrente...</h1>
+<pre id="status"></pre>
+<script>
+  const status = document.getElementById('status');
+  
+  try {
+    // Criar conta recorrente
+    const account = {
+      id: 'fin-recorrente-1000',
+      title: 'aluguel',
+      type: 'payable',
+      category: 'conta_pagar',
+      amount: 1000,
+      dueDate: '2026-08-08',
+      status: 'pending',
+      recipientOrPayer: 'Noel',
+      storeBranchId: 'e5085eba-4398-4c31-ae13-8082b46561ee',
+      organizationId: '361fb95a-3e9f-43be-a43c-0dc91f851f31',
+      isRecurring: true,
+      isInstallment: false,
+      recurrenceType: 'monthly',
+      recurrenceCount: 1000,
+      recurrences: []
+    };
+    
+    // Criar 1000 ocorrências
+    const start = new Date('2026-08-08');
+    for (let i = 0; i < 1000; i++) {
+      const d = new Date(start);
+      d.setMonth(d.getMonth() + i);
+      account.recurrences.push({
+        id: account.id + '-' + (i + 1),
+        number: i + 1,
+        dueDate: d.toISOString().slice(0, 10),
+        status: 'pending'
+      });
+    }
+    
+    // Salvar no localStorage
+    localStorage.setItem('hd_system_financial_accounts', JSON.stringify([account]));
+    
+    status.textContent = 'Conta criada com sucesso!\n';
+    status.textContent += 'ID: ' + account.id + '\n';
+    status.textContent += 'Recorrências: ' + account.recurrences.length + '\n';
+    status.textContent += '\nAgora recarregue a página (F5) e navegue para Financeiro.';
+    
+  } catch (e) {
+    status.textContent = 'Erro: ' + e.message;
+  }
+</script>
+</body>
+</html>

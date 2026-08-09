@@ -1682,6 +1682,9 @@ class StorageService {
           this.set(KEYS.FINANCIAL, merged);
           // Subir os campos de recorrência preservados para o banco (idempotente)
           for (const acc of needsRecurrenceResync) this.syncFinancialAccount(acc);
+        } else {
+          // Se não há dados no cloud nem no local, salva array vazio para evitar null
+          this.set(KEYS.FINANCIAL, []);
         }
       }
 

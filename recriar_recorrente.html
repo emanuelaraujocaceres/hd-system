@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head><title>Recriar Recorrente</title></head>
+<body>
+<h1>Recriando conta recorrente com 1000 recorrências...</h1>
+<script>
+  const account = {
+    id: 'fin-recorrente-1000',
+    title: 'aluguel',
+    type: 'payable',
+    category: 'conta_pagar',
+    amount: 1000,
+    dueDate: '2026-08-08',
+    status: 'pending',
+    recipientOrPayer: 'Noel',
+    storeBranchId: 'e5085eba-4398-4c31-ae13-8082b46561ee',
+    organizationId: '361fb95a-3e9f-4be-a43c-0dc91f851f31',
+    isRecurring: true,
+    isInstallment: false,
+    recurrenceType: 'monthly',
+    recurrenceCount: 1000,
+    recurrences: []
+  };
+  
+  // Criar 1000 ocorrências
+  const start = new Date('2026-08-08');
+  for (let i = 0; i < 1000; i++) {
+    const d = new Date(start);
+    d.setMonth(d.getMonth() + i);
+    account.recurrences.push({
+      id: account.id + '-' + (i + 1),
+      number: i + 1,
+      dueDate: d.toISOString().slice(0, 10),
+      status: 'pending'
+    });
+  }
+  
+  // Salvar no localStorage
+  localStorage.setItem('hd_system_financial_accounts', JSON.stringify([account]));
+  
+  // Forçar reload para sync com Supabase
+  alert('Conta recorrente criada! A página vai recarregar para sincronizar...');
+  window.location.reload();
+</script>
+</body>
+</html>
