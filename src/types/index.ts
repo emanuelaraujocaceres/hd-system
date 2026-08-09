@@ -489,6 +489,10 @@ export interface DeliverySettings {
   branchLongitude?: number;
   whatsappPhone?: string;
   fullAddress?: string;
+  // Configurações do colaborador do delivery (2026)
+  deliveryWorkerFeePercent?: number; // % da taxa que o colaborador recebe (0-100)
+  deliveryWorkerPayType?: 'salary' | 'daily'; // salary = com holerite, daily = diarista sem holerite
+  deliveryWorkerDailyPay?: number; // Valor fixo da diária (se payType = daily)
   createdAt: string;
   updatedAt: string;
 }
@@ -577,4 +581,20 @@ export interface DeliveryOrder {
   deliveredBy?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// Ganhos do colaborador do delivery (tabela delivery_worker_earnings)
+export interface DeliveryWorkerEarnings {
+  id: string;
+  organizationId: string;
+  storeBranchId: string;
+  workerId: string;
+  deliveryOrderId?: string;
+  deliveryFee: number;
+  workerAmount: number;
+  companyAmount: number;
+  payType: 'salary' | 'daily';
+  paid: boolean;
+  paidAt?: string;
+  createdAt: string;
 }

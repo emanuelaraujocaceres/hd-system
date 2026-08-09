@@ -38,6 +38,11 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
   const [maxDistance, setMaxDistance] = useState(15);
   const [whatsappPhone, setWhatsappPhone] = useState('');
   const [fullAddress, setFullAddress] = useState('');
+  
+  // Configurações do colaborador do delivery
+  const [workerFeePercent, setWorkerFeePercent] = useState(100);
+  const [workerPayType, setWorkerPayType] = useState<'salary' | 'daily'>('salary');
+  const [workerDailyPay, setWorkerDailyPay] = useState(0);
 
   // Neighborhood form
   const [newNeighborhood, setNewNeighborhood] = useState('');
@@ -67,6 +72,10 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
       setMaxDistance(s.maxDeliveryDistanceKm);
       setWhatsappPhone(s.whatsappPhone || '');
       setFullAddress(s.fullAddress || branch.fullAddress || '');
+      // Configurações do colaborador
+      setWorkerFeePercent(s.deliveryWorkerFeePercent ?? 100);
+      setWorkerPayType(s.deliveryWorkerPayType ?? 'salary');
+      setWorkerDailyPay(s.deliveryWorkerDailyPay ?? 0);
     } else {
       setFullAddress(branch.fullAddress || '');
       setWhatsappPhone(branch.whatsappPhone || '');
@@ -96,6 +105,9 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
         branchLongitude: branch.longitude,
         whatsappPhone,
         fullAddress,
+        deliveryWorkerFeePercent: workerFeePercent,
+        deliveryWorkerPayType: workerPayType,
+        deliveryWorkerDailyPay: workerDailyPay,
         createdAt: settings?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -396,6 +408,78 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
               className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white"
             />
           </div>
+        </div>
+      </div>
+
+      {/* Configurações do Colaborador do Delivery */}
+      <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-4">
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white">🛵 Pagamento do Entregador</h3>
+        <p className="text-xs text-slate-500 dark:text-[#71717a]">
+          Configure como o colaborador do delivery recebe pelas entregas. A taxa de entrega não é contabilizada como lucro.
+        </p>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">% Taxa para entregador</label>
+            <input
+              type="number"
+              value={workerFeePercent}
+              onChange={(e) => setWorkerFeePercent(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+              min="0"
+              max="100"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">100% = entregador fica com toda a taxa</p>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Tipo de pagamento</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setWorkerPayType('salary')}
+                className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  workerPayType === 'salary'
+                    ? 'bg-orange-500 text-white'
+                    : 'bg-slate-100 dark:bg-[#27272a] text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                Salário + Vale
+              </button>
+              <button
+                onClick={() => setWorkerPayType('daily')}
+                className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  workerPayType === 'daily'
+                    ? 'bg-orange-500 text-white'
+                    : 'bg-slate-100 dark:bg-[#27272a] text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                Diária
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              {workerPayType === 'salary' ? 'Com holerite (fixo)' : 'Sem holerite (diarista)'}
+            </p>
+          </div>
+        </div>
+        
+        {workerPayType === 'daily' && (
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Valor da diária (R$)</label>
+            <input
+              type="number"
+              value={workerDailyPay}
+              onChange={(e) => setWorkerDailyPay(parseFloat(e.target.value) || 0)}
+              placeholder="0.00"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">Valor fixo por dia + taxas de entrega</p>
+          </div>
+        )}
+        
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+          <p className="text-[10px] text-amber-700 dark:text-amber-300">
+            <strong>Importante:</strong> A taxa de entrega paga pelo cliente vai integralmente para o entregador (conforme % configurado acima). 
+            Este valor NÃO é contabilizado como lucro da empresa.
+          </p>
         </div>
       </div>
 
