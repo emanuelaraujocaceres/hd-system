@@ -1598,86 +1598,84 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             </button>
           </div>
 
-          {/* Tabela responsiva - scroll horizontal em telas menores */}
+          {/* Tabela responsiva - sem scroll, colunas autoajustáveis */}
           <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[600px]">
-                <thead className="bg-slate-50 dark:bg-[#09090b] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider border-b border-slate-200 dark:border-[#27272a]">
-                  <tr>
-                    <th className="px-4 py-3.5">Colaborador</th>
-                    <th className="px-4 py-3.5">E-mail</th>
-                    <th className="px-4 py-3.5">Cargo</th>
-                    <th className="px-4 py-3.5 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
-                  {usersList.map((u) => {
-                    const isAdmin = u.role === 'admin';
-                    return (
-                      <tr
-                        key={u.id}
-                        className="hover:bg-slate-50/50 dark:hover:bg-[#27272a]/30 transition-colors"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <img
-                              src={u.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                              alt={u.name}
-                              className="w-8 h-8 rounded-full object-cover ring-2 ring-slate-200 dark:ring-slate-800"
-                            />
-                            <span className="font-bold text-slate-900 dark:text-white whitespace-nowrap">{u.name}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-slate-600 dark:text-[#a1a1aa]">
-                          <span className="truncate max-w-[150px] block">{u.email}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`text-[9px] font-extrabold px-2 py-1 rounded-full border ${
-                              isAdmin
-                                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30'
-                                : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
-                            }`}
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-[#09090b] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider border-b border-slate-200 dark:border-[#27272a]">
+                <tr>
+                  <th className="px-3 py-2">Colaborador</th>
+                  <th className="px-3 py-2">E-mail</th>
+                  <th className="px-3 py-2">Cargo</th>
+                  <th className="px-3 py-2 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
+                {usersList.map((u) => {
+                  const isAdmin = u.role === 'admin';
+                  return (
+                    <tr
+                      key={u.id}
+                      className="hover:bg-slate-50/50 dark:hover:bg-[#27272a]/30 transition-colors"
+                    >
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={u.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                            alt={u.name}
+                            className="w-7 h-7 rounded-full object-cover ring-2 ring-slate-200 dark:ring-slate-800"
+                          />
+                          <span className="font-bold text-slate-900 dark:text-white truncate max-w-[100px]">{u.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-slate-600 dark:text-[#a1a1aa]">
+                        <span className="truncate max-w-[120px] block">{u.email}</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${
+                            isAdmin
+                              ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30'
+                              : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                          }`}
+                        >
+                          {isAdmin ? 'ADMIN' : 'COLAB'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleOpenHoleriteModal(u)}
+                            className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
+                            title="Holerite"
                           >
-                            {isAdmin ? 'ADMIN' : 'COLAB'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1">
+                            <FileText className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleOpenUserModal(u)}
+                            className="p-1.5 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
+                            title="Editar"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          {isAdmin && (
                             <button
-                              onClick={() => handleOpenHoleriteModal(u)}
-                              className="p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
-                              title="Holerite"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDeleteUser({ id: u.id, name: u.name });
+                              }}
+                              className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors"
+                              title="Excluir"
                             >
-                              <FileText className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              onClick={() => handleOpenUserModal(u)}
-                              className="p-2 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
-                              title="Editar"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            {isAdmin && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmDeleteUser({ id: u.id, name: u.name });
-                                }}
-                                className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors"
-                                title="Excluir"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                       </tr>
-                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
 
           {/* Mobile Cards (below md) */}
