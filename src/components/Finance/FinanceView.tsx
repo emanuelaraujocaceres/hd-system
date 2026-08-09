@@ -613,14 +613,31 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           ) : (
                             <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">Pendente</span>
                           )}
-                          <div className="mt-1">
-                            {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400 ml-auto" /> : <ChevronDown className="w-4 h-4 text-slate-400 ml-auto" />}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                           <div className="mt-1">
+                             {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400 ml-auto" /> : <ChevronDown className="w-4 h-4 text-slate-400 ml-auto" />}
+                           </div>
+                         </div>
+                       </div>
+                     </div>
 
-                    {/* Expanded details - apenas as 3 próximas com scroll */}
+                     {/* Botão de deletar conta */}
+                     <div className="px-4 pb-3">
+                       <button
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           if (confirm(`Deseja excluir a conta "${acc.title}"?`)) {
+                             storageService.deleteFinancialAccount(acc.id);
+                             posAudio.chime();
+                             addToast('success', `Conta "${acc.title}" excluída.`);
+                           }
+                         }}
+                         className="w-full px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-[10px] font-bold transition-colors"
+                       >
+                         Excluir Conta
+                       </button>
+                     </div>
+
+                     {/* Expanded details - apenas as 3 próximas com scroll */}
                     {isExpanded && (acc.isRecurring || acc.isInstallment) && (pendingRecurrences.length > 0 || pendingInstallments.length > 0) && (
                       <div className="border-t border-slate-200 dark:border-[#27272a] p-3 bg-slate-50/50 dark:bg-[#09090b]/30">
                         <p className="text-[10px] font-bold text-slate-500 uppercase mb-2">

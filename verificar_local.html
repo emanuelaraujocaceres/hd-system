@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head><title>Verificar LocalStorage</title></head>
+<body>
+<h1>LocalStorage Financial Accounts</h1>
+<div id="data" style="font-family: monospace; font-size: 12px; white-space: pre-wrap;"></div>
+<script>
+  const data = JSON.parse(localStorage.getItem('hd_system_financial_accounts') || '[]');
+  let html = `Total: ${data.length} contas\n\n`;
+  data.forEach((a, i) => {
+    html += `--- Conta ${i+1} ---\n`;
+    html += `ID: ${a.id}\n`;
+    html += `Título: ${a.title}\n`;
+    html += `isRecurring: ${a.isRecurring}\n`;
+    html += `Recorrências: ${a.recurrences?.length || 0}\n`;
+    html += `Status: ${a.status}\n\n`;
+  });
+  document.getElementById('data').textContent = html;
+</script>
+</body>
+</html>
