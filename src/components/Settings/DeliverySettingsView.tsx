@@ -43,6 +43,17 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
   const [workerFeePercent, setWorkerFeePercent] = useState(100);
   const [workerPayType, setWorkerPayType] = useState<'salary' | 'daily'>('salary');
   const [workerDailyPay, setWorkerDailyPay] = useState(0);
+  
+  // Horários de funcionamento
+  const [operatingHours, setOperatingHours] = useState<Record<string, { open: string; close: string }>>({
+    monday: { open: '18:00', close: '23:00' },
+    tuesday: { open: '18:00', close: '23:00' },
+    wednesday: { open: '18:00', close: '23:00' },
+    thursday: { open: '18:00', close: '23:00' },
+    friday: { open: '18:00', close: '00:00' },
+    saturday: { open: '17:00', close: '00:00' },
+    sunday: { open: '', close: '' },
+  });
 
   // Neighborhood form
   const [newNeighborhood, setNewNeighborhood] = useState('');
@@ -76,6 +87,10 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
       setWorkerFeePercent(s.deliveryWorkerFeePercent ?? 100);
       setWorkerPayType(s.deliveryWorkerPayType ?? 'salary');
       setWorkerDailyPay(s.deliveryWorkerDailyPay ?? 0);
+      // Horários
+      if (s.operatingHours && Object.keys(s.operatingHours).length > 0) {
+        setOperatingHours(s.operatingHours);
+      }
     } else {
       setFullAddress(branch.fullAddress || '');
       setWhatsappPhone(branch.whatsappPhone || '');
@@ -108,6 +123,7 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
         deliveryWorkerFeePercent: workerFeePercent,
         deliveryWorkerPayType: workerPayType,
         deliveryWorkerDailyPay: workerDailyPay,
+        operatingHours,
         createdAt: settings?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -479,6 +495,64 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
           <p className="text-[10px] text-amber-700 dark:text-amber-300">
             <strong>Importante:</strong> A taxa de entrega paga pelo cliente vai integralmente para o entregador (conforme % configurado acima). 
             Este valor NÃO é contabilizado como lucro da empresa.
+          </p>
+        </div>
+      </div>
+
+      {/* Horários de Funcionamento */}
+      <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-4">
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white">🕐 Horários de Funcionamento</h3>
+        <p className="text-xs text-slate-500 dark:text-[#71717a]">
+          Configure os dias e horários que o delivery funciona.
+        </p>
+        
+        <div className="space-y-2">
+          {[
+            { key: 'monday', label: 'Segunda-feira' },
+            { key: 'tuesday', label: 'Terça-feira' },
+            { key: 'wednesday', label: 'Quarta-feira' },
+            { key: 'thursday', label: 'Quinta-feira' },
+            { key: 'friday', label: 'Sexta-feira' },
+            { key: 'saturday', label: 'Sábado' },
+            { key: 'sunday', label: 'Domingo' },
+          ].map(({ key, label }) => (
+            <div key={key} className="flex items-center gap-3">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 w-28">{label}</span>
+              <input
+                type="time"
+                value={operatingHours[key]?.open || ''}
+                onChange={(e) => setOperatingHours({
+                  ...operatingHours,
+                  [key]: { ...operatingHours[key], open: e.target.value }
+                })}
+                className="flex-1 px-2 py-1.5 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-lg text-xs text-slate-900 dark:text-white"
+              />
+              <span className="text-xs text-slate-400">até</span>
+              <input
+                type="time"
+                value={operatingHours[key]?.close || ''}
+                onChange={(e) => setOperatingHours({
+                  ...operatingHours,
+                  [key]: { ...operatingHours[key], close: e.target.value }
+                })}
+                className="flex-1 px-2 py-1.5 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-lg text-xs text-slate-900 dark:text-white"
+              />
+              <button
+                onClick={() => setOperatingHours({
+                  ...operatingHours,
+                  [key]: { open: '', close: '' }
+                })}
+                className="text-[10px] text-slate-400 hover:text-rose-500"
+              >
+                {operatingHours[key]?.open ? 'Limpar' : 'Fechado'}
+              </button>
+            </div>
+          ))}
+        </div>
+        
+        <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+          <p className="text-[10px] text-blue-700 dark:text-blue-300">
+            💡 Deixe os horários em branco para marcar o dia como "Fechado"
           </p>
         </div>
       </div>

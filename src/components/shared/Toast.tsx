@@ -1,140 +1,113 @@
-import React, { useState, useEffect, useCallback, createContext, useContext } from 'react';
-import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
+/**
+ * Toast - Sistema de notificações toast
+ * 
+ * Notificações que aparecem no canto da tela por alguns segundos
+ * Tipos: success, error, warning, info
+ * 
+ * Uso:
+ * toast.success('Pedido salvo!')
+ * toast.error('Erro ao salvar')
+ * toast.warning('Estoque baixo')
+ * toast.info('Novo pedido')
+ */
+
+import React, { createContext, useContext, useState, useCallback } from 'react';
+import { CheckCircle, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 
-interface Toast {
+interface ToastMessage {
   id: string;
   type: ToastType;
   message: string;
   duration?: number;
-  /** Ação opcional exibida como botão no toast (ex.: "Desfazer") */
-  actionLabel?: string;
-  onAction?: () => void;
 }
 
-interface ToastContextValue {
-  addToast: (
-    type: ToastType,
-    message: string,
-    duration?: number,
-    actionLabel?: string,
-    onAction?: () => void
-  ) => void;
+interface ToastContextType {
+  success: (message: string, duration?: number) => void;
+  error: (message: string, duration?: number) => void;
+  warning: (message: string, duration?: number) => void;
+  info: (message: string, duration?: number) => void;
+  addToast: (options: { type: ToastType; message: string; duration?: number }) => void;
 }
 
-const ToastContext = createContext<ToastContextValue | null>(null);
+const ToastContext = createContext<ToastContextType | null>(null);
 
-export const useToast = (): ToastContextValue => {
-  const ctx = useContext(ToastContext);
-  if (!ctx) {
-    // Fallback: return a no-op context for components outside the provider
-    return { addToast: () => {} };
+export const useToast = () => {
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error('useToast must be used within ToastProvider');
   }
-  return ctx;
-};
-
-const ICONS: Record<ToastType, React.ReactNode> = {
-  success: <CheckCircle2 className="w-5 h-5 text-emerald-400" />,
-  error: <AlertCircle className="w-5 h-5 text-rose-400" />,
-  warning: <AlertTriangle className="w-5 h-5 text-amber-400" />,
-  info: <Info className="w-5 h-5 text-sky-400" />,
-};
-
-const BORDER_COLORS: Record<ToastType, string> = {
-  success: 'border-emerald-500/40',
-  error: 'border-rose-500/40',
-  warning: 'border-amber-500/40',
-  info: 'border-sky-500/40',
-};
-
-const BG_COLORS: Record<ToastType, string> = {
-  success: 'bg-emerald-500/10 dark:bg-emerald-500/10',
-  error: 'bg-rose-500/10 dark:bg-rose-500/10',
-  warning: 'bg-amber-500/10 dark:bg-amber-500/10',
-  info: 'bg-sky-500/10 dark:bg-sky-500/10',
+  return context;
 };
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const addToast = useCallback((type: ToastType, message: string, duration = 4000, actionLabel?: string, onAction?: () => void) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    setToasts((prev) => [...prev, { id, type, message, duration, actionLabel, onAction }]);
+  const addToastFn = useCallback((type: ToastType, message: string, duration = 3000) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    setToasts(prev => [...prev, { id, type, message, duration }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, duration);
   }, []);
 
   const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  return (
-    <ToastContext.Provider value={{ addToast }}>
-      {children}
+  const success = useCallback((message: string, duration?: number) => addToastFn('success', message, duration), [addToastFn]);
+  const error = useCallback((message: string, duration?: number) => addToastFn('error', message, duration), [addToastFn]);
+  const warning = useCallback((message: string, duration?: number) => addToastFn('warning', message, duration), [addToastFn]);
+  const info = useCallback((message: string, duration?: number) => addToastFn('info', message, duration), [addToastFn]);
+  const addToast = useCallback((options: { type: ToastType; message: string; duration?: number }) => {
+    addToastFn(options.type, options.message, options.duration);
+  }, [addToastFn]);
 
-      {/* Toast container — fixed bottom-right */}
-      <div className="fixed bottom-4 right-4 left-4 sm:left-auto z-[9999] flex flex-col-reverse gap-2 pointer-events-none">
-        {toasts.map((toast) => (
-          <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
-        ))}
-      </div>
+  return (
+    <ToastContext.Provider value={{ success, error, warning, info, addToast }}>
+      {children}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </ToastContext.Provider>
   );
 };
 
-const ToastItem: React.FC<{ toast: Toast; onRemove: (id: string) => void }> = ({ toast, onRemove }) => {
-  const [isVisible, setIsVisible] = useState(false);
-  const [isExiting, setIsExiting] = useState(false);
-
-  useEffect(() => {
-    // Trigger enter animation
-    requestAnimationFrame(() => setIsVisible(true));
-
-    const timer = setTimeout(() => {
-      handleClose();
-    }, toast.duration);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleClose = () => {
-    setIsExiting(true);
-    setTimeout(() => onRemove(toast.id), 300);
-  };
+const ToastContainer: React.FC<{ toasts: ToastMessage[]; onRemove: (id: string) => void }> = ({ toasts, onRemove }) => {
+  if (toasts.length === 0) return null;
 
   return (
-    <div
-      className={`
-        pointer-events-auto max-w-sm w-full rounded-xl border shadow-lg backdrop-blur-md
-        ${BG_COLORS[toast.type]} ${BORDER_COLORS[toast.type]}
-        transition-all duration-300 ease-out
-        ${isVisible && !isExiting ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'}
-        ${isExiting ? 'translate-x-full opacity-0' : ''}
-      `}
-    >
-      <div className="flex items-start gap-3 p-3">
-        <div className="shrink-0 mt-0.5">{ICONS[toast.type]}</div>
-        <p className="flex-1 text-xs font-medium text-slate-800 dark:text-slate-200 leading-relaxed">
-          {toast.message}
-        </p>
-        {toast.actionLabel && toast.onAction && (
-          <button
-            onClick={() => {
-              toast.onAction?.();
-              handleClose();
-            }}
-            className="shrink-0 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold transition-colors"
-          >
-            {toast.actionLabel}
-          </button>
-        )}
-        <button
-          onClick={handleClose}
-          className="shrink-0 p-0.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-          aria-label="Fechar"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
+    <div className="fixed top-4 right-4 z-[9999] space-y-2 max-w-sm">
+      {toasts.map(toast => (
+        <ToastItem key={toast.id} toast={toast} onRemove={onRemove} />
+      ))}
     </div>
   );
 };
+
+const ToastItem: React.FC<{ toast: ToastMessage; onRemove: (id: string) => void }> = ({ toast, onRemove }) => {
+  const icons = {
+    success: <CheckCircle className="w-5 h-5 text-emerald-500" />,
+    error: <AlertCircle className="w-5 h-5 text-rose-500" />,
+    warning: <AlertTriangle className="w-5 h-5 text-amber-500" />,
+    info: <Info className="w-5 h-5 text-blue-500" />,
+  };
+
+  const bgColors = {
+    success: 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800',
+    error: 'bg-rose-50 dark:bg-rose-900/30 border-rose-200 dark:border-rose-800',
+    warning: 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800',
+    info: 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800',
+  };
+
+  return (
+    <div className={`flex items-center gap-3 p-3 rounded-xl border shadow-lg animate-[slideIn_0.3s_ease-out] ${bgColors[toast.type]}`}>
+      {icons[toast.type]}
+      <span className="flex-1 text-xs font-semibold text-slate-900 dark:text-white">{toast.message}</span>
+      <button onClick={() => onRemove(toast.id)} className="p-1 hover:bg-black/5 rounded">
+        <X className="w-3 h-3 text-slate-400" />
+      </button>
+    </div>
+  );
+};
+
+export default ToastProvider;
