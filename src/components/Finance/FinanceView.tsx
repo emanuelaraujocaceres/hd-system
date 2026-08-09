@@ -385,12 +385,20 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     return itemsTotal;
   };
 
-  const totalSalesRevenue = sales.reduce((acc, s) => acc + getSaleTotal(s), 0);
+  // Filial selecionada para filtragem
+  const selectedBranchId = storageService.getSelectedBranchId();
+
+  // Filtrar vendas APENAS da filial selecionada E status completed
+  const filteredSales = sales.filter((s) => 
+    s.status === 'completed' && s.storeBranchId === selectedBranchId
+  );
+
+  const totalSalesRevenue = filteredSales.reduce((acc, s) => acc + getSaleTotal(s), 0);
   const estimatedTaxes = totalSalesRevenue * 0.06; // 6% Simples Nacional
   const netSalesRevenue = totalSalesRevenue - estimatedTaxes;
 
-  // Estimated CMV (Custo de Mercadorias Vendidas)
-  const totalCMV = sales.reduce((acc, s) => {
+  // Estimated CMV (Custo de Mercadorias Vendidas) - apenas vendas completed da filial
+  const totalCMV = filteredSales.reduce((acc, s) => {
     const itemsCmv = (s.items || []).reduce((sum, item) => {
       const prod = products.find((p) => p.id === item.productId);
       return sum + (prod ? prod.costPrice * item.quantity : item.unitPrice * 0.6 * item.quantity);
