@@ -341,7 +341,7 @@ export async function fetchReport(filters: ReportFilters): Promise<{ model: Repo
   };
 
   const meta: ReportMeta = {
-    companyName: settings.companyName || 'HD-System ERP',
+    companyName: settings.companyName || 'HD-System',
     branchName: branch.name,
     branchCity: branch.city,
     branchState: branch.state,
@@ -557,7 +557,7 @@ function buildHtml(model: ReportModel, meta: ReportMeta): string {
         <img src="/logo-hd-system/android-chrome-192x192.png" alt="" />
         <div>
           <h1>${esc(meta.companyName)}</h1>
-          <p>HD-System ERP PDV — Relatório Gerencial de Vendas</p>
+          <p>HD-System — Relatório Gerencial de Vendas</p>
           <p><span class="chip">${esc(meta.branchName)} · ${esc(meta.branchCity)}-${esc(meta.branchState)}</span></p>
         </div>
       </div>
@@ -613,7 +613,7 @@ function buildHtml(model: ReportModel, meta: ReportMeta): string {
     </table>
 
     <footer class="report">
-      <div>Gerado pelo HD-System ERP PDV · ${esc(meta.generatedAt)} · Por ${esc(meta.generatedBy)}</div>
+      <div>Gerado pelo HD-System · ${esc(meta.generatedAt)} · Por ${esc(meta.generatedBy)}</div>
       <div>Fonte: vw_report_sale_items · Filial ${esc(meta.branchName)}</div>
     </footer>
   </div>

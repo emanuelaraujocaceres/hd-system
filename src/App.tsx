@@ -1262,7 +1262,7 @@ export const App: React.FC = () => {
               <span className="hidden md:inline">Perfil: {user.role === 'admin' ? 'Administrador' : 'Colaborador Restrito'}</span>
             </div>
             <div className="hidden sm:block">
-              &copy; 2026 HD-System ERP PDV
+              &copy; 2026 HD-System
             </div>
           </footer>
         )}

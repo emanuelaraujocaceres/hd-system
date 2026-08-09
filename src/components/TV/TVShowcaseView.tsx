@@ -183,7 +183,7 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
           />
           <div>
             <h1 className="text-xl md:text-2xl font-black tracking-tight">
-              <span>{settings.companyName || 'HD-System ERP'}</span>
+              <span>{settings.companyName || 'HD-System'}</span>
             </h1>
             <p className="text-xs text-zinc-400 flex items-center gap-2 mt-0.5 font-medium">
               <Building2 className="w-3.5 h-3.5 text-indigo-400" />

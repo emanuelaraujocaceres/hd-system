@@ -73,7 +73,7 @@ export const Header: React.FC<HeaderProps> = ({
     inventory: { title: 'Gestão de Estoque & Catalog', subtitle: 'Cadastro de produtos, movimentações e código de barras' },
     finance: { title: 'Financeiro & Fluxo de Caixa', subtitle: 'Contas a pagar, contas a receber e DRE gerencial' },
     crm: { title: 'Clientes & Fornecedores (CRM)', subtitle: 'Cadastro de clientes, limite de crédito e parceiros' },
-    settings: { title: 'Configurações do ERP', subtitle: 'Dados da empresa, impressoras e filiais' },
+    settings: { title: 'Configurações', subtitle: 'Dados da empresa, impressoras e filiais' },
   };
 
   const currentInfo = tabTitles[currentTab] || { title: 'HD-System ERP', subtitle: 'Sistema de Gestão & PDV' };
@@ -109,38 +109,16 @@ export const Header: React.FC<HeaderProps> = ({
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Page Title & Status Pill */}
-        <div className="flex flex-wrap items-center gap-1.5 md:gap-2.5 min-w-0">
-          <h2 className="font-serif-italic text-sm md:text-lg lg:text-xl text-slate-900 dark:text-white leading-tight truncate">
-            {currentInfo.title}
-          </h2>
-          <span className={`hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-bold tracking-wider uppercase shrink-0 ${
-            syncStatus === 'offline'
-              ? 'border-amber-500/30 bg-amber-500/10 text-amber-500'
-              : syncStatus === 'syncing'
-              ? 'border-blue-500/30 bg-blue-500/10 text-blue-500'
-              : syncStatus === 'error'
-              ? 'border-rose-500/30 bg-rose-500/10 text-rose-500'
-              : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
-          }`}>
-            {syncStatus === 'syncing' && <RefreshCw className="w-2.5 h-2.5 animate-spin" />}
-            {syncStatus === 'offline' && <CloudOff className="w-2.5 h-2.5" />}
-            {syncStatus === 'online' && <Cloud className="w-2.5 h-2.5" />}
-            {syncStatus === 'error' && <AlertTriangle className="w-2.5 h-2.5" />}
-            
-            {syncStatus === 'offline' && 'OFFLINE'}
-            {syncStatus === 'connecting' && '...'}
-            {syncStatus === 'syncing' && `SYNC (${syncPendingCount})`}
-            {syncStatus === 'online' && 'ONLINE'}
-            {syncStatus === 'error' && 'ERRO'}
-          </span>
-        </div>
+        {/* Page Title */}
+        <h2 className="font-serif-italic text-sm md:text-lg lg:text-xl text-slate-900 dark:text-white leading-tight truncate">
+          {currentInfo.title}
+        </h2>
       </div>
 
       {/* Action Buttons */}
       <div className="flex items-center gap-1.5 sm:gap-3 md:gap-5 shrink-0">
         <div className="hidden lg:flex items-center gap-2 text-xs text-slate-500 dark:text-[#a1a1aa]">
-          {/* Sync icon */}
+          {/* Sync icon (single unified indicator) */}
           {syncStatus === 'offline' ? (
             <CloudOff className="w-3.5 h-3.5 text-amber-500" />
           ) : syncStatus === 'syncing' ? (
@@ -150,8 +128,6 @@ export const Header: React.FC<HeaderProps> = ({
           ) : (
             <Cloud className="w-3.5 h-3.5 text-emerald-500" />
           )}
-          
-          {/* Status text */}
           <span className={`
             ${syncStatus === 'offline' ? 'text-amber-500' : ''}
             ${syncStatus === 'syncing' ? 'text-blue-500' : ''}
@@ -161,12 +137,10 @@ export const Header: React.FC<HeaderProps> = ({
           `}>
             {syncStatus === 'offline' && 'Offline'}
             {syncStatus === 'connecting' && 'Conectando...'}
-            {syncStatus === 'syncing' && 'Sincronizando...'}
+            {syncStatus === 'syncing' && `Sync (${syncPendingCount})`}
             {syncStatus === 'online' && 'Online'}
             {syncStatus === 'error' && 'Erro no Sync'}
           </span>
-
-          {/* Pending count badge */}
           {syncPendingCount > 0 && (
             <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[9px] font-bold">
               {syncPendingCount} pendente{syncPendingCount !== 1 ? 's' : ''}

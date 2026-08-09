@@ -476,5 +476,5 @@ export const INITIAL_SETTINGS: SystemSettings = {
   autoPrintReceipt: true,
   soundEffectsEnabled: true,
   receiptHeaderMsg: 'Obrigado pela preferência! Volte Sempre ao HD-System.',
-  receiptFooterMsg: 'HD-System ERP PDV - www.hd-system.com.br',
+  receiptFooterMsg: 'HD-System - www.hd-system.com.br',
 };
