@@ -43,6 +43,8 @@ import { callServerApi } from '../../lib/serverApi';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { BranchCheck } from '../Admin/BranchCheck';
+import { DeliverySettingsView } from './DeliverySettingsView';
+import { ModuleVisibilityView } from './ModuleVisibilityView';
 
 interface SettingsViewProps {
   settings: SystemSettings;
@@ -53,7 +55,7 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, categories, user }) => {
   const isAdmin = user.role === 'admin';
-  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance' | 'cardapio'>(() => {
+  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance' | 'cardapio' | 'delivery' | 'modules'>(() => {
     const saved = sessionStorage.getItem('settings_active_tab');
     return (saved as typeof activeSubTab) || 'fiscal';
   });
@@ -1124,6 +1126,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           >
             <UtensilsCrossed className="w-4 h-4" />
             <span>Cardápio / Mesas</span>
+          </button>
+          <button
+            onClick={() => handleSetActiveSubTab('delivery')}
+            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+              activeSubTab === 'delivery'
+                ? 'bg-white dark:bg-[#27272a] text-orange-600 dark:text-orange-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <span>🛵</span>
+            <span>Delivery</span>
+          </button>
+          <button
+            onClick={() => handleSetActiveSubTab('modules')}
+            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+              activeSubTab === 'modules'
+                ? 'bg-white dark:bg-[#27272a] text-violet-600 dark:text-violet-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <span>📦</span>
+            <span>Módulos</span>
           </button>
         </div>
       </div>
@@ -2970,6 +2994,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         </button>
       </div>
     </div>
+  </div>
+)}
+
+{/* ── DELIVERY ── */}
+{activeSubTab === 'delivery' && (
+  <div className="space-y-4">
+    <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a]">
+      <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">🛵 Configurações de Delivery</h3>
+      <p className="text-xs text-slate-500 dark:text-[#71717a]">
+        Configure taxas, bairros, distância e horários de entrega para esta filial.
+      </p>
+    </div>
+    <DeliverySettingsView branch={branches.find(b => b.id === user.storeBranchId) || branches[0]} />
+  </div>
+)}
+
+{/* ── MÓDULOS ── */}
+{activeSubTab === 'modules' && (
+  <div className="space-y-4">
+    <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a]">
+      <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">📦 Visibilidade de Módulos</h3>
+      <p className="text-xs text-slate-500 dark:text-[#71717a]">
+        Selecione quais módulos aparecerão no menu desta filial.
+      </p>
+    </div>
+    <ModuleVisibilityView branch={branches.find(b => b.id === user.storeBranchId) || branches[0]} />
   </div>
 )}
 </div>
