@@ -61,7 +61,7 @@ export interface Product {
   salePrice: number;
   currentStock: number;
   minStock: number;
-  maxStock: number;
+  maxStock: number; // mapeia max_stock_quantity no banco
   imageUrl: string;
   supplierId?: string;
   ncm?: string;
