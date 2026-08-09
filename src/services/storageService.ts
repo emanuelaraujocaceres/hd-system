@@ -600,6 +600,8 @@ class StorageService {
       recurrence_count: a.recurrenceCount || null,
       recurrence_parent_id: a.recurrenceParentId || null,
       installment_number: a.installmentNumber || null,
+      recurrences_json: JSON.stringify(a.recurrences || []),
+      installments_json: JSON.stringify(a.installments || []),
     });
   }
 
@@ -1649,8 +1651,10 @@ class StorageService {
             recurrenceType: r.recurrence_type || undefined,
             recurrenceCount: r.recurrence_count || undefined,
             recurrenceParentId: r.recurrence_parent_id || undefined,
-            installmentNumber: r.installment_number || undefined,
-          }),
+             installmentNumber: r.installment_number || undefined,
+             recurrences: safeParseJson(r.recurrences_json) || undefined,
+             installments: safeParseJson(r.installments_json) || undefined,
+           }),
           (a) => this.syncFinancialAccount(a),
           (a) => a.id,
           (loc, cm) => {
