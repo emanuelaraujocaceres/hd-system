@@ -139,8 +139,9 @@ export const App: React.FC = () => {
     return branches.filter(b => b.id === user.storeBranchId);
   }, [branches, user]);
 
-  // Apply branch theme (CSS variables)
-  useBranchTheme(storageService.getBranchTheme());
+  // Apply branch theme (CSS variables) - reactive to storage changes
+  const [branchTheme, setBranchTheme] = useState(() => storageService.getBranchTheme());
+  useBranchTheme(branchTheme);
 
   // Load initial state and subscribe to reactive storage updates
   useEffect(() => {
@@ -156,6 +157,7 @@ export const App: React.FC = () => {
       setBranches(storageService.getBranches());
       setCurrentBranch(storageService.getSelectedBranch());
       setUser(storageService.getUserProfile());
+      setBranchTheme(storageService.getBranchTheme()); // <-- reactive theme
     };
 
     // ── Limpar registros financeiros antigos (formato "X/Y") ──

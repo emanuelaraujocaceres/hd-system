@@ -4078,7 +4078,13 @@ class StorageService {
   // --- BRANCH THEMES ---
   getBranchTheme(): BranchTheme | null {
     const all = this.get<BranchTheme[]>(KEYS.BRANCH_THEMES, []);
-    return all[0] || null;
+    const currentOrgId = this.getCurrentOrgId();
+    const currentBranchId = this.getSelectedBranchId();
+    // Filter by current organization AND branch
+    const filtered = all.filter(
+      (t) => t.organizationId === currentOrgId && t.storeBranchId === currentBranchId
+    );
+    return filtered[0] || null;
   }
 
   saveBranchTheme(theme: BranchTheme) {

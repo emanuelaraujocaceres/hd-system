@@ -168,7 +168,7 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
           <div
             key={`${currentIndex}-${slideSpeed}`}
             className="h-full bg-gradient-to-r from-amber-400 via-indigo-500 to-emerald-400 animate-progressBar"
-            style={{ animationDuration: `${slideSpeed}s` }}
+            style={{ '--progress-duration': `${slideSpeed}s` } as React.CSSProperties}
           />
         </div>
       )}
