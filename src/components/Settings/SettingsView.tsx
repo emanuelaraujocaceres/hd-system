@@ -1031,10 +1031,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Settings className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-            Configurações Globais do HD-System ERP
-          </h2>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Settings className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+              Configurações
+            </h2>
           <p className="text-xs text-slate-500">
             Gerencie dados fiscais, filiais e equipe do sistema
           </p>
