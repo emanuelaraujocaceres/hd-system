@@ -103,6 +103,10 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'comanda', action: 'delete' },
     { module: 'kds', action: 'view' },
     { module: 'kds', action: 'edit' },
+    { module: 'delivery', action: 'view' },
+    { module: 'delivery', action: 'create' },
+    { module: 'delivery', action: 'edit' },
+    { module: 'delivery', action: 'delete' },
     { module: 'cardapioDigital', action: 'view' },
     { module: 'cardapioDigital', action: 'edit' },
   ],
@@ -120,6 +124,8 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     { module: 'comanda', action: 'edit' },
     { module: 'kds', action: 'view' },
     { module: 'kds', action: 'edit' },
+    { module: 'delivery', action: 'view' },
+    { module: 'delivery', action: 'edit' },
   ],
   // Manager: same as admin (legacy role)
   manager: [
@@ -176,6 +182,7 @@ export const TAB_MODULE_MAP: Record<string, Module> = {
   organizations: 'organizations',
   comanda: 'comanda',
   kds: 'kds',
+  delivery: 'delivery',
   cardapio_preview: 'cardapioDigital',
   tv: 'pdv',
 };
@@ -208,7 +215,7 @@ export class PermissionEngine {
     // Developer: bypass everything — has all permissions
     if (user.superadmin) {
       const allPermissions: Permission[] = [];
-      const modules: Module[] = ['pdv', 'inventory', 'crm', 'finance', 'dashboard', 'settings', 'users', 'branches', 'organizations', 'comanda', 'kds', 'cardapioDigital', 'audit'];
+      const modules: Module[] = ['pdv', 'inventory', 'crm', 'finance', 'dashboard', 'settings', 'users', 'branches', 'organizations', 'comanda', 'kds', 'delivery', 'cardapioDigital', 'audit'];
       const actions: PermissionAction[] = ['view', 'create', 'edit', 'delete'];
       for (const mod of modules) {
         for (const act of actions) {

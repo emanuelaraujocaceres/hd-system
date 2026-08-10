@@ -1633,7 +1633,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               className="min-h-[44px] px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 shrink-0"
             >
               <UserPlus className="w-4 h-4" />
-              <span>Adicionar Colaborador Google</span>
+              <span>Adicionar Colaborador</span>
             </button>
           </div>
 
@@ -2111,6 +2111,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                         className="rounded text-red-600"
                       />
                       <span className="font-semibold text-slate-900 dark:text-white">Pedidos (Cozinha)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={userPermissions.delivery}
+                        onChange={() => togglePermission('delivery')}
+                        className="rounded text-amber-600"
+                      />
+                      <span className="font-semibold text-slate-900 dark:text-white">Delivery</span>
                     </label>
 
                     <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] cursor-pointer col-span-2">
