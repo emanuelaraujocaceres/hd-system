@@ -369,18 +369,18 @@ class StorageService {
     this.migrateLegacyIds();
   }
 
-  public subscribe(listener: () => void) {
+  public subscribe(listener: (key?: string) => void) {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
-  private notify() {
+  private notify(key?: string) {
     // Debounce: batch rapid storage changes into a single notification
     // and defer past React's render cycle to prevent error #306
     if (this.notifyTimer) return;
     this.notifyTimer = setTimeout(() => {
       this.notifyTimer = null;
-      this.listeners.forEach((fn) => fn());
+      this.listeners.forEach((fn) => fn(key));
     }, 0);
   }
 

@@ -71,8 +71,72 @@ class GlobalNotificationServiceClass {
   private initRealtimeListener() {
     // Monitor storage changes (triggered by realtime sync)
     storageService.subscribe((key) => {
-      this.handleStorageChange(key);
+      if (key) {
+        this.handleStorageChange(key);
+      }
     });
+
+    // ✅ POLLING: Track data changes by comparing snapshots
+    // This catches ALL changes, including remote updates that don't pass key
+    this.startPolling();
+  }
+
+  /**
+   * Poll localStorage for changes (catches remote sync updates)
+   */
+  private startPolling() {
+    // Track last known counts
+    let lastCounts: Record<string, number> = {
+      products: storageService.getProducts().length,
+      sales: storageService.getSales().length,
+      customers: storageService.getCustomers().length,
+      stockMovements: storageService.getMovements().length,
+      creditPayments: storageService.getCreditPayments().length,
+      deliveryOrders: storageService.getDeliveryOrders().length,
+    };
+
+    setInterval(() => {
+      const currentCounts = {
+        products: storageService.getProducts().length,
+        sales: storageService.getSales().length,
+        customers: storageService.getCustomers().length,
+        stockMovements: storageService.getMovements().length,
+        creditPayments: storageService.getCreditPayments().length,
+        deliveryOrders: storageService.getDeliveryOrders().length,
+      };
+
+      // Compare and notify
+      if (currentCounts.products > lastCounts.products) {
+        this.notify({ type: 'success', title: '📦 Novo Produto', message: 'Um novo produto foi adicionado', playSound: true });
+      } else if (currentCounts.products < lastCounts.products) {
+        this.notify({ type: 'warning', title: '🗑️ Produto Removido', message: 'Um produto foi removido', playSound: false });
+      }
+
+      if (currentCounts.sales > lastCounts.sales) {
+        const latestSale = storageService.getSales()[0];
+        const method = latestSale?.payments?.[0]?.method || 'cash';
+        this.notifySale(latestSale?.total || 0, method);
+      }
+
+      if (currentCounts.customers > lastCounts.customers) {
+        this.notify({ type: 'info', title: '👤 Novo Cliente', message: 'Um novo cliente foi cadastrado', playSound: true });
+      }
+
+      if (currentCounts.stockMovements > lastCounts.stockMovements) {
+        this.notify({ type: 'info', title: '📊 Estoque Atualizado', message: 'Movimentação de estoque detectada', playSound: false });
+      }
+
+      if (currentCounts.creditPayments > lastCounts.creditPayments) {
+        this.notify({ type: 'success', title: '💳 Pagamento Recebido', message: 'Um pagamento de fiado foi registrado', playSound: true });
+      }
+
+      if (currentCounts.deliveryOrders > lastCounts.deliveryOrders) {
+        this.notify({ type: 'info', title: '🛵 Novo Pedido', message: 'Um novo pedido de delivery foi recebido', playSound: true });
+      }
+
+      // Update last counts
+      lastCounts = currentCounts;
+    }, 2000); // Check every 2 seconds
   }
 
   /**
