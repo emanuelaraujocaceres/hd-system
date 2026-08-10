@@ -14,6 +14,7 @@ import { ConnectTVView } from './components/TV/ConnectTVView';
 import { OrganizationsView } from './components/Organizations/OrganizationsView';
 import { ComandaView } from './components/Comanda/ComandaView';
 import { KDSView } from './components/KDS/KDSView';
+import { DeliveryBoardView } from './components/Delivery/DeliveryBoardView';
 import { CardapioPreviewView } from './components/CardapioDigital/CardapioPreviewView';
 import { CaixaModal } from './components/PDV/CaixaModal';
 import { LoginModal } from './components/Auth/LoginModal';
@@ -969,6 +970,7 @@ export const App: React.FC = () => {
     if (tab === 'fiados') return !!perms.crm;
     if (tab === 'comanda') return !!perms.comanda;
     if (tab === 'kds') return !!perms.kds;
+    if (tab === 'delivery') return !!perms.delivery;
     if (tab === 'cardapio_preview') return !!perms.cardapioDigital;
     if (tab === 'tv-showcase') return perms.tvShowcase !== false;
     if (tab === 'connect-tv') return perms.tvShowcase !== false;
@@ -1193,6 +1195,10 @@ export const App: React.FC = () => {
                   products={products}
                   user={user}
                 />
+              )}
+
+              {activeTab === 'delivery' && (
+                <DeliveryBoardView user={user} />
               )}
 
               {activeTab === 'cardapio_preview' && (

@@ -3018,8 +3018,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   </div>
 )}
 
-{/* Reset button — only visible to admins at bottom of settings */}
-{user.role === 'admin' && (
+{/* Reset button — only visible to admins on first tab (fiscal) */}
+{user.role === 'admin' && activeSubTab === 'fiscal' && (
   <div className="mt-8 pt-6 border-t border-slate-200 dark:border-[#27272a]">
     <div className="p-4 rounded-2xl bg-rose-500/5 dark:bg-rose-500/10 border border-rose-500/20">
       <p className="text-xs text-rose-600 dark:text-rose-400 font-bold mb-3">⚠️ Zona Perigosa</p>

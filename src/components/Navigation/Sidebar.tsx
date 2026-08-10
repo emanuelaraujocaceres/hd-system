@@ -18,6 +18,7 @@ import {
   ClipboardList,
   UtensilsCrossed,
   Eye,
+  Truck,
 } from 'lucide-react';
 import { StoreBranch, UserProfile, CashRegisterSession } from '../../types';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
@@ -94,6 +95,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'crm', label: 'Clientes/Fornecedores/CRM', icon: Users, module: 'crm' as const },
     { id: 'comanda', label: 'Comandas', icon: ClipboardList, module: 'comanda' as const },
     { id: 'kds', label: 'Pedidos', icon: ChefHat, module: 'kds' as const },
+    { id: 'delivery', label: 'Delivery', icon: Truck, module: 'delivery' as const },
     { id: 'cardapio_preview', label: 'Cardápio Preview', icon: Eye, module: 'cardapioDigital' as const },
     { id: 'settings', label: 'Configurações', icon: Settings, module: 'settings' as const },
     { id: 'organizations', label: 'Organizações', icon: Building2, module: 'organizations' as const },

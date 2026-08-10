@@ -46,6 +46,7 @@ export type Module =
   | 'organizations' // Organization management (superadmin only)
   | 'comanda'      // Comandas / Mesas / Fiados
   | 'kds'          // Pedidos / Cozinha
+  | 'delivery'     // Delivery
   | 'cardapioDigital' // Cardápio Digital
   | 'audit';       // Audit logs & DLQ (superadmin only)
 

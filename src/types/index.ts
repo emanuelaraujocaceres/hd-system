@@ -11,6 +11,7 @@ export interface UserPermissions {
   comanda?: boolean;        // Fiados/Comanda/Mesa
   kds?: boolean;            // Pedidos / Cozinha
   cardapioDigital?: boolean; // Cardápio Digital + Mesas
+  delivery?: boolean;       // Delivery
 }
 
 export interface UserProfile {
