@@ -4438,21 +4438,16 @@ class StorageService {
     settings.id = StorageService.ensureUuid(settings.id);
     settings.organizationId = this.getCurrentOrgId();
     
-    // ✅ Get data, handle old single-object format
-    const data = this.get<any>('hd_system_module_visibility', []);
-    let all: any[];
-    
-    if (data && !Array.isArray(data)) {
-      // Convert old single-object format to array
-      all = [data];
-    } else {
-      all = Array.isArray(data) ? data : [];
-    }
-    
     // ✅ Store as array (one record per branch)
+    const all = this.get<any[]>('hd_system_module_visibility', []);
     const idx = all.findIndex(v => v.storeBranchId === settings.storeBranchId);
-    if (idx >= 0) all[idx] = { ...all[idx], ...settings };
-    else all.push(settings);
+    if (idx >= 0) {
+      // ✅ Preserve the existing ID to avoid UNIQUE constraint violation
+      settings.id = all[idx].id;
+      all[idx] = { ...all[idx], ...settings };
+    } else {
+      all.push(settings);
+    }
     
     this.set('hd_system_module_visibility', all);
     syncService.upsertRow('module_visibility', {
