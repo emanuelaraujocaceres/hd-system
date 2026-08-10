@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { StoreBranch, UserProfile, CashRegisterSession } from '../../types';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { storageService } from '../../services/storageService';
 import { useToast } from '../shared/Toast';
 import { PermissionEngine, AccessLevel } from '../../lib/iam';
 
@@ -101,12 +102,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'organizations', label: 'Organizações', icon: Building2, module: 'organizations' as const },
   ];
 
-  // IAM: filter menu items using PermissionEngine
+  // ✅ Module visibility: map module name to visibility key
+  const MODULE_VISIBILITY_MAP: Record<string, string> = {
+    pdv: 'modulePdv',
+    inventory: 'moduleInventory',
+    finance: 'moduleFinance',
+    crm: 'moduleCrm',
+    dashboard: 'moduleDashboard',
+    comanda: 'moduleComanda',
+    kds: 'moduleKds',
+    delivery: 'moduleDelivery',
+    cardapioDigital: 'moduleCardapioDigital',
+    settings: 'moduleSettings',
+  };
+
+  // Get module visibility settings for current branch
+  const moduleVisibility = storageService.getModuleVisibility();
+
+  // ✅ Check if module is enabled for this branch
+  const isModuleEnabled = (module: string): boolean => {
+    // If no visibility settings exist, allow all (backward compatible)
+    if (!moduleVisibility) return true;
+    
+    const key = MODULE_VISIBILITY_MAP[module];
+    if (!key) return true; // No mapping = always enabled
+    
+    const value = moduleVisibility[key];
+    // If undefined, use defaults (most modules default to true)
+    if (value === undefined) return true;
+    
+    return value === true;
+  };
+
+  // IAM: filter menu items using PermissionEngine AND module visibility
   const menuItems = allMenuItems.filter((item) => {
     // Organizations: developer only
     if (item.id === 'organizations') return isDev;
-    // All other items: check module access via PermissionEngine
-    return permEngine.hasPermission(item.module, 'view');
+    // Check user permission (IAM)
+    if (!permEngine.hasPermission(item.module, 'view')) return false;
+    // ✅ Check module visibility (per branch)
+    return isModuleEnabled(item.module);
   });
 
   const handleNavClick = (id: string) => {

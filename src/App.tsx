@@ -962,6 +962,34 @@ export const App: React.FC = () => {
 
   const hasAccessToTab = (tab: string): boolean => {
     if (isAdmin) return true;
+    
+    // ✅ Check module visibility (per branch) - admins bypass this
+    const TAB_MODULE_MAP: Record<string, string> = {
+      pdv: 'modulePdv',
+      dashboard: 'moduleDashboard',
+      inventory: 'moduleInventory',
+      'nf-history': 'moduleInventory',
+      finance: 'moduleFinance',
+      'sales-history': 'moduleFinance',
+      crm: 'moduleCrm',
+      fiados: 'moduleCrm',
+      comanda: 'moduleComanda',
+      kds: 'moduleKds',
+      delivery: 'moduleDelivery',
+      cardapio_preview: 'moduleCardapioDigital',
+      tv_showcase: 'moduleTvShowcase',
+      'connect-tv': 'moduleTvConnect',
+      settings: 'moduleSettings',
+    };
+    
+    const moduleVisibility = storageService.getModuleVisibility();
+    if (moduleVisibility) {
+      const key = TAB_MODULE_MAP[tab];
+      if (key && moduleVisibility[key] === false) {
+        return false; // Module disabled for this branch
+      }
+    }
+    
     if (tab === 'pdv') return !!perms.pdv;
     if (tab === 'dashboard') return !!perms.dashboard;
     if (tab === 'inventory') return !!perms.inventory;

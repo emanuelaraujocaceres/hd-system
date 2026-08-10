@@ -43,11 +43,39 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
   const [submitting, setSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
+  
+  // ✅ Delivery mode: no table needed
+  const isDeliveryMode = tableToken === 'delivery';
 
     // Load table and products
   useEffect(() => {
     const loadData = async () => {
       try {
+        // ✅ Delivery mode: load products directly, no table needed
+        if (isDeliveryMode) {
+          const localProducts = storageService.getProducts().filter(p => p.active !== false && p.showOnCardapio !== false);
+          const localConfig = storageService.getDigitalMenuConfig();
+          
+          setProducts(localProducts);
+          setConfig(localConfig);
+          
+          // Create virtual "Delivery" table for order tracking
+          const deliveryTable: Table = {
+            id: 'delivery',
+            name: 'Delivery',
+            qrToken: 'delivery',
+            status: 'active',
+            storeBranchId: localConfig?.storeBranchId || '',
+            organizationId: localConfig?.organizationId || '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          setTable(deliveryTable);
+          setLoading(false);
+          return;
+        }
+        
+        // ✅ Table mode: fetch from Supabase
         const baseUrl = import.meta.env.VITE_SUPABASE_URL;
         const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -290,10 +318,10 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
 
       const sale: Sale = {
         id: crypto.randomUUID(),
-        code: `CARD-${Date.now().toString(36).toUpperCase()}`,
+        code: isDeliveryMode ? `DEL-${Date.now().toString(36).toUpperCase()}` : `CARD-${Date.now().toString(36).toUpperCase()}`,
         date: new Date().toISOString(),
         operatorId: 'cardapio_digital',
-        operatorName: 'Cliente (Cardápio Digital)',
+        operatorName: isDeliveryMode ? 'Cliente (Delivery)' : 'Cliente (Cardápio Digital)',
         storeBranchId: table.storeBranchId,
         organizationId: table.organizationId,
         tableId: table.id,
@@ -304,7 +332,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
         total,
         payments: [], // Will be set when comanda is closed
         status: 'pending', // Pending payment
-        orderSource: 'cardapio_digital',
+        orderSource: isDeliveryMode ? 'delivery' : 'cardapio_digital',
         kitchenStatus: 'pending',
         updatedAt: new Date().toISOString(),
       };

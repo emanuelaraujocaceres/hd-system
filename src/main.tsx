@@ -15,16 +15,20 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 }
 
 // ─── Roteamento público (cardápio digital) ─────────────────────────
-// URLs públicas: #/mesa/{token} ou /#/mesa/{token}
-function getPublicRoute(): { type: 'menu'; token: string } | null {
+// URLs públicas: #/mesa/{token} | #/delivery | #/cardapio
+function getPublicRoute(): { type: 'menu'; token: string } | { type: 'delivery' } | null {
   const hash = window.location.hash;
-  const match = hash.match(/^#\/mesa\/(.+)$/);
-  if (match) {
+  const mesaMatch = hash.match(/^#\/mesa\/(.+)$/);
+  if (mesaMatch) {
     try {
-      return { type: 'menu', token: decodeURIComponent(match[1]) };
+      return { type: 'menu', token: decodeURIComponent(mesaMatch[1]) };
     } catch {
-      return { type: 'menu', token: match[1] };
+      return { type: 'menu', token: mesaMatch[1] };
     }
+  }
+  // ✅ Delivery/Cardápio route (no table needed)
+  if (hash === '#/delivery' || hash === '#/cardapio') {
+    return { type: 'delivery' };
   }
   return null;
 }
@@ -42,6 +46,12 @@ function render() {
     root.render(
       <StrictMode>
         <PublicMenuView tableToken={route.token} onClose={handleClosePublic} />
+      </StrictMode>,
+    );
+  } else if (route?.type === 'delivery') {
+    root.render(
+      <StrictMode>
+        <PublicMenuView tableToken="delivery" onClose={handleClosePublic} />
       </StrictMode>,
     );
   } else {
