@@ -23,6 +23,7 @@ import {
 import { StoreBranch, UserProfile, CashRegisterSession } from '../../types';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { storageService } from '../../services/storageService';
+import { useModuleVisibility } from '../../hooks/useModuleVisibility';
 import { useToast } from '../shared/Toast';
 import { PermissionEngine, AccessLevel } from '../../lib/iam';
 
@@ -67,6 +68,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isDev = permEngine.isDeveloper();
   const isAdmin = permEngine.isAdmin();
   const accessLevel = permEngine.getAccessLevel();
+
+  // ✅ Module visibility: reactive state (updates when settings change)
+  const moduleVisibility = useModuleVisibility();
 
   // Matriz (isHeadquarters) sempre primeiro, demais seguem a ordem original
   const sortedBranches = [...branches].sort((a, b) => {
@@ -115,9 +119,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     cardapioDigital: 'moduleCardapioDigital',
     settings: 'moduleSettings',
   };
-
-  // Get module visibility settings for current branch
-  const moduleVisibility = storageService.getModuleVisibility();
 
   // ✅ Check if module is enabled for this branch
   const isModuleEnabled = (module: string): boolean => {

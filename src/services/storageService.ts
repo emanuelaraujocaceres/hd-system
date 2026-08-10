@@ -1960,7 +1960,7 @@ class StorageService {
 
       // ── MODULE VISIBILITY (visibilidade de módulos por filial) ──
       {
-        const local = this.get<any | null>('hd_system_module_visibility', null);
+        const local = this.get<any[]>('hd_system_module_visibility', []);
         const settings = moduleVisibility.length > 0 ? moduleVisibility[0] : null;
         if (settings) {
           const mapped = {
@@ -1980,8 +1980,12 @@ class StorageService {
             moduleTvShowcase: settings.module_tv_showcase ?? false,
             moduleTvConnect: settings.module_tv_connect ?? false,
           };
-          this.set('hd_system_module_visibility', mapped);
-        } else if (local) {
+          // ✅ Preserve other branches, update/add current branch
+          const idx = local.findIndex(v => v.storeBranchId === mapped.storeBranchId);
+          if (idx >= 0) local[idx] = { ...local[idx], ...mapped };
+          else local.push(mapped);
+          this.set('hd_system_module_visibility', local);
+        } else if (local.length > 0) {
           this.set('hd_system_module_visibility', local);
         }
       }
@@ -4396,9 +4400,21 @@ class StorageService {
   /**
    * Get module visibility for current branch
    * Stored as array of records (one per branch)
+   * ✅ Backward compatible: handles old single-object format
    */
   getModuleVisibility(): any | null {
-    const all = this.get<any[]>('hd_system_module_visibility', []);
+    const data = this.get<any>('hd_system_module_visibility', null);
+    
+    // ✅ Handle old single-object format (convert to array)
+    if (data && !Array.isArray(data)) {
+      const arr = [data];
+      this.set('hd_system_module_visibility', arr);
+      const currentBranchId = this.getSelectedBranchId();
+      if (!currentBranchId) return arr[0] || null;
+      return arr.find(v => v.storeBranchId === currentBranchId) || arr[0];
+    }
+    
+    const all = Array.isArray(data) ? data : [];
     const currentBranchId = this.getSelectedBranchId();
     if (!currentBranchId) return all[0] || null;
     return all.find(v => v.storeBranchId === currentBranchId) || null;
@@ -4408,15 +4424,32 @@ class StorageService {
    * Get all module visibility records (for sync)
    */
   getAllModuleVisibility(): any[] {
-    return this.get<any[]>('hd_system_module_visibility', []);
+    const data = this.get<any>('hd_system_module_visibility', []);
+    
+    // ✅ Handle old single-object format
+    if (data && !Array.isArray(data)) {
+      return [data];
+    }
+    
+    return Array.isArray(data) ? data : [];
   }
 
   saveModuleVisibility(settings: any) {
     settings.id = StorageService.ensureUuid(settings.id);
     settings.organizationId = this.getCurrentOrgId();
     
+    // ✅ Get data, handle old single-object format
+    const data = this.get<any>('hd_system_module_visibility', []);
+    let all: any[];
+    
+    if (data && !Array.isArray(data)) {
+      // Convert old single-object format to array
+      all = [data];
+    } else {
+      all = Array.isArray(data) ? data : [];
+    }
+    
     // ✅ Store as array (one record per branch)
-    const all = this.get<any[]>('hd_system_module_visibility', []);
     const idx = all.findIndex(v => v.storeBranchId === settings.storeBranchId);
     if (idx >= 0) all[idx] = { ...all[idx], ...settings };
     else all.push(settings);
@@ -4460,8 +4493,18 @@ class StorageService {
       moduleTvConnect: row.module_tv_connect ?? false,
     };
     
+    // ✅ Get data, handle old single-object format
+    const data = this.get<any>('hd_system_module_visibility', []);
+    let all: any[];
+    
+    if (data && !Array.isArray(data)) {
+      // Convert old single-object format to array
+      all = [data];
+    } else {
+      all = Array.isArray(data) ? data : [];
+    }
+    
     // ✅ Update array (one record per branch)
-    const all = this.get<any[]>('hd_system_module_visibility', []);
     const idx = all.findIndex(v => v.id === mapped.id || v.storeBranchId === mapped.storeBranchId);
     if (idx >= 0) all[idx] = { ...all[idx], ...mapped };
     else all.push(mapped);
@@ -4471,8 +4514,18 @@ class StorageService {
   }
 
   removeModuleVisibilityFromRemote(id: string) {
-    const all = this.get<any[]>('hd_system_module_visibility', []).filter(v => v.id !== id);
-    this.set('hd_system_module_visibility', all);
+    const data = this.get<any>('hd_system_module_visibility', []);
+    let all: any[];
+    
+    // ✅ Handle old single-object format
+    if (data && !Array.isArray(data)) {
+      all = [data];
+    } else {
+      all = Array.isArray(data) ? data : [];
+    }
+    
+    const filtered = all.filter(v => v.id !== id);
+    this.set('hd_system_module_visibility', filtered);
     this.notify();
   }
 
