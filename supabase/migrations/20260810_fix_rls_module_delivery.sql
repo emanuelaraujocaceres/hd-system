@@ -88,7 +88,7 @@ CREATE POLICY "delivery_orders_delete" ON public.delivery_orders FOR DELETE TO a
 
 -- 8. Verification
 SELECT 'RLS privileges granted for:' as status;
-SELECT tablename, grantee, privilege_type 
+SELECT table_name, grantee, privilege_type 
 FROM information_schema.role_table_grants 
 WHERE table_schema = 'public' 
   AND table_name IN ('module_visibility', 'delivery_settings', 'delivery_neighborhoods', 'delivery_distance_rates', 'delivery_orders')
