@@ -217,7 +217,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     // Also trim the stored barcode for comparison to handle whitespace differences
     const existing = allProds
       .filter(p => p.active !== false) // Só produtos ativos
-      .find((p) => p.barcode.trim() === barcode.trim());
+      .find((p) => p.barcode && p.barcode.trim() === barcode.trim());
 
     console.log('🔍 [BarcodeScanner] Product found:', existing ? existing.name : '❌ NOT FOUND');
 
@@ -237,12 +237,15 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
       // Produto não encontrado — fecha câmera e direciona para cadastro completo
       posAudio.beep();
       stopScanner();
-      if (onNavigateToNewProduct) {
-        onNavigateToNewProduct(barcode);
-      }
-      onClose();
+      // ✅ FIXED: Delay navigation to allow React to close fullscreen scanner first
+      setTimeout(() => {
+        if (onNavigateToNewProduct) {
+          onNavigateToNewProduct(barcode);
+        }
+        onClose();
+      }, 150);
     }
-  }, []);
+  }, [onNavigateToNewProduct, onClose]);
 
   if (!isOpen) return null;
 
