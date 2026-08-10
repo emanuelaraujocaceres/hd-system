@@ -40,7 +40,9 @@ type TableName =
   | 'delivery_settings'
   | 'delivery_neighborhoods'
   | 'delivery_distance_rates'
-  | 'delivery_orders';
+  | 'delivery_orders'
+  // Module Visibility (2026)
+  | 'module_visibility';
 
 type QueueAction = 'upsert' | 'delete' | 'upsert_batch';
 
