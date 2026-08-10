@@ -4393,14 +4393,35 @@ class StorageService {
   }
 
   // --- MODULE VISIBILITY ---
+  /**
+   * Get module visibility for current branch
+   * Stored as array of records (one per branch)
+   */
   getModuleVisibility(): any | null {
-    return this.get<any | null>('hd_system_module_visibility', null);
+    const all = this.get<any[]>('hd_system_module_visibility', []);
+    const currentBranchId = this.getSelectedBranchId();
+    if (!currentBranchId) return all[0] || null;
+    return all.find(v => v.storeBranchId === currentBranchId) || null;
+  }
+
+  /**
+   * Get all module visibility records (for sync)
+   */
+  getAllModuleVisibility(): any[] {
+    return this.get<any[]>('hd_system_module_visibility', []);
   }
 
   saveModuleVisibility(settings: any) {
     settings.id = StorageService.ensureUuid(settings.id);
     settings.organizationId = this.getCurrentOrgId();
-    this.set('hd_system_module_visibility', settings);
+    
+    // ✅ Store as array (one record per branch)
+    const all = this.get<any[]>('hd_system_module_visibility', []);
+    const idx = all.findIndex(v => v.storeBranchId === settings.storeBranchId);
+    if (idx >= 0) all[idx] = { ...all[idx], ...settings };
+    else all.push(settings);
+    
+    this.set('hd_system_module_visibility', all);
     syncService.upsertRow('module_visibility', {
       id: settings.id,
       organization_id: settings.organizationId,
@@ -4421,7 +4442,7 @@ class StorageService {
   }
 
   updateModuleVisibilityFromRemote(row: any) {
-    const mapped = {
+    const mapped: any = {
       id: row.id,
       organizationId: row.organization_id || this.getCurrentOrgId(),
       storeBranchId: row.store_branch_id || '',
@@ -4438,12 +4459,20 @@ class StorageService {
       moduleTvShowcase: row.module_tv_showcase ?? false,
       moduleTvConnect: row.module_tv_connect ?? false,
     };
-    this.set('hd_system_module_visibility', mapped);
+    
+    // ✅ Update array (one record per branch)
+    const all = this.get<any[]>('hd_system_module_visibility', []);
+    const idx = all.findIndex(v => v.id === mapped.id || v.storeBranchId === mapped.storeBranchId);
+    if (idx >= 0) all[idx] = { ...all[idx], ...mapped };
+    else all.push(mapped);
+    
+    this.set('hd_system_module_visibility', all);
     this.notify();
   }
 
   removeModuleVisibilityFromRemote(id: string) {
-    localStorage.removeItem('hd_system_module_visibility');
+    const all = this.get<any[]>('hd_system_module_visibility', []).filter(v => v.id !== id);
+    this.set('hd_system_module_visibility', all);
     this.notify();
   }
 
