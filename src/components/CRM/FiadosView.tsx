@@ -365,7 +365,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Wallet className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-            Contas Fiado (Accounts Receivable)
+            Fiados
           </h2>
           <p className="text-xs text-slate-500">
             Acompanhe as compras a prazo dos clientes e registre pagamentos parciais

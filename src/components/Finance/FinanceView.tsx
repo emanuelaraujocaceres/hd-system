@@ -471,7 +471,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <DollarSign className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
-            Módulo Financeiro & DRE Gerencial
+            Financeiro
           </h2>
           <p className="text-xs text-slate-500">
             Controle de fluxo de caixa, contas a pagar/receber e balanço DRE

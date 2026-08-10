@@ -285,7 +285,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-6 rounded-2xl bg-[#18181b] border border-[#27272a] text-white shadow-xl">
         <div>
           <h2 className="font-serif-italic text-2xl font-light tracking-tight flex items-center gap-3">
-            Visão Geral ERP
+            Visão Geral
             <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 font-sans font-bold uppercase tracking-wider">
               ONLINE
             </span>

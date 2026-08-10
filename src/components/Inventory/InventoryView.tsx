@@ -586,7 +586,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Package className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-            Catálogo & Gestão de Estoque
+            Estoque
           </h2>
           <p className="text-xs text-slate-500">
             Total de <span className="font-bold text-slate-900 dark:text-white">{products.length}</span> produtos cadastrados

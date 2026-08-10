@@ -45,7 +45,7 @@ export type Module =
   | 'branches'     // Branch management
   | 'organizations' // Organization management (superadmin only)
   | 'comanda'      // Comandas / Mesas / Fiados
-  | 'kds'          // Kitchen Display System
+  | 'kds'          // Pedidos / Cozinha
   | 'cardapioDigital' // Cardápio Digital
   | 'audit';       // Audit logs & DLQ (superadmin only)
 

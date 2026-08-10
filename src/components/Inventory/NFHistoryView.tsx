@@ -236,7 +236,7 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
           </div>
           <div>
             <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">
-              Notas Fiscais Escaneadas
+              Notas Fiscais de Compra
             </h2>
             <p className="text-xs text-slate-500 dark:text-[#71717a]">
               Histórico de NFs importadas via câmera ou formulário

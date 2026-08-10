@@ -9,7 +9,7 @@ export interface UserPermissions {
   settings: boolean;
   tvShowcase?: boolean;
   comanda?: boolean;        // Fiados/Comanda/Mesa
-  kds?: boolean;            // Kitchen Display System
+  kds?: boolean;            // Pedidos / Cozinha
   cardapioDigital?: boolean; // Cardápio Digital + Mesas
 }
 

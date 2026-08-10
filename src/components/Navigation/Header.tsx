@@ -69,10 +69,10 @@ export const Header: React.FC<HeaderProps> = ({
 
   const tabTitles: Record<string, { title: string; subtitle: string }> = {
     pdv: { title: 'Ponto de Venda (PDV)', subtitle: 'Frente de caixa rápida com leitor de código de barras' },
-    dashboard: { title: 'Painel Executivo ERP', subtitle: 'Visão geral de faturamento, vendas e relatórios IA' },
-    inventory: { title: 'Gestão de Estoque & Catalog', subtitle: 'Cadastro de produtos, movimentações e código de barras' },
-    finance: { title: 'Financeiro & Fluxo de Caixa', subtitle: 'Contas a pagar, contas a receber e DRE gerencial' },
-    crm: { title: 'Clientes & Fornecedores (CRM)', subtitle: 'Cadastro de clientes, limite de crédito e parceiros' },
+    dashboard: { title: 'Painel Executivo', subtitle: 'Visão geral de faturamento, vendas e relatórios IA' },
+    inventory: { title: 'Estoque', subtitle: 'Cadastro de produtos, movimentações e código de barras' },
+    finance: { title: 'Financeiro', subtitle: 'Contas a pagar, contas a receber e DRE gerencial' },
+    crm: { title: 'Clientes/Fornecedores/CRM', subtitle: 'Cadastro de clientes, limite de crédito e parceiros' },
     settings: { title: 'Configurações', subtitle: 'Dados da empresa, impressoras e filiais' },
   };
 

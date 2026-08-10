@@ -265,7 +265,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
             <ChefHat className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">KDS — Kitchen Display</h2>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Pedidos</h2>
             <p className="text-[10px] text-slate-500">
               {activeOrdersCount} pedido{activeOrdersCount !== 1 ? 's' : ''} ativo{activeOrdersCount !== 1 ? 's' : ''}
               {pendingCount > 0 && <span className="text-yellow-500 font-bold"> • {pendingCount} pendente{pendingCount !== 1 ? 's' : ''}</span>}

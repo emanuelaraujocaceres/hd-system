@@ -43,6 +43,7 @@ import { callServerApi } from '../../lib/serverApi';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { BranchCheck } from '../Admin/BranchCheck';
+import { ResetDataButton } from '../shared/ResetDataButton';
 import { DeliverySettingsView } from './DeliverySettingsView';
 import { ModuleVisibilityView } from './ModuleVisibilityView';
 
@@ -1716,8 +1717,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             </table>
           </div>
 
-        </div>
+</div>
       )}
+
+      {/* Branch Check — verificar filial de cada usuário (apenas na aba colaboradores) */}
+      {activeSubTab === 'collaborators' && <BranchCheck />}
 
       {/* --- MODAL BRANCH (FILIAL) --- */}
       {isBranchModalOpen && (
@@ -2106,7 +2110,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                         onChange={() => togglePermission('kds')}
                         className="rounded text-red-600"
                       />
-                      <span className="font-semibold text-slate-900 dark:text-white">KDS (Cozinha)</span>
+                      <span className="font-semibold text-slate-900 dark:text-white">Pedidos (Cozinha)</span>
                     </label>
 
                     <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] cursor-pointer col-span-2">
@@ -2939,15 +2943,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 <ConfirmDialog
   isOpen={confirmDeleteUser !== null}
   title="Excluir colaborador?"
-  message="O colaborador perder� o acesso ao sistema."
+  message="O colaborador perderá o acesso ao sistema."
   itemName={confirmDeleteUser?.name}
   confirmLabel="Excluir"
   onConfirm={handleConfirmDeleteUser}
   onCancel={() => setConfirmDeleteUser(null)}
 />
-
-{/* Branch Check — verificar filial de cada usu�rio */}
-<BranchCheck />
 
 {/* QR Code Modal */}
 {qrModalTable && (
@@ -3013,13 +3014,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 {/* ── MÓDULOS ── */}
 {activeSubTab === 'modules' && (
   <div className="space-y-4">
-    <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a]">
-      <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-1">📦 Visibilidade de Módulos</h3>
-      <p className="text-xs text-slate-500 dark:text-[#71717a]">
-        Selecione quais módulos aparecerão no menu desta filial.
-      </p>
-    </div>
     <ModuleVisibilityView branch={branches.find(b => b.id === user.storeBranchId) || branches[0]} />
+  </div>
+)}
+
+{/* Reset button — only visible to admins at bottom of settings */}
+{user.role === 'admin' && (
+  <div className="mt-8 pt-6 border-t border-slate-200 dark:border-[#27272a]">
+    <div className="p-4 rounded-2xl bg-rose-500/5 dark:bg-rose-500/10 border border-rose-500/20">
+      <p className="text-xs text-rose-600 dark:text-rose-400 font-bold mb-3">⚠️ Zona Perigosa</p>
+      <p className="text-[10px] text-slate-500 dark:text-[#71717a] mb-3">
+        Esta ação apaga todos os dados do sistema (produtos, vendas, clientes, fornecedores, colaboradores, financeiro, caixa). 
+        Apenas o administrador que clicou neste botão permanecerá no sistema. Um backup automático é criado antes.
+      </p>
+      <ResetDataButton />
+    </div>
   </div>
 )}
 </div>

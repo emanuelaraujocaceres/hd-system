@@ -20,7 +20,6 @@ import {
   Eye,
 } from 'lucide-react';
 import { StoreBranch, UserProfile, CashRegisterSession } from '../../types';
-import { ResetDataButton } from '../shared/ResetDataButton';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { useToast } from '../shared/Toast';
 import { PermissionEngine, AccessLevel } from '../../lib/iam';
@@ -92,9 +91,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'connect-tv', label: 'Conectar TV', icon: Plug, module: 'pdv' as const },
     { id: 'finance', label: 'Financeiro', icon: DollarSign, module: 'finance' as const },
     { id: 'fiados', label: 'Fiados', icon: Receipt, module: 'crm' as const },
-    { id: 'crm', label: 'Clientes/Fornecedores', icon: Users, module: 'crm' as const },
+    { id: 'crm', label: 'Clientes/Fornecedores/CRM', icon: Users, module: 'crm' as const },
     { id: 'comanda', label: 'Comandas', icon: ClipboardList, module: 'comanda' as const },
-    { id: 'kds', label: 'KDS', icon: ChefHat, module: 'kds' as const },
+    { id: 'kds', label: 'Pedidos', icon: ChefHat, module: 'kds' as const },
     { id: 'cardapio_preview', label: 'Cardápio Preview', icon: Eye, module: 'cardapioDigital' as const },
     { id: 'settings', label: 'Configurações', icon: Settings, module: 'settings' as const },
     { id: 'organizations', label: 'Organizações', icon: Building2, module: 'organizations' as const },
@@ -239,8 +238,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <LogOut className="w-4 h-4" />
           </button>
         </div>
-
-        <ResetDataButton />
 
         {/* Confirm: trocar de filial */}
         <ConfirmDialog

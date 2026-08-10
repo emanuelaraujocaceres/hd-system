@@ -4826,6 +4826,10 @@ class StorageService {
         backupKeys.sort().reverse();
         for (const oldKey of backupKeys.slice(3)) localStorage.removeItem(oldKey);
 
+        // Salvar dados do administrador atual antes de resetar
+        const currentUser = this.getUserProfile();
+        const currentEmail = localStorage.getItem(KEYS.LOGGED_IN_EMAIL);
+
         const dataKeys = [
           KEYS.PRODUCTS, KEYS.CATEGORIES, KEYS.CUSTOMERS, KEYS.SUPPLIERS,
           KEYS.SALES, KEYS.SALE_ITEMS, KEYS.CAIXA, KEYS.CAIXA_HISTORY,
@@ -4843,6 +4847,15 @@ class StorageService {
         localStorage.removeItem(KEYS.LOGGED_IN_EMAIL);
         localStorage.removeItem(StorageService.MIGRATION_KEY);
         this.migrated = false;
+
+        // Restaurar apenas o administrador que clicou no botão
+        if (currentUser && currentUser.role === 'admin') {
+          this.saveUserProfile(currentUser);
+          if (currentEmail) {
+            localStorage.setItem(KEYS.LOGGED_IN_EMAIL, currentEmail);
+          }
+        }
+
         this.notify();
         return { backupKey };
       }
