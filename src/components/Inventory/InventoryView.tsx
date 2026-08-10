@@ -26,6 +26,7 @@ import {
 import { Product, Category, Supplier, StockMovement, UserProfile, SystemSettings, WholesaleOption } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { globalNotificationService } from '../../services/globalNotificationService';
 import { useToast } from '../shared/Toast';
 import { BarcodeLabelModal } from './BarcodeLabelModal';
 import { CategoryManagerModal } from './CategoryManagerModal';
@@ -445,6 +446,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setTimeout(() => setHighlightedProductId(null), 2000);
       setIsProductModalOpen(false);
       addToast('success', `Produto "${newProd.name}" salvo com sucesso.`);
+      // ✅ Global notification for product
+      globalNotificationService.notifyProduct(editingProduct ? 'updated' : 'created', newProd.name);
     } catch (err: any) {
       addToast('error', friendlyErrorMessage(err, 'Não foi possível salvar o produto. Tente novamente.'));
       posAudio.error();

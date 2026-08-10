@@ -20,6 +20,7 @@ import {
 import { Sale, Customer, UserProfile, CashRegisterSession } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { globalNotificationService } from '../../services/globalNotificationService';
 import { useToast } from '../shared/Toast';
 import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
@@ -311,6 +312,8 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
 
           posAudio.chime();
           addToast('success', `Pagamento de ${formatCurrency(amount)} registrado via ${paymentMethod === 'cash' ? 'dinheiro' : paymentMethod === 'pix' ? 'PIX' : paymentMethod}.`);
+          // ✅ Global notification for fiado payment
+          globalNotificationService.notifyFiado(debt.customer.name, amount, 'payment');
         } else {
           addToast('warning', 'Nenhum valor pendente para esta dívida.');
           posAudio.error();

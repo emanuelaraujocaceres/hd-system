@@ -25,6 +25,7 @@ import {
 import { storageService } from '../../services/storageService';
 import { pixConfigService } from '../../services/pixConfigService';
 import { posAudio } from '../../services/audioService';
+import { globalNotificationService } from '../../services/globalNotificationService';
 import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
 import { LoadingButton } from '../shared/LoadingButton';
 
@@ -243,6 +244,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       // Save to storage (async — calls process_sale_transaction RPC)
       await storageService.addSale(newSale);
       posAudio.chime();
+
+      // ✅ Global notification for new sale
+      const primaryMethod = payments[0]?.method || 'cash';
+      const methodLabels: Record<string, string> = {
+        cash: 'Dinheiro',
+        pix: 'PIX',
+        credit_card: 'Cartão de Crédito',
+        debit_card: 'Cartão de Débito',
+        credit_account: 'Fiado',
+      };
+      globalNotificationService.notifySale(totalAmount, primaryMethod);
 
       onSaleSuccess(newSale);
       onClose();

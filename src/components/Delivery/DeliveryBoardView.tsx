@@ -15,6 +15,7 @@ import { RefreshCw, Clock, CheckCircle, Truck, Package, MapPin, Phone, DollarSig
 import { DeliveryOrder } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { globalNotificationService } from '../../services/globalNotificationService';
 import { useDeliveryNotifications } from '../../hooks/useDeliveryNotifications';
 import { NotificationBanner } from './NotificationBanner';
 
@@ -105,6 +106,21 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
     
     storageService.updateDeliveryOrderStatus(orderId, newStatus, extraData);
     posAudio.chime();
+    // ✅ Global notification for delivery status update
+    const statusLabels: Record<string, string> = {
+      confirmed: 'Confirmado',
+      preparing: 'Preparando',
+      ready: 'Pronto',
+      out_for_delivery: 'Saiu p/ Entrega',
+      delivered: 'Entregue',
+      cancelled: 'Cancelado',
+    };
+    globalNotificationService.notify({
+      type: newStatus === 'cancelled' ? 'error' : 'info',
+      title: `🛵 Delivery ${statusLabels[newStatus] || newStatus}`,
+      message: `Pedido #${orderId.slice(0, 8)} atualizado`,
+      playSound: newStatus === 'delivered' || newStatus === 'cancelled',
+    });
   };
 
   const handleCancelOrder = (orderId: string) => {

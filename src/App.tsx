@@ -20,6 +20,8 @@ import { CaixaModal } from './components/PDV/CaixaModal';
 import { LoginModal } from './components/Auth/LoginModal';
 import { UserProfileModal } from './components/Auth/UserProfileModal';
 import { SyncBanner } from './components/Sync/SyncBanner';
+import { NotificationBanner } from './components/Notifications/NotificationBanner';
+import { NotificationBridge } from './components/Notifications/NotificationBridge';
 import { storageService } from './services/storageService';
 import { syncService, setOrgOnlineAllowed as syncSetOrgOnlineAllowed } from './services/syncService';
 import { syncQueue } from './services/syncQueueService';
@@ -984,6 +986,7 @@ export const App: React.FC = () => {
 
   return (
     <ToastProvider>
+      <NotificationBridge />
     <div className={`min-h-screen font-sans bg-slate-100 dark:bg-[#09090b] text-slate-900 dark:text-[#fafafa] flex flex-col md:flex-row transition-colors duration-200`}>
       {/* Sidebar Navigation */}
       <Sidebar
@@ -1051,6 +1054,9 @@ export const App: React.FC = () => {
             }}
           />
         )}
+
+        {/* Global Notification Banner — solicita permissão */}
+        {!isTvMode && <NotificationBanner />}
 
         {/* Global viewing org indicator (superadmin) */}
         {user?.superadmin && !isTvMode && activeTab !== 'organizations' && localStorage.getItem('hd_system_viewing_org') && (
