@@ -74,38 +74,48 @@ class GlobalNotificationServiceClass {
     // - source: 'local' | 'sync' | 'hydration' | 'remote'
     // Apenas 'remote' notifica. 'local' já foi notificado pelos componentes
     // com o nome do item; 'sync'/'hydration' nunca notificam.
-    storageService.subscribe((key, source) => {
-      if (key && source === 'remote') this.handleRemoteChange(key);
+    storageService.subscribe((key, source, payload) => {
+      if (key && source === 'remote') this.handleRemoteChange(key, payload);
     });
   }
 
   /**
    * Uma mudança veio de OUTRO dispositivo (real-time). Mostra uma
    * notificação única, com o nome real do item, filtrada por filial.
-   * 
+   *
    * Só notifica o que o operador precisa SABER imediatamente:
    * venda, delivery e pagamento de fiado. Produtos/estoque/clientes
    * NÃO notificam: toda venda remota gera UPDATE em produtos e
    * movimentos — seria uma enxurrada de toasts a cada venda.
+   *
+   * O `payload` é o registro REAL que chegou (passado pelo storageService
+   * notify). Usar getSales()[0] é frágil: quando a venda já existia e foi
+   * substituída no lugar (exists=true), [0] é outra venda → notificação
+   * sobre o item errado ou pulada. O payload garante o item correto +
+   * dedupe correta por id.
    */
-  private handleRemoteChange(key: string) {
+  private handleRemoteChange(key: string, payload?: any) {
     if (key.includes('SALES')) {
-      const latestSale = storageService.getSales()[0];
+      const latestSale = payload;
       if (!this.isInCurrentBranch(latestSale)) return;
       // Dedupe: o App.tsx re-executa updateSaleFromRemote quando o
       // sale_items chega (mesma venda) → 1 venda = 1 notificação.
-      if (this.wasNotified('sale', latestSale.id)) return;
+      if (this.wasNotified('sale', latestSale?.id)) {
+        console.log(`[HD-Notif] ⏭️ Venda ${latestSale?.id} já notificada nos últimos 10s — ignorada`);
+        return;
+      }
+      console.log(`[HD-Notif] 🛎️ Notificando venda remota ${latestSale?.id} (total R$${latestSale?.total})`);
       const method = latestSale?.payments?.[0]?.method || 'cash';
       this.notifySale(latestSale?.total || 0, method, latestSale?.customerName);
     } else if (key.includes('DELIVERY')) {
-      const latestOrder = this.newestByUpdatedAt(storageService.getDeliveryOrders());
+      const latestOrder = payload;
       if (!this.isInCurrentBranch(latestOrder)) return;
-      if (this.wasNotified('delivery', latestOrder.id)) return;
+      if (this.wasNotified('delivery', latestOrder?.id)) return;
       this.notifyDelivery(latestOrder?.orderNumber || '#?', latestOrder?.customerName || 'Cliente', latestOrder?.total || 0);
     } else if (key.includes('CREDIT_PAYMENTS')) {
-      const latestPayment = this.newestByDate(storageService.getCreditPayments());
+      const latestPayment = payload;
       if (!this.isInCurrentBranch(latestPayment)) return;
-      if (this.wasNotified('credit', latestPayment.id)) return;
+      if (this.wasNotified('credit', latestPayment?.id)) return;
       this.notifyFiado(latestPayment?.customerName || 'Cliente', latestPayment?.amount || 0, 'payment');
     }
     // PRODUCTS / MOVEMENTS / CUSTOMERS remotos: silenciosos (ruído de venda)
@@ -120,15 +130,6 @@ class GlobalNotificationServiceClass {
     if (this.recentNotified.some((x) => x.kind === kind && x.id === id)) return true;
     this.recentNotified.push({ kind, id, at: now });
     return false;
-  }
-
-  /** Item mais recentemente atualizado (atualizações preservam posição no array) */
-  private newestByUpdatedAt<T extends { updatedAt?: string }>(items: T[]): T | undefined {
-    return [...items].sort((a, b) => (new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()))[0];
-  }
-
-  private newestByDate<T extends { date?: string }>(items: T[]): T | undefined {
-    return [...items].sort((a, b) => (new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()))[0];
   }
 
   /** Filtro por filial: superadmin sem filial selecionada vê todas */
