@@ -122,6 +122,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // ✅ Check if module is enabled for this branch
   const isModuleEnabled = (module: string): boolean => {
+    // Settings and Organizations are always visible
+    if (module === 'settings' || module === 'organizations') return true;
+    
     // If no visibility settings exist, allow all (backward compatible)
     if (!moduleVisibility) return true;
     

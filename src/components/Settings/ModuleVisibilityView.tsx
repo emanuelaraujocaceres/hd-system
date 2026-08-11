@@ -24,14 +24,16 @@ interface ModuleConfig {
   description: string;
   defaultValue: boolean;
   requires?: string[];
+  conjugado?: string[]; // Módulos conjugados - se um é desativado, o outro também é
   icon: string;
 }
 
 const MODULES: ModuleConfig[] = [
   { key: 'modulePdv', label: 'PDV', description: 'Ponto de Venda', defaultValue: true, requires: ['moduleInventory'], icon: '💰' },
   { key: 'moduleInventory', label: 'Estoque', description: 'Gestão de produtos', defaultValue: true, icon: '📦' },
-  { key: 'moduleFiado', label: 'Fiados', description: 'Contas a receber', defaultValue: false, requires: ['moduleCrm'], icon: '📋' },
-  { key: 'moduleCrm', label: 'Clientes/Fornecedores/CRM', description: 'Cadastro de clientes', defaultValue: false, icon: '👥' },
+  { key: 'moduleFiado', label: 'Fiados', description: 'Contas a receber', defaultValue: false, requires: ['moduleCrm'], conjugado: ['moduleCrm'], icon: '📋' },
+  { key: 'moduleCrm', label: 'Clientes/Fornecedores/CRM', description: 'Cadastro de clientes', defaultValue: false, conjugado: ['moduleFiado'], icon: '👥' },
+  { key: 'moduleComanda', label: 'Comandas', description: 'Comandas e Mesas', defaultValue: false, requires: ['moduleInventory'], icon: '📋' },
   { key: 'moduleDashboard', label: 'Painel Executivo', description: 'Visão geral', defaultValue: true, requires: ['moduleInventory'], icon: '📊' },
   { key: 'moduleFinance', label: 'Financeiro', description: 'Contas e despesas', defaultValue: false, requires: ['modulePdv'], icon: '💵' },
   { key: 'moduleKds', label: 'Pedidos', description: 'Cozinha', defaultValue: false, requires: ['modulePdv'], icon: '🍳' },
@@ -93,12 +95,18 @@ export const ModuleVisibilityView: React.FC<ModuleVisibilityViewProps> = ({ bran
       }
     }
 
-    // Regras inversa: se desativar X, verifica se algo precisa de X
+    // Regras inversa: se desativar X, verifica se algo precisa de X OU é conjugado de X
     if (!value) {
       MODULES.forEach(m => {
+        // Se m depende de X (requires)
         if (m.requires?.includes(key) && newSettings[m.key]) {
           newSettings[m.key] = false;
           setInfoMessage(`"${m.label}" foi desativado porque depende de "${MODULES.find(mod => mod.key === key)?.label}".`);
+        }
+        // Se m é conjugado de X (bidirecional)
+        if (m.conjugado?.includes(key) && newSettings[m.key]) {
+          newSettings[m.key] = false;
+          setInfoMessage(`"${m.label}" foi desativado porque é conjugado de "${MODULES.find(mod => mod.key === key)?.label}".`);
         }
       });
     }
