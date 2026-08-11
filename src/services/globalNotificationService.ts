@@ -1,15 +1,23 @@
 /**
  * GlobalNotificationService - Sistema de notificações global
  * 
- * Detecta todas as ações do aplicativo e mostra:
+ * Detecta mudanças e mostra:
  * 1. Toast notifications (dentro do app)
  * 2. Browser notifications (quando a aba não está focada)
  * 
- * REGRAS DE NEGÓCIO:
- * - Notificações apenas para ações LOCAL (do usuário) ou REMOTE (real-time de outros dispositivos)
- * - NÃO dispara para sync/hydração do cloud
- * - Filtrado por filial: usuários só veem notificações da sua filial
- * - Superadmin (sem filial selecionada) vê todas as filiais
+ * REGRAS DE NEGÓCIO (simplificadas em 2026-08):
+ * - Ações LOCAIS (do usuário neste dispositivo) NÃO notificam aqui:
+ *   os próprios componentes chamam notifySale()/notifyProduct()/etc.
+ *   com o nome do item — notificar de novo aqui geraria toast duplicado.
+ * - Apenas mudanças REMOTE (real-time de outro dispositivo) geram toast,
+ *   com o nome real do item (venda, pedido, produto, cliente, fiado...).
+ * - sync/hydração do cloud NUNCA geram notificação.
+ * - Filtrado por filial: usuários só veem notificações da sua filial.
+ * - Superadmin (sem filial selecionada) vê todas as filiais.
+ * 
+ * SEM polling: a fonte da verdade é o listener do storageService, que
+ * agora entrega (key, source). O polling de 2s era redundante e causava
+ * notificações duplicadas + falsos positivos.
  */
 
 import { storageService } from '../services/storageService';
@@ -30,12 +38,10 @@ class GlobalNotificationServiceClass {
   private listeners: Set<NotificationListener> = new Set();
   private notificationPermission: NotificationPermission = 'default';
   private isSupported: boolean = false;
-  private lastCounts: Record<string, number> = {};
 
   constructor() {
     this.checkNotificationSupport();
     this.initRealtimeListener();
-    this.initStorageListener();
   }
 
   private checkNotificationSupport() {
@@ -57,136 +63,69 @@ class GlobalNotificationServiceClass {
   }
 
   private initRealtimeListener() {
-    storageService.subscribe((key) => {
-      if (key) this.handleStorageChange(key);
+    // storageService.notify() agora entrega (key, source):
+    // - key: qual coleção mudou (KEYS.*) — undefined para mudanças sem interesse
+    // - source: 'local' | 'sync' | 'hydration' | 'remote'
+    // Apenas 'remote' notifica. 'local' já foi notificado pelos componentes
+    // com o nome do item; 'sync'/'hydration' nunca notificam.
+    storageService.subscribe((key, source) => {
+      if (key && source === 'remote') this.handleRemoteChange(key);
     });
-    this.startPolling();
   }
 
   /**
-   * Poll for changes - only triggers for local/remote actions
+   * Uma mudança veio de OUTRO dispositivo (real-time). Mostra uma
+   * notificação única, com o nome real do item, filtrada por filial.
    */
-  private startPolling() {
-    let lastCounts: Record<string, number> = {
-      products: storageService.getProducts().length,
-      sales: storageService.getSales().length,
-      customers: storageService.getCustomers().length,
-      stockMovements: storageService.getMovements().length,
-      creditPayments: storageService.getCreditPayments().length,
-      deliveryOrders: storageService.getDeliveryOrders().length,
-    };
-
-    setInterval(() => {
-      const source = storageService.getChangeSource();
-      // Skip sync/hydration - no notifications
-      if (source === 'sync' || source === 'hydration') {
-        lastCounts = {
-          products: storageService.getProducts().length,
-          sales: storageService.getSales().length,
-          customers: storageService.getCustomers().length,
-          stockMovements: storageService.getMovements().length,
-          creditPayments: storageService.getCreditPayments().length,
-          deliveryOrders: storageService.getDeliveryOrders().length,
-        };
-        return;
-      }
-
-      const currentCounts = {
-        products: storageService.getProducts().length,
-        sales: storageService.getSales().length,
-        customers: storageService.getCustomers().length,
-        stockMovements: storageService.getMovements().length,
-        creditPayments: storageService.getCreditPayments().length,
-        deliveryOrders: storageService.getDeliveryOrders().length,
-      };
-
-      if (currentCounts.products > lastCounts.products) {
-        this.notify({ type: 'success', title: '📦 Novo Produto', message: 'Um novo produto foi adicionado', playSound: true });
-      } else if (currentCounts.products < lastCounts.products) {
-        this.notify({ type: 'warning', title: '🗑️ Produto Removido', message: 'Um produto foi removido', playSound: false });
-      }
-
-      if (currentCounts.sales > lastCounts.sales) {
-        const latestSale = storageService.getSales()[0];
-        if (this.isSaleInCurrentBranch(latestSale)) {
-          const method = latestSale?.payments?.[0]?.method || 'cash';
-          this.notifySale(latestSale?.total || 0, method);
-        }
-      }
-
-      if (currentCounts.customers > lastCounts.customers) {
-        this.notify({ type: 'info', title: '👤 Novo Cliente', message: 'Um novo cliente foi cadastrado', playSound: true });
-      }
-
-      if (currentCounts.stockMovements > lastCounts.stockMovements) {
-        this.notify({ type: 'info', title: '📊 Estoque Atualizado', message: 'Movimentação de estoque detectada', playSound: false });
-      }
-
-      if (currentCounts.creditPayments > lastCounts.creditPayments) {
-        this.notify({ type: 'success', title: '💳 Pagamento Recebido', message: 'Um pagamento de fiado foi registrado', playSound: true });
-      }
-
-      if (currentCounts.deliveryOrders > lastCounts.deliveryOrders) {
-        const latestOrder = storageService.getDeliveryOrders()[0];
-        if (this.isDeliveryInCurrentBranch(latestOrder)) {
-          this.notifyDelivery(latestOrder?.orderNumber || '#?', latestOrder?.customerName || 'Cliente', latestOrder?.total || 0);
-        }
-      }
-
-      lastCounts = currentCounts;
-    }, 2000);
-  }
-
-  private isSaleInCurrentBranch(sale: any): boolean {
-    if (!sale) return false;
-    const currentBranchId = storageService.getSelectedBranchId();
-    if (!currentBranchId) return true; // Superadmin sees all
-    return sale.storeBranchId === currentBranchId;
-  }
-
-  private isDeliveryInCurrentBranch(order: any): boolean {
-    if (!order) return false;
-    const currentBranchId = storageService.getSelectedBranchId();
-    if (!currentBranchId) return true; // Superadmin sees all
-    return order.storeBranchId === currentBranchId;
-  }
-
-  private initStorageListener() {
-    window.addEventListener('storage', (e) => {
-      if (e.key?.startsWith('hd_system_')) {
-        this.handleStorageChange(e.key);
-      }
-    });
-  }
-
-  private handleStorageChange(key: string) {
-    const source = storageService.getChangeSource();
-    if (source === 'sync' || source === 'hydration') return;
-
-    const now = Date.now();
-    const lastTime = this.lastCounts[key] || 0;
-    if (now - lastTime < 1000) return;
-    this.lastCounts[key] = now;
-
+  private handleRemoteChange(key: string) {
     if (key.includes('SALES')) {
       const latestSale = storageService.getSales()[0];
-      if (this.isSaleInCurrentBranch(latestSale)) {
-        this.notify({ type: 'success', title: '💰 Nova Venda', message: 'Uma nova venda foi registrada', playSound: true });
-      }
+      if (!this.isInCurrentBranch(latestSale)) return;
+      const method = latestSale?.payments?.[0]?.method || 'cash';
+      this.notifySale(latestSale?.total || 0, method, latestSale?.customerName);
     } else if (key.includes('DELIVERY')) {
-      const latestOrder = storageService.getDeliveryOrders()[0];
-      if (this.isDeliveryInCurrentBranch(latestOrder)) {
-        this.notify({ type: 'info', title: '🛵 Delivery', message: 'Pedido de delivery atualizado', playSound: true });
-      }
+      const latestOrder = this.newestByUpdatedAt(storageService.getDeliveryOrders());
+      if (!this.isInCurrentBranch(latestOrder)) return;
+      this.notifyDelivery(latestOrder?.orderNumber || '#?', latestOrder?.customerName || 'Cliente', latestOrder?.total || 0);
     } else if (key.includes('PRODUCTS')) {
-      this.notify({ type: 'info', title: '📦 Produto', message: 'Produto atualizado', playSound: false });
-    } else if (key.includes('CREDIT_PAYMENTS') || key.includes('FIADO')) {
-      this.notify({ type: 'success', title: '💳 Fiado', message: 'Pagamento de fiado registrado', playSound: true });
-    } else if (key.includes('STOCK') || key.includes('MOVEMENTS')) {
-      this.notify({ type: 'warning', title: '📊 Estoque', message: 'Estoque atualizado', playSound: false });
+      const latestProduct = this.newestByUpdatedAt(storageService.getProducts());
+      if (!this.isInCurrentBranch(latestProduct)) return;
+      this.notifyProduct('updated', latestProduct?.name || 'Produto');
+    } else if (key.includes('CREDIT_PAYMENTS')) {
+      const latestPayment = this.newestByDate(storageService.getCreditPayments());
+      if (!this.isInCurrentBranch(latestPayment)) return;
+      this.notifyFiado(latestPayment?.customerName || 'Cliente', latestPayment?.amount || 0, 'payment');
+    } else if (key.includes('MOVEMENTS')) {
+      const latestMovement = this.newestByDate(storageService.getMovements());
+      if (!this.isInCurrentBranch(latestMovement)) return;
+      const qty = latestMovement?.quantity || 0;
+      if (latestMovement?.type === 'in') {
+        this.notifyStockAdded(latestMovement?.productName || 'Produto', qty);
+      } else {
+        this.notify({ type: 'warning', title: '📦 Saída de Estoque', message: `${latestMovement?.productName || 'Produto'}: ${qty} unidades`, playSound: false });
+      }
     } else if (key.includes('CUSTOMERS')) {
-      this.notify({ type: 'info', title: '👥 Cliente', message: 'Dados de cliente atualizado', playSound: false });
+      const latestCustomer = storageService.getCustomers()[0];
+      if (!this.isInCurrentBranch(latestCustomer)) return;
+      this.notifyCustomer('updated', latestCustomer?.name || 'Cliente');
     }
+  }
+
+  /** Item mais recentemente atualizado (atualizações preservam posição no array) */
+  private newestByUpdatedAt<T extends { updatedAt?: string }>(items: T[]): T | undefined {
+    return [...items].sort((a, b) => (new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()))[0];
+  }
+
+  private newestByDate<T extends { date?: string }>(items: T[]): T | undefined {
+    return [...items].sort((a, b) => (new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()))[0];
+  }
+
+  /** Filtro por filial: superadmin sem filial selecionada vê todas */
+  private isInCurrentBranch(item: any): boolean {
+    if (!item) return false;
+    const currentBranchId = storageService.getSelectedBranchId();
+    if (!currentBranchId) return true;
+    return item.storeBranchId === currentBranchId;
   }
 
   subscribe(listener: NotificationListener) {
@@ -215,14 +154,15 @@ class GlobalNotificationServiceClass {
     } catch { /* ignore */ }
   }
 
-  notifySale(amount: number, paymentMethod: string) {
+  notifySale(amount: number, paymentMethod: string, customerName?: string) {
     const methodLabels: Record<string, string> = {
       cash: 'Dinheiro', pix: 'PIX', credit_card: 'Cartão de Crédito',
       debit_card: 'Cartão de Débito', credit_account: 'Fiado',
     };
+    const customer = customerName ? `${customerName} - ` : '';
     this.notify({
       type: 'success', title: '💰 Venda Realizada!',
-      message: `R$ ${amount.toFixed(2)} - ${methodLabels[paymentMethod] || paymentMethod}`,
+      message: `${customer}R$ ${amount.toFixed(2)} - ${methodLabels[paymentMethod] || paymentMethod}`,
       playSound: true,
     });
   }

@@ -369,9 +369,9 @@ class StorageService {
     this.migrateLegacyIds();
   }
 
-  public subscribe(listener: (key?: string) => void) {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+  public subscribe(listener: (key?: string, source?: 'local' | 'sync' | 'hydration' | 'remote') => void) {
+    this.listeners.add(listener as any);
+    return () => this.listeners.delete(listener as any);
   }
 
   // ─── CHANGE SOURCE TRACKING ────────────────────────────────────
@@ -398,13 +398,25 @@ class StorageService {
 
   private notify(key?: string) {
     // Debounce: batch rapid storage changes into a single notification
-    // and defer past React's render cycle to prevent error #306
+    // and defer past React's render cycle to prevent error #306.
+    // Capture key + changeSource AQUI (no momento da escrita) — o source
+    // pode mudar antes do setTimeout(0) disparar, e o listener de
+    // notificações precisa saber a origem EXATA do evento.
     if (this.notifyTimer) return;
+    this._pendingNotifyKey = key;
+    this._pendingNotifySource = this.changeSource;
     this.notifyTimer = setTimeout(() => {
       this.notifyTimer = null;
-      this.listeners.forEach((fn) => fn(key));
+      const k = this._pendingNotifyKey;
+      const s = this._pendingNotifySource;
+      this._pendingNotifyKey = undefined;
+      this._pendingNotifySource = undefined;
+      this.listeners.forEach((fn) => { try { fn(k, s); } catch {} });
     }, 0);
   }
+
+  private _pendingNotifyKey: string | undefined;
+  private _pendingNotifySource: 'local' | 'sync' | 'hydration' | 'remote' | undefined;
 
   // ─── DLQ: Dead Letter Queue para operacoes RPC que falharam ──────
   private async insertDLQ(
@@ -785,7 +797,7 @@ class StorageService {
       products.unshift(mapped);
     }
     this.set(KEYS.PRODUCTS, products);
-    this.notify();
+    this.notify(KEYS.PRODUCTS);
   }
 
   removeProductFromRemote(id: string) {
@@ -915,7 +927,7 @@ class StorageService {
     if (idx >= 0) sales[idx] = mapped;
     else sales.unshift(mapped);
     this.set(KEYS.SALES, sales);
-    this.notify();
+    this.notify(KEYS.SALES);
 
     // ── Update caixa session in real-time ──────────────────
     // When a sale is synced from another device, update the
@@ -1048,7 +1060,7 @@ class StorageService {
     if (idx >= 0) customers[idx] = mapped;
     else customers.unshift(mapped);
     this.set(KEYS.CUSTOMERS, customers);
-    this.notify();
+    this.notify(KEYS.CUSTOMERS);
   }
 
   removeCustomerFromRemote(id: string) {
@@ -1240,6 +1252,7 @@ class StorageService {
   }
 
   updateStockMovementFromRemote(row: any) {
+    this.setChangeSource('remote');
     // Branch isolation: reject remote movements from other branches
     if (!this.isRemoteFromCurrentBranch(row)) {
       console.log(`[HD-Sync] Ignoring remote stock movement from other branch: ${row.store_branch_id}`);
@@ -1265,7 +1278,7 @@ class StorageService {
     if (idx >= 0) movements[idx] = mapped;
     else movements.unshift(mapped);
     this.set(KEYS.MOVEMENTS, movements);
-    this.notify();
+    this.notify(KEYS.MOVEMENTS);
   }
 
   removeStockMovementFromRemote(id: string) {
@@ -3601,6 +3614,7 @@ class StorageService {
   }
 
   updateCreditPaymentFromRemote(row: any) {
+    this.setChangeSource('remote');
     const all = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []);
     const mapped: CreditPayment = {
       id: row.id, saleId: row.sale_id, customerId: row.customer_id || undefined,
@@ -3614,7 +3628,7 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.CREDIT_PAYMENTS, all);
-    this.notify();
+    this.notify(KEYS.CREDIT_PAYMENTS);
   }
 
   removeCreditPaymentFromRemote(id: string) {
@@ -4439,6 +4453,7 @@ class StorageService {
   }
 
   updateDeliveryOrderFromRemote(row: any) {
+    this.setChangeSource('remote');
     const all = this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []);
     const mapped: DeliveryOrder = {
       id: row.id,
@@ -4478,7 +4493,7 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.DELIVERY_ORDERS, all);
-    this.notify();
+    this.notify(KEYS.DELIVERY_ORDERS);
   }
 
   removeDeliveryOrderFromRemote(id: string) {
