@@ -20,6 +20,7 @@ import { routeItemsToPrinters } from '../../services/printerRouting';
 
 interface PublicMenuViewProps {
   tableToken: string;
+  filialId?: string;
   onClose: () => void;
 }
 
@@ -30,7 +31,7 @@ interface CartItem {
 
 const CATEGORY_ORDER = ['Entradas', 'Pratos', 'Lanches', 'Pizzas', 'Bebidas', 'Sobremesas', 'Geral'];
 
-export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onClose }) => {
+export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, filialId, onClose }) => {
   const [table, setTable] = useState<Table | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [config, setConfig] = useState<DigitalMenuConfig | null>(null);
@@ -51,21 +52,25 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, onCl
   useEffect(() => {
     const loadData = async () => {
       try {
-        // ✅ Delivery mode: load products directly, no table needed
+        // ✅ Delivery mode: load products filtered by filial
         if (isDeliveryMode) {
-          const localProducts = storageService.getProducts().filter(p => p.active !== false && p.showOnCardapio !== false);
+          // Filter products by filialId
+          let localProducts = storageService.getProducts().filter(p => p.active !== false && p.showOnCardapio !== false);
+          if (filialId && filialId !== 'default') {
+            localProducts = localProducts.filter(p => p.storeBranchId === filialId);
+          }
           const localConfig = storageService.getDigitalMenuConfig();
           
           setProducts(localProducts);
           setConfig(localConfig);
           
-          // Create virtual "Delivery" table for order tracking
+          // Create virtual "Delivery" table for order tracking with filial
           const deliveryTable: Table = {
-            id: 'delivery',
+            id: `delivery-${filialId || 'default'}`,
             name: 'Delivery',
-            qrToken: 'delivery',
+            qrToken: `delivery-${filialId || 'default'}`,
             status: 'active',
-            storeBranchId: localConfig?.storeBranchId || '',
+            storeBranchId: filialId || localConfig?.storeBranchId || '',
             organizationId: localConfig?.organizationId || '',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),

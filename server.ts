@@ -54,7 +54,7 @@ async function startServer() {
       if (!supabaseAdmin) {
         return res.status(500).json({ success: false, message: "SUPABASE_SERVICE_ROLE_KEY não configurada no servidor." });
       }
-      const { name, email, role, organization_id, store_branch_id } = req.body;
+      const { name, email, role, organization_id, store_branch_id, password } = req.body;
       if (!name || !email || !organization_id) {
         return res.status(400).json({ success: false, message: "name, email e organization_id são obrigatórios." });
       }
@@ -70,19 +70,20 @@ async function startServer() {
         return res.json({ success: false, message: "Já existe um usuário com este e-mail nesta organização." });
       }
 
-      // Gerar senha temporária segura
-      const tempPassword =
+      // Usar senha manual OU gerar temporária se não fornecida
+      const finalPassword = password || (
         Math.random().toString(36).slice(2, 6).toUpperCase() +
         Math.random().toString(36).slice(2, 6) +
         Math.random().toString(10).slice(2, 5) +
-        "@";
+        "@"
+      );
 
       // 1. Criar no Supabase Auth
       const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
         email: email.toLowerCase(),
-        password: tempPassword,
+        password: finalPassword,
         email_confirm: true,
-        user_metadata: { name, role: role || "admin" },
+        user_metadata: { name, role: role || "collaborator" },
       });
       if (authErr) {
         // Erro específico: e-mail já cadastrado no Auth
@@ -98,7 +99,7 @@ async function startServer() {
         organization_id,
         name,
         email: email.toLowerCase(),
-        role: role || "admin",
+        role: role || "collaborator",
         active: true,
         store_branch_id: store_branch_id || null,
         superadmin: false,

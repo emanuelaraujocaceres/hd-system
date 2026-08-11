@@ -15,8 +15,8 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 }
 
 // ─── Roteamento público (cardápio digital) ─────────────────────────
-// URLs públicas: #/mesa/{token} | #/delivery | #/cardapio
-function getPublicRoute(): { type: 'menu'; token: string } | { type: 'delivery' } | null {
+// URLs públicas: #/mesa/{token} | #/delivery/{filialId} | #/cardapio/{filialId}
+function getPublicRoute(): { type: 'menu'; token: string } | { type: 'delivery'; filialId: string } | null {
   const hash = window.location.hash;
   const mesaMatch = hash.match(/^#\/mesa\/(.+)$/);
   if (mesaMatch) {
@@ -26,9 +26,14 @@ function getPublicRoute(): { type: 'menu'; token: string } | { type: 'delivery' 
       return { type: 'menu', token: mesaMatch[1] };
     }
   }
-  // ✅ Delivery/Cardápio route (no table needed)
+  // ✅ Delivery/Cardápio route with filial isolation
+  const deliveryMatch = hash.match(/^#\/delivery\/(.+)$/);
+  if (deliveryMatch) {
+    return { type: 'delivery', filialId: deliveryMatch[1] };
+  }
+  // Fallback for old URLs without filial ID
   if (hash === '#/delivery' || hash === '#/cardapio') {
-    return { type: 'delivery' };
+    return { type: 'delivery', filialId: 'default' };
   }
   return null;
 }
@@ -51,7 +56,7 @@ function render() {
   } else if (route?.type === 'delivery') {
     root.render(
       <StrictMode>
-        <PublicMenuView tableToken="delivery" onClose={handleClosePublic} />
+        <PublicMenuView tableToken="delivery" filialId={route.filialId} onClose={handleClosePublic} />
       </StrictMode>,
     );
   } else {
