@@ -255,6 +255,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         credit_account: 'Fiado',
       };
       globalNotificationService.notifySale(totalAmount, primaryMethod);
+      // Marca para suprimir o eco do Supabase Realtime que devolve esta
+      // mesma INSERT para este dispositivo (senão = 2 chimes por venda local).
+      globalNotificationService.markLocalSale(newSale.code);
 
       onSaleSuccess(newSale);
       onClose();

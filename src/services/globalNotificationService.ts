@@ -6,14 +6,22 @@
  * 2. Browser notifications (quando a aba não está focada)
  * 
  * REGRAS DE NEGÓCIO (simplificadas em 2026-08):
- * - Ações LOCAIS (do usuário neste dispositivo) NÃO notificam aqui:
- *   os próprios componentes chamam notifySale()/notifyProduct()/etc.
- *   com o nome do item — notificar de novo aqui geraria toast duplicado.
- * - Apenas mudanças REMOTE (real-time de outro dispositivo) geram toast,
- *   com o nome real do item (venda, pedido, produto, cliente, fiado...).
- * - sync/hydração do cloud NUNCA geram notificação.
- * - Filtrado por filial: usuários só veem notificações da sua filial.
- * - Superadmin (sem filial selecionada) vê todas as filiais.
+   * - Ações LOCAIS (do usuário neste dispositivo) NÃO notificam aqui:
+   *   os próprios componentes chamam notifySale()/notifyProduct()/etc.
+   *   com o nome do item — notificar de novo aqui geraria toast duplicado.
+   * - Apenas mudanças REMOTE (real-time de outro dispositivo) geram toast,
+   *   com o nome real do item (venda, pedido, produto, cliente, fiado...).
+   * - sync/hydração do cloud NUNCA geram notificação.
+   * - Filtrado por filial: usuários só veem notificações da sua filial.
+   * - Superadmin (sem filial selecionada) vê todas as filiais.
+   *
+   * AUTO-ECO SUPRIMIDO (vendas PDV deste dispositivo):
+   * Supabase Realtime devolve a INSERT que o próprio PDV gravou para volta
+   * neste mesmo dispositivo. Como o PDV já tocou o chime + toast na confirmação
+   * local, o eco NÃO deve notificar de novo (senão 1 venda = 2 chimes = 8 bips).
+   * O sinal confiável é o `code` (VEN-...), estável entre local e remote —
+   * o `id` muda (sale-... → UUID cloud), por isso o dedupe por id falha.
+   * PaymentModal.markLocalSale(code) registra; handleRemoteChange consome.
  * 
  * SEM polling: a fonte da verdade é o listener do storageService, que
  * agora entrega (key, source). O polling de 2s era redundante e causava
@@ -98,6 +106,14 @@ class GlobalNotificationServiceClass {
     if (key.includes('SALES')) {
       const latestSale = payload;
       if (!this.isInCurrentBranch(latestSale)) return;
+      // Suprime eco da venda feita LOCALMENTE neste dispositivo: o PDV já
+      // tocou o chime + toast na confirmação. O `code` (VEN-...) é estável
+      // entre o caminho local e o eco remoto; o `id` muda
+      // (sale-... → UUID cloud), por isso não basta o dedupe por id.
+      if (latestSale?.code && this.isLocalEcho(latestSale.code)) {
+        console.log(`[HD-Notif] ⏭️ Eco local suprimido: venda ${latestSale?.id} (code ${latestSale?.code})`);
+        return;
+      }
       // Dedupe: o App.tsx re-executa updateSaleFromRemote quando o
       // sale_items chega (mesma venda) → 1 venda = 1 notificação.
       if (this.wasNotified('sale', latestSale?.id)) {
@@ -129,6 +145,29 @@ class GlobalNotificationServiceClass {
     this.recentNotified = this.recentNotified.filter((x) => now - x.at < 10000);
     if (this.recentNotified.some((x) => x.kind === kind && x.id === id)) return true;
     this.recentNotified.push({ kind, id, at: now });
+    return false;
+  }
+
+  /**
+   * Eco local de venda PDV: registra o `code` (VEN-...) de uma venda concluída
+   * neste dispositivo para suprimir o eco que o Supabase Realtime devolve.
+   * O `code` é o mesmo em local e remote; o `id` muda (sale-... → UUID cloud).
+   */
+  private localSaleCodes: { code: string; at: number }[] = [];
+  markLocalSale(code: string) {
+    if (!code) return;
+    const now = Date.now();
+    this.localSaleCodes = this.localSaleCodes.filter((x) => now - x.at < 10000);
+    this.localSaleCodes.push({ code, at: now });
+  }
+  private isLocalEcho(code: string): boolean {
+    const now = Date.now();
+    this.localSaleCodes = this.localSaleCodes.filter((x) => now - x.at < 10000);
+    const idx = this.localSaleCodes.findIndex((x) => x.code === code);
+    if (idx >= 0) {
+      this.localSaleCodes.splice(idx, 1); // consome: cada eco só suprime uma vez
+      return true;
+    }
     return false;
   }
 
