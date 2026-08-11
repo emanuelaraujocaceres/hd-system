@@ -125,6 +125,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     // Settings and Organizations are always visible
     if (module === 'settings' || module === 'organizations') return true;
     
+    // Superadmin bypasses module visibility
+    if (user.superadmin) return true;
+    
     // If no visibility settings exist, allow all (backward compatible)
     if (!moduleVisibility) return true;
     

@@ -984,7 +984,7 @@ export const App: React.FC = () => {
   }
 
   // Check current user permissions
-  const isAdmin = user.role === 'admin';
+  const isAdmin = user.role === 'admin' || user.superadmin;
   const perms = user.permissions || {
     pdv: true,
     inventory: true,

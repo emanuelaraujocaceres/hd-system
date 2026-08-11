@@ -127,7 +127,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [themePrimary, setThemePrimary] = useState(existingTheme?.primaryColor || '#4f46e5');
   const [themeSecondary, setThemeSecondary] = useState(existingTheme?.secondaryColor || '#6366f1');
   const [themeAccent, setThemeAccent] = useState(existingTheme?.accentColor || '#f59e0b');
-  const [themeBg, setThemeBg] = useState(existingTheme?.bgColor || '#09090b');
+  const [themeBg, setThemeBg] = useState(existingTheme?.bgColor || '#ffffff');
+  // Extended colors
+  const [themeButtonBg, setThemeButtonBg] = useState(existingTheme?.buttonBg || '#4f46e5');
+  const [themeButtonText, setThemeButtonText] = useState(existingTheme?.buttonText || '#ffffff');
+  const [themeMenuBg, setThemeMenuBg] = useState(existingTheme?.menuBg || '#1e293b');
+  const [themeSignalRed, setThemeSignalRed] = useState(existingTheme?.signalRed || '#ef4444');
+  const [themeSignalGreen, setThemeSignalGreen] = useState(existingTheme?.signalGreen || '#22c55e');
+  const [themeSignalYellow, setThemeSignalYellow] = useState(existingTheme?.signalYellow || '#eab308');
   const [savingTheme, setSavingTheme] = useState(false);
 
   // Cardápio Digital / Mesas State
@@ -693,20 +700,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const handleSaveTheme = () => {
     setSavingTheme(true);
     try {
-      storageService.saveBranchTheme({
+      const themeData = {
         id: existingTheme?.id || crypto.randomUUID(),
         primaryColor: themePrimary,
         secondaryColor: themeSecondary,
         accentColor: themeAccent,
         bgColor: themeBg,
+        // Extended colors
+        buttonBg: themeButtonBg,
+        buttonText: themeButtonText,
+        menuBg: themeMenuBg,
+        signalRed: themeSignalRed,
+        signalGreen: themeSignalGreen,
+        signalYellow: themeSignalYellow,
         logoUrl: existingTheme?.logoUrl || undefined,
         faviconUrl: existingTheme?.faviconUrl || undefined,
         storeBranchId: user.storeBranchId,
         organizationId: user.organizationId,
         updatedAt: new Date().toISOString(),
-      });
+      };
+      storageService.saveBranchTheme(themeData);
+      
+      // Apply theme immediately
+      setBranchTheme(themeData);
+      
       posAudio.chime();
-      setSuccessMessage('Paleta de cores salva! Recarregue para ver o efeito completo.');
+      setSuccessMessage('Paleta de cores salva e aplicada! Mudanças visíveis imediatamente no modo claro.');
     } catch (err: any) {
       setErrorMessage(friendlyErrorMessage(err, 'Não foi possível salvar a paleta de cores.'));
       posAudio.error();
@@ -2756,6 +2775,140 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               </div>
             </div>
 
+            {/* Extended Colors - Buttons, Menu, Signals */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Button Colors */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] block">
+                  🎨 Cor de Fundo do Botão
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+                  Cor de fundo dos botões principais
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={themeButtonBg}
+                    onChange={(e) => setThemeButtonBg(e.target.value)}
+                    className="w-10 h-10 rounded-lg border border-slate-200 dark:border-[#27272a] cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={themeButtonBg}
+                    onChange={(e) => setThemeButtonBg(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-mono text-slate-900 dark:text-white"
+                    placeholder="#4f46e5"
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] block">
+                  ✏️ Cor do Texto do Botão
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+                  Cor da letra e ícones dos botões
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={themeButtonText}
+                    onChange={(e) => setThemeButtonText(e.target.value)}
+                    className="w-10 h-10 rounded-lg border border-slate-200 dark:border-[#27272a] cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={themeButtonText}
+                    onChange={(e) => setThemeButtonText(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-mono text-slate-900 dark:text-white"
+                    placeholder="#ffffff"
+                  />
+                </div>
+              </div>
+
+              {/* Menu Color */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] block">
+                  📋 Cor de Fundo do Menu
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+                  Cor de fundo do menu lateral
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={themeMenuBg}
+                    onChange={(e) => setThemeMenuBg(e.target.value)}
+                    className="w-10 h-10 rounded-lg border border-slate-200 dark:border-[#27272a] cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={themeMenuBg}
+                    onChange={(e) => setThemeMenuBg(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-mono text-slate-900 dark:text-white"
+                    placeholder="#1e293b"
+                  />
+                </div>
+              </div>
+
+              {/* Signal Colors */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-3">
+                <label className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] block">
+                  🚦 Cores de Sinalização
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+                  Cores para alertas e status
+                </p>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={themeSignalRed}
+                      onChange={(e) => setThemeSignalRed(e.target.value)}
+                      className="w-8 h-8 rounded-lg border border-slate-200 dark:border-[#27272a] cursor-pointer"
+                    />
+                    <span className="text-[10px] text-slate-600 dark:text-slate-400 w-12">Negativo</span>
+                    <input
+                      type="text"
+                      value={themeSignalRed}
+                      onChange={(e) => setThemeSignalRed(e.target.value)}
+                      className="flex-1 px-2 py-1 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-[10px] font-mono text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={themeSignalYellow}
+                      onChange={(e) => setThemeSignalYellow(e.target.value)}
+                      className="w-8 h-8 rounded-lg border border-slate-200 dark:border-[#27272a] cursor-pointer"
+                    />
+                    <span className="text-[10px] text-slate-600 dark:text-slate-400 w-12">Médio</span>
+                    <input
+                      type="text"
+                      value={themeSignalYellow}
+                      onChange={(e) => setThemeSignalYellow(e.target.value)}
+                      className="flex-1 px-2 py-1 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-[10px] font-mono text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={themeSignalGreen}
+                      onChange={(e) => setThemeSignalGreen(e.target.value)}
+                      className="w-8 h-8 rounded-lg border border-slate-200 dark:border-[#27272a] cursor-pointer"
+                    />
+                    <span className="text-[10px] text-slate-600 dark:text-slate-400 w-12">Positivo</span>
+                    <input
+                      type="text"
+                      value={themeSignalGreen}
+                      onChange={(e) => setThemeSignalGreen(e.target.value)}
+                      className="flex-1 px-2 py-1 rounded-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-[10px] font-mono text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Preview das cores */}
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-3">
               <p className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa]">Pré-visualização</p>
@@ -2767,9 +2920,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                   <div className="w-8 h-8 rounded-lg border border-slate-200 dark:border-[#27272a]" style={{ backgroundColor: themeBg }} title="Fundo" />
                 </div>
                 <div className="flex gap-2 ml-auto">
-                  <span className="px-3 py-1 rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: themePrimary }}>Botão</span>
+                  <span className="px-3 py-1 rounded-full text-[10px] font-bold" style={{ backgroundColor: themeButtonBg, color: themeButtonText }}>Botão</span>
                   <span className="px-3 py-1 rounded-full text-[10px] font-bold text-white" style={{ backgroundColor: themeAccent }}>Badge</span>
                 </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="px-2 py-1 rounded text-[10px] font-bold text-white" style={{ backgroundColor: themeSignalRed }}>Negativo</span>
+                <span className="px-2 py-1 rounded text-[10px] font-bold text-white" style={{ backgroundColor: themeSignalYellow }}>Médio</span>
+                <span className="px-2 py-1 rounded text-[10px] font-bold text-white" style={{ backgroundColor: themeSignalGreen }}>Positivo</span>
               </div>
             </div>
 

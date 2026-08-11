@@ -6,6 +6,26 @@
 
 :root {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  
+  /* Theme CSS Variables - Applied in light mode only */
+  --color-primary: #4f46e5;
+  --color-secondary: #6366f1;
+  --color-accent: #f59e0b;
+  --color-bg: #ffffff;
+  --color-button-bg: #4f46e5;
+  --color-button-text: #ffffff;
+  --color-menu-bg: #1e293b;
+  --color-signal-red: #ef4444;
+  --color-signal-green: #22c55e;
+  --color-signal-yellow: #eab308;
+}
+
+/* Dark mode - uses Tailwind dark mode classes, not CSS variables */
+.dark {
+  --color-primary: #4f46e5;
+  --color-secondary: #6366f1;
+  --color-accent: #f59e0b;
+  --color-bg: #09090b;
 }
 
 .font-serif-italic {
