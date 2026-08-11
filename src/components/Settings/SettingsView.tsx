@@ -36,6 +36,7 @@ import {
   Download,
   Truck,
   Printer as PrinterLucide,
+  CreditCard,
 } from 'lucide-react';
 import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, PrinterRole, MediaDevice, BranchTheme, Category, Table, DigitalMenuConfig } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -48,6 +49,7 @@ import { BranchCheck } from '../Admin/BranchCheck';
 import { ResetDataButton } from '../shared/ResetDataButton';
 import { DeliverySettingsView } from './DeliverySettingsView';
 import { ModuleVisibilityView } from './ModuleVisibilityView';
+import { IntegrationsView } from './IntegrationsView';
 
 interface SettingsViewProps {
   settings: SystemSettings;
@@ -58,7 +60,7 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, categories, user }) => {
   const isAdmin = user.role === 'admin';
-  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance' | 'cardapio' | 'delivery' | 'modules'>(() => {
+  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance' | 'cardapio' | 'delivery' | 'modules' | 'integrations'>(() => {
     const saved = sessionStorage.getItem('settings_active_tab');
     return (saved as typeof activeSubTab) || 'fiscal';
   });
@@ -1151,6 +1153,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           >
             <span>📦</span>
             <span>Módulos</span>
+          </button>
+          <button
+            onClick={() => handleSetActiveSubTab('integrations')}
+            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+              activeSubTab === 'integrations'
+                ? 'bg-white dark:bg-[#27272a] text-blue-600 dark:text-blue-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>Integrações</span>
           </button>
         </div>
       </div>
@@ -3096,6 +3109,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 {activeSubTab === 'modules' && (
   <div className="space-y-4">
     <ModuleVisibilityView branch={branches.find(b => b.id === user.storeBranchId) || branches[0]} />
+  </div>
+)}
+
+{/* ── INTEGRAÇÕES ── */}
+{activeSubTab === 'integrations' && (
+  <div className="space-y-4">
+    <IntegrationsView branch={branches.find(b => b.id === user.storeBranchId) || branches[0]} />
   </div>
 )}
 

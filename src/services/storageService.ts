@@ -4524,6 +4524,35 @@ class StorageService {
     this.notify();
   }
 
+  // --- INTEGRATIONS (Bancos & Meios de Pagamento) ---
+  getIntegration(): any | null {
+    const all = this.get<any[]>('hd_system_integrations', []);
+    const currentBranchId = this.getSelectedBranchId();
+    if (!currentBranchId) return all[0] || null;
+    return all.find(v => v.storeBranchId === currentBranchId) || null;
+  }
+
+  getAllIntegrations(): any[] {
+    return this.get<any[]>('hd_system_integrations', []);
+  }
+
+  saveIntegration(config: any) {
+    config.id = StorageService.ensureUuid(config.id);
+    config.organizationId = this.getCurrentOrgId();
+    
+    const all = this.get<any[]>('hd_system_integrations', []);
+    const idx = all.findIndex(v => v.storeBranchId === config.storeBranchId);
+    if (idx >= 0) {
+      config.id = all[idx].id; // Preserve existing ID
+      all[idx] = { ...all[idx], ...config };
+    } else {
+      all.push(config);
+    }
+    
+    this.set('hd_system_integrations', all);
+    this.notify();
+  }
+
   // --- BRANCHES ---
   getBranches(): StoreBranch[] {
     const fallback = this.isDefaultOrg() ? INITIAL_BRANCHES : [];
