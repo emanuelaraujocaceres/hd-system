@@ -1078,8 +1078,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           </p>
         </div>
 
-        {/* Sub-tab pills - fully responsive, no horizontal scroll */}
-        <div className="flex flex-wrap items-center gap-1 bg-slate-200/80 dark:bg-[#18181b] p-1.5 rounded-2xl border border-slate-300 dark:border-[#27272a] text-xs font-bold shrink-0">
+        {/* Sub-tab pills - fully responsive */}
+        <div className="flex flex-wrap items-center gap-1 bg-slate-200/80 dark:bg-[#18181b] p-1.5 rounded-2xl border border-slate-300 dark:border-[#27272a] text-xs font-bold w-full lg:w-auto">
           <button
             onClick={() => handleSetActiveSubTab('fiscal')}
             className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${

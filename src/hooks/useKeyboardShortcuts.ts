@@ -42,8 +42,14 @@ export function useKeyboardShortcuts(shortcuts: Shortcut[], deps: any[] = []) {
   );
 
   useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    // Listen on both document and window for PWA compatibility
+    const handler = (e: KeyboardEvent) => handleKeyDown(e);
+    document.addEventListener('keydown', handler);
+    window.addEventListener('keydown', handler);
+    return () => {
+      document.removeEventListener('keydown', handler);
+      window.removeEventListener('keydown', handler);
+    };
   }, [handleKeyDown]);
 }
 

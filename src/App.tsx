@@ -836,6 +836,40 @@ export const App: React.FC = () => {
     }
   };
 
+  // Tab history for ESC navigation
+  const [tabHistory, setTabHistory] = useState<string[]>(['pdv']);
+
+  // Track tab changes for history
+  const handleTabChangeWithHistory = (tab: string) => {
+    setTabHistory(prev => [...prev, tab]);
+    handleTabChange(tab);
+  };
+
+  // ESC navigation - go back through tab history
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // Check if any modal is open (has escape key handler)
+        const hasOpenModal = document.querySelector('[class*="z-[9999]"]');
+        if (hasOpenModal) return; // Let modal handle ESC
+        
+        // Go back through history
+        if (tabHistory.length > 1) {
+          e.preventDefault();
+          setTabHistory(prev => {
+            const newHistory = [...prev];
+            newHistory.pop(); // Remove current
+            const previousTab = newHistory[newHistory.length - 1];
+            handleTabChange(previousTab);
+            return newHistory;
+          });
+        }
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [tabHistory, handleTabChange]);
+
   // Keyboard shortcuts
   const shortcuts = useMemo(() => {
     const permEngine = user ? new PermissionEngine(user) : null;
