@@ -65,6 +65,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     return (saved as typeof activeSubTab) || 'fiscal';
   });
 
+  // Listen for quick navigation events (e.g., from Header QR button)
+  useEffect(() => {
+    const handleSwitchTab = (e: CustomEvent) => {
+      const tab = e.detail as typeof activeSubTab;
+      if (tab) {
+        setActiveSubTab(tab);
+        sessionStorage.setItem('settings_active_tab', tab);
+      }
+    };
+    window.addEventListener('switch-settings-tab', handleSwitchTab as EventListener);
+    return () => window.removeEventListener('switch-settings-tab', handleSwitchTab as EventListener);
+  }, []);
+
   // Persist tab on change
   const handleSetActiveSubTab = (tab: typeof activeSubTab) => {
     setActiveSubTab(tab);
