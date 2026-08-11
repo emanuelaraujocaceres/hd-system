@@ -3097,6 +3097,14 @@ class StorageService {
       session.closedAt = new Date().toISOString();
       if (notes) session.notes = notes;
 
+      // ✅ Store the closing balance for next opening
+      const closingBalance = session.currentCashBalance;
+      localStorage.setItem('hd_system_last_closed_balance', JSON.stringify({
+        balance: closingBalance,
+        closedAt: session.closedAt,
+        branchId: session.storeBranchId,
+      }));
+
       // Archive in history
       const history = this.get<CashRegisterSession[]>(KEYS.CAIXA_HISTORY, []);
       history.unshift(session);
@@ -3105,6 +3113,61 @@ class StorageService {
       // Save updated state
       this.saveActiveCaixaSession(session);
     }
+  }
+
+  /**
+   * Get the last closed balance for the current branch
+   */
+  getLastClosedBalance(): number {
+    try {
+      const data = localStorage.getItem('hd_system_last_closed_balance');
+      if (data) {
+        const parsed = JSON.parse(data);
+        const branchId = this.getSelectedBranchId();
+        // Only return balance if it's from the same branch
+        if (parsed.branchId === branchId) {
+          return parsed.balance || 0;
+        }
+      }
+    } catch {}
+    return 0;
+  }
+
+  /**
+   * Fechamento Definitivo - Zera todos os contadores (apenas admin)
+   * Armazena backup antes de zerar
+   */
+  async fechamentoDefinitivo(notes?: string): Promise<void> {
+    const session = this.getActiveCaixaSession();
+    if (!session) return;
+
+    // Archive the final session in history
+    const history = this.get<CashRegisterSession[]>(KEYS.CAIXA_HISTORY, []);
+    const finalSession = {
+      ...session,
+      status: 'final_closed' as const,
+      closedAt: new Date().toISOString(),
+      notes: notes || 'Fechamento definitivo realizado.',
+    };
+    history.unshift(finalSession);
+    this.set(KEYS.CAIXA_HISTORY, history);
+
+    // Clear the last closed balance
+    localStorage.removeItem('hd_system_last_closed_balance');
+
+    // Reset caixa session
+    this.set(KEYS.CAIXA, {
+      ...INITIAL_CAIXA_SESSION,
+      id: '00000000-0000-0000-0000-000000000000',
+      status: 'closed',
+      organizationId: this.getCurrentOrgId(),
+      operatorId: '',
+      operatorName: '',
+      openedAt: new Date().toISOString(),
+      notes: '',
+    });
+
+    this.notify();
   }
 
   /**

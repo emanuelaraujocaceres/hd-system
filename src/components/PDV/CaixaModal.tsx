@@ -34,11 +34,13 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 }) => {
   const { addToast } = useToast();
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
+  const isAdmin = user.role === 'admin';
   const [loading, setLoading] = useState(false);
 
   // Forms state
-  const [initialCashInput, setInitialCashInput] = useState<string>('250');
-  const [openingNotes, setOpeningNotes] = useState<string>('Troco padrão de abertura.');
+  const lastClosedBalance = storageService.getLastClosedBalance();
+  const [initialCashInput, setInitialCashInput] = useState<string>(lastClosedBalance > 0 ? lastClosedBalance.toFixed(2).replace('.', ',') : '250');
+  const [openingNotes, setOpeningNotes] = useState<string>(lastClosedBalance > 0 ? `Caixa reaberto com saldo de R$ ${lastClosedBalance.toFixed(2)}` : 'Troco padrão de abertura.');
 
   const [suprimentoAmount, setSuprimentoAmount] = useState<string>('');
   const [suprimentoReason, setSuprimentoReason] = useState<string>('');
@@ -159,6 +161,26 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
       onClose();
     } catch (err: any) {
       addToast('error', friendlyErrorMessage(err, 'Não foi possível fechar o caixa. Verifique sua conexão e tente novamente.'));
+      posAudio.error();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFechamentoDefinitivo = async () => {
+    if (!isAdmin) {
+      addToast('error', 'Apenas administradores podem realizar o fechamento definitivo.');
+      return;
+    }
+    setIsCloseConfirmOpen(false);
+    setLoading(true);
+    try {
+      await storageService.fechamentoDefinitivo(closeNotes || 'Fechamento definitivo realizado.');
+      posAudio.chime();
+      addToast('success', 'Fechamento definitivo realizado! Todos os contadores foram zerados.');
+      onClose();
+    } catch (err: any) {
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível realizar o fechamento definitivo.'));
       posAudio.error();
     } finally {
       setLoading(false);
@@ -313,43 +335,46 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                     </p>
                   </div>
 
-                  {/* Breakdown List */}
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300">
-                      <span>(+) Fundo Inicial (Troco)</span>
-                      <span className="font-bold">R$ {caixaSession.initialCash.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300">
-                      <span>(+) Vendas em Dinheiro</span>
-                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                        R$ {caixaSession.totalSalesCash.toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300">
-                      <span>(+) Vendas em PIX</span>
-                      <span className="font-bold text-sky-600 dark:text-sky-400">
-                        R$ {caixaSession.totalSalesPix.toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300">
-                      <span>(+) Vendas em Cartão (Déb/Créd)</span>
-                      <span className="font-bold text-indigo-600 dark:text-indigo-400">
-                        R$ {caixaSession.totalSalesCard.toFixed(2)}
-                      </span>
-                    </div>
-                    {caixaSession.suprimentos > 0 && (
-                      <div className="flex justify-between p-2.5 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                        <span>(+) Total de Suprimentos</span>
-                        <span className="font-bold">R$ {caixaSession.suprimentos.toFixed(2)}</span>
+                  {/* Breakdown List - ADMIN ONLY */}
+                  {isAdmin && (
+                    <div className="space-y-2 text-xs">
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">Visível apenas para administradores</p>
+                      <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300">
+                        <span>(+) Fundo Inicial (Troco)</span>
+                        <span className="font-bold">R$ {caixaSession.initialCash.toFixed(2)}</span>
                       </div>
-                    )}
-                    {caixaSession.sangrias > 0 && (
-                      <div className="flex justify-between p-2.5 rounded-lg bg-rose-500/10 text-rose-700 dark:text-rose-300">
-                        <span>(-) Total de Sangrias</span>
-                        <span className="font-bold">R$ {caixaSession.sangrias.toFixed(2)}</span>
+                      <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300">
+                        <span>(+) Vendas em Dinheiro</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                          R$ {caixaSession.totalSalesCash.toFixed(2)}
+                        </span>
                       </div>
-                    )}
-                  </div>
+                      <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300">
+                        <span>(+) Vendas em PIX</span>
+                        <span className="font-bold text-sky-600 dark:text-sky-400">
+                          R$ {caixaSession.totalSalesPix.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300">
+                        <span>(+) Vendas em Cartão (Déb/Créd)</span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                          R$ {caixaSession.totalSalesCard.toFixed(2)}
+                        </span>
+                      </div>
+                      {caixaSession.suprimentos > 0 && (
+                        <div className="flex justify-between p-2.5 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                          <span>(+) Total de Suprimentos</span>
+                          <span className="font-bold">R$ {caixaSession.suprimentos.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {caixaSession.sangrias > 0 && (
+                        <div className="flex justify-between p-2.5 rounded-lg bg-rose-500/10 text-rose-700 dark:text-rose-300">
+                          <span>(-) Total de Sangrias</span>
+                          <span className="font-bold">R$ {caixaSession.sangrias.toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -480,6 +505,26 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                     <Lock className="w-4 h-4" />
                     <span>{loading ? 'Encerrando...' : 'Encerrar e Fechar Caixa'}</span>
                   </button>
+
+                  {/* Fechamento Definitivo - ADMIN ONLY */}
+                  {isAdmin && (
+                    <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                      <button
+                        type="button"
+                        onClick={handleFechamentoDefinitivo}
+                        disabled={loading}
+                        className="w-full min-h-[44px] py-3 rounded-xl bg-slate-900 dark:bg-white hover:bg-slate-800 dark:hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed text-white dark:text-black font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        <span>Fechamento Definitivo (Zerar Contadores)</span>
+                      </button>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-2 text-center">
+                        ⚠️ Apenas administradores. Zera todos os contadores incluindo o Dashboard. Dados são salvos no financeiro.
+                      </p>
+                    </div>
+                  )}
                 </form>
               )}
             </div>

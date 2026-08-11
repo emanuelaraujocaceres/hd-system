@@ -1061,109 +1061,118 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           </p>
         </div>
 
-        {/* Sub-tab pills - responsive: horizontal scroll on small screens, no scrollbar */}
-        <div className="flex flex-nowrap items-center gap-1 bg-slate-200/80 dark:bg-[#18181b] p-1 rounded-2xl border border-slate-300 dark:border-[#27272a] text-xs font-bold shrink-0 overflow-x-auto scrollbar-none">
+        {/* Sub-tab pills - fully responsive, no horizontal scroll */}
+        <div className="flex flex-wrap items-center gap-1 bg-slate-200/80 dark:bg-[#18181b] p-1.5 rounded-2xl border border-slate-300 dark:border-[#27272a] text-xs font-bold shrink-0">
           <button
             onClick={() => handleSetActiveSubTab('fiscal')}
-            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+            className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
               activeSubTab === 'fiscal'
                 ? 'bg-white dark:bg-[#27272a] text-indigo-600 dark:text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Building2 className="w-4 h-4" />
-            <span>Dados & Impressora</span>
+            <span className="hidden sm:inline">Dados & Impressora</span>
+            <span className="sm:hidden">Dados</span>
           </button>
 
           <button
             onClick={() => handleSetActiveSubTab('branches')}
-            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+            className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
               activeSubTab === 'branches'
                 ? 'bg-white dark:bg-[#27272a] text-indigo-600 dark:text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Store className="w-4 h-4" />
-            <span>Filiais ({branches.length})</span>
+            <span className="hidden sm:inline">Filiais ({branches.length})</span>
+            <span className="sm:hidden">Filiais</span>
           </button>
 
           <button
             onClick={() => handleSetActiveSubTab('collaborators')}
-            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+            className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
               activeSubTab === 'collaborators'
                 ? 'bg-white dark:bg-[#27272a] text-indigo-600 dark:text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Users className="w-4 h-4 text-emerald-500" />
-            <span>Equipe ({usersList.length})</span>
+            <span className="hidden sm:inline">Equipe ({usersList.length})</span>
+            <span className="sm:hidden">Equipe</span>
           </button>
 
           <button
             onClick={() => handleSetActiveSubTab('tv')}
-            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+            className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
               activeSubTab === 'tv'
                 ? 'bg-white dark:bg-[#27272a] text-amber-600 dark:text-amber-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Tv className="w-4 h-4" />
-            <span>TV / Vitrine</span>
+            <span className="hidden sm:inline">TV / Vitrine</span>
+            <span className="sm:hidden">TV</span>
           </button>
           <button
             onClick={() => handleSetActiveSubTab('appearance')}
-            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+            className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
               activeSubTab === 'appearance'
                 ? 'bg-white dark:bg-[#27272a] text-pink-600 dark:text-pink-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Palette className="w-4 h-4" />
-            <span>Aparência</span>
+            <span className="hidden sm:inline">Aparência</span>
+            <span className="sm:hidden">Tema</span>
           </button>
           <button
             onClick={() => handleSetActiveSubTab('cardapio')}
-            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+            className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
               activeSubTab === 'cardapio'
                 ? 'bg-white dark:bg-[#27272a] text-teal-600 dark:text-teal-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <UtensilsCrossed className="w-4 h-4" />
-            <span>Cardápio / Mesas</span>
+            <span className="hidden sm:inline">Cardápio / Mesas</span>
+            <span className="sm:hidden">Cardápio</span>
           </button>
           <button
             onClick={() => handleSetActiveSubTab('delivery')}
-            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+            className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
               activeSubTab === 'delivery'
                 ? 'bg-white dark:bg-[#27272a] text-orange-600 dark:text-orange-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <span>🛵</span>
-            <span>Delivery</span>
+            <span className="hidden sm:inline">Delivery</span>
+            <span className="sm:hidden">Delivery</span>
           </button>
           <button
             onClick={() => handleSetActiveSubTab('modules')}
-            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+            className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
               activeSubTab === 'modules'
                 ? 'bg-white dark:bg-[#27272a] text-violet-600 dark:text-violet-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <span>📦</span>
-            <span>Módulos</span>
+            <span className="hidden sm:inline">Módulos</span>
+            <span className="sm:hidden">Módulos</span>
           </button>
           <button
             onClick={() => handleSetActiveSubTab('integrations')}
-            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+            className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
               activeSubTab === 'integrations'
                 ? 'bg-white dark:bg-[#27272a] text-blue-600 dark:text-blue-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <CreditCard className="w-4 h-4" />
-            <span>Integrações</span>
+            <span className="hidden sm:inline">Integrações</span>
+            <span className="sm:hidden">Integrações</span>
           </button>
         </div>
       </div>
