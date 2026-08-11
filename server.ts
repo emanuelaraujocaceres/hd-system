@@ -300,6 +300,108 @@ Retorne ESTRITAMENTE um objeto JSON válido sem Markdown:
     }
   });
 
+  // ─── WEBHOOK HANDLER ────────────────────────────────────────
+  // Recebe notificações de pagamento e roteia para a filial correta
+  // URL única para todas as filiais - o roteamento é feito via payment_id
+  app.post('/api/webhook', async (req, res) => {
+    try {
+      const { payment_id, status, event_type, ...extra } = req.body;
+      
+      if (!payment_id) {
+        return res.status(400).json({ error: 'payment_id is required' });
+      }
+
+      console.log(`[Webhook] Received: payment_id=${payment_id}, status=${status}, event=${event_type}`);
+
+      if (!supabaseAdmin) {
+        return res.status(500).json({ error: 'Service not configured' });
+      }
+
+      // 1. Buscar a sale pelo payment_id para descobrir a filial
+      const { data: sale, error: saleError } = await supabaseAdmin
+        .from('sales')
+        .select('id, store_branch_id, organization_id, status, payments')
+        .eq('payment_id', payment_id)
+        .single();
+
+      if (saleError || !sale) {
+        console.warn(`[Webhook] Sale not found for payment_id=${payment_id}`);
+        // Salva o evento mesmo assim para auditoria
+        await supabaseAdmin.from('webhook_events').insert({
+          payment_id,
+          event_type: event_type || 'unknown',
+          payload: req.body,
+          processed: false,
+          error_message: 'Sale not found',
+        });
+        return res.status(404).json({ error: 'Sale not found' });
+      }
+
+      // 2. Log do evento
+      await supabaseAdmin.from('webhook_events').insert({
+        organization_id: sale.organization_id,
+        store_branch_id: sale.store_branch_id,
+        payment_id,
+        event_type: event_type || status || 'unknown',
+        payload: req.body,
+        processed: true,
+        processed_at: new Date().toISOString(),
+      });
+
+      // 3. Mapear status do webhook para status da sale
+      let newStatus = sale.status;
+      let kitchenStatus = null;
+
+      switch (status) {
+        case 'approved':
+        case 'paid':
+        case 'confirmed':
+          newStatus = 'completed';
+          kitchenStatus = 'pending';
+          break;
+        case 'refunded':
+        case 'charged_back':
+          newStatus = 'refunded';
+          break;
+        case 'cancelled':
+        case 'voided':
+          newStatus = 'cancelled';
+          break;
+        case 'declined':
+        case 'rejected':
+          newStatus = 'declined';
+          break;
+        case 'pending':
+          newStatus = 'pending';
+          break;
+      }
+
+      // 4. Atualizar status da sale
+      const updateData: any = { status: newStatus };
+      if (kitchenStatus) updateData.kitchen_status = kitchenStatus;
+      updateData.updated_at = new Date().toISOString();
+
+      await supabaseAdmin
+        .from('sales')
+        .update(updateData)
+        .eq('id', sale.id);
+
+      console.log(`[Webhook] Sale ${sale.id} updated: status=${newStatus}, branch=${sale.store_branch_id}`);
+
+      // 5. Retornar sucesso para o provedor de pagamento
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Webhook processed',
+        sale_id: sale.id,
+        branch_id: sale.store_branch_id,
+      });
+
+    } catch (err: any) {
+      console.error('[Webhook] Error:', err);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
   // Vite middleware for development vs static serve for production
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

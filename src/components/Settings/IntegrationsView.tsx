@@ -574,25 +574,51 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({ branch, user
         </div>
       )}
 
-      {/* Webhook URL */}
+      {/* Webhook URL - Single URL for all filials */}
       <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-4">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
           <Upload className="w-5 h-5 text-indigo-500" />
           Webhook de Notificações
         </h3>
+        
+        {/* URL Display - Read only */}
         <div>
-          <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1 text-xs">URL para receber notificações de pagamento</label>
-          <input
-            type="url"
-            value={webhookUrl}
-            onChange={(e) => setWebhookUrl(e.target.value)}
-            disabled={!canEdit}
-            placeholder="https://seusite.com/api/webhook/pagamentos"
-            className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 disabled:opacity-50"
-          />
+          <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1 text-xs">URL única para todas as filiais</label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              readOnly
+              value={`${window.location.origin}/api/webhook`}
+              className="flex-1 px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-mono text-slate-900 dark:text-white"
+            />
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/api/webhook`);
+              }}
+              className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+            >
+              Copiar
+            </button>
+          </div>
         </div>
+
+        {/* Info */}
+        <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs">
+          <p className="font-bold text-blue-700 dark:text-blue-300 mb-1">🔄 Roteamento Automático</p>
+          <p className="text-blue-600 dark:text-blue-400">
+            Esta URL recebe TODAS as notificações de pagamento. O sistema roteia automaticamente para a filial correta via <code className="bg-blue-500/20 px-1 rounded">payment_id</code>.
+          </p>
+        </div>
+
+        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs">
+          <p className="font-bold text-emerald-700 dark:text-emerald-300 mb-1">✅ Zero Configuração</p>
+          <p className="text-emerald-600 dark:text-emerald-400">
+            Não é necessário configurar nada. Quando uma venda é feita, o <code className="bg-emerald-500/20 px-1 rounded">payment_id</code> é vinculado à filial. Quando o pagamento é aprovado, a notificação vai automaticamente para a filial correta.
+          </p>
+        </div>
+        
         <p className="text-[10px] text-slate-500 dark:text-[#71717a]">
-          O banco envia notificações (POST) para esta URL quando o pagamento for aprovado, recusado ou estornado.
+          Cole esta URL no painel do seu provedor de pagamento (Mercado Pago, PagSeguro, Stripe, etc.)
         </p>
       </div>
 

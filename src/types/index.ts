@@ -203,6 +203,8 @@ export interface Sale {
   customerSessionId?: string;  // sessão do cliente (1 por mesa)
   orderSource?: OrderSource;   // origem da venda
   kitchenStatus?: KitchenStatus; // status no KDS
+  // Payment Provider
+  payment_id?: string;          // ID do pagamento no provedor (Mercado Pago, Stripe, etc.)
 }
 
 export interface CashRegisterSession {
