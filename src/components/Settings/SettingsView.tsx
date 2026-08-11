@@ -1059,11 +1059,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           </p>
         </div>
 
-        {/* Sub-tab pills */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-slate-200/80 dark:bg-[#18181b] p-1 rounded-2xl border border-slate-300 dark:border-[#27272a] text-xs font-bold shrink-0">
+        {/* Sub-tab pills - responsive: horizontal scroll on small screens, no scrollbar */}
+        <div className="flex flex-nowrap items-center gap-1 bg-slate-200/80 dark:bg-[#18181b] p-1 rounded-2xl border border-slate-300 dark:border-[#27272a] text-xs font-bold shrink-0 overflow-x-auto scrollbar-none">
           <button
             onClick={() => handleSetActiveSubTab('fiscal')}
-            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
               activeSubTab === 'fiscal'
                 ? 'bg-white dark:bg-[#27272a] text-indigo-600 dark:text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1075,7 +1075,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
           <button
             onClick={() => handleSetActiveSubTab('branches')}
-            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
               activeSubTab === 'branches'
                 ? 'bg-white dark:bg-[#27272a] text-indigo-600 dark:text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1087,7 +1087,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
           <button
             onClick={() => handleSetActiveSubTab('collaborators')}
-            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
               activeSubTab === 'collaborators'
                 ? 'bg-white dark:bg-[#27272a] text-indigo-600 dark:text-white shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1099,7 +1099,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
           <button
             onClick={() => handleSetActiveSubTab('tv')}
-            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
               activeSubTab === 'tv'
                 ? 'bg-white dark:bg-[#27272a] text-amber-600 dark:text-amber-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1110,7 +1110,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           </button>
           <button
             onClick={() => handleSetActiveSubTab('appearance')}
-            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
               activeSubTab === 'appearance'
                 ? 'bg-white dark:bg-[#27272a] text-pink-600 dark:text-pink-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1121,7 +1121,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           </button>
           <button
             onClick={() => handleSetActiveSubTab('cardapio')}
-            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
               activeSubTab === 'cardapio'
                 ? 'bg-white dark:bg-[#27272a] text-teal-600 dark:text-teal-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1132,7 +1132,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           </button>
           <button
             onClick={() => handleSetActiveSubTab('delivery')}
-            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
               activeSubTab === 'delivery'
                 ? 'bg-white dark:bg-[#27272a] text-orange-600 dark:text-orange-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -1143,7 +1143,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           </button>
           <button
             onClick={() => handleSetActiveSubTab('modules')}
-            className={`min-h-[44px] px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+            className={`min-h-[44px] px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
               activeSubTab === 'modules'
                 ? 'bg-white dark:bg-[#27272a] text-violet-600 dark:text-violet-400 shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
