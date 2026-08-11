@@ -19,6 +19,8 @@ import {
 import { Product, Supplier } from '../../types';
 import { storageService } from '../../services/storageService';
 
+import { NFAddModal } from './NFAddModal';
+
 interface NFItem {
   productName: string;
   quantity: number;
@@ -28,10 +30,15 @@ interface NFItem {
 interface NFRecord {
   id: string;
   scanDate: string;
+  nfNumber: string;
   supplierName: string;
+  supplierCNPJ?: string;
   items: NFItem[];
   totalValue: number;
   note: string;
+  accessKey?: string;
+  pdfFile?: string | null;
+  createdAt: string;
 }
 
 interface NFHistoryViewProps {
@@ -44,9 +51,9 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [scannedImage, setScannedImage] = useState<string | null>(null);
+  const [selectedNFs, setSelectedNFs] = useState<string[]>([]);
+  const [showBulkWhatsapp, setShowBulkWhatsapp] = useState(false);
+  const [bulkWhatsappNumber, setBulkWhatsappNumber] = useState('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [showWhatsappModal, setShowWhatsappModal] = useState<string | null>(null);
 
@@ -79,6 +86,51 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
     storageService.deleteNFRecord(id);
     setNfs(storageService.getNFRecords());
     if (expandedId === id) setExpandedId(null);
+    setSelectedNFs(prev => prev.filter(nfId => nfId !== id));
+  };
+
+  // Bulk selection handlers
+  const handleToggleSelect = (id: string) => {
+    setSelectedNFs(prev =>
+      prev.includes(id) ? prev.filter(nfId => nfId !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedNFs.length === filteredNfs.length) {
+      setSelectedNFs([]);
+    } else {
+      setSelectedNFs(filteredNfs.map(nf => nf.id));
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (!confirm(`Excluir ${selectedNFs.length} nota(s) fiscal(is)?`)) return;
+    selectedNFs.forEach(id => storageService.deleteNFRecord(id));
+    setNfs(storageService.getNFRecords());
+    setSelectedNFs([]);
+  };
+
+  const handleBulkWhatsApp = () => {
+    if (!bulkWhatsappNumber.trim()) {
+      alert('Digite o número do WhatsApp.');
+      return;
+    }
+    const cleanPhone = bulkWhatsappNumber.replace(/\D/g, '');
+    const nfNumbers = nfs.filter(nf => selectedNFs.includes(nf.id)).map(nf => nf.nfNumber).join(', ');
+    const message = `📄 Notas Fiscais: ${nfNumbers}`;
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+    setShowBulkWhatsapp(false);
+    setBulkWhatsappNumber('');
+  };
+
+  const handleShareWhatsApp = (phone: string, nfIds: string[]) => {
+    const cleanPhone = phone.replace(/\D/g, '');
+    const nfNumbers = nfs.filter(nf => nfIds.includes(nf.id)).map(nf => nf.nfNumber).join(', ');
+    const message = `📄 Notas Fiscais: ${nfNumbers}`;
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
   };
 
   const formatDate = (iso: string) => {
@@ -245,12 +297,21 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={startCamera}
+            onClick={() => setIsAddModalOpen(true)}
             className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Adicionar NF
           </button>
+          {selectedNFs.length > 0 && (
+            <button
+              onClick={() => setShowBulkWhatsapp(true)}
+              className="px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-xs flex items-center gap-2 transition-colors"
+            >
+              <Send className="w-4 h-4" />
+              Enviar ({selectedNFs.length})
+            </button>
+          )}
           <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-extrabold">
             {nfs.length} NF{nfs.length !== 1 ? 's' : ''}
           </span>
@@ -304,52 +365,49 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
                 className="rounded-2xl border border-slate-200 dark:border-[#27272a] bg-white dark:bg-[#18181b] overflow-hidden transition-all"
               >
                 {/* NF Header Row */}
-                <button
-                  onClick={() => toggleExpand(nf.id)}
-                  className="w-full p-4 flex items-center gap-4 hover:bg-slate-50 dark:hover:bg-[#09090b] transition-colors text-left"
-                >
-                  <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-                    <FileText className="w-5 h-5" />
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                        {nf.supplierName}
-                      </h4>
+                <div className="flex items-center gap-2 p-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedNFs.includes(nf.id)}
+                    onChange={() => handleToggleSelect(nf.id)}
+                    className="w-4 h-4 rounded accent-emerald-500"
+                  />
+                  <button
+                    onClick={() => toggleExpand(nf.id)}
+                    className="flex-1 flex items-center gap-4 hover:bg-slate-50 dark:hover:bg-[#09090b] transition-colors text-left rounded-xl p-2"
+                  >
+                    <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <FileText className="w-5 h-5" />
                     </div>
-                    <div className="flex items-center gap-3 mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {formatDate(nf.scanDate)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Package className="w-3 h-3" />
-                        {nf.items.length} {nf.items.length === 1 ? 'item' : 'itens'}
-                      </span>
-                    </div>
-                  </div>
 
-                  <div className="text-right shrink-0">
-                    <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
-                      {formatCurrency(nf.totalValue)}
-                    </span>
-                    {nf.note && (
-                      <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5">
-                        <StickyNote className="w-3 h-3" />
-                        <span className="truncate max-w-[100px]">Nota</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                          {nf.nfNumber ? `#${nf.nfNumber}` : nf.supplierName}
+                        </h4>
                       </div>
-                    )}
-                  </div>
+                      <div className="flex items-center gap-3 mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {formatDate(nf.scanDate)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Package className="w-3 h-3" />
+                          {nf.items.length} {nf.items.length === 1 ? 'item' : 'itens'}
+                        </span>
+                      </div>
+                    </div>
 
-                  <div className="shrink-0">
-                    {isExpanded ? (
-                      <ChevronUp className="w-4 h-4 text-slate-400" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-slate-400" />
-                    )}
-                  </div>
-                </button>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+                        R$ {nf.totalValue.toFixed(2)}
+                      </p>
+                      <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    </div>
+                  </button>
+                </div>
+
+                {/* Expanded Content */}
 
                 {/* Expanded Content */}
                 {isExpanded && (
@@ -440,6 +498,60 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* NF Add Modal */}
+      <NFAddModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        suppliers={suppliers}
+        onSave={() => setNfs(storageService.getNFRecords())}
+      />
+
+      {/* Bulk WhatsApp Modal */}
+      {showBulkWhatsapp && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Enviar {selectedNFs.length} NF(s) via WhatsApp
+              </h3>
+              <button
+                onClick={() => setShowBulkWhatsapp(false)}
+                className="p-1 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1 text-xs">
+                Número do WhatsApp
+              </label>
+              <input
+                type="tel"
+                value={bulkWhatsappNumber}
+                onChange={(e) => setBulkWhatsappNumber(e.target.value)}
+                placeholder="(11) 99999-9999"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowBulkWhatsapp(false)}
+                className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-[#27272a] text-slate-700 dark:text-slate-300 font-bold text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleBulkWhatsApp}
+                className="flex-1 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-xs flex items-center justify-center gap-2"
+              >
+                <Send className="w-4 h-4" />
+                Enviar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
