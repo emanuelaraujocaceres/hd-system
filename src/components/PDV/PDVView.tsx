@@ -422,18 +422,19 @@ export const PDVView: React.FC<PDVViewProps> = ({
   };
 
   const handleBarcodeDetected = (barcode: string) => {
-    if (!isCaixaOpen) {
-      stopScanner();
-      onOpenCaixaModal();
-      return;
-    }
-
     setScannedBarcode(barcode);
 
     // Search product by barcode (trim both sides for robust matching)
-    const found = productsRef.current.find((p) => p.barcode.trim() === barcode.trim());
+    const found = productsRef.current.find((p) => p.barcode && p.barcode.trim() === barcode.trim());
 
     if (found) {
+      // Product found - check if caixa is open
+      if (!isCaixaOpen) {
+        stopScanner();
+        onOpenCaixaModal();
+        return;
+      }
+      
       setScannedProduct(found);
       setScannerStatus('found');
       posAudio.beep();
@@ -450,8 +451,12 @@ export const PDVView: React.FC<PDVViewProps> = ({
         scannerIntervalRef.current = null;
       }
     } else {
+      // Product NOT found - redirect to product registration
       setScannerStatus('not_found');
       posAudio.error();
+      // Stop scanner and navigate to product registration
+      stopScanner();
+      onNavigateToNewProduct(barcode);
     }
   };
 
@@ -986,52 +991,16 @@ export const PDVView: React.FC<PDVViewProps> = ({
 
           {/* Bottom sheet: status + manual input */}
           <div className="bg-white dark:bg-[#18181b] rounded-t-3xl px-4 pt-4 space-y-3 border-t border-slate-200 dark:border-[#27272a] max-h-[40vh] overflow-y-auto" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
-            {/* Not found */}
+            {/* Not found - redirecting to product registration */}
             {scannerStatus === 'not_found' && (
-              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-500/30 rounded-xl">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
-                  <p className="text-sm font-bold text-amber-800 dark:text-amber-300">Produto não encontrado</p>
+              <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-500/30 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <Package className="w-5 h-5 text-indigo-500 shrink-0" />
+                  <p className="text-sm font-bold text-indigo-800 dark:text-indigo-300">Produto não encontrado</p>
                 </div>
-                <p className="text-xs text-amber-600 dark:text-amber-400 mb-3">
-                  Código lido: <span className="font-mono font-bold">{scannedBarcode}</span>
+                <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
+                  Código: <span className="font-mono font-bold">{scannedBarcode}</span> — Redirecionando para cadastro...
                 </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      stopScanner();
-                      onNavigateToNewProduct(scannedBarcode);
-                    }}
-                    className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Package className="w-3.5 h-3.5" />
-                    Cadastrar no Estoque
-                  </button>
-                  <button
-                    onClick={() => {
-                      stopScanner();
-                      setQuickProductBarcode(scannedBarcode);
-                    }}
-                    className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
-                    title="Cadastro rápido sem sair do PDV"
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    Cadastro Rápido
-                  </button>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setScannerStatus('scanning');
-                      setScannedBarcode('');
-                      setScannedProduct(null);
-                      lastScannedRef.current = '';
-                    }}
-                    className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-300 text-xs font-bold transition-colors"
-                  >
-                    Escanear Novamente
-                  </button>
-                </div>
               </div>
             )}
 
