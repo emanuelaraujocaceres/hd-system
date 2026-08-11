@@ -186,9 +186,8 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={() => {
             setCurrentTab('settings');
-            sessionStorage.setItem('settings_active_tab', 'cardapio');
-            // Dispatch event to switch to cardapio tab
-            window.dispatchEvent(new CustomEvent('switch-settings-tab', { detail: 'cardapio' }));
+            sessionStorage.setItem('settings_active_tab', 'delivery');
+            window.dispatchEvent(new CustomEvent('switch-settings-tab', { detail: 'delivery' }));
           }}
           className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-indigo-600 text-white text-[10px] sm:text-xs font-bold rounded-full hover:bg-indigo-500 transition-colors shadow-sm flex items-center gap-1.5 sm:gap-2"
           title="QR Code do Delivery"

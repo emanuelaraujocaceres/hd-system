@@ -101,6 +101,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formSalePrice, setFormSalePrice] = useState('');
   const [formCurrentStock, setFormCurrentStock] = useState('');
   const [formMinStock, setFormMinStock] = useState('');
+  const [formMaxStock, setFormMaxStock] = useState('');
   const [formImageUrl, setFormImageUrl] = useState('');
   const [formShowOnTV, setFormShowOnTV] = useState(false);
   const [formShowOnCardapio, setFormShowOnCardapio] = useState(false);
