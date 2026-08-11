@@ -38,6 +38,12 @@ class GlobalNotificationServiceClass {
   private listeners: Set<NotificationListener> = new Set();
   private notificationPermission: NotificationPermission = 'default';
   private isSupported: boolean = false;
+  /**
+   * Dedupe: o mesmo registro realtime chega várias vezes por venda
+   * (INSERT em sales + re-fetch do sale_items no App.tsx + UPDATEs).
+   * Sem isso, 1 venda = 2-3 chimes (8-12 bips) + toasts duplicados.
+   */
+  private recentNotified: { kind: string; id: string; at: number }[] = [];
 
   constructor() {
     this.checkNotificationSupport();
@@ -76,39 +82,44 @@ class GlobalNotificationServiceClass {
   /**
    * Uma mudança veio de OUTRO dispositivo (real-time). Mostra uma
    * notificação única, com o nome real do item, filtrada por filial.
+   * 
+   * Só notifica o que o operador precisa SABER imediatamente:
+   * venda, delivery e pagamento de fiado. Produtos/estoque/clientes
+   * NÃO notificam: toda venda remota gera UPDATE em produtos e
+   * movimentos — seria uma enxurrada de toasts a cada venda.
    */
   private handleRemoteChange(key: string) {
     if (key.includes('SALES')) {
       const latestSale = storageService.getSales()[0];
       if (!this.isInCurrentBranch(latestSale)) return;
+      // Dedupe: o App.tsx re-executa updateSaleFromRemote quando o
+      // sale_items chega (mesma venda) → 1 venda = 1 notificação.
+      if (this.wasNotified('sale', latestSale.id)) return;
       const method = latestSale?.payments?.[0]?.method || 'cash';
       this.notifySale(latestSale?.total || 0, method, latestSale?.customerName);
     } else if (key.includes('DELIVERY')) {
       const latestOrder = this.newestByUpdatedAt(storageService.getDeliveryOrders());
       if (!this.isInCurrentBranch(latestOrder)) return;
+      if (this.wasNotified('delivery', latestOrder.id)) return;
       this.notifyDelivery(latestOrder?.orderNumber || '#?', latestOrder?.customerName || 'Cliente', latestOrder?.total || 0);
-    } else if (key.includes('PRODUCTS')) {
-      const latestProduct = this.newestByUpdatedAt(storageService.getProducts());
-      if (!this.isInCurrentBranch(latestProduct)) return;
-      this.notifyProduct('updated', latestProduct?.name || 'Produto');
     } else if (key.includes('CREDIT_PAYMENTS')) {
       const latestPayment = this.newestByDate(storageService.getCreditPayments());
       if (!this.isInCurrentBranch(latestPayment)) return;
+      if (this.wasNotified('credit', latestPayment.id)) return;
       this.notifyFiado(latestPayment?.customerName || 'Cliente', latestPayment?.amount || 0, 'payment');
-    } else if (key.includes('MOVEMENTS')) {
-      const latestMovement = this.newestByDate(storageService.getMovements());
-      if (!this.isInCurrentBranch(latestMovement)) return;
-      const qty = latestMovement?.quantity || 0;
-      if (latestMovement?.type === 'in') {
-        this.notifyStockAdded(latestMovement?.productName || 'Produto', qty);
-      } else {
-        this.notify({ type: 'warning', title: '📦 Saída de Estoque', message: `${latestMovement?.productName || 'Produto'}: ${qty} unidades`, playSound: false });
-      }
-    } else if (key.includes('CUSTOMERS')) {
-      const latestCustomer = storageService.getCustomers()[0];
-      if (!this.isInCurrentBranch(latestCustomer)) return;
-      this.notifyCustomer('updated', latestCustomer?.name || 'Cliente');
     }
+    // PRODUCTS / MOVEMENTS / CUSTOMERS remotos: silenciosos (ruído de venda)
+  }
+
+  /**
+   * True se (kind, id) já notificou nos últimos 10s. Marca como notificado.
+   */
+  private wasNotified(kind: string, id: string): boolean {
+    const now = Date.now();
+    this.recentNotified = this.recentNotified.filter((x) => now - x.at < 10000);
+    if (this.recentNotified.some((x) => x.kind === kind && x.id === id)) return true;
+    this.recentNotified.push({ kind, id, at: now });
+    return false;
   }
 
   /** Item mais recentemente atualizado (atualizações preservam posição no array) */

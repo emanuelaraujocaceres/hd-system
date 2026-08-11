@@ -396,15 +396,16 @@ class StorageService {
     return this.changeSource;
   }
 
-  private notify(key?: string) {
+  private notify(key?: string, source?: 'local' | 'sync' | 'hydration' | 'remote') {
     // Debounce: batch rapid storage changes into a single notification
     // and defer past React's render cycle to prevent error #306.
-    // Capture key + changeSource AQUI (no momento da escrita) — o source
-    // pode mudar antes do setTimeout(0) disparar, e o listener de
-    // notificações precisa saber a origem EXATA do evento.
+    // Handlers REMOTOS passam source='remote' EXPLÍCITO: entre o
+    // setChangeSource('remote') e o notify() pode haver await (fetch de
+    // itens), e qualquer operação concorrente (sync/hidratação) mudaria
+    // o changeSource — corrompendo a notificação.
     if (this.notifyTimer) return;
     this._pendingNotifyKey = key;
-    this._pendingNotifySource = this.changeSource;
+    this._pendingNotifySource = source || this.changeSource;
     this.notifyTimer = setTimeout(() => {
       this.notifyTimer = null;
       const k = this._pendingNotifyKey;
@@ -797,7 +798,7 @@ class StorageService {
       products.unshift(mapped);
     }
     this.set(KEYS.PRODUCTS, products);
-    this.notify(KEYS.PRODUCTS);
+    this.notify(KEYS.PRODUCTS, 'remote');
   }
 
   removeProductFromRemote(id: string) {
@@ -927,7 +928,7 @@ class StorageService {
     if (idx >= 0) sales[idx] = mapped;
     else sales.unshift(mapped);
     this.set(KEYS.SALES, sales);
-    this.notify(KEYS.SALES);
+    this.notify(KEYS.SALES, 'remote');
 
     // ── Update caixa session in real-time ──────────────────
     // When a sale is synced from another device, update the
@@ -1060,7 +1061,7 @@ class StorageService {
     if (idx >= 0) customers[idx] = mapped;
     else customers.unshift(mapped);
     this.set(KEYS.CUSTOMERS, customers);
-    this.notify(KEYS.CUSTOMERS);
+    this.notify(KEYS.CUSTOMERS, 'remote');
   }
 
   removeCustomerFromRemote(id: string) {
@@ -1278,7 +1279,7 @@ class StorageService {
     if (idx >= 0) movements[idx] = mapped;
     else movements.unshift(mapped);
     this.set(KEYS.MOVEMENTS, movements);
-    this.notify(KEYS.MOVEMENTS);
+    this.notify(KEYS.MOVEMENTS, 'remote');
   }
 
   removeStockMovementFromRemote(id: string) {
@@ -3628,7 +3629,7 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.CREDIT_PAYMENTS, all);
-    this.notify(KEYS.CREDIT_PAYMENTS);
+    this.notify(KEYS.CREDIT_PAYMENTS, 'remote');
   }
 
   removeCreditPaymentFromRemote(id: string) {
@@ -4493,7 +4494,7 @@ class StorageService {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.DELIVERY_ORDERS, all);
-    this.notify(KEYS.DELIVERY_ORDERS);
+    this.notify(KEYS.DELIVERY_ORDERS, 'remote');
   }
 
   removeDeliveryOrderFromRemote(id: string) {
