@@ -3189,7 +3189,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 {/* ── INTEGRAÇÕES ── */}
 {activeSubTab === 'integrations' && (
   <div className="space-y-4">
-    <IntegrationsView branch={branches.find(b => b.id === user.storeBranchId) || branches[0]} />
+    <IntegrationsView branch={branches.find(b => b.id === user.storeBranchId) || branches[0]} user={user} />
   </div>
 )}
 
