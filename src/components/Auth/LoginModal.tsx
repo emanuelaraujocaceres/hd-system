@@ -5,6 +5,7 @@ import { storageService } from '../../services/storageService';
 import { supabase } from '../../lib/supabase';
 import { syncQueue } from '../../services/syncQueueService';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
+import { loginRateLimiter, sanitizeInput } from '../../lib/security';
 
 interface LoginModalProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -21,11 +22,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
-    const email = emailInput.trim();
+    
+    // ✅ Sanitize inputs to prevent XSS
+    const email = sanitizeInput(emailInput.trim());
     const password = passwordInput.trim();
+    
     if (!email) return;
     if (!password) {
       setErrorMessage('Senha obrigatória');
+      return;
+    }
+
+    // ✅ Rate limiting - prevent brute force
+    const rateLimitKey = `login_${email}`;
+    if (!loginRateLimiter.canAttempt(rateLimitKey)) {
+      const remainingTime = Math.ceil(loginRateLimiter.getLockoutTimeRemaining(rateLimitKey) / 60000);
+      setErrorMessage(`Muitas tentativas. Aguarde ${remainingTime} minutos antes de tentar novamente.`);
       return;
     }
 
@@ -42,6 +54,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
       const user = storageService.getUserByEmail(email);
       if (!user) {
         setErrorMessage('Usuário não encontrado no sistema local.');
+        loginRateLimiter.recordAttempt(rateLimitKey);
         return false;
       }
       if (!user.active) {
@@ -54,8 +67,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
       }
       if (user.password !== password) {
         setErrorMessage('Senha incorreta. Tente novamente.');
+        loginRateLimiter.recordAttempt(rateLimitKey);
         return false;
       }
+      // ✅ Success - reset rate limiter
+      loginRateLimiter.reset(rateLimitKey);
       const res = storageService.loginWithGoogle(email, password);
       if (res.success && res.user) {
         // Auto-selecionar filial do usuário no login local
@@ -68,6 +84,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
         return true;
       } else {
         setErrorMessage(res.message || 'Erro ao realizar login.');
+        loginRateLimiter.recordAttempt(rateLimitKey);
         return false;
       }
     };
@@ -84,12 +101,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
         if (authError) {
           // Se erro de credenciais ou usuário não existe no Auth, cai no fallback
           console.warn('[Login] Supabase Auth failed, falling back to local:', authError.message);
+          // ✅ Record failed attempt for rate limiting
+          loginRateLimiter.recordAttempt(rateLimitKey);
           setAuthMode('local');
           if (tryLocalLogin()) { setIsLoading(false); return; }
           throw authError;
         }
 
         if (authData.user) {
+          // ✅ Success - reset rate limiter
+          loginRateLimiter.reset(rateLimitKey);
           // Buscar perfil completo via RPC get_my_profile() — independe de RLS
           // e resolve a organização SEMPRE pelo banco (nunca herda org de outra sessão).
           const { data: profileData, error: profileError } = await supabase.rpc('get_my_profile');

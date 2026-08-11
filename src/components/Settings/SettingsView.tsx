@@ -2767,6 +2767,80 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       {/* --- TAB 7: CARDÁPIO DIGITAL / MESAS --- */}
       {activeSubTab === 'cardapio' && (
         <div className="space-y-6">
+          {/* ✅ Cardápio Delivery - DESTAQUE */}
+          <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-500/5 to-purple-500/5 dark:from-indigo-500/10 dark:to-purple-500/10 border-2 border-indigo-500/30 space-y-5 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                <Truck className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  🛵 Cardápio Delivery
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-extrabold uppercase tracking-wider">
+                    URL Única
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-[#71717a]">URL e QR Code para pedidos de delivery (sem mesa) - Diferente dos QR codes das mesas</p>
+              </div>
+            </div>
+
+            {/* URL do Cardápio Delivery */}
+            <div className="space-y-3">
+              <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1 text-xs">🔗 URL do Cardápio Delivery</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${window.location.origin}${window.location.pathname}#/delivery`}
+                  className="flex-1 px-3 py-2 bg-white dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-mono text-slate-900 dark:text-white"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}#/delivery`);
+                    addToast('success', 'URL do Delivery copiada!');
+                  }}
+                  className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  Copiar
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-500 dark:text-[#71717a]">
+                ⚠️ Esta URL é diferente dos QR codes das mesas! Compartilhe com clientes para pedidos de delivery.
+              </p>
+            </div>
+
+            {/* QR Code do Delivery - DESTAQUE */}
+            <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-white dark:bg-[#09090b] rounded-xl border border-slate-200 dark:border-[#27272a]">
+              <div className="w-32 h-32 bg-white rounded-lg p-2 flex items-center justify-center border border-slate-200">
+                <img 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${window.location.origin}${window.location.pathname}#/delivery`)}`} 
+                  alt="QR Code Delivery" 
+                  className="w-full h-full"
+                />
+              </div>
+              <div className="flex-1 space-y-2 text-center sm:text-left">
+                <p className="text-sm font-bold text-slate-900 dark:text-white">QR Code Delivery</p>
+                <p className="text-[10px] text-slate-500 dark:text-[#71717a]">Imprima e exiba no balcão ou em materiais de marketing</p>
+                <button
+                  onClick={() => {
+                    const link = `${window.location.origin}${window.location.pathname}#/delivery`;
+                    const printWindow = window.open('', '_blank');
+                    if (printWindow) {
+                      printWindow.document.write(`<html><head><title>QR Code Delivery</title></head><body style="display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;"><div style="text-align:center;"><img src="https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(link)}" /><p style="font-family:sans-serif;margin-top:20px;font-size:18px;">Escaneie para pedir delivery</p></div></body></html>`);
+                      printWindow.document.close();
+                      printWindow.print();
+                    }
+                  }}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 mx-auto sm:mx-0"
+                >
+                  <PrinterLucide className="w-3.5 h-3.5" />
+                  Imprimir QR Code
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Configurações do Cardápio */}
           <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-5 shadow-sm">
             <div className="flex items-center gap-3">
