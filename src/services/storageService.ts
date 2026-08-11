@@ -4497,6 +4497,39 @@ class StorageService {
     return Array.isArray(data) ? data : [];
   }
 
+  /**
+   * Get all branch themes (for backup/sync)
+   */
+  getAllBranchThemes(): any[] {
+    const data = this.get<any>('hd_system_branch_themes', []);
+    if (data && !Array.isArray(data)) {
+      return [data];
+    }
+    return Array.isArray(data) ? data : [];
+  }
+
+  /**
+   * Get all system settings (for backup/sync)
+   */
+  getAllSettings(): any[] {
+    const data = this.get<any>('hd_system_settings', []);
+    if (data && !Array.isArray(data)) {
+      return [data];
+    }
+    return Array.isArray(data) ? data : [];
+  }
+
+  /**
+   * Get all caixa sessions (for backup/sync)
+   */
+  getCaixaSessions(): any[] {
+    const data = this.get<any>('hd_system_caixa_session', []);
+    if (data && !Array.isArray(data)) {
+      return [data];
+    }
+    return Array.isArray(data) ? data : [];
+  }
+
   saveModuleVisibility(settings: any) {
     settings.id = StorageService.ensureUuid(settings.id);
     settings.organizationId = this.getCurrentOrgId();

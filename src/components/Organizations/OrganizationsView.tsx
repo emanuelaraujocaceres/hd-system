@@ -7,6 +7,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { callServerApi } from '../../lib/serverApi';
 import { storageService } from '../../services/storageService';
+import { backupService, BackupRecord } from '../../services/backupService';
 import { DEFAULT_ORG_ID } from '../../data/mockData';
 import { UserProfile } from '../../types';
 import { useToast } from '../shared/Toast';
@@ -135,6 +136,74 @@ const OrganizationsManager: React.FC<{ user: UserProfile; onEnterOrg?: (orgId: s
   const [addUserEmail, setAddUserEmail] = useState('');
   const [addingUser, setAddingUser] = useState(false);
   const [addUserResult, setAddUserResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Backup state
+  const [backupsMap, setBackupsMap] = useState<Record<string, BackupRecord[]>>({});
+  const [loadingBackups, setLoadingBackups] = useState<Record<string, boolean>>({});
+  const [creatingBackup, setCreatingBackup] = useState<string | null>(null);
+  const [restoringBackup, setRestoringBackup] = useState<string | null>(null);
+  const [showBackupHistory, setShowBackupHistory] = useState<string | null>(null);
+  const [backupSuccess, setBackupSuccess] = useState<string | null>(null);
+
+  // Load backups when expanding an org
+  useEffect(() => {
+    for (const orgId of expanded) {
+      const branches = branchesMap[orgId] || [];
+      for (const branch of branches) {
+        if (!backupsMap[branch.id] && !loadingBackups[branch.id]) {
+          loadBackups(branch.id);
+        }
+      }
+    }
+  }, [expanded, branchesMap]);
+
+  /* ---------- backup handlers ---------- */
+  const loadBackups = async (branchId: string) => {
+    setLoadingBackups(prev => ({ ...prev, [branchId]: true }));
+    try {
+      const backups = await backupService.getBackups(branchId);
+      setBackupsMap(prev => ({ ...prev, [branchId]: backups }));
+    } catch (e) {
+      console.error('[Backup] Failed to load:', e);
+    } finally {
+      setLoadingBackups(prev => ({ ...prev, [branchId]: false }));
+    }
+  };
+
+  const handleCreateBackup = async (branchId: string, branchName: string) => {
+    setCreatingBackup(branchId);
+    try {
+      const name = `Backup Manual - ${branchName} - ${new Date().toLocaleDateString('pt-BR')}`;
+      await backupService.createBackup(branchId, name, false);
+      await loadBackups(branchId);
+      setBackupSuccess(branchId);
+      setTimeout(() => setBackupSuccess(null), 3000);
+    } catch (e: any) {
+      addToast('error', `Erro ao criar backup: ${e?.message || 'erro desconhecido'}`);
+    } finally {
+      setCreatingBackup(null);
+    }
+  };
+
+  const handleRestoreBackup = async (backupId: string, branchId: string) => {
+    if (!confirm('⚠️ ATENÇÃO: Isso irá substituir TODOS os dados atuais da filial pelos dados do backup. Esta ação não pode ser desfeita. Continuar?')) {
+      return;
+    }
+    setRestoringBackup(backupId);
+    try {
+      const success = await backupService.restoreBackup(backupId);
+      if (success) {
+        addToast('success', 'Backup restaurado com sucesso! Os dados serão sincronizados em todos os dispositivos.');
+        await loadBackups(branchId);
+      } else {
+        addToast('error', 'Erro ao restaurar backup. Tente novamente.');
+      }
+    } catch (e: any) {
+      addToast('error', `Erro ao restaurar: ${e?.message || 'erro desconhecido'}`);
+    } finally {
+      setRestoringBackup(null);
+    }
+  };
 
   // Modal de excluir organização
   const [deleteOrgTarget, setDeleteOrgTarget] = useState<OrgRow | null>(null);
@@ -353,6 +422,18 @@ const OrganizationsManager: React.FC<{ user: UserProfile; onEnterOrg?: (orgId: s
     } finally { setTogglingUserId(null); }
   };
 
+  // Load backups when expanding an org
+  useEffect(() => {
+    for (const orgId of expanded) {
+      const branches = branchesMap[orgId] || [];
+      for (const branch of branches) {
+        if (!backupsMap[branch.id] && !loadingBackups[branch.id]) {
+          loadBackups(branch.id);
+        }
+      }
+    }
+  }, [expanded, branchesMap]);
+
   /* ---------- viewing org state ---------- */
   const viewingOrgId = localStorage.getItem('hd_system_viewing_org');
   const viewingOrgName = viewingOrgId ? orgs.find(o => o.id === viewingOrgId)?.name : null;
@@ -489,14 +570,52 @@ const OrganizationsManager: React.FC<{ user: UserProfile; onEnterOrg?: (orgId: s
                       {!b.active && <span className="mt-2 inline-block px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[9px] font-bold">INATIVA</span>}
 
                       {/* Ações da filial */}
-                      <div className="mt-3 flex items-center gap-2 pt-3 border-t border-slate-200 dark:border-[#27272a]">
-                        <button
-                          onClick={() => openAddUser(org.id, b.id)}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] transition-all"
-                        >
-                          <UserPlus className="w-3 h-3" />
-                          <span>Add Admin</span>
-                        </button>
+                      <div className="mt-3 flex flex-col gap-2 pt-3 border-t border-slate-200 dark:border-[#27272a]">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openAddUser(org.id, b.id)}
+                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] transition-all"
+                          >
+                            <UserPlus className="w-3 h-3" />
+                            <span>Add Admin</span>
+                          </button>
+                          <button
+                            onClick={() => handleCreateBackup(b.id, b.name)}
+                            disabled={creatingBackup === b.id}
+                            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-[10px] transition-all"
+                            title="Criar Backup"
+                          >
+                            {creatingBackup === b.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                              </svg>
+                            )}
+                            <span>Backup</span>
+                          </button>
+                        </div>
+                        {backupSuccess === b.id && (
+                          <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                            ✅ Backup criado com sucesso!
+                          </p>
+                        )}
+                        {/* Backup History */}
+                        {backupsMap[b.id] && backupsMap[b.id].length > 0 && (
+                          <div className="mt-1">
+                            <button
+                              onClick={() => setShowBackupHistory(b.id)}
+                              className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
+                            >
+                              📋 Ver histórico ({backupsMap[b.id].length} backup{backupsMap[b.id].length > 1 ? 's' : ''})
+                            </button>
+                          </div>
+                        )}
+                        {loadingBackups[b.id] && (
+                          <p className="text-[10px] text-slate-400">
+                            <Loader2 className="w-3 h-3 inline animate-spin" /> Carregando backups...
+                          </p>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -895,6 +1014,83 @@ const OrganizationsManager: React.FC<{ user: UserProfile; onEnterOrg?: (orgId: s
                     : <><Power className="w-3.5 h-3.5" /> Desativar Acesso</>}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ============================================================ */}
+      {/* MODAL: Histórico de Backups                                */}
+      {/* ============================================================ */}
+      {showBackupHistory && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[10vh] bg-slate-950/60 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-lg bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-gradient-to-br from-amber-950 via-slate-900 to-black p-5 text-white relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(245,158,11,0.2),transparent_50%)] pointer-events-none" />
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold">Histórico de Backups</h2>
+                    <p className="text-xs text-slate-300">
+                      {backupsMap[showBackupHistory]?.length || 0} backup{backupsMap[showBackupHistory]?.length !== 1 ? 's' : ''} disponível{backupsMap[showBackupHistory]?.length !== 1 ? 'is' : ''}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setShowBackupHistory(null)} className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="p-5 max-h-[60vh] overflow-y-auto">
+              {backupsMap[showBackupHistory]?.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-8">Nenhum backup encontrado para esta filial.</p>
+              ) : (
+                <div className="space-y-3">
+                  {backupsMap[showBackupHistory]?.map((backup) => (
+                    <div key={backup.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{backup.backup_name}</p>
+                            {backup.is_automatic && (
+                              <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[9px] font-bold">AUTO</span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            {new Date(backup.created_at).toLocaleString('pt-BR')}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            {backup.record_count} registros • {(backup.data_size_bytes / 1024).toFixed(1)} KB
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleRestoreBackup(backup.id, showBackupHistory)}
+                          disabled={restoringBackup === backup.id}
+                          className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-[10px] font-bold flex items-center gap-1.5 transition-all"
+                        >
+                          {restoringBackup === backup.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          )}
+                          Restaurar
+                        </button>
+                      </div>
+                      {backup.restored_at && (
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-2 font-bold">
+                          ✅ Restaurado em {new Date(backup.restored_at).toLocaleString('pt-BR')}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
