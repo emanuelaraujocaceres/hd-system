@@ -374,6 +374,28 @@ class StorageService {
     return () => this.listeners.delete(listener);
   }
 
+  // ─── CHANGE SOURCE TRACKING ────────────────────────────────────
+  // Track where changes come from to filter notifications properly
+  private changeSource: 'local' | 'sync' | 'hydration' | 'remote' = 'local';
+
+  /**
+   * Set the source of changes (to filter notifications)
+   * - 'local': User action in this device → trigger notifications
+   * - 'sync': Sync from cloud/hydration → don't trigger notifications
+   * - 'hydration': Initial data load → don't trigger notifications
+   * - 'remote': Real-time update from another device → trigger notifications
+   */
+  setChangeSource(source: 'local' | 'sync' | 'hydration' | 'remote') {
+    this.changeSource = source;
+  }
+
+  /**
+   * Get the current change source
+   */
+  getChangeSource(): 'local' | 'sync' | 'hydration' | 'remote' {
+    return this.changeSource;
+  }
+
   private notify(key?: string) {
     // Debounce: batch rapid storage changes into a single notification
     // and defer past React's render cycle to prevent error #306
@@ -717,6 +739,7 @@ class StorageService {
   // These convert Supabase row format back to our app types and update localStorage.
 
   updateProductFromRemote(row: any) {
+    this.setChangeSource('remote');
     // Branch isolation: reject remote products from other branches
     if (!this.isRemoteFromCurrentBranch(row)) {
       console.log(`[HD-Sync] Ignoring remote product from other branch: ${row.store_branch_id}`);
@@ -816,6 +839,7 @@ class StorageService {
   }
 
   updateSaleFromRemote(row: any) {
+    this.setChangeSource('remote');
     // Branch isolation: reject remote sales from other branches
     if (!this.isRemoteFromCurrentBranch(row)) {
       console.log(`[HD-Sync] Ignoring remote sale from other branch: ${row.store_branch_id}`);
@@ -990,6 +1014,7 @@ class StorageService {
   }
 
   updateCustomerFromRemote(row: any) {
+    this.setChangeSource('remote');
     const customers = this.get<Customer[]>(KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : []);
     const mapped: Customer = {
       id: row.id,
@@ -1306,6 +1331,9 @@ class StorageService {
 
   async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranchId?: string }> {
     try {
+      // ✅ Mark as hydration to prevent false notifications
+      this.setChangeSource('hydration');
+      
       // PASSO 1: Buscar branches do Supabase PRIMEIRO para poder resolver
       // short codes (e.g. "br-01") → UUID. Antes, a resolução usava
       // getBranches() do localStorage que podia estar vazio (org não-default).
@@ -2334,7 +2362,7 @@ class StorageService {
 
       console.log('[HD-Sync] Cloud hydration complete — merge strategy preserves all local data not yet in cloud');
       // Vendas fiado (novas ou antigas) → garantir conta a receber vinculada
-      this.backfillReceivablesFromSales();
+      this.setChangeSource("local"); this.backfillReceivablesFromSales();
       // Força notify para garantir que o React state seja atualizado
       // com o merge completo (não com dados parciais de um notify anterior).
       if (this.notifyTimer) {
@@ -5097,3 +5125,7 @@ class StorageService {
 }
 
 export const storageService = new StorageService();
+
+
+
+
