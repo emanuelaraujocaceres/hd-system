@@ -129,6 +129,9 @@ class SupabaseSyncService {
   private _reconnectAttempts = 0;
   private static MAX_RECONNECT_ATTEMPTS = 10;
   private static RECONNECT_BASE_DELAY_MS = 2000;
+  // Proteção contra loop de re-auth: após falha, cooldown de 5 minutos
+  private _lastAuthFailAt = 0;
+  private static AUTH_FAIL_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutos
 
   constructor() {
     // Listen for browser online/offline events
@@ -852,6 +855,13 @@ class SupabaseSyncService {
     }
 
     // Re-login silencioso com as credenciais locais (mesmo aparelho)
+    // Cooldown: se a última tentativa falhou há menos de 5 min, não repete
+    const now = Date.now();
+    if (this._lastAuthFailAt && (now - this._lastAuthFailAt) < SupabaseSyncService.AUTH_FAIL_COOLDOWN_MS) {
+      const remaining = Math.ceil((SupabaseSyncService.AUTH_FAIL_COOLDOWN_MS - (now - this._lastAuthFailAt)) / 1000);
+      console.warn(`[HD-Sync] ⏳ Re-auth em cooldown — tentar em ${remaining}s (senha local não confere)`);
+      return false;
+    }
     try {
       const raw = localStorage.getItem('hd_system_user_profile');
       if (!raw) return false;
@@ -862,9 +872,11 @@ class SupabaseSyncService {
         password: String(user.password),
       });
       if (error) {
+        this._lastAuthFailAt = Date.now();
         console.warn('[HD-Sync] Re-login automático falhou (senha local ≠ Supabase?):', error.message);
         return false;
       }
+      this._lastAuthFailAt = 0; // limpa cooldown em caso de sucesso
       console.log('[HD-Sync] 🔑 Sessão Supabase restabelecida automaticamente');
       return true;
     } catch (e) {
