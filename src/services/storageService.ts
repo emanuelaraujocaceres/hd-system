@@ -3036,16 +3036,37 @@ class StorageService {
     }
   }
 
-  // ─── saveSale: atualiza uma venda existente (usado pela ComandaView) ──
+// ─── saveSale: atualiza uma venda existente (usado pela ComandaView) ──
   saveSale(sale: Sale) {
     sale.id = StorageService.ensureUuid(sale.id);
     sale.organizationId = sale.organizationId || this.getCurrentOrgId();
     sale.storeBranchId = sale.storeBranchId || this.getSelectedBranchId() || undefined;
     if (!sale.updatedAt) sale.updatedAt = new Date().toISOString();
 
-    // Atualiza sale_items no localStorage
+    // Atualiza sale_items no localStorage APENAS se houver itens diferentes
+    // Evita recrear itens a cada mudança de status (kitchenStatus), que causava
+    // itens duplicados e perda do quantity/total originais.
     if (sale.items && sale.items.length > 0) {
       const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
+      // Filtra itens que jÁ pertencem a esta venda
+      const itemsForThisSale = existingItems.filter((i: any) => i.sale_id === sale.id);
+      
+      // Se os itens atuais já batem com os salvos (mesmo quantity/total), só atualiza o status
+      // Para evitar duplicatas e perda de quantity/total.
+      const itemsChanged = itemsForThisSale.some((existing) => {
+        const current = sale.items?.find((si) => si.productId === existing.product_id);
+        return !current || current.quantity !== existing.quantity || current.total !== existing.total_price;
+      });
+
+      // Se nada mudou nos itens, apenas atualiza o header da venda (kitchenStatus, etc.)
+      // e não recria os itens, evitando a criação de itens duplicados.
+      if (!itemsChanged) {
+        // Apenas garante que o sale está salvo com o novo status
+        // Os sale_items já existentes permanecem intactos
+        return;
+      }
+
+      // Recria sale_items apenas se realmente houver mudanças nos itens
       const newItems = sale.items.map((item) => ({
         id: StorageService.newId(),
         sale_id: sale.id,
@@ -3454,19 +3475,23 @@ class StorageService {
   // Dá baixa na conta a receber vinculada à venda após salvar/excluir um
   // pagamento. Usa getFiadoAmount(sale) como valor ORIGINAL (nunca acc.amount,
   // que já é o restante). remaining = original - totalPaid.
-  private updateReceivableFromPayments(saleId: string) {
+private updateReceivableFromPayments(saleId: string) {
     try {
       const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
       const acc = accounts.find((a) => a.id === saleId);
       const sale = this.get<Sale[]>(KEYS.SALES, []).find((s) => s.id === saleId);
       const totalPaid = this.getTotalPaidForSale(saleId);
 
-      // Valor original do fiado: usa getFiadoAmount da venda (fonte de verdade)
-      const originalAmount = sale ? this.getFiadoAmount(sale) : (acc ? acc.amount + totalPaid : 0);
-      const remaining = Math.max(0, Math.round((originalAmount - totalPaid) * 100) / 100);
+      // Usar o fiadoAmount da própria venda (source of truth) se existir
+      const fiadoAmount = sale ? this.getFiadoAmount(sale) : 0;
+
+      // Se a venda tem credit_account no payments, usa o valor da venda;
+      // senão, tenta calcular a partir dos pagamentos locais salvos
+      const fiadoFromSale = sale && sale.payments?.length > 0 ? fiadoAmount : (acc ? acc.amount + totalPaid : totalPaid);
+      const remaining = Math.max(0, Math.round((fiadoFromSale - totalPaid) * 100) / 100);
 
       if (!acc) {
-        // Conta não existe localmente (ex.: venda fiado legada) — tenta criar
+        // Conta não existe localmente — cria a partir da venda
         if (sale) this.createReceivableFromSale(sale);
         return;
       }

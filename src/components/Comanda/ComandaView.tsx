@@ -221,6 +221,26 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     }
   };
 
+  // Abrir uma nova comanda manualmente (sem QR Code)
+  const openNewComanda = () => {
+    // Cria uma sessão de cliente para a mesa "Caixa" (sem mesa específica)
+    const newSession: CustomerSession = {
+      id: crypto.randomUUID(),
+      tableId: null,
+      sessionToken: crypto.randomUUID(),
+      status: 'active',
+      openedAt: new Date().toISOString(),
+      deviceFingerprint: '',
+      storeBranchId: storageService.getCurrentOrgId(),
+      organizationId: storageService.getCurrentOrgId(),
+    };
+    storageService.saveCustomerSession(newSession);
+    setCloseModalTable(null);
+    // Recarrega as comandas para o novo session aparecer
+    loadMyOrders();
+    setOrderSuccess(true);
+  };
+
   const handleDeleteSale = (saleId: string) => {
     try {
       storageService.deleteSale(saleId);
@@ -421,6 +441,13 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
           </div>
           <p className="text-sm text-slate-500 dark:text-[#71717a]">Nenhuma comanda aberta no momento</p>
           <p className="text-xs text-slate-400">As comandas aparecerão aqui quando clientes fizerem pedidos pelo cardápio digital</p>
+          <button
+            onClick={() => openNewComanda()}
+            className="mt-4 w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Abrir Comanda Manual</span>
+          </button>
         </div>
       )}
 
