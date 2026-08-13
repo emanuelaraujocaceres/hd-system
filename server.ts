@@ -114,7 +114,7 @@ async function startServer() {
         success: true,
         message: "Usuário criado com sucesso!",
         user_id: authUser.user.id,
-        password: tempPassword,
+        password: finalPassword,
       });
     } catch (e: any) {
       console.error("[create-user] Erro:", e);

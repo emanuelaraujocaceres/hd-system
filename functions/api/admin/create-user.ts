@@ -22,7 +22,7 @@ export async function onRequestPost(context: any) {
     });
 
     const body = await request.json().catch(() => ({}));
-    const { name, email, role, organization_id, store_branch_id } = body;
+    const { name, email, role, organization_id, store_branch_id, password } = body;
 
     if (!name || !email || !organization_id) {
       return new Response(JSON.stringify({
@@ -46,17 +46,18 @@ export async function onRequestPost(context: any) {
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
-    // Gerar senha temporária segura
-    const tempPassword =
+    // Usar senha manual OU gerar temporária se não fornecida
+    const finalPassword = password || (
       Math.random().toString(36).slice(2, 6).toUpperCase() +
       Math.random().toString(36).slice(2, 6) +
       Math.random().toString(10).slice(2, 5) +
-      '@';
+      '@'
+    );
 
     // 1. Criar no Supabase Auth
     const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
       email: String(email).toLowerCase(),
-      password: tempPassword,
+      password: finalPassword,
       email_confirm: true,
       user_metadata: { name, role: role || 'admin' },
     });
@@ -100,7 +101,7 @@ export async function onRequestPost(context: any) {
       success: true,
       message: 'Usuário criado com sucesso!',
       user_id: authUser.user.id,
-      password: tempPassword,
+      password: finalPassword,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
   } catch (e: any) {
