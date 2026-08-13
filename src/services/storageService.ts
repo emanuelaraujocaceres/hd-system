@@ -4926,29 +4926,44 @@ class StorageService {
    * (localStorage) — o Supabase nunca as armazena; por isso o merge do
    * Realtime (applyRemoteUserUpdate) preserva a senha local.
    */
-  setLocalPassword(user: UserProfile, password: string) {
-    const users = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
-    const idx = users.findIndex(
-      (u) => (u.email || '').toLowerCase() === (user.email || '').toLowerCase(),
-    );
-    const entry = { ...user, password };
-    if (idx >= 0) {
-      // Preserva campos locais que não vêm do perfil (ex.: superadmin local)
-      users[idx] = { ...users[idx], ...entry, password };
-    } else {
-      users.unshift(entry);
-    }
-    this.set(KEYS.USERS_LIST, users);
-
-    // Mantém o perfil ativo (KEYS.USER) consistente com a senha recém-capturada
-    const activeEmail = localStorage.getItem(KEYS.LOGGED_IN_EMAIL);
-    if (activeEmail && activeEmail.toLowerCase() === (user.email || '').toLowerCase()) {
-      const current = this.get<UserProfile | null>(KEYS.USER, null);
-      if (current) this.saveUserProfile({ ...current, password });
-    }
+  /**
+   * Gera hash SHA-256 de uma senha para armazenamento seguro no localStorage.
+   * Usa Web Crypto API (disponível em todos browsers modernos).
+   */
+  static async hashPassword(password: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password + 'hd-system-salt-v1'); // salt fixo para rainbow table
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  loginWithGoogle(email: string, password?: string): { success: boolean; user?: UserProfile; message?: string } {
+  setLocalPassword(user: UserProfile, password: string) {
+    // Hash da senha antes de salvar no localStorage (nunca plaintext)
+    StorageService.hashPassword(password).then((hashedPassword) => {
+      const users = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
+      const idx = users.findIndex(
+        (u) => (u.email || '').toLowerCase() === (user.email || '').toLowerCase(),
+      );
+      const entry = { ...user, password: hashedPassword };
+      if (idx >= 0) {
+        // Preserva campos locais que não vêm do perfil (ex.: superadmin local)
+        users[idx] = { ...users[idx], ...entry, password: hashedPassword };
+      } else {
+        users.unshift(entry);
+      }
+      this.set(KEYS.USERS_LIST, users);
+
+      // Mantém o perfil ativo (KEYS.USER) consistente com a senha recém-capturada
+      const activeEmail = localStorage.getItem(KEYS.LOGGED_IN_EMAIL);
+      if (activeEmail && activeEmail.toLowerCase() === (user.email || '').toLowerCase()) {
+        const current = this.get<UserProfile | null>(KEYS.USER, null);
+        if (current) this.saveUserProfile({ ...current, password: hashedPassword });
+      }
+    });
+  }
+
+  async loginWithGoogle(email: string, password?: string): Promise<{ success: boolean; user?: UserProfile; message?: string }> {
     const user = this.getUserByEmail(email);
     if (!user) {
       return {
@@ -4965,11 +4980,20 @@ class StorageService {
     }
 
     // Validate password if user has one set locally
-    if (user.password && password !== user.password) {
-      return {
-        success: false,
-        message: 'Senha incorreta. Tente novamente.',
-      };
+    if (user.password && password) {
+      const inputHash = await StorageService.hashPassword(password);
+      // Comparar hash vs hash (senhas armazenadas agora são hashes)
+      // Fallback: compatibilidade com senhas em plaintext de versões anteriores
+      if (inputHash !== user.password && password !== user.password) {
+        return {
+          success: false,
+          message: 'Senha incorreta. Tente novamente.',
+        };
+      }
+      // Se a senha em plaintext ainda estava armazenada, re-hash para segurança
+      if (password === user.password && inputHash !== user.password) {
+        this.setLocalPassword(user, password);
+      }
     }
 
     this.saveUserProfile(user);

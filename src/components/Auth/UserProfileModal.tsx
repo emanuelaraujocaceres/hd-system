@@ -138,8 +138,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       posAudio.error();
       return;
     }
-    if (newPassword.length < 4) {
-      setMessage({ type: 'error', text: 'A nova senha deve ter pelo menos 4 caracteres.' });
+    if (newPassword.length < 8) {
+      setMessage({ type: 'error', text: 'A nova senha deve ter pelo menos 8 caracteres.' });
       posAudio.error();
       return;
     }
@@ -417,7 +417,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Mínimo 4 caracteres"
+                  placeholder="Mínimo 8 caracteres"
                 />
                 <button
                   type="button"

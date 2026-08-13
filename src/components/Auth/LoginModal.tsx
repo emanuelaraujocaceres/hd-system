@@ -50,7 +50,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
     // login offline com as mesmas credenciais. Antes disso, só é possível
     // entrar via Supabase Auth (fluxo online) ou com senha definida em
     // Usuários & Permissões.
-    const tryLocalLogin = (): boolean => {
+    const tryLocalLogin = async (): Promise<boolean> => {
       const user = storageService.getUserByEmail(email);
       if (!user) {
         setErrorMessage('Usuário não encontrado no sistema local.');
@@ -65,14 +65,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
         setErrorMessage('Conta sem senha local definida. Faça login online ou defina uma senha em Usuários & Permissões.');
         return false;
       }
-      if (user.password !== password) {
-        setErrorMessage('Senha incorreta. Tente novamente.');
-        loginRateLimiter.recordAttempt(rateLimitKey);
-        return false;
-      }
       // ✅ Success - reset rate limiter
       loginRateLimiter.reset(rateLimitKey);
-      const res = storageService.loginWithGoogle(email, password);
+      const res = await storageService.loginWithGoogle(email, password);
       if (res.success && res.user) {
         // Auto-selecionar filial do usuário no login local
         if (res.user.storeBranchId) {
@@ -104,7 +99,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
           // ✅ Record failed attempt for rate limiting
           loginRateLimiter.recordAttempt(rateLimitKey);
           setAuthMode('local');
-          if (tryLocalLogin()) { setIsLoading(false); return; }
+          if (await tryLocalLogin()) { setIsLoading(false); return; }
           throw authError;
         }
 
@@ -118,7 +113,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
           if (profileError) {
             console.error('[Login] Erro ao buscar perfil no Supabase:', profileError.message);
             setAuthMode('local');
-            if (tryLocalLogin()) { setIsLoading(false); return; }
+            if (await tryLocalLogin()) { setIsLoading(false); return; }
           }
 
           if (profileData && !profileError) {
@@ -180,7 +175,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
       }
 
       // TENTATIVA 2: Local storage (offline ou Supabase Auth indisponível)
-      if (tryLocalLogin()) { setIsLoading(false); return; }
+      if (await tryLocalLogin()) { setIsLoading(false); return; }
       // Se o login local também falhou (senha errada / sem senha local),
       // resetar o loading — antes o botão ficava "Verificando..." para sempre
       // porque o fluxo saía do try sem return nem throw.

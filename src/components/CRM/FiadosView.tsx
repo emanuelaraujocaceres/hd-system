@@ -280,7 +280,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
 
           const apply = Math.min(remaining, remainingOnSale);
           newPayments.push({
-            id: `crdpay-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+            id: crypto.randomUUID(),
             saleId,
             customerId,
             amount: Math.round(apply * 100) / 100,
@@ -305,7 +305,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
           // ── Registra no financeiro (financial_transaction de entrada) ──
           const sale = sales.find((s) => s.id === newPayments[0].saleId);
           storageService.saveFinancialAccount({
-            id: `ft-payment-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+            id: crypto.randomUUID(),
             title: `Pagamento Fiado - ${debt.customer.name}`,
             type: 'income',
             category: 'fiado_payment',

@@ -42,15 +42,37 @@ export function isValidUUID(uuid: string): boolean {
 }
 
 /**
- * Rate limiter for login attempts
+ * Rate limiter for login attempts — persistido em localStorage
+ * para sobreviver a refreshes de página e tentativas de brute force.
  */
 class RateLimiter {
-  private attempts: Map<string, { count: number; lastAttempt: number }> = new Map();
+  private readonly STORAGE_KEY = 'hd_system_rate_limiter';
   private readonly maxAttempts = 5;
   private readonly lockoutDuration = 15 * 60 * 1000; // 15 minutes
 
+  private loadAttempts(): Map<string, { count: number; lastAttempt: number }> {
+    try {
+      const raw = localStorage.getItem(this.STORAGE_KEY);
+      if (!raw) return new Map();
+      const parsed = JSON.parse(raw);
+      return new Map(Object.entries(parsed));
+    } catch {
+      return new Map();
+    }
+  }
+
+  private saveAttempts(attempts: Map<string, { count: number; lastAttempt: number }>): void {
+    try {
+      const obj = Object.fromEntries(attempts);
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(obj));
+    } catch {
+      // Quota exceeded or other localStorage error — fail silently
+    }
+  }
+
   canAttempt(identifier: string): boolean {
-    const record = this.attempts.get(identifier);
+    const attempts = this.loadAttempts();
+    const record = attempts.get(identifier);
     
     if (!record) {
       return true;
@@ -58,7 +80,8 @@ class RateLimiter {
 
     // Reset if lockout duration has passed
     if (Date.now() - record.lastAttempt > this.lockoutDuration) {
-      this.attempts.delete(identifier);
+      attempts.delete(identifier);
+      this.saveAttempts(attempts);
       return true;
     }
 
@@ -66,18 +89,21 @@ class RateLimiter {
   }
 
   recordAttempt(identifier: string): void {
-    const record = this.attempts.get(identifier);
+    const attempts = this.loadAttempts();
+    const record = attempts.get(identifier);
     
     if (record) {
       record.count++;
       record.lastAttempt = Date.now();
     } else {
-      this.attempts.set(identifier, { count: 1, lastAttempt: Date.now() });
+      attempts.set(identifier, { count: 1, lastAttempt: Date.now() });
     }
+    this.saveAttempts(attempts);
   }
 
   getRemainingAttempts(identifier: string): number {
-    const record = this.attempts.get(identifier);
+    const attempts = this.loadAttempts();
+    const record = attempts.get(identifier);
     
     if (!record) {
       return this.maxAttempts;
@@ -92,7 +118,8 @@ class RateLimiter {
   }
 
   getLockoutTimeRemaining(identifier: string): number {
-    const record = this.attempts.get(identifier);
+    const attempts = this.loadAttempts();
+    const record = attempts.get(identifier);
     
     if (!record) {
       return 0;
@@ -103,7 +130,9 @@ class RateLimiter {
   }
 
   reset(identifier: string): void {
-    this.attempts.delete(identifier);
+    const attempts = this.loadAttempts();
+    attempts.delete(identifier);
+    this.saveAttempts(attempts);
   }
 }
 

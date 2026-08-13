@@ -187,7 +187,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ user }) => {
       return;
     }
     try {
-      const id = editingCustomer?.id || `cust-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+      const id = editingCustomer?.id || crypto.randomUUID();
       const customer: Customer = {
         id,
         name: formCustomerName.trim(),
@@ -256,7 +256,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ user }) => {
       return;
     }
     try {
-      const id = editingSupplier?.id || `sup-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+      const id = editingSupplier?.id || crypto.randomUUID();
       const supplier: Supplier = {
         id,
         companyName: formSupplierName.trim(),

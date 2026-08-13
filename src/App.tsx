@@ -579,6 +579,8 @@ export const App: React.FC = () => {
               }
               storageService.updateSaleFromRemote(sale);
               setLastSyncTime(new Date());
+            }).catch((err) => {
+              console.warn('[HD-Sync] Error fetching sale for sale_items event:', err?.message);
             });
           }
           break;
@@ -696,6 +698,9 @@ export const App: React.FC = () => {
               setSyncStatus('online');
               setLastSyncTime(new Date());
             }
+          }).catch((err) => {
+            console.warn('[HD-Sync] Error processing pending queue:', err?.message);
+            setSyncStatus('error');
           });
         }
         isOnlineRef.current = true;
@@ -723,6 +728,9 @@ export const App: React.FC = () => {
       syncService.processPendingQueue().then((result) => {
         setSyncStatus(result.failed > 0 ? 'error' : 'online');
         setLastSyncTime(new Date());
+      }).catch((err) => {
+        console.warn('[HD-Sync] Error processing pending queue on reconnect:', err?.message);
+        setSyncStatus('error');
       });
     }
   }, [isOnline]);
@@ -796,8 +804,12 @@ export const App: React.FC = () => {
           if (prevOrg !== orgId) {
             runHydration();
           }
+        }).catch((err) => {
+          console.warn('[Auth] Error fetching profile on session restore:', err?.message);
         });
       }
+    }).catch((err) => {
+      console.warn('[Auth] Error checking session on mount:', err?.message);
     });
 
     // Listen for auth state changes
