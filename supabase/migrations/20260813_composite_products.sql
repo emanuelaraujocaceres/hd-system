@@ -34,22 +34,26 @@ CREATE TABLE IF NOT EXISTS product_recipes (
 ALTER TABLE product_recipes ENABLE ROW LEVEL SECURITY;
 
 -- 4. RLS Policies (isolamento por organização)
--- Superadmin vê tudo; usuários normais só veem sua org
+-- Usamos DROP IF EXISTS para idempotência (não falhar se já existirem)
+DROP POLICY IF EXISTS "product_recipes_select" ON product_recipes;
 CREATE POLICY "product_recipes_select" ON product_recipes
   FOR SELECT USING (
     is_superadmin() OR organization_id = get_user_org_id()
   );
 
+DROP POLICY IF EXISTS "product_recipes_insert" ON product_recipes;
 CREATE POLICY "product_recipes_insert" ON product_recipes
   FOR INSERT WITH CHECK (
     is_superadmin() OR organization_id = get_user_org_id()
   );
 
+DROP POLICY IF EXISTS "product_recipes_update" ON product_recipes;
 CREATE POLICY "product_recipes_update" ON product_recipes
   FOR UPDATE USING (
     is_superadmin() OR organization_id = get_user_org_id()
   );
 
+DROP POLICY IF EXISTS "product_recipes_delete" ON product_recipes;
 CREATE POLICY "product_recipes_delete" ON product_recipes
   FOR DELETE USING (
     is_superadmin() OR organization_id = get_user_org_id()
