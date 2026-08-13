@@ -59,6 +59,12 @@ const handleSetTab = (tab) => { setActiveTab(tab); setSessionStorage(...); };
 
 ### BUG-005: Valor do FiadosView vs FinanceView diferente
 **Sintoma:** FiadosView mostra R$81,90, FinanceView mostra R$61,90 (mesmo fiado)
-**Causa:** `creditAmount` no FiadosView usa fallback `|| saleTotal` quando `payments.find()` retorna undefined.
-**Regra:** Garantir que `payments` da venda SEMPRE tenha o payment `credit_account` mapeado corretamente (via `payments_json`).
-**Local:** `FiadosView.tsx:131-132`
+**Causa:** `creditAmount` no FiadosView usava fallback `|| saleTotal` quando `payments.find()` retornava undefined.
+**Regra:** Usar `reduce` para somar TODOS os pagamentos `credit_account` (suporta split payment). Fallback `|| saleTotal` só se nenhum pagamento credit existir.
+**Local:** `FiadosView.tsx:136-141` + `FiadosView.tsx:266-271` (corrigido)
+
+### BUG-006: getCreditPayments() sempre retorna array vazio
+**Sintoma:** Barra de progresso de fiados sempre mostra 0%, pagamentos desaparecem do UI
+**Causa:** `getCreditPayments()` filtrava por `p.sale_id` (snake_case) mas objetos CreditPayment usam `saleId` (camelCase).
+**Regra:** `getCreditPayments()` deve filtrar por `p.saleId`. `getSaleItems()` pode usar `item.sale_id` (sale_items são armazenados com snake_case).
+**Local:** `storageService.ts:2881-2887` (corrigido)

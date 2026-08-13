@@ -72,6 +72,7 @@ interface UserRow {
   email: string;
   role: string;
   active: boolean;
+  store_branch_id?: string;
 }
 
 /* ================================================================== */
@@ -639,16 +640,22 @@ const OrganizationsManager: React.FC<{ user: UserProfile; onEnterOrg?: (orgId: s
                       <tr className="bg-slate-50 dark:bg-[#09090b]/40 text-slate-400 dark:text-[#52525b] uppercase tracking-wider font-bold">
                         <th className="px-4 py-2.5 text-left">Nome</th>
                         <th className="px-4 py-2.5 text-left">E-mail</th>
+                        <th className="px-4 py-2.5 text-left">Filial</th>
                         <th className="px-4 py-2.5 text-left">Perfil</th>
                         <th className="px-4 py-2.5 text-center">Ativo</th>
                         <th className="px-4 py-2.5 text-center">Ação</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
-                      {users.map((u) => (
+                      {users.map((u) => {
+                        const branchName = u.store_branch_id
+                          ? (branches || []).find((b) => b.id === u.store_branch_id)?.name || '—'
+                          : '—';
+                        return (
                         <tr key={u.id} className="text-slate-700 dark:text-[#a1a1aa]">
                           <td className="px-4 py-2.5 font-medium">{u.name}</td>
                           <td className="px-4 py-2.5 text-slate-400">{u.email}</td>
+                          <td className="px-4 py-2.5 text-xs">{branchName}</td>
                           <td className="px-4 py-2.5">
                             <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
                               u.role === 'admin' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' : 'bg-slate-500/10 text-slate-600 dark:text-slate-400'
@@ -679,7 +686,8 @@ const OrganizationsManager: React.FC<{ user: UserProfile; onEnterOrg?: (orgId: s
                             </button>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

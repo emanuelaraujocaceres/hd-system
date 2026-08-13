@@ -54,6 +54,26 @@ async function startServer() {
       if (!supabaseAdmin) {
         return res.status(500).json({ success: false, message: "SUPABASE_SERVICE_ROLE_KEY não configurada no servidor." });
       }
+
+      // 1) Valida o chamador: precisa ser superadmin
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+      if (!token) {
+        return res.status(401).json({ success: false, message: 'Não autenticado.' });
+      }
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
+      if (authErr || !authData?.user) {
+        return res.status(401).json({ success: false, message: 'Sessão inválida ou expirada.' });
+      }
+      const { data: callerProfile } = await supabaseAdmin
+        .from('system_users')
+        .select('superadmin')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+      if (!callerProfile?.superadmin) {
+        return res.status(403).json({ success: false, message: 'Acesso negado: apenas superadmin.' });
+      }
+
       const { name, email, role, organization_id, store_branch_id, password } = req.body;
       if (!name || !email || !organization_id) {
         return res.status(400).json({ success: false, message: "name, email e organization_id são obrigatórios." });
@@ -130,6 +150,26 @@ async function startServer() {
       if (!supabaseAdmin) {
         return res.status(500).json({ success: false, message: "SUPABASE_SERVICE_ROLE_KEY não configurada no servidor." });
       }
+
+      // 1) Valida o chamador: precisa ser superadmin
+      const authHeader = req.headers.authorization || '';
+      const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+      if (!token) {
+        return res.status(401).json({ success: false, message: 'Não autenticado.' });
+      }
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
+      if (authErr || !authData?.user) {
+        return res.status(401).json({ success: false, message: 'Sessão inválida ou expirada.' });
+      }
+      const { data: callerProfile } = await supabaseAdmin
+        .from('system_users')
+        .select('superadmin')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+      if (!callerProfile?.superadmin) {
+        return res.status(403).json({ success: false, message: 'Acesso negado: apenas superadmin.' });
+      }
+
       const { org_name, admin_name, admin_email } = req.body;
       if (!org_name || !admin_name || !admin_email) {
         return res.status(400).json({ success: false, message: "org_name, admin_name e admin_email são obrigatórios." });

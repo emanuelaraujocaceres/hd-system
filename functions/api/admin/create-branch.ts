@@ -23,6 +23,28 @@ export async function onRequestPost(context: any) {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
+    // 1) Valida o chamador: precisa ser superadmin
+    const authHeader = request.headers.get('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) {
+      return new Response(JSON.stringify({ success: false, message: 'Não autenticado.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } });
+    }
+    const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    if (authErr || !authData?.user) {
+      return new Response(JSON.stringify({ success: false, message: 'Sessão inválida ou expirada.' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } });
+    }
+    const { data: callerProfile } = await supabaseAdmin
+      .from('system_users')
+      .select('superadmin')
+      .eq('id', authData.user.id)
+      .maybeSingle();
+    if (!callerProfile?.superadmin) {
+      return new Response(JSON.stringify({ success: false, message: 'Acesso negado: apenas superadmin.' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+
     const body = await request.json().catch(() => ({}));
     const { id, name, code, organization_id, cnpj, city, state, address, phone, is_headquarters, active } = body;
 
