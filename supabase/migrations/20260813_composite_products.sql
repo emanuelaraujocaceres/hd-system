@@ -60,10 +60,32 @@ CREATE POLICY "product_recipes_delete" ON product_recipes
   );
 
 -- 5. Adicionar à publicação realtime (regra #2 do AGENTS.md)
-ALTER PUBLICATION supabase_realtime ADD TABLE product_recipes;
+-- Usamos um bloco condicional para idempotência (não falhar se já estiver)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_rel WHERE pubname = 'supabase_realtime' AND relname = 'product_recipes'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE product_recipes;
+    RAISE NOTICE '✅ Tabela product_recipes adicionada à publicação supabase_realtime';
+  ELSE
+    RAISE NOTICE 'ℹ️ Tabela product_recipes já está na publicação supabase_realtime';
+  END IF;
+END $$;
 
 -- 6. Replica Identity FULL para payload completo (regra #2)
-ALTER TABLE product_recipes REPLICA IDENTITY FULL;
+-- Idempotente: usa um bloco condicional
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_replication_identity WHERE relname = 'product_recipes'
+  ) THEN
+    ALTER TABLE product_recipes REPLICA IDENTITY FULL;
+    RAISE NOTICE '✅ Replica Identity FULL definido para product_recipes';
+  ELSE
+    RAISE NOTICE 'ℹ️ Replica Identity FULL já definido para product_recipes';
+  END IF;
+END $$;
 
 -- 7. Índices para performance
 CREATE INDEX IF NOT EXISTS idx_product_recipes_composite ON product_recipes(composite_product_id);
