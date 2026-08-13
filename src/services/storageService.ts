@@ -1708,19 +1708,24 @@ class StorageService {
               updatedAt: r.updated_at || new Date().toISOString(),
             };
           });
-          // CRITICAL: Filter local-only sales by resolved branch to prevent
-          // cross-branch data leaks (e.g. Campinas sales appearing in São Paulo).
-          // Without this, switching branches leaves old sales in localStorage
-          // that get merged into the new branch's view.
-          const mergedSales = [
-            ...cloudMapped,
-            ...localSales.filter((s) => {
-              if (cloudSaleIds.has(s.id)) return false; // already in cloud
-              // If we have a resolved branch, only keep local sales from THIS branch
-              if (resolvedBranchId) return s.storeBranchId === resolvedBranchId;
-              return true; // no branch filter: keep all (edge case)
-            }),
-          ];
+// CRITICAL: Filter local-only sales by resolved branch to prevent
+            // cross-branch data leaks (e.g. Campinas sales appearing in São Paulo).
+            // However, preserve sales from active customer sessions (comandas em aberto),
+            // para que pedidos não sumam da comanda ao mudar de filial ou recarregar o app.
+            const activeSessions = this.getCustomerSessions()
+              .filter((s) => s.status === 'active')
+              .map((s) => s.id);
+            const mergedSales = [
+              ...cloudMapped,
+              ...localSales.filter((s) => {
+                // Sempre preservar vendas de sessões de cliente ativas (comandas em aberto)
+                if (activeSessions.has(s.customerSessionId)) return true;
+                if (cloudSaleIds.has(s.id)) return false; // já no cloud
+                // If we have a resolved branch, only keep local sales from THIS branch
+                if (resolvedBranchId) return s.storeBranchId === resolvedBranchId;
+                return true; // no branch filter: keep all (edge case)
+              }),
+            ];
           // Sort: newest first by date (defensive — cloud ORDER BY + local safety net)
           mergedSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           console.log(`[HD-Sync] 📊 Merged ${mergedSales.length} sales (cloud: ${cloudMapped.length}, local-only: ${mergedSales.length - cloudMapped.length})`);
@@ -4938,8 +4943,16 @@ private updateReceivableFromPayments(saleId: string) {
     return null;
   }
 
-  saveUserProfile(user: UserProfile) {
-    this.set(KEYS.USER, user);
+saveUserProfile(user: UserProfile) {
+    // Ensure organizationId and storeBranchId are always persisted
+    // so that getCurrentOrgId() can read them and avoid DEFAULT_ORG_ID fallback,
+    // which would cause 401 Unauthorized errors on API calls.
+    const updatedUser = {
+      ...user,
+      organizationId: user.organizationId || DEFAULT_ORG_ID,
+      storeBranchId: user.storeBranchId || undefined,
+    };
+    this.set(KEYS.USER, updatedUser);
     localStorage.setItem(KEYS.LOGGED_IN_EMAIL, user.email);
     this.notify();
   }
