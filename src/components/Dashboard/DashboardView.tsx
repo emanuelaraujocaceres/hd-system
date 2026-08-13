@@ -87,6 +87,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const lowStockCount = products.filter((p) => p.currentStock <= p.minStock).length;
 
+  // ── ALERTAS DE VALIDADE ──────────────────────────────────────
+  // Produtos com data de validade vencida ou nos próximos 30 dias
+  const today = new Date();
+  const thirtyDaysFromNow = new Date(today);
+  thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+  const expiredProducts = useMemo(() =>
+    products.filter((p) => {
+      if (!p.expirationDate || !p.active) return false;
+      const expDate = new Date(p.expirationDate + 'T23:59:59');
+      return expDate < today;
+    }),
+    [products]
+  );
+
+  const expiringProducts = useMemo(() =>
+    products.filter((p) => {
+      if (!p.expirationDate || !p.active) return false;
+      const expDate = new Date(p.expirationDate + 'T23:59:59');
+      return expDate >= today && expDate <= thirtyDaysFromNow;
+    }).sort((a, b) => new Date(a.expirationDate!).getTime() - new Date(b.expirationDate!).getTime()),
+    [products]
+  );
+
   // ── TOP SELLING PRODUCTS THIS MONTH ────────────────────────────
   // Agrega itens de vendas do mês atual, agrupa por produto, soma
   // quantidades e retorna os TOP 3 mais vendidos.
@@ -387,6 +411,97 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </button>
       </div>
+
+      {/* ── ALERTAS DE VALIDADE ──────────────────────────────── */}
+      {(expiredProducts.length > 0 || expiringProducts.length > 0) && (
+        <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl overflow-hidden shadow-sm">
+          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 dark:border-[#27272a] flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-amber-500" />
+            <h3 className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">Alertas de Validade</h3>
+            {expiredProducts.length > 0 && (
+              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 border border-rose-500/20">
+                {expiredProducts.length} vencido{expiredProducts.length > 1 ? 's' : ''}
+              </span>
+            )}
+            {expiringProducts.length > 0 && (
+              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                {expiringProducts.length} próximo{expiringProducts.length > 1 ? 's' : ''} ao vencimento
+              </span>
+            )}
+          </div>
+          <div className="p-4 space-y-3">
+            {/* Produtos VENCIDOS */}
+            {expiredProducts.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Vencidos
+                </p>
+                <div className="space-y-1.5">
+                  {expiredProducts.slice(0, 5).map((p) => (
+                    <div key={p.id} className="flex items-center justify-between p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40 text-xs">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-rose-900 dark:text-rose-200 truncate">{p.name}</p>
+                        <p className="text-[10px] text-rose-600 dark:text-rose-400">
+                          Validade: {new Date(p.expirationDate + 'T12:00:00').toLocaleDateString('pt-BR')} • Estoque: {p.currentStock} {p.unit}
+                        </p>
+                      </div>
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 shrink-0 ml-2">
+                        VENCIDO
+                      </span>
+                    </div>
+                  ))}
+                  {expiredProducts.length > 5 && (
+                    <p className="text-[10px] text-slate-400 dark:text-[#71717a] text-center">
+                      + {expiredProducts.length - 5} outros produtos vencidos
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Produtos PRÓXIMOS AO VENCIMENTO */}
+            {expiringProducts.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  Próximos ao Vencimento (30 dias)
+                </p>
+                <div className="space-y-1.5">
+                  {expiringProducts.slice(0, 5).map((p) => {
+                    const expDate = new Date(p.expirationDate + 'T12:00:00');
+                    const daysUntil = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                    return (
+                      <div key={p.id} className="flex items-center justify-between p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-xs">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-amber-900 dark:text-amber-200 truncate">{p.name}</p>
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                            Validade: {expDate.toLocaleDateString('pt-BR')} • Estoque: {p.currentStock} {p.unit}
+                          </p>
+                        </div>
+                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ml-2 ${
+                          daysUntil <= 7
+                            ? 'bg-rose-500/10 text-rose-600'
+                            : daysUntil <= 14
+                              ? 'bg-amber-500/10 text-amber-600'
+                              : 'bg-yellow-500/10 text-yellow-600'
+                        }`}>
+                          {daysUntil} dia{daysUntil > 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {expiringProducts.length > 5 && (
+                    <p className="text-[10px] text-slate-400 dark:text-[#71717a] text-center">
+                      + {expiringProducts.length - 5} outros produtos próximos ao vencimento
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* CHARTS & TABLES GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">

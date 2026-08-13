@@ -486,6 +486,8 @@ class StorageService {
       tv_promo_price: p.tvPromoPrice || null,
       tv_highlight_tag: p.tvHighlightTag || null,
       wholesale_options: p.wholesaleOptions || null,
+      expiration_date: p.expirationDate || null,
+      is_composite: p.isComposite || false,
     });
   }
 
@@ -788,6 +790,8 @@ class StorageService {
       tvHighlightTag: row.tv_highlight_tag || undefined,
       organizationId: row.organization_id || undefined,
       wholesaleOptions: row.wholesale_options || undefined,
+      expirationDate: row.expiration_date || undefined,
+      isComposite: row.is_composite || false,
     };
     const idx = products.findIndex((p) => p.id === mapped.id);
     if (idx >= 0) {
@@ -1529,6 +1533,8 @@ class StorageService {
             tvHighlightTag: r.tv_highlight_tag || undefined,
             organizationId: r.organization_id || this.getCurrentOrgId(),
             wholesaleOptions: r.wholesale_options || undefined,
+            expirationDate: r.expiration_date || undefined,
+            isComposite: r.is_composite || false,
           };
         }, (p) => this.syncProduct(p), (p) => p.id, (localItem, cloudItem) => {
           // Preserve local salePrice if cloud sent 0

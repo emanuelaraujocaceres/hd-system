@@ -112,6 +112,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formWholesaleOptions, setFormWholesaleOptions] = useState<{ boxQuantity: string; salePrice: string }[]>([
     { boxQuantity: '', salePrice: '' },
   ]);
+  const [formExpirationDate, setFormExpirationDate] = useState('');
+  const [formIsComposite, setFormIsComposite] = useState(false);
 
   // Estoque Inteligente: Inventário (ajuste com motivo)
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
@@ -172,6 +174,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setFormShowOnTV(false);
       setFormTvPromoPrice('');
       setFormTvHighlightTag('');
+      setFormExpirationDate('');
+      setFormIsComposite(false);
       setImageSuggestions([]);
       setIsSearchingImages(false);
       setIsProductModalOpen(true);
@@ -359,6 +363,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormTvHighlightTag('');
     setFormWholesaleEnabled(false);
     setFormWholesaleOptions([{ boxQuantity: '', salePrice: '' }]);
+    setFormExpirationDate('');
+    setFormIsComposite(false);
     setImageSuggestions([]);
     setIsSearchingImages(false);
   };
@@ -390,6 +396,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         ? existingWholesale.map((o) => ({ boxQuantity: String(o.boxQuantity), salePrice: String(o.salePrice) }))
         : [{ boxQuantity: '', salePrice: '' }]
     );
+    setFormExpirationDate(product.expirationDate || '');
+    setFormIsComposite(product.isComposite || false);
     setIsProductModalOpen(true);
   };
 
@@ -439,6 +447,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         showOnCardapio: formShowOnCardapio,
         tvHighlightTag: formTvHighlightTag || undefined,
         wholesaleOptions,
+        expirationDate: formExpirationDate || undefined,
+        isComposite: formIsComposite || undefined,
       };
 
       storageService.saveProduct(newProd);
@@ -1243,6 +1253,25 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none placeholder:text-slate-300 dark:placeholder:text-[#3f3f46]"
                   />
                 </div>
+              </div>
+
+              {/* Data de Validade */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                  Data de Validade
+                  <span className="text-[10px] font-normal text-slate-400 dark:text-[#52525b] ml-1">(opcional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={formExpirationDate}
+                  onChange={(e) => setFormExpirationDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none placeholder:text-slate-300 dark:placeholder:text-[#3f3f46]"
+                />
+                {formExpirationDate && (
+                  <p className="text-[10px] text-slate-400 dark:text-[#52525b] mt-1">
+                    ⚠️ Produtos próximos à validade aparecem no Dashboard
+                  </p>
+                )}
               </div>
 
               {/* Product Photo Management */}

@@ -85,6 +85,8 @@ export interface Product {
   organizationId?: string; // multi-tenant: qual organização este produto pertence
   // Venda no ATACADO: uma ou mais caixas com quantidades e preços diferentes
   wholesaleOptions?: WholesaleOption[];
+  expirationDate?: string; // Data de validade (YYYY-MM-DD) — para alertas no Dashboard
+  isComposite?: boolean; // true = produto composto (desconta ingredientes do estoque)
 }
 
 export interface Category {
@@ -105,6 +107,24 @@ export interface WholesaleOption {
   id: string;
   boxQuantity: number; // quantas unidades vêm na caixa (12, 15, 18...)
   salePrice: number;   // preço de venda da caixa inteira (R$)
+}
+
+// ─── PRODUTOS COMPOSTOS (RECEITAS / BILL OF MATERIALS) ────────
+// Um produto composto é montado por N ingredientes (outros produtos do estoque).
+// Ao vender 1 unidade do composto, o sistema desconta automaticamente os ingredientes.
+export interface ProductRecipe {
+  id: string;
+  compositeProductId: string; // FK → Product.id (o produto composto)
+  ingredientProductId: string; // FK → Product.id (o ingrediente)
+  ingredientName?: string; // Nome do ingrediente (denormalizado para exibição)
+  quantity: number; // Quantidade do ingrediente por 1 unidade do composto (ex: 0.25 = 1 dose de 1L)
+  unit?: string; // un, lit, kg — unidade de medida da receita
+}
+
+// Tipo estendido de Product para incluir campos de compostos
+export interface CompositeProduct extends Product {
+  isComposite: boolean; // true = produto composto (desconta ingredientes)
+  recipe?: ProductRecipe[]; // Lista de ingredientes da receita
 }
 
 export interface CartItem {
