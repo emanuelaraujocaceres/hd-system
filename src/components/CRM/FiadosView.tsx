@@ -133,8 +133,13 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
 
       for (const sale of custSales) {
         const saleTotal = sale.total > 0 ? sale.total : (sale.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0);
-        const creditAmount =
-          sale.payments.find((p) => p.method === 'credit_account')?.amount || saleTotal;
+        // BUG-005 fix: somar TODOS os pagamentos credit_account (split payment),
+        // não usar fallback para saleTotal que infla a dívida
+        const creditAmount = Math.round(
+          (sale.payments || [])
+            .filter((p) => p.method === 'credit_account')
+            .reduce((sum, p) => sum + (p.amount || 0), 0) * 100,
+        ) / 100 || saleTotal;
 
         // Distribute the sale's credit amount across its items proportionally
         const saleSubtotal = (sale.items || []).reduce((acc, item) => acc + item.total, 0);
@@ -258,8 +263,12 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
 
           const saleSubtotal = (sale.items || []).reduce((acc, item) => acc + item.total, 0);
           const saleTotal = sale.total > 0 ? sale.total : (sale.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0);
-          const creditAmount =
-            sale.payments.find((p) => p.method === 'credit_account')?.amount || saleTotal;
+          // BUG-005 fix: somar TODOS os pagamentos credit_account (split payment)
+          const creditAmount = Math.round(
+            (sale.payments || [])
+              .filter((p) => p.method === 'credit_account')
+              .reduce((sum, p) => sum + (p.amount || 0), 0) * 100,
+          ) / 100 || saleTotal;
           const ratio = saleSubtotal > 0 ? creditAmount / saleSubtotal : 1;
           const totalSaleDebt = Math.round(saleSubtotal * ratio * 100) / 100;
           const remainingOnSale = Math.max(

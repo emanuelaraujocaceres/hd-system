@@ -2878,12 +2878,13 @@ class StorageService {
     return all.filter(item => validSaleIds.has(item.sale_id));
   }
 
-  getCreditPayments(): any[] {
-    const all = this.get<any[]>(KEYS.CREDIT_PAYMENTS, []);
+  getCreditPayments(): CreditPayment[] {
+    const all = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []);
     // Filtra por vendas que pertencem à org atual
+    // CreditPayment usa camelCase (saleId), não snake_case (sale_id)
     const sales = this.getSales();
     const validSaleIds = new Set(sales.map(s => s.id));
-    return all.filter(p => validSaleIds.has(p.sale_id));
+    return all.filter(p => validSaleIds.has(p.saleId));
   }
 
   saveCreditPayments(payments: any[]) {
