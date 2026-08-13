@@ -228,4 +228,6 @@ BEGIN
 END;
 $$;
 
-RAISE NOTICE '✅ Migração de RLS concluída — todas as policies USING(true) foram substituídas';
+DO $$ BEGIN
+  RAISE NOTICE '✅ Migração de RLS concluída — todas as policies USING(true) foram substituídas';
+END $$;
