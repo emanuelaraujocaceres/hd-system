@@ -1,8 +1,9 @@
 # SUPABASE SCHEMA — Referência Completa do Banco de Dados
 
-> **Última atualização:** 2026-08-13 (após migrations de validade + produtos compostos)
+> **Última atualização:** 2026-08-13 (MIGRATIONS CONFIRMADAS NO SUPABASE ✅)
 > **Projeto:** `tixwhmgzibvazkqbqoev` (https://tixwhmgzibvazkqbqoev.supabase.co)
 > **Migrations:** 78 arquivos em `supabase/migrations/`
+> **Total tabelas na realtime:** 32
 
 ## Regra de Manutenção
 
@@ -832,6 +833,7 @@ Todas com `REPLICA IDENTITY FULL` para payload completo de UPDATE/DELETE.
 ## Pendências Conhecidas
 
 1. **`suppliers`** — Colunas `company_name`, `trade_name`, `contact_name` mapeadas como `name`, `contact_person` no banco
-2. **Sistema de produtos compostos** — Tabela `product_recipes` CRIADA (migration 20260813_composite_products.sql). Falta: UI de edição de receitas no InventoryView, lógica de desconto automático no PDV
-3. **UI de edição de receita** — Modal para adicionar/remover ingredientes de um produto composto
-4. **Lógica de venda de composto** — No PDV, ao vender um produto composto, descontar ingredientes automaticamente
+2. **Sistema de produtos compostos** — ✅ Migration EXECUTADA e CONFIRMADA (tabela `product_recipes` + coluna `is_composite`)
+   - **Pendente frontend:** UI de edição de receitas no InventoryView (modal para adicionar/remover ingredientes)
+   - **Pendente frontend:** Lógica de desconto automático no PDV ao vender produto composto
+   - **Pendente frontend:** Sub-itens no recibo térmico para produtos compostos
