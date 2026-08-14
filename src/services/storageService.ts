@@ -2502,23 +2502,6 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
     return this.filterBySelectedBranch<Product>(this.filterByOrg<Product>(all));
   }
 
-  // Remove produtos duplicados (mesmo nome + mesma filial), mantendo o mais
-  // recente (updatedAt). Defesa: impede que os cardápios exibam preços
-  // divergentes quando o banco contém linhas duplicadas (mesmo nome, preços
-  // diferentes). O estojo (Inventory) continua exibindo tudo p/ limpeza manual.
-  dedupeProductsByName(products: Product[]): Product[] {
-    const map = new Map<string, Product>();
-    for (const p of products) {
-      const key = `${p.name ?? ''}|${p.storeBranchId ?? ''}`;
-      const existing = map.get(key);
-      if (!existing) { map.set(key, p); continue; }
-      const tE = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
-      const tP = p.updatedAt ? new Date(p.updatedAt).getTime() : 0;
-      if (tP > tE) map.set(key, p);
-    }
-    return Array.from(map.values());
-  }
-
   saveProduct(product: Product): Product {
     product.id = StorageService.ensureUuid(product.id);
     product.organizationId = this.getCurrentOrgId();

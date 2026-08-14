@@ -87,10 +87,7 @@ export const MarketingGenerator: React.FC<MarketingGeneratorProps> = ({ branch }
   }, [selectedProducts, selectedTemplate, platform, callToAction, customMessage, qrCodeUrl]);
 
   const loadProducts = () => {
-    // Defesa: nunca exibir produtos duplicados (mesmo nome/filial) nos cardápios
-    const all = storageService.dedupeProductsByName(
-      storageService.getProducts().filter(p => p.active !== false && p.showOnCardapio !== false)
-    );
+    const all = storageService.getProducts().filter(p => p.active !== false && p.showOnCardapio !== false);
     setProducts(all);
     setSelectedProducts(all.slice(0, 3));
   };

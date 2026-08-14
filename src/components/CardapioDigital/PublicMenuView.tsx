@@ -59,8 +59,6 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           if (filialId && filialId !== 'default') {
             localProducts = localProducts.filter(p => p.storeBranchId === filialId);
           }
-          // Defesa: nunca exibir produtos duplicados (mesmo nome/filial) nos cardápios
-          localProducts = storageService.dedupeProductsByName(localProducts);
           const localConfig = storageService.getDigitalMenuConfig();
           
           setProducts(localProducts);
@@ -138,9 +136,9 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         );
 
         if (productsRes.ok) {
-          const raw = await productsRes.json();
+          const products = await productsRes.json();
           // Map snake_case to camelCase
-          const mapped = (raw || []).map((p: any) => ({
+          setProducts((products || []).map((p: any) => ({
             id: p.id,
             name: p.name,
             barcode: p.barcode || '',
@@ -159,9 +157,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
             showOnCardapio: p.show_on_cardapio || false,
             showOnTV: p.show_on_tv || false,
             tvPromoPrice: p.tv_promo_price || undefined,
-          }));
-          // Defesa: nunca exibir produtos duplicados (mesmo nome/filial) nos cardápios
-          setProducts(storageService.dedupeProductsByName(mapped));
+          })));
         }
 
         // Fetch menu config

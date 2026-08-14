@@ -63,10 +63,7 @@ export const DeliveryClientView: React.FC<DeliveryClientViewProps> = ({ branch, 
 
   const loadData = () => {
     const allProducts = storageService.getProducts();
-    // Defesa: nunca exibir produtos duplicados (mesmo nome/filial) nos cardápios
-    const filtered = storageService.dedupeProductsByName(
-      allProducts.filter(p => p.active !== false && p.showOnCardapio !== false)
-    );
+    const filtered = allProducts.filter(p => p.active !== false && p.showOnCardapio !== false);
     setProducts(filtered);
     
     const s = storageService.getDeliverySettings();

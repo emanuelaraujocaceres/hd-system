@@ -41,9 +41,7 @@ export const CardapioPreviewView: React.FC<CardapioPreviewViewProps> = ({ produc
 
   // Filter products: only active AND showOnCardapio = true
   const filteredProducts = useMemo(() => {
-    const active = products.filter((p) => p.active !== false && p.showOnCardapio !== false);
-    // Defesa: nunca exibir produtos duplicados (mesmo nome/filial) nos cardápios
-    return storageService.dedupeProductsByName(active);
+    return products.filter((p) => p.active !== false && p.showOnCardapio !== false);
   }, [products]);
 
   // Categories from products
@@ -262,10 +260,27 @@ export const CardapioPreviewView: React.FC<CardapioPreviewViewProps> = ({ produc
                   {product.name}
                 </p>
                 <div className="mt-auto flex items-center justify-between">
-                  <span className="text-sm font-bold text-emerald-600">
-                    {config?.showPrices !== false ? `R$ ${product.salePrice.toFixed(2)}` : 'Consultar'}
-                  </span>
-                  {config?.showPrices !== false && (
+                  <div className="flex flex-col">
+                    {config?.showPrices !== false ? (
+                      product.tvPromoPrice && product.tvPromoPrice > 0 && product.tvPromoPrice < (product.salePrice ?? 0) ? (
+                        <>
+                          <span className="text-[10px] font-bold text-rose-500 line-through">
+                            R$ {(product.salePrice ?? 0).toFixed(2)}
+                          </span>
+                          <span className="text-sm font-bold text-emerald-600">
+                            R$ {product.tvPromoPrice.toFixed(2)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-sm font-bold text-emerald-600">
+                          R$ {(product.salePrice ?? 0).toFixed(2)}
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-sm font-bold text-emerald-600">Consultar</span>
+                    )}
+                  </div>
+                  {product.currentStock > 0 && config?.showPrices !== false && (
                     <button
                       onClick={() => addToCart(product)}
                       className="w-8 h-8 rounded-full bg-teal-600 text-white flex items-center justify-center hover:bg-teal-500"
