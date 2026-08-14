@@ -257,7 +257,13 @@ getCurrentOrgId(): string {
    */
   private isRemoteFromCurrentBranch(row: any): boolean {
     const rawBranchId = this.getRawBranchId();
-    if (!rawBranchId || !row?.store_branch_id) return true; // sem filtro: aceitar
+    // Sem filial selecionada (modo global / superadmin sem override de filial):
+    // aceita tudo — a filtragem fina fica na UI.
+    if (!rawBranchId) return true;
+    // Filial selecionada: registros SEM store_branch_id (legado/ambíguo) NUNCA
+    // entram na filial atual. Isso impede vazar dados de origem desconhecida
+    // para a filial em foco (isolamento estrito por filial em todas as funções).
+    if (!row?.store_branch_id) return false;
     let resolved = rawBranchId;
     if (!StorageService.UUID_RE.test(resolved)) {
       const branches = this.getBranches();
