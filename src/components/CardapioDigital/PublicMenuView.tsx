@@ -374,6 +374,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       }
 
       setCart([]);
+      setShowCart(false); // Fecha o carrinho para não reabrir vazio após a confirmação
       loadMyOrders(); // Refresh my orders
       setOrderSuccess(true);
     } catch (err: any) {
