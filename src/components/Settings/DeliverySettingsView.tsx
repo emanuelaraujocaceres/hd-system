@@ -110,7 +110,6 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
         isActive: true,
         deliveryEnabled,
         pickupEnabled,
-        operatingHours: settings?.operatingHours || {},
         feeCalculationType: feeType,
         fixedFee,
         minimumOrderValue: minimumOrder,

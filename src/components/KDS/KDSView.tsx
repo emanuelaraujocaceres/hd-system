@@ -251,7 +251,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
   };
 
   // Advance status for a single item (from the whole sale)
-  const handleAdvanceStatus = (saleId: string, currentStatus: KdsStatus) => {
+  const handleAdvanceStatus = async (saleId: string, currentStatus: KdsStatus) => {
     const nextStatus = STATUS_CONFIG[currentStatus].next;
     if (!nextStatus) return;
     try {
