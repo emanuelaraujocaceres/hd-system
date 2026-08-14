@@ -171,12 +171,37 @@ class GlobalNotificationServiceClass {
     return false;
   }
 
-  /** Filtro por filial: superadmin sem filial selecionada vê todas */
+  /**
+   * Isolamento ESTRITO por organização + filial (defesa-em-profundidade).
+   * - Org: se o item tem organizationId e ele difere da org em foco, BLOQUEIA.
+   *   (superadmin "vendo" uma org específica também fica limitado a ela)
+   * - Filial: só libera se o item pertence à filial selecionada. Código curto
+   *   ("br-01") é resolvido para UUID antes de comparar, espelhando o filtro do
+   *   App.tsx. Sem filial selecionada (ou superadmin global), libera.
+   * Uma notificação JAMAIS vaza para outra filial ou outra organização.
+   */
   private isInCurrentBranch(item: any): boolean {
     if (!item) return false;
-    const currentBranchId = storageService.getSelectedBranchId();
-    if (!currentBranchId) return true;
-    return item.storeBranchId === currentBranchId;
+
+    // ── Org isolation ──
+    const currentOrgId = storageService.getCurrentOrgId();
+    if (currentOrgId && item.organizationId && item.organizationId !== currentOrgId) {
+      return false;
+    }
+
+    // ── Branch isolation (resolve short code → UUID) ──
+    const rawBranch = storageService.getRawBranchId();
+    if (rawBranch) {
+      let resolved = rawBranch;
+      if (!storageService.isUuid(rawBranch)) {
+        const branches = storageService.getBranches();
+        const matched = branches.find((b) => b.id === rawBranch || b.code === rawBranch);
+        if (matched) resolved = matched.id;
+      }
+      if (item.storeBranchId && item.storeBranchId !== resolved) return false;
+    }
+
+    return true;
   }
 
   subscribe(listener: NotificationListener) {

@@ -400,34 +400,30 @@ getCurrentOrgId(): string {
   }
 
   private notify(key?: string, source?: 'local' | 'sync' | 'hydration' | 'remote', payload?: any) {
-    // Debounce: batch rapid storage changes into a single notification
-    // and defer past React's render cycle to prevent error #306.
-    // Handlers REMOTOS passam source='remote' EXPLÍCITO e o payload (o
-    // registro que mudou): entre o setChangeSource('remote') e o notify()
-    // pode haver await (fetch de itens), e qualquer operação concorrente
-    // (sync/hidratação) mudaria o changeSource — corrompendo a origem.
-    // O payload garante que a notificação se refira ao registro REAL que
-    // chegou (não ao getSales()[0], que pode não ser o mesmo quando a
-    // venda já existia e foi substituída no lugar).
+    // FILA (não single-slot): o debounce original com `if (this.notifyTimer) return`
+    // DROPAVA qualquer notificação que chegasse enquanto um timer estava pendente.
+    // Em rajadas do Realtime (venda + item + caixa chegam juntos), a notificação da
+    // VENDA era engolida → "não notifica nada". Agora enfileiramos TODAS e despachamos
+    // o lote num microtask (setTimeout 0), respeitando o diferimento que evita o React
+    // error #306, mas sem perder nenhum evento. O dedupe por (kind,id) no
+    // globalNotificationService impede toasts/chimes duplicados do mesmo registro.
+    // Handlers REMOTOS passam source='remote' EXPLÍCITO e o payload (o registro que
+    // mudou): entre setChangeSource('remote') e notify() pode haver await.
+    this._notifyQueue.push({ key, source: source || this.changeSource, payload });
     if (this.notifyTimer) return;
-    this._pendingNotifyKey = key;
-    this._pendingNotifySource = source || this.changeSource;
-    this._pendingNotifyPayload = payload;
     this.notifyTimer = setTimeout(() => {
       this.notifyTimer = null;
-      const k = this._pendingNotifyKey;
-      const s = this._pendingNotifySource;
-      const p = this._pendingNotifyPayload;
-      this._pendingNotifyKey = undefined;
-      this._pendingNotifySource = undefined;
-      this._pendingNotifyPayload = undefined;
-      this.listeners.forEach((fn) => { try { fn(k, s, p); } catch {} });
+      const batch = this._notifyQueue;
+      this._notifyQueue = [];
+      batch.forEach(({ key, source, payload }) => {
+        this.listeners.forEach((fn) => {
+          try { fn(key, source, payload); } catch (e) { console.warn('[HD-Sync] notify listener error', e); }
+        });
+      });
     }, 0);
   }
 
-  private _pendingNotifyKey: string | undefined;
-  private _pendingNotifySource: 'local' | 'sync' | 'hydration' | 'remote' | undefined;
-  private _pendingNotifyPayload: any;
+  private _notifyQueue: { key?: string; source?: 'local' | 'sync' | 'hydration' | 'remote'; payload?: any }[] = [];
 
   // ─── DLQ: Dead Letter Queue para operacoes RPC que falharam ──────
   private async insertDLQ(
