@@ -21,6 +21,15 @@ import {
 } from 'lucide-react';
 import { FinancialAccount, FinancialInstallment, FinancialRecurrence, Sale, Product, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
+import { printSaleReceipt } from '../../services/printService';
+
+async function reprintSaleReceipt(sale: Sale) {
+  try {
+    const printers = storageService.getPrinters();
+    const settings = storageService.getSystemSettings();
+    await printSaleReceipt(sale, settings, printers, { type: 'venda' });
+  } catch { /* silencioso */ }
+}
 import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
 import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
@@ -837,6 +846,14 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                                 <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-200 dark:border-[#27272a]">
                                   <span className="text-slate-500 dark:text-[#71717a]">Operador(a)</span>
                                   <span className="font-medium text-slate-700 dark:text-[#a1a1aa]">{sale.operatorName}</span>
+                                </div>
+                                <div className="pt-2 border-t border-slate-200 dark:border-[#27272a]">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); reprintSaleReceipt(sale); }}
+                                    className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-[#27272a] text-slate-600 dark:text-slate-300 text-[10px] font-bold"
+                                  >
+                                    Imprimir Cupom
+                                  </button>
                                 </div>
                               </div>
                             </td>

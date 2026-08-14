@@ -12,8 +12,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { RefreshCw, Clock, CheckCircle, Truck, Package, MapPin, Phone, DollarSign, CreditCard, Banknote, Loader2, Bell } from 'lucide-react';
-import { DeliveryOrder } from '../../types';
+import { DeliveryOrder, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
+import { printSaleReceipt } from '../../services/printService';
 import { posAudio } from '../../services/audioService';
 import { globalNotificationService } from '../../services/globalNotificationService';
 import { useDeliveryNotifications } from '../../hooks/useDeliveryNotifications';
@@ -21,6 +22,37 @@ import { NotificationBanner } from './NotificationBanner';
 
 interface DeliveryBoardViewProps {
   user: any;
+}
+
+/** Converte um pedido de delivery do cardápio (sale) em DeliveryOrder p/ exibição. */
+function mapSaleToDeliveryOrder(sale: Sale): DeliveryOrder & { saleRef: string } {
+  const notes = sale.notes || '';
+  const telMatch = notes.match(/Tel:\s*([^|]+)/);
+  const endMatch = notes.match(/End:\s*([^|]+)/);
+  const statusMap: Record<string, DeliveryOrder['status']> = {
+    pending: 'pending', preparing: 'preparing', ready: 'ready', closing_request: 'ready', delivered: 'delivered',
+  };
+  return {
+    id: sale.id,
+    saleRef: sale.id,
+    organizationId: sale.organizationId || '',
+    storeBranchId: sale.storeBranchId || '',
+    orderNumber: parseInt((sale.code || '').replace(/\D/g, ''), 10) || 0,
+    orderType: 'delivery',
+    status: statusMap[sale.kitchenStatus || ''] || (sale.status === 'completed' ? 'delivered' : 'pending'),
+    items: (sale.items || []).map((it) => ({
+      productId: it.productId || '', productName: it.productName, unitPrice: it.unitPrice, quantity: it.quantity, total: it.total,
+    })),
+    subtotal: sale.subtotal, deliveryFee: 0, discount: sale.discount, total: sale.total,
+    paymentMethod: (sale.payments && sale.payments.length > 0 ? (sale.payments[0].method as any) : undefined),
+    customerName: sale.customerName || 'Cliente',
+    customerWhatsapp: telMatch ? telMatch[1].trim() : undefined,
+    deliveryAddress: endMatch ? ({ street: endMatch[1].trim() } as any) : undefined,
+    notes: sale.notes,
+    whatsappSent: false,
+    createdAt: sale.date,
+    updatedAt: sale.updatedAt || sale.date,
+  } as DeliveryOrder & { saleRef: string };
 }
 
 type StatusFilter = 'all' | 'pending' | 'confirmed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered';
@@ -43,7 +75,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 };
 
 export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) => {
-  const [orders, setOrders] = useState<DeliveryOrder[]>([]);
+  const [orders, setOrders] = useState<(DeliveryOrder & { saleRef?: string })[]>([]);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [isDeliveryWorker, setIsDeliveryWorker] = useState(false);
   const [showBanner, setShowBanner] = useState(true);
@@ -74,10 +106,17 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
 
   const loadOrders = () => {
     const all = storageService.getDeliveryOrders();
-    const filtered = user.superadmin 
-      ? all 
+    const filtered = user.superadmin
+      ? all
       : all.filter(o => o.storeBranchId === user.storeBranchId);
-    setOrders(filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+
+    // Também exibe pedidos de delivery do cardápio (sale com orderSource 'delivery')
+    const cardapioDelivery = (storageService.getSales() || [])
+      .filter((s) => s.orderSource === 'delivery' && s.status !== 'cancelled' && (user.superadmin || s.storeBranchId === user.storeBranchId))
+      .map((s) => mapSaleToDeliveryOrder(s));
+
+    const merged = [...filtered, ...cardapioDelivery];
+    setOrders(merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
   };
 
   const filteredOrders = useMemo(() => {
@@ -92,6 +131,13 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
   }, [orders]);
 
   const handleUpdateStatus = (orderId: string, newStatus: string) => {
+    const order = orders.find((o) => o.id === orderId);
+    if (!order) return;
+    // Pedido de delivery vindo do cardápio (sale): mantém sincronia e finaliza a venda
+    if (order.saleRef) {
+      handleCardapioDeliveryStatus(order, newStatus);
+      return;
+    }
     const extraData: any = {};
     const now = new Date().toISOString();
     
@@ -123,13 +169,48 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
     });
   };
 
+  /** Atualiza status de um pedido de delivery do cardápio (sale) e finaliza a venda ao entregar. */
+  const handleCardapioDeliveryStatus = async (order: DeliveryOrder & { saleRef?: string }, newStatus: string) => {
+    if (!order.saleRef) return;
+    const sale = storageService.getSales().find((s) => s.id === order.saleRef);
+    if (!sale) return;
+    const kitchenStatusMap: Record<string, string> = {
+      confirmed: 'preparing', preparing: 'preparing', ready: 'ready', out_for_delivery: 'ready', delivered: 'delivered', cancelled: 'cancelled',
+    };
+    const ks = kitchenStatusMap[newStatus] || 'preparing';
+    if (newStatus === 'delivered') {
+      const payments = sale.payments && sale.payments.length > 0 ? sale.payments : ([{ method: 'cash', amount: sale.total }] as any);
+      const finalized: Sale = { ...sale, status: 'completed', kitchenStatus: 'delivered', payments, updatedAt: new Date().toISOString() };
+      storageService.saveSale(finalized);
+      posAudio.chime();
+      globalNotificationService.notify({ type: 'info', title: '🛵 Delivery Entregue', message: `Pedido ${sale.code} computado`, playSound: true });
+      try {
+        const printers = storageService.getPrinters();
+        const settings = storageService.getSystemSettings();
+        await printSaleReceipt(finalized, settings, printers, { type: 'venda' });
+      } catch { /* silencioso */ }
+    } else {
+      storageService.saveSale({ ...sale, kitchenStatus: ks, updatedAt: new Date().toISOString() });
+      posAudio.click();
+    }
+    loadOrders();
+  };
+
   const handleCancelOrder = (orderId: string) => {
+    const order = orders.find((o) => o.id === orderId);
+    if (!order) return;
     if (confirm('Tem certeza que deseja cancelar este pedido?')) {
+      // Cancela também o sale do cardápio (se vier do cardápio)
+      if (order.saleRef) {
+        const sale = storageService.getSales().find((s) => s.id === order.saleRef);
+        if (sale) storageService.saveSale({ ...sale, status: 'cancelled', kitchenStatus: 'cancelled', updatedAt: new Date().toISOString() });
+      }
       storageService.updateDeliveryOrderStatus(orderId, 'cancelled', {
         cancelledAt: new Date().toISOString(),
         cancelledReason: 'Cancelado pelo colaborador',
       });
       posAudio.error();
+      loadOrders();
     }
   };
 
