@@ -2914,7 +2914,10 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
 
   async addSale(sale: Sale) {
     sale.id = StorageService.ensureUuid(sale.id);
-    sale.organizationId = this.getCurrentOrgId();
+    // Preserva o organizationId definido por quem criou a venda (ex.: cardápio
+    // digital usa o da filial da mesa). Só cai no getCurrentOrgId() se ausente.
+    sale.organizationId = sale.organizationId || this.getCurrentOrgId();
+    let cloudSaleItems: any[] = [];
     // CONFIA no storeBranchId já presente na venda (vem do seletor de filial no PDV).
     // Só usa getSelectedBranchId() como fallback para vendas criadas sem filial explícita.
     if (!sale.storeBranchId) {
@@ -2959,12 +2962,20 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
       }));
       const filtered = existingItems.filter((i: any) => i.sale_id !== sale.id);
       this.set(KEYS.SALE_ITEMS, [...newItems, ...filtered]);
+      cloudSaleItems = newItems;
     }
 
     const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
     sales.unshift(sale);
     this.set(KEYS.SALES, sales);
-    this.syncSale(sale);
+    await this.syncSale(sale);
+
+    // 🔥 Sincroniza sale_items ao cloud. O canal realtime de sale_items NÃO tem
+    // filtro de org/filial, então entrega o pedido AO VIVO para TODOS os operadores,
+    // inclusive pedidos do cardápio (anon), cuja venda é filtrada pelo canal de sales.
+    // Antes os itens nunca iam pro cloud → pedido só aparecia após reload e sem os
+    // itens no dispositivo do operador.
+    cloudSaleItems.forEach((it: any) => syncService.upsertRow('sale_items', it));
     // Venda fiado → criar conta a receber vinculada (id da conta = id da venda)
     this.createReceivableFromSale(sale);
 
