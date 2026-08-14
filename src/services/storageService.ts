@@ -127,6 +127,31 @@ class StorageService {
     return !!value && StorageService.UUID_RE.test(value);
   }
 
+  // ─── ORG DERIVATION FROM BRANCH ──────────────────────────────────
+  // Derives organization_id from the branch's organization instead of
+  // relying solely on getCurrentOrgId(). This ensures that when a record
+  // is created/updated for a specific branch, the organization_id always
+  // matches the branch's org — preventing tenant mismatches.
+  //
+  // PRIORITY: branch's orgId > sale/record's organizationId > getCurrentOrgId()
+  // This mirrors what syncSale() already does inline (the only sync helper
+  // that was correct before this fix).
+  orgIdForBranch(branchId?: string, fallbackOrgId?: string): string {
+    if (branchId) {
+      // Resolve short code → UUID if needed
+      let resolved = branchId;
+      if (!StorageService.UUID_RE.test(resolved)) {
+        const branches = this.getBranches();
+        const matched = branches.find((b) => b.id === resolved || b.code === resolved);
+        if (matched) resolved = matched.id;
+      }
+      const branch = this.getBranches().find((b) => b.id === resolved);
+      if (branch?.organizationId) return branch.organizationId;
+    }
+    // Fallback: use explicit orgId param, then getCurrentOrgId()
+    return fallbackOrgId || this.getCurrentOrgId();
+  }
+
   // Retorna o organization_id do usuário logado.
   // Super Admin (developer) SEM organizationId: fail-OPEN — acesso global.
   // Outros usuários sem org: fail-CLOSED — escrita bloqueada.
@@ -461,17 +486,6 @@ getCurrentOrgId(): string {
   // Fire-and-forget sync to Supabase. localStorage is always the source of truth locally.
   // When Supabase Realtime delivers remote changes, they update localStorage via syncRemoteToLocal().
 
-  // Deriva o organization_id a partir da FILIAL (autoritativa) para evitar
-  // vazamento de tenant: se a filial selecionada pertence a outra org que não a
-  // do perfil do usuário, o registro deve receber a org da filial, nunca a do perfil.
-  private orgIdForBranch(branchId?: string | null): string {
-    if (branchId && StorageService.UUID_RE.test(branchId)) {
-      const branch = this.getBranches().find((b) => b.id === branchId);
-      if (branch?.organizationId) return branch.organizationId;
-    }
-    return this.getCurrentOrgId();
-  }
-
   private syncProduct(p: Product) {
     // Resolve store_branch_id: use product's value, or fall back to selected branch
     let branchId = p.storeBranchId || this.getSelectedBranchId() || '';
@@ -483,9 +497,12 @@ getCurrentOrgId(): string {
       console.error('❌ syncProduct: Nenhuma filial selecionada!', p.id);
       return;
     }
+    // Derive organization_id from branch's org (not getCurrentOrgId)
+    // to prevent tenant mismatch when user's org differs from branch's org
+    const orgId = this.orgIdForBranch(branchId, p.organizationId);
     syncService.upsertRow('products', {
       id: p.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: branchId,
       name: p.name,
       barcode: p.barcode,
@@ -517,9 +534,10 @@ getCurrentOrgId(): string {
       console.error('❌ syncCategory: Nenhuma filial selecionada!', c.id);
       return;
     }
+    const orgId = this.orgIdForBranch(branchId, c.organizationId);
     syncService.upsertRow('categories', {
       id: c.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       name: c.name,
       color: c.color || '#6366f1',
       store_branch_id: branchId,
@@ -536,9 +554,10 @@ getCurrentOrgId(): string {
       console.error('❌ syncCustomer: Nenhuma filial selecionada!', c.id);
       return;
     }
+    const orgId = this.orgIdForBranch(branchId, c.organizationId);
     syncService.upsertRow('customers', {
       id: c.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       name: c.name,
       cpf_cnpj: c.cpfCnpj,
       email: c.email,
@@ -558,9 +577,10 @@ getCurrentOrgId(): string {
       console.error('❌ syncSupplier: Nenhuma filial selecionada!', s.id);
       return;
     }
+    const orgId = this.orgIdForBranch(branchId, s.organizationId);
     syncService.upsertRow('suppliers', {
       id: s.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       corporate_name: s.companyName,
       trade_name: s.tradeName,
       cnpj: s.cnpj,
@@ -580,19 +600,12 @@ getCurrentOrgId(): string {
         const matched = branches.find((b) => b.code === branchUuid || b.id === branchUuid);
         if (matched) branchUuid = matched.id;
       }
-      // Organização da venda: resolve a partir da FILIAL (autoritativa) para que
-      // pedidos do cardápio feitos por visitante anon (sem login → getCurrentOrgId()
-      // retorna a org PADRÃO) cheguem ao Realtime da filial correta do operador.
-      // Sem isso, o canal do operador filtra a venda por organization_id e o
-      // bip/toast nunca dispara (pedido aparece em Pedidos, mas sem notificação).
-      // Fallback: sale.organizationId (cardápio carrega a org da filial) e, por
-      // fim, getCurrentOrgId() (PDV logado — sem alteração de comportamento).
-      let orgId = this.getCurrentOrgId();
-      if (branchUuid) {
-        const branch = this.getBranches().find((b) => b.id === branchUuid);
-        if (branch?.organizationId) orgId = branch.organizationId;
-      }
-      if (!orgId) orgId = s.organizationId || this.getCurrentOrgId();
+      // Derive organization_id from branch's org (source of truth).
+      // This ensures pedidos do cardápio (anon) reach the correct operator's
+      // Realtime channel even when the visitor's org differs from the branch's org.
+      // Fallback: sale.organizationId (cardápio loads branch's org) and finally
+      // getCurrentOrgId() (PDV logged in — no behavior change).
+      const orgId = this.orgIdForBranch(branchUuid, s.organizationId || this.getCurrentOrgId());
       // First upsert the parent sale — wait for it to complete
       await syncService.upsertRow('sales', {
         id: s.id,
@@ -655,9 +668,10 @@ getCurrentOrgId(): string {
   }
 
   private syncFinancialAccount(a: FinancialAccount) {
+    const orgId = this.orgIdForBranch(a.storeBranchId, a.organizationId);
     syncService.upsertRow('financial_transactions', {
       id: a.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: a.storeBranchId || null,
       type: a.type,
       description: a.title,
@@ -689,7 +703,8 @@ getCurrentOrgId(): string {
       const matched = branches.find(b => b.code === branchUuid || b.id === branchUuid);
       if (matched) branchUuid = matched.id;
     }
-    const orgId = this.orgIdForBranch(branchUuid);
+    // Derive organization_id from branch's org (source of truth)
+    const orgId = this.orgIdForBranch(branchUuid, this.getCurrentOrgId());
     // Defensive: se organization_id for inválido, não tenta upsert
     if (!orgId || orgId === '' || orgId === 'undefined' || orgId === 'null' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) {
       console.warn(`[HD-Sync] ⚠️ syncCaixaSession skipped — organization_id inválido (${orgId})`);
@@ -726,9 +741,10 @@ getCurrentOrgId(): string {
       console.error('❌ syncStockMovement: Nenhuma filial selecionada!', m.id);
       return;
     }
+    const orgId = this.orgIdForBranch(branchId, m.organizationId);
     syncService.upsertRow('stock_movements', {
       id: m.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: branchId,
       product_id: m.productId && StorageService.UUID_RE.test(m.productId) ? m.productId : null,
       product_name: m.productName,
@@ -752,9 +768,10 @@ getCurrentOrgId(): string {
       console.error('❌ syncSystemUser: Nenhuma filial selecionada!', u.id);
       return;
     }
+    const orgId = this.orgIdForBranch(branchId, u.organizationId);
     syncService.upsertRow('system_users', {
       id: u.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: branchId,
       name: u.name,
       email: u.email,
@@ -772,9 +789,10 @@ getCurrentOrgId(): string {
       console.error('❌ syncSettings: Nenhuma filial selecionada!');
       return;
     }
+    const orgId = this.orgIdForBranch(branchId);
     syncService.upsertRow('system_settings', {
-      id: this.getCurrentOrgId(),
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      id: orgId,
+      organization_id: orgId,
       settings: s,
       updated_at: new Date().toISOString(),
       store_branch_id: branchId,
@@ -2728,7 +2746,7 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
         p_type: type,
         p_reason: reason,
         p_operator_name: operatorName,
-        p_organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+        p_organization_id: this.getCurrentOrgId(),
       });
       if (error) {
         console.warn('[HD-Sync] ajustar_estoque RPC failed:', error.message);
@@ -3624,9 +3642,10 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   private syncScannedBoleto(b: ScannedBoleto) {
+    const orgId = this.orgIdForBranch(b.storeBranchId, b.organizationId);
     syncService.upsertRow('scanned_boletos', {
       id: b.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: b.storeBranchId || null,
       barcode: b.barcode || null,
       linha_digitavel: b.linhaDigitavel,
@@ -3690,9 +3709,10 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   private syncCreditPayment(p: CreditPayment) {
+    const orgId = this.orgIdForBranch(p.storeBranchId, p.organizationId);
     syncService.upsertRow('credit_payments', {
       id: p.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: p.storeBranchId || null,
       sale_id: p.saleId && StorageService.UUID_RE.test(p.saleId) ? p.saleId : null,
       customer_id: p.customerId && StorageService.UUID_RE.test(p.customerId) ? p.customerId : null,
@@ -3753,9 +3773,10 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   private syncNFRecord(nf: NFRecord) {
+    const orgId = this.orgIdForBranch(nf.storeBranchId, nf.organizationId);
     syncService.upsertRow('nf_records', {
       id: nf.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: nf.storeBranchId || null,
       supplier_name: nf.supplierName,
       total_amount: nf.totalValue,
@@ -3815,9 +3836,10 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   private syncFooterMessage(f: FooterMessage) {
+    const orgId = this.orgIdForBranch(f.storeBranchId, f.organizationId);
     syncService.upsertRow('footer_messages', {
       id: f.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: f.storeBranchId || null,
       message: f.message,
       active: f.active,
@@ -3888,9 +3910,10 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   private syncMediaDevice(d: MediaDevice) {
+    const orgId = this.orgIdForBranch(d.storeBranchId, d.organizationId);
     syncService.upsertRow('media_devices', {
       id: d.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: d.storeBranchId || null,
       name: d.name,
       device_type: d.deviceType,
@@ -3954,9 +3977,10 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   private syncPrinter(p: Printer) {
+    const orgId = this.orgIdForBranch(p.storeBranchId, p.organizationId);
     syncService.upsertRow('printers', {
       id: p.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: p.storeBranchId || null,
       name: p.name,
       model: p.model || null,
@@ -3972,9 +3996,10 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   private syncTable(t: Table) {
+    const orgId = this.orgIdForBranch(t.storeBranchId, t.organizationId);
     syncService.upsertRow('tables', {
       id: t.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: t.storeBranchId || null,
       name: t.name,
       number: t.number || null,
@@ -3984,10 +4009,11 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   private syncCustomerSession(s: CustomerSession) {
+    const orgId = this.orgIdForBranch(s.storeBranchId, s.organizationId);
     syncService.upsertRow('customer_sessions', {
       id: s.id,
       table_id: s.tableId || null,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: s.storeBranchId || null,
       session_token: s.sessionToken,
       status: s.status || 'active',
@@ -3997,9 +4023,10 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   private syncDigitalMenuConfig(c: DigitalMenuConfig) {
+    const orgId = this.orgIdForBranch(c.storeBranchId, c.organizationId);
     syncService.upsertRow('digital_menu_config', {
       id: c.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: c.storeBranchId || null,
       title: c.title,
       subtitle: c.subtitle || null,
@@ -4011,9 +4038,10 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   private syncBranchTheme(t: BranchTheme) {
+    const orgId = this.orgIdForBranch(t.storeBranchId, t.organizationId);
     syncService.upsertRow('branch_themes', {
       id: t.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: t.storeBranchId || null,
       primary_color: t.primaryColor,
       secondary_color: t.secondaryColor,
@@ -4025,9 +4053,10 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   private syncApiKey(k: ApiKey) {
+    const orgId = this.orgIdForBranch(k.storeBranchId, k.organizationId);
     syncService.upsertRow('api_keys', {
       id: k.id,
-      organization_id: this.orgIdForBranch(this.getSelectedBranchId()),
+      organization_id: orgId,
       store_branch_id: k.storeBranchId || null,
       name: k.name,
       key_hash: k.keyHash,
@@ -4668,7 +4697,7 @@ private updateReceivableFromPayments(saleId: string) {
 
   saveModuleVisibility(settings: any) {
     settings.id = StorageService.ensureUuid(settings.id);
-    settings.organizationId = this.getCurrentOrgId();
+    settings.organizationId = this.orgIdForBranch(settings.storeBranchId, this.getCurrentOrgId());
     
     // ✅ Store as array (one record per branch)
     const all = this.get<any[]>('hd_system_module_visibility', []);
