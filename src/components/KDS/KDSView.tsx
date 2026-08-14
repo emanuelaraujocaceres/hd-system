@@ -18,6 +18,7 @@ import { Sale, Table, Product, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
+import { printSaleReceipt } from '../../services/printService';
 
 interface KDSViewProps {
   sales: Sale[];
@@ -105,7 +106,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
   // Build KDS orders from cardapio_digital sales
   const kdsOrders = useMemo<KdsOrder[]>(() => {
     const cardapioSales = sales.filter(
-      (s) => s.orderSource === 'cardapio_digital' && s.kitchenStatus !== 'cancelled'
+      (s) => (s.orderSource === 'cardapio_digital' || s.orderSource === 'delivery') && s.kitchenStatus !== 'cancelled'
     );
 
     return cardapioSales.map((sale) => {
@@ -213,6 +214,42 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
     }
   };
 
+  // Reimprime o cupom de pedido (itens + total) na impressora do caixa
+  const handleReprint = async (sale: Sale) => {
+    try {
+      const printers = storageService.getPrinters();
+      const settings = storageService.getSystemSettings();
+      const table = tables.find((t) => t.id === sale.tableId) || null;
+      await printSaleReceipt(sale, settings, printers, { type: 'pedido', table });
+      addToast('success', 'Cupom de pedido enviado para impressão.');
+    } catch (err: any) {
+      addToast('error', 'Erro ao imprimir cupom.');
+    }
+  };
+
+  // Finaliza um pedido de DELIVERY: computa a venda (pagamento + concluído)
+  // e imprime o cupom de venda com os dados do comprador.
+  const finalizeDeliverySale = async (sale: Sale) => {
+    const payments = sale.payments && sale.payments.length > 0
+      ? sale.payments
+      : [{ method: 'cash', amount: sale.total } as any];
+    const finalized: Sale = {
+      ...sale,
+      status: 'completed',
+      kitchenStatus: 'delivered',
+      payments,
+      updatedAt: new Date().toISOString(),
+    };
+    storageService.saveSale(finalized);
+    posAudio.chime();
+    addToast('success', `Delivery ${sale.code} entregue e computado!`);
+    try {
+      const printers = storageService.getPrinters();
+      const settings = storageService.getSystemSettings();
+      await printSaleReceipt(finalized, settings, printers, { type: 'venda' });
+    } catch { /* silencioso */ }
+  };
+
   // Advance status for a single item (from the whole sale)
   const handleAdvanceStatus = (saleId: string, currentStatus: KdsStatus) => {
     const nextStatus = STATUS_CONFIG[currentStatus].next;
@@ -220,6 +257,11 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
     try {
       const sale = sales.find((s) => s.id === saleId);
       if (!sale) return;
+      // Delivery: "Entregue" finaliza e computa a venda (não vira comanda)
+      if (nextStatus === 'delivered' && sale.orderSource === 'delivery') {
+        await finalizeDeliverySale(sale);
+        return;
+      }
       storageService.saveSale({
         ...sale,
         kitchenStatus: nextStatus,
@@ -361,7 +403,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
                         {/* Table + Time */}
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-slate-900 dark:text-white">
-                            {order.table?.name || 'Sem Mesa'}
+                            {order.sale.orderSource === 'delivery' ? `DELIVERY${order.sale.customerName ? ' · ' + order.sale.customerName : ''}` : (order.table?.name || 'Sem Mesa')}
                           </span>
                           <span className={`text-[10px] font-bold ${
                             order.timeElapsed > 15 ? 'text-rose-500' : 'text-slate-400'
@@ -400,6 +442,13 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
 
                         {/* Actions */}
                         <div className="flex items-center gap-1 pt-1 border-t border-slate-200 dark:border-[#27272a]">
+                          <button
+                            onClick={() => handleReprint(order.sale)}
+                            className="px-2 py-1.5 rounded-lg bg-slate-200 dark:bg-[#27272a] text-slate-600 dark:text-slate-300 text-[10px] font-bold"
+                            title="Reimprimir pedido"
+                          >
+                            Imprimir
+                          </button>
                           {status === 'closing_request' ? (
                             <>
                               <div className="flex-1 text-[10px] text-slate-500 dark:text-slate-400">

@@ -74,6 +74,7 @@ export function buildReceiptEscPos(sale: Sale, settings: SystemSettings): Uint8A
     line(`Data: ${new Date(sale.date).toLocaleString('pt-BR')}`),
     line(`Operador: ${sale.operatorName || ''}`),
     line(`Cliente: ${sale.customerName || 'Consumidor Nao Identificado'}`),
+    ...(sale.notes ? [line(`Obs: ${sale.notes}`)] : []),
     line('', { skip: true }),
     line('ITEM                QTD   TOTAL', { bold: true }),
   ];
@@ -382,4 +383,140 @@ function buildComandaReceiptEscPos(
   lines.push({ text: 'Obrigado pela preferencia!', align: 1 });
 
   return buildEscPos(lines);
+}
+
+/**
+ * Cupom de PEDIDO (cardápio Mesa/Delivery): lista os itens + total,
+ * SEM forma de pagamento (o pagamento ocorre no fechamento da comanda /
+ * entrega). Reimprimível de Pedidos, Dashboard e Financeiro.
+ */
+export function buildOrderReceiptEscPos(
+  sale: Sale,
+  settings: SystemSettings,
+  table?: Table,
+): Uint8Array {
+  const paperWidth = 48;
+  const lines: EscPosLine[] = [
+    { text: settings.tradeName || 'HD-SYSTEM', align: 1, bold: true, size: 19 },
+    { text: settings.companyName || '', align: 1 },
+    { text: '', skip: true },
+    { text: 'COMPROVANTE DE PEDIDO', align: 1, bold: true },
+    { text: table ? `Mesa: ${table.name}` : sale.orderSource === 'delivery' ? 'DELIVERY' : 'PEDIDO', align: 1, bold: true },
+    { text: `#${sale.code || sale.id.slice(-6)}`, align: 1 },
+    { text: new Date(sale.date).toLocaleString('pt-BR'), align: 1 },
+    { text: '', skip: true },
+  ];
+  if (sale.customerName) lines.push({ text: `Cliente: ${sale.customerName}`, align: 0 });
+  if (sale.notes) lines.push({ text: sale.notes, align: 0 });
+  lines.push({ text: '', skip: true });
+  lines.push({ text: 'ITENS:', align: 0, bold: true });
+  lines.push({ text: '-'.repeat(paperWidth) });
+  for (const it of sale.items || []) {
+    lines.push({ text: `${it.quantity}x ${it.productName}`, align: 0, bold: true });
+    lines.push({ text: `  R$ ${it.unitPrice.toFixed(2)} = R$ ${it.total.toFixed(2)}`, align: 2 });
+  }
+  lines.push({ text: '-'.repeat(paperWidth) });
+  lines.push({ text: '', skip: true });
+  lines.push({ text: `TOTAL: R$ ${sale.total.toFixed(2)}`, align: 2, bold: true, size: 19 });
+  lines.push({ text: '', skip: true });
+  lines.push({ text: 'Obrigado!', align: 1 });
+
+  return buildEscPos(lines);
+}
+
+/** Devolve a impressora de frente (caixa) ativa, ou a primeira não-OS. */
+export function getCaixaPrinter(printers: Printer[]): Printer | null {
+  const active = (printers || []).filter((p) => p.transport !== 'os');
+  return active.find((p) => p.role === 'caixa') || active[0] || null;
+}
+
+/**
+ * Reimprime o cupom de uma venda/pedido. Tenta a impressora térmica (ESC/POS);
+ * se não houver impressora pareada ou for transporte "os", usa o diálogo de
+ * impressão do sistema (window.print) via iframe oculto.
+ */
+export async function printSaleReceipt(
+  sale: Sale,
+  settings: SystemSettings,
+  printers: Printer[],
+  opts?: { type?: 'pedido' | 'venda'; table?: Table },
+): Promise<void> {
+  const type = opts?.type || 'venda';
+  const bytes = type === 'pedido'
+    ? buildOrderReceiptEscPos(sale, settings, opts?.table)
+    : buildReceiptEscPos(sale, settings);
+
+  const printer = getCaixaPrinter(printers);
+  if (printer && (printer.transport === 'webusb' || printer.transport === 'serial')) {
+    if (printer.transport === 'webusb') return printWebUsb(printer, bytes);
+    return printSerial(printer, bytes);
+  }
+  // Fallback: diálogo de impressão do sistema (funciona com qualquer impressora)
+  printOsReceipt(sale, settings, type, opts?.table);
+}
+
+/** Gera um cupom HTML e dispara o diálogo de impressão do navegador. */
+function printOsReceipt(sale: Sale, settings: SystemSettings, type: 'pedido' | 'venda', table?: Table) {
+  const isPedido = type === 'pedido';
+  const title = isPedido ? 'COMPROVANTE DE PEDIDO' : 'COMPROVANTE DE VENDA';
+  const subtitle = table ? `Mesa: ${table.name}` : sale.orderSource === 'delivery' ? 'DELIVERY' : 'PEDIDO';
+  const rows = (sale.items || []).map(
+    (it) => `<tr><td>${it.quantity}x ${escapeHtml(it.productName)}</td><td style="text-align:right">R$ ${it.total.toFixed(2)}</td></tr>`,
+  ).join('');
+  const methodMap: Record<string, string> = {
+    cash: 'Dinheiro', pix: 'PIX', credit_card: 'Cartão Crédito', debit_card: 'Cartão Débito', credit_account: 'Fiado',
+  };
+  const payments = !isPedido
+    ? (sale.payments || []).map((p) => `<div>${methodMap[p.method] || p.method}: R$ ${p.amount.toFixed(2)}</div>`).join('')
+    : '';
+  const html = `
+    <html><head><title>${title}</title>
+    <style>
+      @page { margin: 8mm; }
+      body { font-family: monospace; font-size: 12px; width: 72mm; margin: 0 auto; color: #000; }
+      .c { text-align: center; } .r { text-align: right; } .b { font-weight: bold; }
+      hr { border: none; border-top: 1px dashed #000; margin: 4px 0; }
+      table { width: 100%; border-collapse: collapse; } td { padding: 1px 0; }
+    </style></head>
+    <body>
+      <div class="c b">${escapeHtml(settings.tradeName || 'HD-SYSTEM')}</div>
+      <div class="c">${escapeHtml(settings.companyName || '')}</div>
+      <hr/>
+      <div class="c b">${title}</div>
+      <div class="c">${subtitle}</div>
+      <div class="c">#${escapeHtml(sale.code || sale.id.slice(-6))}</div>
+      <div class="c">${new Date(sale.date).toLocaleString('pt-BR')}</div>
+      ${sale.customerName ? `<div>Cliente: ${escapeHtml(sale.customerName)}</div>` : ''}
+      ${sale.notes ? `<div>${escapeHtml(sale.notes)}</div>` : ''}
+      <hr/>
+      <table>${rows}</table>
+      <hr/>
+      <div class="r b">TOTAL: R$ ${sale.total.toFixed(2)}</div>
+      ${payments ? `<div style="margin-top:4px">${payments}</div>` : ''}
+      <hr/>
+      <div class="c">Obrigado!</div>
+    </body></html>`;
+
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+  const doc = iframe.contentWindow?.document;
+  if (!doc) return;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  iframe.contentWindow?.focus();
+  setTimeout(() => {
+    iframe.contentWindow?.print();
+    setTimeout(() => { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); }, 800);
+  }, 300);
+}
+
+function escapeHtml(s: string): string {
+  return (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c));
 }

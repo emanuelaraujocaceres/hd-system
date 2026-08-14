@@ -24,6 +24,15 @@ import { useToast } from '../shared/Toast';
 import { undoManager } from '../../lib/undoManager';
 import { posAudio } from '../../services/audioService';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
+import { printSaleReceipt } from '../../services/printService';
+
+async function reprintSaleReceipt(sale: Sale) {
+  try {
+    const printers = storageService.getPrinters();
+    const settings = storageService.getSystemSettings();
+    await printSaleReceipt(sale, settings, printers, { type: 'venda' });
+  } catch { /* silencioso */ }
+}
 
 type PeriodFilter = 'today' | 'week' | 'month';
 
@@ -585,6 +594,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                                 <span className="text-slate-500 dark:text-[#71717a] font-bold">Operador: </span>
                                 <span className="text-slate-900 dark:text-white font-medium">{sale.operatorName}</span>
                               </div>
+                            </div>
+                            <div className="pt-2 border-t border-slate-200 dark:border-[#27272a]">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); reprintSaleReceipt(sale); }}
+                                className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-[#27272a] text-slate-600 dark:text-slate-300 text-[10px] font-bold"
+                              >
+                                Imprimir Cupom
+                              </button>
                             </div>
                             {isAdmin && (
                               <div className="pt-2 border-t border-slate-200 dark:border-[#27272a]">
