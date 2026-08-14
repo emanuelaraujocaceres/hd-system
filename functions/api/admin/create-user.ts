@@ -77,15 +77,15 @@ export async function onRequestPost(context: any) {
     );
 
     // 1. Criar no Supabase Auth
-    const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authUser, error: createAuthErr } = await supabaseAdmin.auth.admin.createUser({
       email: String(email).toLowerCase(),
       password: finalPassword,
       email_confirm: true,
       user_metadata: { name, role: role || 'admin' },
     });
 
-    if (authErr) {
-      const msg = authErr.message || '';
+    if (createAuthErr) {
+      const msg = createAuthErr.message || '';
       if (msg.includes('already registered') || msg.includes('already exists')) {
         return new Response(JSON.stringify({
           success: false,
