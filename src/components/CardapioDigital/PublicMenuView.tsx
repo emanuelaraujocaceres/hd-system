@@ -384,17 +384,16 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
     }
   };
 
-  const handleCloseComanda = async (paymentMethod: Sale['payments'][0]['method']) => {
+  const handleRequestCloseComanda = async () => {
     if (!table || myOrders.length === 0) return;
     setClosingComanda(true);
     try {
-      // Cliente solicita fechamento → status muda para 'closing_request'
-      // NÃO fecha automaticamente — operador deve finalizar
+      // Cliente SOLICITA o fechamento (não cobra). Operador fecha e cobra na
+      // página de Comandas. kitchenStatus='closing_request' sinaliza o Pedidos.
       for (const sale of myOrders) {
         const updatedSale: Sale = {
           ...sale,
           status: 'pending', // Aguardando operador finalizar
-          payments: [{ method: paymentMethod, amount: sale.total }],
           kitchenStatus: 'closing_request', // Sinaliza pedido de fechamento
           updatedAt: new Date().toISOString(),
         };
@@ -798,19 +797,15 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
                   <span className="text-xl font-bold text-slate-900 dark:text-white">R$ {(myComandaTotal ?? 0).toFixed(2)}</span>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase">Forma de Pagamento</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['pix', 'cash', 'credit_card', 'debit_card'] as const).map((method) => (
-                      <button
-                        key={method}
-                        onClick={() => handleCloseComanda(method)}
-                        disabled={closingComanda}
-                        className="py-2 px-3 rounded-xl bg-slate-100 dark:bg-[#27272a] text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-teal-500 hover:text-white transition-colors disabled:opacity-50"
-                      >
-                        {method === 'pix' ? 'PIX' : method === 'cash' ? 'Dinheiro' : method === 'credit_card' ? 'Crédito' : 'Débito'}
-                      </button>
-                    ))}
-                  </div>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase">Fechamento</p>
+                  <button
+                    onClick={handleRequestCloseComanda}
+                    disabled={closingComanda}
+                    className="w-full py-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60 transition-colors"
+                  >
+                    {closingComanda ? 'Solicitando...' : 'Solicitar fechamento de comanda'}
+                  </button>
+                  <p className="text-[10px] text-slate-400 text-center">O operador irá fechar e cobrar na comanda.</p>
                 </div>
               </div>
             )}
