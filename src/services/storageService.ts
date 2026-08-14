@@ -131,7 +131,7 @@ class StorageService {
   // Super Admin (developer) SEM organizationId: fail-OPEN — acesso global.
   // Outros usuários sem org: fail-CLOSED — escrita bloqueada.
   // O fallback para DEFAULT_ORG_ID só ocorre sem perfil salvo (bootstrap/offline).
-  getCurrentOrgId(): string {
+getCurrentOrgId(): string {
     // Superadmin override (visualizando outra org)
     if (this.isSuperAdmin()) {
       const override = localStorage.getItem(KEYS.VIEWING_ORG);
@@ -150,9 +150,10 @@ class StorageService {
           const profile = JSON.parse(raw);
           if (profile?.organizationId) return profile.organizationId;
         }
-      } catch {}
+      } catch {
+        console.error('[Storage] getCurrentOrgId: error parsing user profile from localStorage');
+      }
       // Sem organizationId salvo: retornar '' para acesso global
-      // (o superadmin não precisa de filtragem por org no cliente)
       console.log('[Storage] getCurrentOrgId() — superadmin sem organizationId: acesso global');
       return '';
     }
@@ -165,7 +166,9 @@ class StorageService {
         console.error('[Storage] getCurrentOrgId() — usuário logado sem organizationId. Falha fechada: escrita bloqueada até o perfil ser corrigido.');
         return '';
       }
-    } catch {}
+    } catch (err) {
+      console.error('[Storage] getCurrentOrgId: error reading user profile from localStorage', err);
+    }
     if (localStorage.getItem('hd_system_logged_in_email') !== 'LOGGED_OUT') {
       console.warn('[Storage] getCurrentOrgId() fallback to DEFAULT_ORG_ID — bootstrap/offline sem perfil salvo');
     }
@@ -593,16 +596,12 @@ class StorageService {
         status: s.status,
         notes: s.customerName || null,
         customer_name: s.customerName || null,
-      });
-      // Only upsert sale items AFTER the sale record exists (avoid FK violation)
-      // Items are read from KEYS.SALE_ITEMS (which have stable IDs set by addSale),
-      // so upsert with onConflict: 'id' correctly deduplicates instead of inserting.
-      const allItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
-      const items = allItems.filter((i: any) => i.sale_id === s.id);
-      if (items.length > 0) {
-        await syncService.upsertRows('sale_items', items);
-      }
-      // NOTA: o caixa NÃO é atualizado aqui. O syncCaixaSession() (chamado por
+});
+        // NOTA: sale_items NÃO são upsertados aqui — são IMUTÁVEIS e criados apenas
+        // uma vez no addSale(). Re-sincronizar a cada mudança de status (kitchenStatus)
+        // causava inserções duplicadas no Supabase (novos IDs a cada saveSale).
+        // O addSale() já faz o upsert inicial dos itens com IDs estáveis.
+        // NOTA: o caixa NÃO é atualizado aqui. O syncCaixaSession() (chamado por
       // saveActiveCaixaSession) grava os totais ABSOLUTOS da sessão local no
       // cloud. Somar a venda incrementalmente por cima (updateCaixaFromSale)
       // aplicava a venda DUAS vezes (ex.: caixa 101.90 + venda 79.90 = 181.80).
@@ -1354,15 +1353,25 @@ class StorageService {
   // ─── INITIAL LOAD FROM SUPABASE ──────────────────────────────────
   // Called once on app startup to hydrate localStorage from cloud.
 
-  async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranchId?: string }> {
+async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranchId?: string }> {
     try {
       // ✅ Mark as hydration to prevent false notifications
       this.setChangeSource('hydration');
+      
+      // Log inicio da hydratacao
+      console.log('[HD-Sync] 🔄 Iniciando hydrateFromCloud', { branchId, isSuper: this.isSuperAdmin() });
       
       // PASSO 1: Buscar branches do Supabase PRIMEIRO para poder resolver
       // short codes (e.g. "br-01") → UUID. Antes, a resolução usava
       // getBranches() do localStorage que podia estar vazio (org não-default).
       const cloudBranches = await syncService.fetchRows('store_branches');
+      
+      // Monitor: verifica se conseguimos buscar branches
+      if (cloudBranches === undefined || cloudBranches === null) {
+        console.error('[HD-Sync] ❌ hydrateFromCloud: falha ao buscar branches do cloud');
+        return { ok: false };
+      }
+      console.log('[HD-Sync] ✅ Buscado', cloudBranches.length, 'rows from store_branches');
 
       // Merge branches into localStorage para que getBranches() retorne dados atualizados
       if (cloudBranches.length > 0) {
@@ -3041,60 +3050,37 @@ class StorageService {
     }
   }
 
-// ─── saveSale: atualiza uma venda existente (usado pela ComandaView) ──
+// ─── saveSale: atualiza uma venda existente (usado pela ComandaView/KDS) ──
+  // REGRA CRÍTICA: NUNCA recriar sale_items aqui. Itens de venda são IMUTÁVEIS
+  // após criação (addSale). Apenas atualiza header: kitchenStatus, status, payments, etc.
+  // Recriar itens a cada mudança de status causava duplicação exponencial
+  // (BUG: quantity multiplicava a cada transição pending→preparing→ready→delivered).
   saveSale(sale: Sale) {
     sale.id = StorageService.ensureUuid(sale.id);
     sale.organizationId = sale.organizationId || this.getCurrentOrgId();
     sale.storeBranchId = sale.storeBranchId || this.getSelectedBranchId() || undefined;
     if (!sale.updatedAt) sale.updatedAt = new Date().toISOString();
 
-    // Atualiza sale_items no localStorage APENAS se houver itens diferentes
-    // Evita recrear itens a cada mudança de status (kitchenStatus), que causava
-    // itens duplicados e perda do quantity/total originais.
-    if (sale.items && sale.items.length > 0) {
-      const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
-      // Filtra itens que jÁ pertencem a esta venda
-      const itemsForThisSale = existingItems.filter((i: any) => i.sale_id === sale.id);
-      
-      // Se os itens atuais já batem com os salvos (mesmo quantity/total), só atualiza o status
-      // Para evitar duplicatas e perda de quantity/total.
-      const itemsChanged = itemsForThisSale.some((existing) => {
-        const current = sale.items?.find((si) => si.productId === existing.product_id);
-        return !current || current.quantity !== existing.quantity || current.total !== existing.total_price;
-      });
-
-      // Se nada mudou nos itens, apenas atualiza o header da venda (kitchenStatus, etc.)
-      // e não recria os itens, evitando a criação de itens duplicados.
-      if (!itemsChanged) {
-        // Apenas garante que o sale está salvo com o novo status
-        // Os sale_items já existentes permanecem intactos
-        return;
-      }
-
-      // Recria sale_items apenas se realmente houver mudanças nos itens
-      const newItems = sale.items.map((item) => ({
-        id: StorageService.newId(),
-        sale_id: sale.id,
-        product_id: item.productId && StorageService.UUID_RE.test(item.productId) ? item.productId : null,
-        product_name: item.productName || '',
-        quantity: item.quantity,
-        unit_price: item.unitPrice,
-        total_price: item.total,
-        store_branch_id: sale.storeBranchId || this.getSelectedBranchId() || null,
-      }));
-      const filtered = existingItems.filter((i: any) => i.sale_id !== sale.id);
-      this.set(KEYS.SALE_ITEMS, [...newItems, ...filtered]);
-    }
-
-    // Atualiza a venda no array
+    // Atualiza APENAS o header da venda no array local
     const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
     const idx = sales.findIndex((s) => s.id === sale.id);
-    if (idx >= 0) sales[idx] = sale;
-    else sales.unshift(sale);
+    if (idx >= 0) {
+      // Preserva itens originais da venda local - NUNCA sobrescreve com sale.items
+      // que pode vir com estrutura diferente (ex.: do realtime updateSaleFromRemote)
+      const existingSale = sales[idx];
+      sales[idx] = {
+        ...existingSale,
+        ...sale,
+        items: existingSale.items, // SEMPRE mantém itens originais
+      };
+    } else {
+      // Nova venda (fallback) - mantém itens recebidos
+      sales.unshift(sale);
+    }
     this.set(KEYS.SALES, sales);
 
-    // Sync com o cloud
-    this.syncSale(sale);
+    // Sync com o cloud (envia header atualizado; sale_items NÃO são reenviados)
+    this.syncSale(sales[idx] || sale);
   }
 
   // --- CAIXA (CASH REGISTER) ---
@@ -3489,6 +3475,12 @@ private updateReceivableFromPayments(saleId: string) {
 
       // Usar o fiadoAmount da própria venda (source of truth) se existir
       const fiadoAmount = sale ? this.getFiadoAmount(sale) : 0;
+
+      // MONITORAMENTO: log do cálculo do fiado (BUG-003: antes calculava errado usando acc.amount como baseline)
+      if (sale && sale.payments && sale.payments.length > 0) {
+        const creditCount = sale.payments.filter((p: any) => p.method === 'credit_account').length;
+        console.log(`[HD-Sync] 💳 Fiado calculado: sale=${sale.code}, credit_payments=${creditCount}, fiadoAmount=R$${fiadoAmount.toFixed(2)}`);
+      }
 
       // Se a venda tem credit_account no payments, usa o valor da venda;
       // senão, tenta calcular a partir dos pagamentos locais salvos
@@ -4952,6 +4944,14 @@ saveUserProfile(user: UserProfile) {
       organizationId: user.organizationId || DEFAULT_ORG_ID,
       storeBranchId: user.storeBranchId || undefined,
     };
+    // Monitor: log when organizationId falls back to DEFAULT_ORG_ID
+    if (user.organizationId !== updatedUser.organizationId) {
+      console.warn('[Storage] saveUserProfile: organizationId fell back to DEFAULT_ORG_ID',
+        { original: user.organizationId, applied: updatedUser.organizationId });
+    }
+    if (user.storeBranchId !== updatedUser.storeBranchId) {
+      console.warn('[Storage] saveUserProfile: storeBranchId was undefined, applying fallback');
+    }
     this.set(KEYS.USER, updatedUser);
     localStorage.setItem(KEYS.LOGGED_IN_EMAIL, user.email);
     this.notify();
