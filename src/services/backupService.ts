@@ -410,11 +410,21 @@ class BackupServiceClass {
    * Initialize Realtime listener for cross-device sync
    */
   private initRealtimeListener() {
+    const branchId = storageService.getSelectedBranchId();
     supabase
       .channel('filial_backups_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'filial_backups' }, () => {
-        this.notifyListeners();
-      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'filial_backups',
+          ...(branchId ? { filter: `store_branch_id=eq.${branchId}` } : {}),
+        },
+        () => {
+          this.notifyListeners();
+        }
+      )
       .subscribe();
   }
 
@@ -430,13 +440,17 @@ class BackupServiceClass {
    * Notify all listeners
    */
   private async notifyListeners() {
+    const branchId = storageService.getSelectedBranchId();
     for (const listener of this.backupListeners) {
       try {
-        // Get all backups for current org
-        const { data } = await supabase
+        // Isolamento estrito por filial: só busca backups da filial selecionada.
+        // Superadmin em modo global (sem filial) vê todos (RLS por org).
+        let query = supabase
           .from('filial_backups')
           .select('*')
           .order('created_at', { ascending: false });
+        if (branchId) query = query.eq('store_branch_id', branchId);
+        const { data } = await query;
         listener(data || []);
       } catch {
         // Ignore errors

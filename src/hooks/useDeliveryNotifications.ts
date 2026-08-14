@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { storageService } from '../services/storageService';
 
 interface UseDeliveryNotificationsProps {
   enabled: boolean;
@@ -81,6 +82,10 @@ export const useDeliveryNotifications = ({ enabled, onNewPedido }: UseDeliveryNo
         },
         (payload) => {
           const pedido = payload.new;
+          // Isolamento estrito por filial: só notifica pedidos da filial selecionada.
+          // Superadmin em modo global (sem filial selecionada) continua recebendo todos.
+          const branchId = storageService.getSelectedBranchId();
+          if (branchId && pedido.store_branch_id && pedido.store_branch_id !== branchId) return;
           if (pedido.status === 'pending') {
             showNotification(
               '🛵 Novo Pedido!',
