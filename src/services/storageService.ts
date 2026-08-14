@@ -870,7 +870,7 @@ getCurrentOrgId(): string {
     this.notify();
   }
 
-  updateSaleFromRemote(row: any) {
+  updateSaleFromRemote(row: any, eventType?: string) {
     this.setChangeSource('remote');
     // Branch isolation: reject remote sales from other branches
     if (!this.isRemoteFromCurrentBranch(row)) {
@@ -957,7 +957,10 @@ getCurrentOrgId(): string {
     if (idx >= 0) sales[idx] = mapped;
     else sales.unshift(mapped);
     this.set(KEYS.SALES, sales);
-    this.notify(KEYS.SALES, 'remote', mapped);
+    // Só notifica (bip/toast) em INSERT remoto — uma venda NOVA chegou de
+    // outro dispositivo. UPDATEs (ex.: operador marcando "Entregue" ou fechando
+    // comanda) ecoam pelo Realtime e gerariam bip/toast DUPLICADO da ação local.
+    if (eventType === 'INSERT') this.notify(KEYS.SALES, 'remote', mapped);
 
     // ── Update caixa session in real-time ──────────────────
     // When a sale is synced from another device, update the
@@ -4522,7 +4525,7 @@ private updateReceivableFromPayments(saleId: string) {
     syncService.deleteRow('delivery_orders', id);
   }
 
-  updateDeliveryOrderFromRemote(row: any) {
+  updateDeliveryOrderFromRemote(row: any, eventType?: string) {
     this.setChangeSource('remote');
     const all = this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []);
     const mapped: DeliveryOrder = {
@@ -4563,7 +4566,10 @@ private updateReceivableFromPayments(saleId: string) {
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.DELIVERY_ORDERS, all);
-    this.notify(KEYS.DELIVERY_ORDERS, 'remote', mapped);
+    // Só notifica (bip/toast) em INSERT remoto — pedido NOVO chegou de outro
+    // dispositivo. UPDATEs de status (ex.: operador marcando "Entregue") ecoam
+    // pelo Realtime e gerariam bip/toast DUPLICADO da ação local.
+    if (eventType === 'INSERT') this.notify(KEYS.DELIVERY_ORDERS, 'remote', mapped);
   }
 
   removeDeliveryOrderFromRemote(id: string) {

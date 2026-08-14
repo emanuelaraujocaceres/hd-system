@@ -131,6 +131,10 @@ class GlobalNotificationServiceClass {
     } else if (key.includes('CREDIT_PAYMENTS')) {
       const latestPayment = payload;
       if (!this.isInCurrentBranch(latestPayment)) return;
+      // Suprime eco do pagamento de fiado feito LOCALMENTE neste dispositivo:
+      // o FiadosView já tocou o chime + toast na confirmação; o INSERT que o
+      // Realtime devolve geraria bip/toast duplicado.
+      if (this.isLocalCreditEcho(latestPayment?.customerName, latestPayment?.amount)) return;
       if (this.wasNotified('credit', latestPayment?.id)) return;
       this.notifyFiado(latestPayment?.customerName || 'Cliente', latestPayment?.amount || 0, 'payment');
     }
@@ -166,6 +170,33 @@ class GlobalNotificationServiceClass {
     const idx = this.localSaleCodes.findIndex((x) => x.code === code);
     if (idx >= 0) {
       this.localSaleCodes.splice(idx, 1); // consome: cada eco só suprime uma vez
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Eco local de pagamento de fiado: registra (cliente, valor) de um pagamento
+   * concluído neste dispositivo para suprimir o INSERT que o Realtime devolve.
+   * Chave estável entre local e remoto (o id muda de credit-... → UUID cloud,
+   * então usa cliente+valor, únicos o suficiente na janela de 10s).
+   */
+  private localCreditKeys: { key: string; at: number }[] = [];
+  markLocalCreditPayment(customerName: string, amount: number) {
+    if (!customerName) return;
+    const key = `${customerName}|${amount}`;
+    const now = Date.now();
+    this.localCreditKeys = this.localCreditKeys.filter((x) => now - x.at < 10000);
+    this.localCreditKeys.push({ key, at: now });
+  }
+  private isLocalCreditEcho(customerName: string, amount: number): boolean {
+    if (!customerName) return false;
+    const key = `${customerName}|${amount}`;
+    const now = Date.now();
+    this.localCreditKeys = this.localCreditKeys.filter((x) => now - x.at < 10000);
+    const idx = this.localCreditKeys.findIndex((x) => x.key === key);
+    if (idx >= 0) {
+      this.localCreditKeys.splice(idx, 1);
       return true;
     }
     return false;

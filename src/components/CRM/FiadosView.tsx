@@ -321,7 +321,9 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
 
           posAudio.chime();
           addToast('success', `Pagamento de ${formatCurrency(amount)} registrado via ${paymentMethod === 'cash' ? 'dinheiro' : paymentMethod === 'pix' ? 'PIX' : paymentMethod}.`);
-          // ✅ Global notification for fiado payment
+          // ✅ Global notification for fiado payment (marca eco local p/ não
+          // duplicar o bip/toast quando o INSERT do Realtime voltar neste aparelho)
+          globalNotificationService.markLocalCreditPayment(debt.customer.name, amount);
           globalNotificationService.notifyFiado(debt.customer.name, amount, 'payment');
         } else {
           addToast('warning', 'Nenhum valor pendente para esta dívida.');

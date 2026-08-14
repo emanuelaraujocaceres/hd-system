@@ -478,7 +478,7 @@ export const App: React.FC = () => {
           break;
         case 'sales':
           if (event === 'DELETE') storageService.removeSaleFromRemote(row.id);
-          else storageService.updateSaleFromRemote(row);
+          else storageService.updateSaleFromRemote(row, event);
           break;
         case 'financial_transactions':
           if (event === 'DELETE') storageService.removeFinancialFromRemote(row.id);
@@ -541,7 +541,7 @@ export const App: React.FC = () => {
           break;
         case 'delivery_orders':
           if (event === 'DELETE') storageService.removeDeliveryOrderFromRemote(row.id);
-          else storageService.updateDeliveryOrderFromRemote(row);
+          else storageService.updateDeliveryOrderFromRemote(row, event);
           break;
         case 'module_visibility':
           if (event === 'DELETE') storageService.removeModuleVisibilityFromRemote(row.id);
