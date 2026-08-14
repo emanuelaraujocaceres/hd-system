@@ -183,10 +183,26 @@ class GlobalNotificationServiceClass {
   private isInCurrentBranch(item: any): boolean {
     if (!item) return false;
 
+    // Superadmin global (sem override de org) vê e notifica TUDO.
+    if (storageService.isSuperAdmin() && !storageService.getSuperadminViewingOrg()) return true;
+
     // ── Org isolation ──
+    // IMPORTANTE: resolve a org A PARTIR DA FILIAL (igual ao getSales), não do
+    // organizationId do próprio registro. O cardápio digital marca a venda com o
+    // organization_id da MESA (que pode estar DEFAULT_ORG_ID por inconsistência de
+    // dados), mas a filial (store_branch_id) pertence à org real do operador.
+    // getSales mostra a venda pela filial; se comparássemos o organizationId do
+    // registro, a notificação seria silenciosamente suprimida (venda visível,
+    // sem bip/toast). Espelhar o getSales garante consistência.
     const currentOrgId = storageService.getCurrentOrgId();
-    if (currentOrgId && item.organizationId && item.organizationId !== currentOrgId) {
-      return false;
+    const viewingOrg = storageService.getSuperadminViewingOrg() || currentOrgId;
+    if (viewingOrg) {
+      let itemOrg = item.organizationId;
+      if (item.storeBranchId) {
+        const branch = storageService.getBranches().find((b) => b.id === item.storeBranchId);
+        if (branch?.organizationId) itemOrg = branch.organizationId;
+      }
+      if (itemOrg && itemOrg !== viewingOrg) return false;
     }
 
     // ── Branch isolation (resolve short code → UUID) ──

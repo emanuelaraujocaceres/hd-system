@@ -1734,7 +1734,8 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
               ...cloudMapped,
               ...localSales.filter((s) => {
                 // Sempre preservar vendas de sessões de cliente ativas (comandas em aberto)
-                if (activeSessions.has(s.customerSessionId)) return true;
+                // activeSessions é um array (string[]), usar includes e não has
+                if (activeSessions.includes(s.customerSessionId)) return true;
                 if (cloudSaleIds.has(s.id)) return false; // já no cloud
                 // If we have a resolved branch, only keep local sales from THIS branch
                 if (resolvedBranchId) return s.storeBranchId === resolvedBranchId;
