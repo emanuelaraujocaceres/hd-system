@@ -442,6 +442,8 @@ export interface CustomerSession {
   closedAt?: string;
   deviceFingerprint?: string;
   customerName?: string;
+  phone?: string;
+  address?: string;
   storeBranchId: string;
   organizationId: string;
   createdAt: string;

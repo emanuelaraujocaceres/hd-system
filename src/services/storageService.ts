@@ -560,13 +560,26 @@ getCurrentOrgId(): string {
       let branchUuid = s.storeBranchId || '';
       if (branchUuid && !StorageService.UUID_RE.test(branchUuid)) {
         const branches = this.getBranches();
-        const matched = branches.find(b => b.code === branchUuid || b.id === branchUuid);
+        const matched = branches.find((b) => b.code === branchUuid || b.id === branchUuid);
         if (matched) branchUuid = matched.id;
       }
+      // Organização da venda: resolve a partir da FILIAL (autoritativa) para que
+      // pedidos do cardápio feitos por visitante anon (sem login → getCurrentOrgId()
+      // retorna a org PADRÃO) cheguem ao Realtime da filial correta do operador.
+      // Sem isso, o canal do operador filtra a venda por organization_id e o
+      // bip/toast nunca dispara (pedido aparece em Pedidos, mas sem notificação).
+      // Fallback: sale.organizationId (cardápio carrega a org da filial) e, por
+      // fim, getCurrentOrgId() (PDV logado — sem alteração de comportamento).
+      let orgId = this.getCurrentOrgId();
+      if (branchUuid) {
+        const branch = this.getBranches().find((b) => b.id === branchUuid);
+        if (branch?.organizationId) orgId = branch.organizationId;
+      }
+      if (!orgId) orgId = s.organizationId || this.getCurrentOrgId();
       // First upsert the parent sale — wait for it to complete
       await syncService.upsertRow('sales', {
         id: s.id,
-        organization_id: this.getCurrentOrgId(),
+        organization_id: orgId,
         store_branch_id: branchUuid,
         user_id: s.operatorId && StorageService.UUID_RE.test(s.operatorId) ? s.operatorId : null,
         customer_id: s.customerId || null,
@@ -590,7 +603,7 @@ getCurrentOrgId(): string {
         order_source: s.orderSource || 'pdv',
         kitchen_status: s.kitchenStatus || 'pending',
         status: s.status,
-        notes: s.customerName || null,
+        notes: s.notes || s.customerName || null,
         customer_name: s.customerName || null,
 });
         // NOTA: sale_items NÃO são upsertados aqui — são IMUTÁVEIS e criados apenas

@@ -12,6 +12,7 @@ import {
   QrCode,
   X,
   Receipt,
+  Truck,
 } from 'lucide-react';
 import { Product, Table, DigitalMenuConfig, CustomerSession, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -38,6 +39,24 @@ const getEffectivePrice = (p: Product): number =>
     ? p.tvPromoPrice
     : (p.salePrice ?? 0);
 
+// ── Delivery: dados do cliente persistidos no PRÓPRIO aparelho ────────────
+// O cliente de delivery informa nome/telefone/endereço uma vez; o app salva no
+// localStorage do celular para auto-preencher em pedidos seguintes.
+const DELIVERY_CUSTOMER_PREFIX = 'hd_delivery_customer_';
+function deliveryDeviceKey(): string {
+  const raw = navigator.userAgent.slice(0, 100) + (screen.width + 'x' + screen.height);
+  return raw.replace(/[^a-zA-Z0-9]/g, '');
+}
+function loadSavedDeliveryCustomer(): { name: string; phone: string; address: string } | null {
+  try {
+    const raw = localStorage.getItem(DELIVERY_CUSTOMER_PREFIX + deliveryDeviceKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function saveDeliveryCustomer(c: { name: string; phone: string; address: string }) {
+  try { localStorage.setItem(DELIVERY_CUSTOMER_PREFIX + deliveryDeviceKey(), JSON.stringify(c)); } catch {}
+}
+
 export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, filialId, onClose }) => {
   const [table, setTable] = useState<Table | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -51,6 +70,10 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   const [submitting, setSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
+
+  // ✅ Delivery: dados do cliente (salvos no aparelho)
+  const [customer, setCustomer] = useState<{ name: string; phone: string; address: string }>({ name: '', phone: '', address: '' });
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
   
   // ✅ Delivery mode: no table needed
   const isDeliveryMode = tableToken === 'delivery';
@@ -59,30 +82,122 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   useEffect(() => {
     const loadData = async () => {
       try {
-        // ✅ Delivery mode: load products filtered by filial
+        // ✅ Delivery mode: carrega produtos/config/FILIAL do CLOUD (igual à Mesa),
+        // pois o celular do cliente (anon) não tem localStorage hidratado → sem
+        // isso o cardápio de delivery abre vazio.
         if (isDeliveryMode) {
-          // Filter products by filialId
-          let localProducts = storageService.getProducts().filter(p => p.active !== false && p.showOnCardapio !== false);
-          if (filialId && filialId !== 'default') {
-            localProducts = localProducts.filter(p => p.storeBranchId === filialId);
+          const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+          const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+          if (!filialId || filialId === 'default') {
+            setError('Delivery não configurado para esta filial.');
+            setLoading(false);
+            return;
           }
-          const localConfig = storageService.getDigitalMenuConfig();
-          
-          setProducts(localProducts);
-          setConfig(localConfig);
-          
-          // Create virtual "Delivery" table for order tracking with filial
+
+          // Buscar a filial para obter o organization_id REAL (necessário p/ o
+          // Realtime do operador entregar o pedido na filial correta).
+          const branchRes = await fetch(
+            `${baseUrl}/rest/v1/store_branches?id=eq.${encodeURIComponent(filialId)}&select=*`,
+            { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json' } }
+          );
+          const branchesData = branchRes.ok ? await branchRes.json() : [];
+          const branchData = branchesData[0];
+          if (!branchData) {
+            setError('Filial de delivery não encontrada.');
+            setLoading(false);
+            return;
+          }
+          const branchOrg = branchData.organization_id;
+
+          // Buscar produtos da filial (anon)
+          const productsRes = await fetch(
+            `${baseUrl}/rest/v1/products?store_branch_id=eq.${branchData.id}&is_active=eq.true&show_on_cardapio=eq.true&stock_quantity=gt.0&select=*`,
+            { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json' } }
+          );
+          if (productsRes.ok) {
+            const cloudProducts = await productsRes.json();
+            setProducts((cloudProducts || []).map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              barcode: p.barcode || '',
+              category: p.category || 'Geral',
+              unit: p.unit || 'un',
+              costPrice: p.cost_price || 0,
+              salePrice: p.sale_price || 0,
+              currentStock: p.stock_quantity || 0,
+              minStock: p.min_stock_quantity || 0,
+              maxStock: p.max_stock_quantity || 100,
+              imageUrl: p.image_url || '',
+              active: p.is_active !== false,
+              updatedAt: p.updated_at,
+              storeBranchId: p.store_branch_id,
+              organizationId: p.organization_id,
+              showOnCardapio: p.show_on_cardapio || false,
+              showOnTV: p.show_on_tv || false,
+              tvPromoPrice: p.tv_promo_price || undefined,
+            })));
+          }
+
+          // Buscar config do cardápio
+          const configRes = await fetch(
+            `${baseUrl}/rest/v1/digital_menu_config?store_branch_id=eq.${branchData.id}&select=*`,
+            { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json' } }
+          );
+          if (configRes.ok) {
+            const configs = await configRes.json();
+            if (configs && configs.length > 0) {
+              setConfig({
+                id: configs[0].id,
+                title: configs[0].title,
+                subtitle: configs[0].subtitle,
+                logoUrl: configs[0].logo_url,
+                bannerUrl: configs[0].banner_url,
+                layoutMode: configs[0].layout_mode,
+                showPrices: configs[0].show_prices,
+                storeBranchId: configs[0].store_branch_id,
+                organizationId: configs[0].organization_id,
+                updatedAt: configs[0].updated_at,
+              });
+            }
+          }
+
+          // Tabela virtual de delivery com org real da filial
           const deliveryTable: Table = {
-            id: `delivery-${filialId || 'default'}`,
+            id: `delivery-${branchData.id}`,
             name: 'Delivery',
-            qrToken: `delivery-${filialId || 'default'}`,
+            qrToken: `delivery-${branchData.id}`,
             status: 'active',
-            storeBranchId: filialId || localConfig?.storeBranchId || '',
-            organizationId: localConfig?.organizationId || '',
+            storeBranchId: branchData.id,
+            organizationId: branchOrg || '',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           };
           setTable(deliveryTable);
+
+          // Sessão do cliente (para CRM/operador identificar o pedido)
+          const deviceFingerprint = navigator.userAgent.slice(0, 100) + (screen.width + 'x' + screen.height);
+          const newSession: CustomerSession = {
+            id: crypto.randomUUID(),
+            tableId: deliveryTable.id,
+            sessionToken: sessionId,
+            status: 'active',
+            openedAt: new Date().toISOString(),
+            deviceFingerprint,
+            storeBranchId: deliveryTable.storeBranchId,
+            organizationId: deliveryTable.organizationId,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          storageService.saveCustomerSession(newSession);
+          setSession(newSession);
+
+          // Cliente já salvo neste aparelho? auto-preencher, senão abrir formulário
+          const saved = loadSavedDeliveryCustomer();
+          if (saved?.name) {
+            setCustomer(saved);
+          } else {
+            setShowCustomerForm(true);
+          }
           setLoading(false);
           return;
         }
@@ -313,6 +428,10 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
 
   const handleSubmitOrder = async () => {
     if (cart.length === 0 || !table) return;
+    if (isDeliveryMode && !customer.name.trim()) {
+      setShowCustomerForm(true);
+      return;
+    }
     if (submittingRef.current) return; // Prevent double-click
     submittingRef.current = true;
     setSubmitting(true);
@@ -337,10 +456,12 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         date: new Date().toISOString(),
         operatorId: 'cardapio_digital',
         operatorName: isDeliveryMode ? 'Cliente (Delivery)' : 'Cliente (Cardápio Digital)',
+        customerName: isDeliveryMode ? customer.name.trim() : undefined,
         storeBranchId: table.storeBranchId,
         organizationId: table.organizationId,
         tableId: table.id,
         customerSessionId: session?.id || undefined,
+        notes: isDeliveryMode ? `Tel: ${customer.phone.trim()} | End: ${customer.address.trim()}` : undefined,
         items: saleItems,
         subtotal: total,
         discount: 0,
@@ -353,6 +474,18 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       };
 
       await storageService.addSale(sale);
+
+      // Delivery: grava dados do cliente na sessão (CRM/operador) e no aparelho
+      if (isDeliveryMode && session) {
+        storageService.saveCustomerSession({
+          ...session,
+          customerName: customer.name.trim(),
+          phone: customer.phone.trim(),
+          address: customer.address.trim(),
+          updatedAt: new Date().toISOString(),
+        });
+        saveDeliveryCustomer({ name: customer.name.trim(), phone: customer.phone.trim(), address: customer.address.trim() });
+      }
 
       // Print to configured printers (routed by category: kitchen/bar/caixa)
       const printers = storageService.getPrinters();
@@ -497,6 +630,51 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#09090b] flex flex-col">
+      {/* 🛵 Formulário de dados do cliente (Delivery) */}
+      {isDeliveryMode && showCustomerForm && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] p-5 space-y-4 shadow-xl">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                <Truck className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Seus dados para entrega</h3>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-[#71717a]">Precisamos de nome, telefone e endereço para enviar o pedido.</p>
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={customer.name}
+                onChange={(e) => setCustomer((c) => ({ ...c, name: e.target.value }))}
+                placeholder="Nome completo"
+                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-sm text-slate-900 dark:text-white"
+              />
+              <input
+                type="tel"
+                value={customer.phone}
+                onChange={(e) => setCustomer((c) => ({ ...c, phone: e.target.value }))}
+                placeholder="Telefone / WhatsApp"
+                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-sm text-slate-900 dark:text-white"
+              />
+              <textarea
+                value={customer.address}
+                onChange={(e) => setCustomer((c) => ({ ...c, address: e.target.value }))}
+                placeholder="Endereço completo (rua, nº, bairro, cidade)"
+                rows={3}
+                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-sm text-slate-900 dark:text-white resize-none"
+              />
+            </div>
+            <button
+              onClick={() => { if (customer.name.trim()) setShowCustomerForm(false); }}
+              disabled={!customer.name.trim()}
+              className="w-full px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm disabled:opacity-50"
+            >
+              Salvar e continuar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white dark:bg-[#18181b] border-b border-slate-200 dark:border-[#27272a] px-4 py-3 flex items-center justify-between">
         <div>
