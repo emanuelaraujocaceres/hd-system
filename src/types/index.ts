@@ -60,6 +60,27 @@ export interface StoreBranch {
   pickupEnabled?: boolean; // Retirada habilitada por filial
 }
 
+export interface ProductLot {
+  id: string;
+  lotNumber: string;         // Código do lote (ex: LOTE-2026-001)
+  expirationDate: string;    // Data de validade (YYYY-MM-DD)
+  quantity: number;          // Quantidade em estoque deste lote
+  costPrice?: number;        // Custo específico deste lote (opcional)
+  status: 'active' | 'expired' | 'disposed'; // active = em estoque; expired = vencido; disposed = descartado
+  supplierId?: string;       // Fornecedor (opcional)
+  receivedAt?: string;       // Data de recebimento (opcional)
+}
+
+export interface StockLossLog {
+  id: string;
+  reason: 'expired' | 'damaged' | 'other';
+  quantity: number;
+  productName?: string;
+  operatorName?: string;
+  notes?: string;
+  createdAt?: string;
+}
+
 export interface Product {
   id: string;
   barcode: string; // EAN-13
@@ -87,6 +108,9 @@ export interface Product {
   wholesaleOptions?: WholesaleOption[];
   expirationDate?: string; // Data de validade (YYYY-MM-DD) — para alertas no Dashboard
   isComposite?: boolean; // true = produto composto (desconta ingredientes do estoque)
+  useLots?: boolean;       // se verdadeiro, usa controle por lote (FEFO)
+  productLots?: ProductLot[]; // lotes ativos deste produto (para referência UI)
+  activeStockLossLogs?: StockLossLog[]; // perdas registradas recentemente
 }
 
 export interface Category {

@@ -68,6 +68,9 @@ const BRANCH_REQUIRED_TABLES: TableName[] = [
   'delivery_orders',
   // Visibilidade de Módulos (2026): tabela escopada por filial
   'module_visibility',
+  // Controle de Lote/Validade (2026-08-14): tabelas escopadas por filial
+  'product_lots',
+  'stock_loss_log',
 ];
 
 /**
@@ -277,9 +280,12 @@ class SupabaseSyncService {
       'delivery_neighborhoods',
       'delivery_distance_rates',
       'delivery_orders',
-      // Visibilidade de Módulos (2026)
-      'module_visibility',
-    ];
+// Visibilidade de Módulos (2026)
+  'module_visibility',
+  // Controle de Lote/Validade (2026-08-14)
+  'product_lots',
+  'stock_loss_log',
+];
 
     this.channel = supabase.channel('hd-system-realtime');
 

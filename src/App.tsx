@@ -528,6 +528,14 @@ export const App: React.FC = () => {
           if (event === 'DELETE') storageService.removeApiKeyFromRemote(row.id);
           else storageService.updateApiKeyFromRemote(row);
           break;
+        case 'product_lots':
+          if (event === 'DELETE') storageService.removeProductLotFromRemote(row.id);
+          else storageService.updateProductLotFromRemote(row);
+          break;
+        case 'stock_loss_log':
+          if (event === 'DELETE') storageService.removeStockLossLogFromRemote(row.id);
+          else storageService.updateStockLossLogFromRemote(row);
+          break;
         case 'delivery_settings':
           storageService.updateDeliverySettingsFromRemote(row);
           break;

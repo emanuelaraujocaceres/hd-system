@@ -84,7 +84,9 @@ const KEYS = {
   DELIVERY_NEIGHBORHOODS: 'hd_system_delivery_neighborhoods',
   DELIVERY_DISTANCE_RATES: 'hd_system_delivery_distance_rates',
   DELIVERY_ORDERS: 'hd_system_delivery_orders',
-  VIEWING_ORG: 'hd_system_viewing_org',
+VIEWING_ORG: 'hd_system_viewing_org',
+  PRODUCT_LOTS: 'hd_system_product_lots',
+  STOCK_LOSS_LOG: 'hd_system_stock_loss_log',
 };
 
 class StorageService {
@@ -519,8 +521,62 @@ getCurrentOrgId(): string {
       tv_promo_price: p.tvPromoPrice || null,
       tv_highlight_tag: p.tvHighlightTag || null,
       wholesale_options: p.wholesaleOptions || null,
-      expiration_date: p.expirationDate || null,
+expiration_date: p.expirationDate || null,
       is_composite: p.isComposite || false,
+      use_lots: p.useLots || false,
+    });
+  }
+
+  // ── PRODUCT_LOTS ────────────────────────────────────────────────
+  private syncProductLot(pl: any) {
+    let branchId = pl.storeBranchId || this.getSelectedBranchId() || '';
+    if (branchId && !StorageService.UUID_RE.test(branchId)) {
+      const resolved = this.resolveBranchId(branchId);
+      if (resolved) branchId = resolved;
+    }
+    if (!branchId) {
+      console.error('❌ syncProductLot: Nenhuma filial selecionada!', pl.id);
+      return;
+    }
+    const orgId = this.orgIdForBranch(branchId, pl.organizationId);
+    syncService.upsertRow('product_lots', {
+      id: pl.id,
+      organization_id: orgId,
+      store_branch_id: branchId,
+      product_id: pl.productId,
+      lot_number: pl.lotNumber || '',
+      expiration_date: pl.expirationDate || null,
+      quantity: pl.quantity || 0,
+      cost_price: pl.costPrice || null,
+      status: pl.status || 'active',
+      supplier_id: pl.supplierId || null,
+      received_at: pl.receivedAt || null,
+    });
+  }
+
+  // ── STOCK_LOSS_LOG ──────────────────────────────────────────────
+  private syncStockLossLog(sll: any) {
+    let branchId = sll.storeBranchId || this.getSelectedBranchId() || '';
+    if (branchId && !StorageService.UUID_RE.test(branchId)) {
+      const resolved = this.resolveBranchId(branchId);
+      if (resolved) branchId = resolved;
+    }
+    if (!branchId) {
+      console.error('❌ syncStockLossLog: Nenhuma filial selecionada!', sll.id);
+      return;
+    }
+    const orgId = this.orgIdForBranch(branchId, sll.organizationId);
+    syncService.upsertRow('stock_loss_log', {
+      id: sll.id,
+      organization_id: orgId,
+      store_branch_id: branchId,
+      product_id: sll.productId,
+      lot_id: sll.lotId || null,
+      quantity: sll.quantity || 0,
+      reason: sll.reason || 'other',
+      operator_name: sll.operatorName || null,
+      notes: sll.notes || null,
+      created_at: sll.createdAt || null,
     });
   }
 
@@ -835,6 +891,7 @@ getCurrentOrgId(): string {
       wholesaleOptions: row.wholesale_options || undefined,
       expirationDate: row.expiration_date || undefined,
       isComposite: row.is_composite || false,
+      useLots: row.use_lots || false,
     };
     const idx = products.findIndex((p) => p.id === mapped.id);
     if (idx >= 0) {
@@ -876,9 +933,97 @@ getCurrentOrgId(): string {
     }
   }
 
-  removeUserFromRemote(id: string) {
+removeUserFromRemote(id: string) {
     const users = this.get<UserProfile[]>(KEYS.USERS_LIST, []).filter((u) => u.id !== id);
     this.set(KEYS.USERS_LIST, users);
+    this.notify();
+  }
+
+  // ── PRODUCT_LOTS REMOTE ─────────────────────────────────────────
+  updateProductLotFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote product lot from other branch: ${row.store_branch_id}`);
+      return;
+    }
+
+    const productLots = this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, []);
+    const idx = productLots.findIndex((p) => p.id === row.id);
+    if (idx >= 0) {
+      const updated: ProductLot = {
+        id: row.id,
+        lotNumber: row.lot_number || productLots[idx].lotNumber,
+        expirationDate: row.expiration_date || productLots[idx].expirationDate,
+        quantity: row.quantity !== undefined ? row.quantity : productLots[idx].quantity,
+        costPrice: row.cost_price !== undefined ? row.cost_price : productLots[idx].costPrice,
+        status: row.status || productLots[idx].status,
+        supplierId: row.supplier_id || productLots[idx].supplierId,
+        receivedAt: row.received_at || productLots[idx].receivedAt,
+      };
+      productLots[idx] = updated;
+    } else {
+      const newLot: ProductLot = {
+        id: row.id,
+        lotNumber: row.lot_number || '',
+        expirationDate: row.expiration_date || undefined,
+        quantity: row.quantity || 0,
+        costPrice: row.cost_price || undefined,
+        status: row.status || 'active',
+        supplierId: row.supplier_id || undefined,
+        receivedAt: row.received_at || undefined,
+      };
+      productLots.unshift(newLot);
+    }
+    this.set(KEYS.PRODUCT_LOTS, productLots);
+    this.notify();
+  }
+
+  removeProductLotFromRemote(id: string) {
+    const productLots = this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, []).filter((p) => p.id !== id);
+    this.set(KEYS.PRODUCT_LOTS, productLots);
+    this.notify();
+  }
+
+  // ── STOCK_LOSS_LOG REMOTE ───────────────────────────────────────
+  updateStockLossLogFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote stock loss log from other branch: ${row.store_branch_id}`);
+      return;
+    }
+
+    const stockLossLogs = this.get<StockLossLog[]>(KEYS.STOCK_LOSS_LOG, []);
+    const idx = stockLossLogs.findIndex((p) => p.id === row.id);
+    if (idx >= 0) {
+      const updated: StockLossLog = {
+        id: row.id,
+        reason: row.reason || stockLossLogs[idx].reason,
+        quantity: row.quantity !== undefined ? row.quantity : stockLossLogs[idx].quantity,
+        operatorName: row.operator_name || stockLossLogs[idx].operatorName,
+        notes: row.notes || stockLossLogs[idx].notes,
+        createdAt: row.created_at || stockLossLogs[idx].createdAt,
+      };
+      stockLossLogs[idx] = updated;
+    } else {
+      const newLoss: StockLossLog = {
+        id: row.id,
+        reason: row.reason || 'other',
+        quantity: row.quantity || 0,
+        operatorName: row.operator_name || undefined,
+        notes: row.notes || undefined,
+        createdAt: row.created_at || undefined,
+      };
+      stockLossLogs.unshift(newLoss);
+    }
+    this.set(KEYS.STOCK_LOSS_LOG, stockLossLogs);
+    this.notify();
+  }
+
+  removeStockLossLogFromRemote(id: string) {
+    const stockLossLogs = this.get<StockLossLog[]>(KEYS.STOCK_LOSS_LOG, []).filter((p) => p.id !== id);
+    this.set(KEYS.STOCK_LOSS_LOG, stockLossLogs);
     this.notify();
   }
 
@@ -1473,7 +1618,7 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
       // PASSO 3: Buscar todos os dados filtrados pela filial
       // Todas as tabelas agora têm store_branch_id NOT NULL (banco convertido).
       // store_branches: já buscado no PASSO 1 (precisamos de TODAS para o seletor)
-      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders, moduleVisibility] =
+      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders, moduleVisibility, productLots, stockLossLogs] =
         await Promise.all([
           syncService.fetchRows('products', resolvedBranchId),
           syncService.fetchRows('categories', resolvedBranchId),
@@ -1503,8 +1648,22 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
           syncService.fetchRows('delivery_neighborhoods', resolvedBranchId),
           syncService.fetchRows('delivery_distance_rates', resolvedBranchId),
           syncService.fetchRows('delivery_orders', resolvedBranchId),
+// Cardápio Digital / Comandas (2026)
+          syncService.fetchRows('tables', resolvedBranchId),
+          syncService.fetchRows('customer_sessions', resolvedBranchId),
+          syncService.fetchRows('digital_menu_config', resolvedBranchId),
+          syncService.fetchRows('branch_themes', resolvedBranchId),
+          syncService.fetchRows('api_keys', resolvedBranchId),
+          // Delivery (2026)
+          syncService.fetchRows('delivery_settings', resolvedBranchId),
+          syncService.fetchRows('delivery_neighborhoods', resolvedBranchId),
+          syncService.fetchRows('delivery_distance_rates', resolvedBranchId),
+          syncService.fetchRows('delivery_orders', resolvedBranchId),
           // Visibilidade de Módulos (2026)
           syncService.fetchRows('module_visibility', resolvedBranchId),
+          // Controle de Lote/Validade (2026-08-14)
+          syncService.fetchRows('product_lots', resolvedBranchId),
+          syncService.fetchRows('stock_loss_log', resolvedBranchId),
         ]);
 
       // ── HELPER: merge cloud rows into local data by ID ──────────
@@ -1601,6 +1760,7 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
             wholesaleOptions: r.wholesale_options || undefined,
             expirationDate: r.expiration_date || undefined,
             isComposite: r.is_composite || false,
+            useLots: r.use_lots || false,
           };
         }, (p) => this.syncProduct(p), (p) => p.id, (localItem, cloudItem) => {
           // Preserve local salePrice if cloud sent 0
@@ -1613,7 +1773,50 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
           }
           return { ...cloudItem, updatedAt: new Date().toISOString() };
         });
-        if (merged !== null) this.set(KEYS.PRODUCTS, merged);
+if (merged !== null) this.set(KEYS.PRODUCTS, merged);
+      }
+
+      // ── PRODUCT_LOTS ────────────────────────────────────────────────
+      {
+        const local = this.get<any[]>(KEYS.PRODUCT_LOTS, []);
+        const merged = mergeBy(KEYS.PRODUCT_LOTS, local, productLots, (r: any) => ({
+          id: r.id,
+          lotNumber: r.lot_number || '',
+          expirationDate: r.expiration_date || undefined,
+          quantity: r.quantity || 0,
+          costPrice: r.cost_price || undefined,
+          status: r.status || 'active',
+          supplierId: r.supplier_id || undefined,
+          receivedAt: r.received_at || undefined,
+        }), (c) => this.syncProductLot(c), (item: any) => item.id, (localItem, cloudMapped) => {
+          // Preserve local quantity if cloud sent 0
+          if (localItem.quantity > 0 && cloudMapped.quantity <= 0) {
+            cloudMapped.quantity = localItem.quantity;
+          }
+          // Preserve local status if cloud sent empty/undefined
+          if ((!localItem.status || localItem.status === 'active') && !cloudMapped.status) {
+            cloudMapped.status = localItem.status || 'active';
+          }
+          return { ...cloudMapped, updatedAt: new Date().toISOString() };
+        });
+        if (merged !== null) this.set(KEYS.PRODUCT_LOTS, merged);
+      }
+
+      // ── STOCK_LOSS_LOG ────────────────────────────────────────────────
+      {
+        const local = this.get<any[]>(KEYS.STOCK_LOSS_LOG, []);
+        const merged = mergeBy(KEYS.STOCK_LOSS_LOG, local, stockLossLogs, (r: any) => ({
+          id: sll.id,
+          reason: sll.reason || 'other',
+          quantity: sll.quantity || 0,
+          operatorName: sll.operator_name || undefined,
+          notes: sll.notes || undefined,
+          createdAt: sll.created_at || undefined,
+        }), (sll) => this.syncStockLossLog(sll), (item: any) => item.id, (localItem, cloudMapped) => {
+          // Always keep the most recent entry (higher ID wins)
+          return { ...cloudMapped, updatedAt: new Date().toISOString() };
+        });
+        if (merged !== null) this.set(KEYS.STOCK_LOSS_LOG, merged);
       }
 
       // ── CATEGORIES ────────────────────────────────────────────────
@@ -3032,12 +3235,39 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
     // Venda fiado → criar conta a receber vinculada (id da conta = id da venda)
     this.createReceivableFromSale(sale);
 
-    // ─── Deduce stock LOCALLY ONLY (instant UI) ────────────────
+// ─── Deduce stock LOCALLY ONLY (instant UI) ────────────────
     // Uses deductStockLocal() instead of updateStock() to avoid calling
-    // ajustar_estoque RPC — the process_sale_transaction RPC below
+    // adjustStock RPC — the process_sale_transaction RPC below
     // already handles server-side stock deduction atomically.
     for (const item of sale.items || []) {
       this.deductStockLocal(item.productId, -item.quantity, `Venda PDV #${sale.code}`, sale.operatorName);
+    }
+
+    // ─── FEFO: Deduz do lote com validade mais próxima (First Expired First Out) ────────────────
+    // Se o produto tem controle por lote ativo, deduz do lote com validade mais próxima
+    // FEFO (First Expired First Out): vende primeiro o que vence primeiro.
+    if (sale.items && sale.items.length > 0) {
+      for (const item of sale.items) {
+        const product = this.get<Product>(KEYS.PRODUCTS, []).find((p) => p.id === item.productId);
+        if (product && product.useLots) {
+          // Encontrar lote ativo com data de validade mais próxima (FEFO)
+          const productLots = this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, []).filter(
+            (pl) => pl.product_id === item.productId && pl.status === 'active'
+          );
+          if (productLots.length > 0) {
+            // Ordenar por expiration_date (mais antiga primeiro)
+            productLots.sort((a, b) => new Date(a.expirationDate).getTime() - new Date(b.expirationDate).getTime());
+            const fefoLot = productLots[0];
+            // Diminuir quantidade do lote
+            fefoLot.quantity -= item.quantity;
+            if (fefoLot.quantity <= 0) {
+              fefoLot.quantity = 0;
+              fefoLot.status = 'disposed';
+            }
+            this.set(KEYS.PRODUCT_LOTS, this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, []));
+          }
+        }
+      }
     }
 
     // ─── RPC: process_sale_transaction (server-side atomic) ───
