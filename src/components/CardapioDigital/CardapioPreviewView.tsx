@@ -41,7 +41,9 @@ export const CardapioPreviewView: React.FC<CardapioPreviewViewProps> = ({ produc
 
   // Filter products: only active AND showOnCardapio = true
   const filteredProducts = useMemo(() => {
-    return products.filter((p) => p.active !== false && p.showOnCardapio !== false);
+    const active = products.filter((p) => p.active !== false && p.showOnCardapio !== false);
+    // Defesa: nunca exibir produtos duplicados (mesmo nome/filial) nos cardápios
+    return storageService.dedupeProductsByName(active);
   }, [products]);
 
   // Categories from products
