@@ -469,6 +469,8 @@ Impressoras configuradas.
 | ip_address | TEXT | | IP |
 | port | INTEGER | | Porta |
 | is_default | BOOLEAN | `FALSE` | Padrão? (UNIQUE per branch) |
+| role | TEXT | `'caixa'` | Roteamento: caixa/bar/cozinha/outro |
+| category_id | UUID | | Categoria específica (opcional) p/ roteamento |
 | status | TEXT | `'offline'` | Status |
 | last_seen_at | TIMESTAMPTZ | | Último heartbeat |
 | version | INTEGER | `0` | Versão |

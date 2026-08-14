@@ -1930,6 +1930,8 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
             id: r.id, name: r.name || '',
             model: r.model || undefined,
             transport: (r.transport === 'webusb' || r.transport === 'serial' || r.transport === 'os' ? r.transport : 'network'),
+            role: (r.role === 'bar' || r.role === 'cozinha' || r.role === 'outro' ? r.role : 'caixa'),
+            categoryId: r.category_id || undefined,
             ipAddress: r.ip_address || undefined,
             port: parseInt(r.port) || undefined,
             isDefault: r.is_default === true,
