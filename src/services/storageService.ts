@@ -890,13 +890,23 @@ getCurrentOrgId(): string {
           return null; // Signal to caller: don't apply
         }
         if (data && data.length > 0) {
-          return data.map((item: any) => ({
+          const mapped = data.map((item: any) => ({
             productId: item.product_id,
             productName: item.product_name || '',
             unitPrice: parseFloat(item.unit_price) || 0,
             quantity: item.quantity || 1,
             total: parseFloat(item.total_price) || 0,
           }));
+          // Defensive dedupe: builds antigos podiam inserir sale_items duplicados
+          // no cloud. Sem isto, o realtime puxaria as duplicatas e multiplicaria
+          // os itens do pedido a cada transição de status (1→2→4→8).
+          const seen = new Set<string>();
+          return mapped.filter((it: any) => {
+            const key = `${it.productId}|${it.quantity}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
         }
       } catch {}
       return existing?.items || [];
@@ -916,7 +926,7 @@ getCurrentOrgId(): string {
       storeBranchId: row.store_branch_id ?? existing?.storeBranchId ?? '',
       tableId: row.table_id || existing?.tableId || undefined,
       customerSessionId: row.customer_session_id || existing?.customerSessionId || undefined,
-      items: existing?.items || [],
+      items: existing?.items ? [...existing.items] : [],
       subtotal: row.subtotal !== undefined && row.subtotal !== null ? parseFloat(row.subtotal) : (existing?.subtotal ?? 0),
       discount: row.discount !== undefined && row.discount !== null ? parseFloat(row.discount) : (existing?.discount ?? 0),
       total: row.total !== undefined && row.total !== null ? parseFloat(row.total) : (existing?.total ?? 0),

@@ -31,6 +31,13 @@ interface CartItem {
 
 const CATEGORY_ORDER = ['Entradas', 'Pratos', 'Lanches', 'Pizzas', 'Bebidas', 'Sobremesas', 'Geral'];
 
+// Preço efetivo: a Oferta TV (tvPromoPrice) prevalece quando é menor que o preço normal.
+// Garante que o desconto chegue ao pedido (KDS/Comanda/Caixa) e não só ao cardápio.
+const getEffectivePrice = (p: Product): number =>
+  p.tvPromoPrice && p.tvPromoPrice > 0 && p.tvPromoPrice < (p.salePrice ?? 0)
+    ? p.tvPromoPrice
+    : (p.salePrice ?? 0);
+
 export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, filialId, onClose }) => {
   const [table, setTable] = useState<Table | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -242,7 +249,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   }, [products, selectedCategory]);
 
   const cartTotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.product.salePrice * item.quantity, 0);
+    return cart.reduce((sum, item) => sum + getEffectivePrice(item.product) * item.quantity, 0);
   }, [cart]);
 
   const cartCount = useMemo(() => {
@@ -311,13 +318,16 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
     setSubmitting(true);
     try {
       // Create one sale per batch of items
-      const saleItems = cart.map((item) => ({
-        productId: item.product.id,
-        productName: item.product.name,
-        unitPrice: item.product.salePrice,
-        quantity: item.quantity,
-        total: Math.round(item.product.salePrice * item.quantity * 100) / 100,
-      }));
+      const saleItems = cart.map((item) => {
+        const unit = getEffectivePrice(item.product);
+        return {
+          productId: item.product.id,
+          productName: item.product.name,
+          unitPrice: unit,
+          quantity: item.quantity,
+          total: Math.round(unit * item.quantity * 100) / 100,
+        };
+      });
 
       const total = saleItems.reduce((sum, item) => sum + item.total, 0);
 
@@ -650,7 +660,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
                 <div key={item.product.id} className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 dark:bg-[#09090b]">
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.product.name}</p>
-                    <p className="text-[10px] text-slate-500">R$ {(item.product.salePrice ?? 0).toFixed(2)} cada</p>
+                     <p className="text-[10px] text-slate-500">R$ {getEffectivePrice(item.product).toFixed(2)} cada</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => removeFromCart(item.product.id)} className="w-6 h-6 rounded-full bg-slate-200 dark:bg-[#27272a] flex items-center justify-center">
@@ -661,9 +671,9 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
                       <Plus className="w-3 h-3" />
                     </button>
                   </div>
-                  <span className="text-xs font-bold text-slate-900 dark:text-white w-16 text-right">
-                    R$ {((item.product.salePrice ?? 0) * item.quantity).toFixed(2)}
-                  </span>
+                     <span className="text-xs font-bold text-slate-900 dark:text-white w-16 text-right">
+                     R$ {(getEffectivePrice(item.product) * item.quantity).toFixed(2)}
+                   </span>
                 </div>
               ))}
               {cart.length === 0 && (

@@ -26,6 +26,13 @@ interface CartItem {
   quantity: number;
 }
 
+// Preço efetivo: a Oferta TV (tvPromoPrice) prevalece quando é menor que o preço normal.
+// Garante que o desconto chegue ao pedido (KDS/Comanda/Caixa) e não só ao cardápio.
+const getEffectivePrice = (p: Product): number =>
+  p.tvPromoPrice && p.tvPromoPrice > 0 && p.tvPromoPrice < (p.salePrice ?? 0)
+    ? p.tvPromoPrice
+    : (p.salePrice ?? 0);
+
 export const CardapioPreviewView: React.FC<CardapioPreviewViewProps> = ({ products, user }) => {
   const [config, setConfig] = useState<DigitalMenuConfig | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -58,7 +65,7 @@ export const CardapioPreviewView: React.FC<CardapioPreviewViewProps> = ({ produc
   }, [filteredProducts, selectedCategory]);
 
   const cartTotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.product.salePrice * item.quantity, 0);
+    return cart.reduce((sum, item) => sum + getEffectivePrice(item.product) * item.quantity, 0);
   }, [cart]);
 
   const cartCount = useMemo(() => {
@@ -98,13 +105,16 @@ export const CardapioPreviewView: React.FC<CardapioPreviewViewProps> = ({ produc
     setSubmitting(true);
     try {
       // Create sale with table name "Caixa" (collaborator/admin order)
-      const saleItems = cart.map((item) => ({
-        productId: item.product.id,
-        productName: item.product.name,
-        unitPrice: item.product.salePrice,
-        quantity: item.quantity,
-        total: Math.round(item.product.salePrice * item.quantity * 100) / 100,
-      }));
+      const saleItems = cart.map((item) => {
+        const unit = getEffectivePrice(item.product);
+        return {
+          productId: item.product.id,
+          productName: item.product.name,
+          unitPrice: unit,
+          quantity: item.quantity,
+          total: Math.round(unit * item.quantity * 100) / 100,
+        };
+      });
 
       const total = saleItems.reduce((sum, item) => sum + item.total, 0);
 
@@ -337,7 +347,7 @@ export const CardapioPreviewView: React.FC<CardapioPreviewViewProps> = ({ produc
                 <div key={item.product.id} className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 dark:bg-[#09090b]">
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{item.product.name}</p>
-                    <p className="text-[10px] text-slate-500">R$ {item.product.salePrice.toFixed(2)} cada</p>
+                    <p className="text-[10px] text-slate-500">R$ {getEffectivePrice(item.product).toFixed(2)} cada</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => removeFromCart(item.product.id)} className="w-6 h-6 rounded-full bg-slate-200 dark:bg-[#27272a] flex items-center justify-center">
@@ -349,7 +359,7 @@ export const CardapioPreviewView: React.FC<CardapioPreviewViewProps> = ({ produc
                     </button>
                   </div>
                   <span className="text-xs font-bold text-slate-900 dark:text-white w-16 text-right">
-                    R$ {(item.product.salePrice * item.quantity).toFixed(2)}
+                    R$ {(getEffectivePrice(item.product) * item.quantity).toFixed(2)}
                   </span>
                 </div>
               ))}
