@@ -161,12 +161,12 @@ class GlobalNotificationServiceClass {
   markLocalSale(code: string) {
     if (!code) return;
     const now = Date.now();
-    this.localSaleCodes = this.localSaleCodes.filter((x) => now - x.at < 10000);
+    this.localSaleCodes = this.localSaleCodes.filter((x) => now - x.at < 1800000);
     this.localSaleCodes.push({ code, at: now });
   }
   private isLocalEcho(code: string): boolean {
     const now = Date.now();
-    this.localSaleCodes = this.localSaleCodes.filter((x) => now - x.at < 10000);
+    this.localSaleCodes = this.localSaleCodes.filter((x) => now - x.at < 1800000);
     const idx = this.localSaleCodes.findIndex((x) => x.code === code);
     if (idx >= 0) {
       this.localSaleCodes.splice(idx, 1); // consome: cada eco só suprime uma vez
@@ -186,14 +186,14 @@ class GlobalNotificationServiceClass {
     if (!customerName) return;
     const key = `${customerName}|${amount}`;
     const now = Date.now();
-    this.localCreditKeys = this.localCreditKeys.filter((x) => now - x.at < 10000);
+    this.localCreditKeys = this.localCreditKeys.filter((x) => now - x.at < 120000);
     this.localCreditKeys.push({ key, at: now });
   }
   private isLocalCreditEcho(customerName: string, amount: number): boolean {
     if (!customerName) return false;
     const key = `${customerName}|${amount}`;
     const now = Date.now();
-    this.localCreditKeys = this.localCreditKeys.filter((x) => now - x.at < 10000);
+    this.localCreditKeys = this.localCreditKeys.filter((x) => now - x.at < 120000);
     const idx = this.localCreditKeys.findIndex((x) => x.key === key);
     if (idx >= 0) {
       this.localCreditKeys.splice(idx, 1);

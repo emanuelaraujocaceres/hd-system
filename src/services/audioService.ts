@@ -6,6 +6,36 @@ class POSAudioService {
   private ctx: AudioContext | null = null;
   public enabled: boolean = true;
 
+  constructor() {
+    this.init();
+  }
+
+  /**
+   * Destrava o AudioContext para que os bips do Realtime toquem mesmo após
+   * muito tempo ocioso. O browser só libera áudio após um gesto do usuário,
+   * então registramos o primeiro clique/tecla/toque e também o retorno de
+   * foco da aba. Padrão seguro: sem isso, uma venda remota chegada sem gesto
+   * recente silenciaria o bip.
+   */
+  unlock() {
+    const ctx = this.getContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+  }
+
+  init() {
+    if (typeof window === 'undefined') return;
+    const handler = () => this.unlock();
+    window.addEventListener('pointerdown', handler, { once: true });
+    window.addEventListener('keydown', handler, { once: true });
+    window.addEventListener('touchstart', handler, { once: true });
+    window.addEventListener('focus', handler);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) this.unlock(); });
+    }
+  }
+
   private getContext(): AudioContext | null {
     if (!this.ctx && typeof window !== 'undefined') {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
