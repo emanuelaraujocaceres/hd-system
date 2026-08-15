@@ -2296,7 +2296,7 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
         const settings = moduleVisibility.length > 0 ? moduleVisibility[0] : null;
         if (settings) {
           const mapped = {
-            id: StorageService.ensureUuid(settings.id),
+            id: settings.id,
             organizationId: settings.organization_id || this.getCurrentOrgId(),
             storeBranchId: settings.store_branch_id || '',
             modulePdv: settings.module_pdv ?? true,
@@ -4864,11 +4864,12 @@ private updateReceivableFromPayments(saleId: string) {
     this.notify();
   }
 
-  // --- MODULE VISIBILITY ---
+// --- MODULE VISIBILITY ---
   /**
    * Get module visibility for current branch
    * Stored as array of records (one per branch)
    * ✅ Backward compatible: handles old single-object format
+   * ✅ Defensive: never returns undefined that could cause "Cannot read properties of undefined (reading 'id')"
    */
   getModuleVisibility(): any | null {
     const data = this.get<any>('hd_system_module_visibility', null);
@@ -4879,13 +4880,15 @@ private updateReceivableFromPayments(saleId: string) {
       this.set('hd_system_module_visibility', arr);
       const currentBranchId = this.getSelectedBranchId();
       if (!currentBranchId) return arr[0] || null;
-      return arr.find(v => v.storeBranchId === currentBranchId) || arr[0];
+      const found = arr.find(v => v.storeBranchId === currentBranchId);
+      return found || arr[0] || null;
     }
     
     const all = Array.isArray(data) ? data : [];
     const currentBranchId = this.getSelectedBranchId();
     if (!currentBranchId) return all[0] || null;
-    return all.find(v => v.storeBranchId === currentBranchId) || null;
+    const found = all.find(v => v.storeBranchId === currentBranchId);
+    return found || null;
   }
 
   /**
