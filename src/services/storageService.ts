@@ -949,6 +949,24 @@ removeUserFromRemote(id: string) {
     }
 
     const productLots = this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, []);
+    // ✅ Defensiva: se não houver lotes locais, inserir novo lote direto
+    // (dados vindo da nuvem ainda não têm correspondente local)
+    if (productLots.length === 0) {
+      const newLot: ProductLot = {
+        id: row.id,
+        lotNumber: row.lot_number || '',
+        expirationDate: row.expiration_date || undefined,
+        quantity: row.quantity || 0,
+        costPrice: row.cost_price || undefined,
+        status: row.status || 'active',
+        supplierId: row.supplier_id || undefined,
+        receivedAt: row.received_at || undefined,
+      };
+      productLots.unshift(newLot);
+      this.set(KEYS.PRODUCT_LOTS, productLots);
+      this.notify();
+      return;
+    }
     const idx = productLots.findIndex((p) => p.id === row.id);
     if (idx >= 0) {
       const updated: ProductLot = {
@@ -963,6 +981,7 @@ removeUserFromRemote(id: string) {
       };
       productLots[idx] = updated;
     } else {
+      // Lote não existe localmente — inserir novo registo
       const newLot: ProductLot = {
         id: row.id,
         lotNumber: row.lot_number || '',
