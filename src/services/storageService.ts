@@ -2290,7 +2290,7 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
         if (merged !== null) this.set(KEYS.API_KEYS, merged);
       }
 
-      // ── MODULE VISIBILITY (visibilidade de módulos por filial) ──
+// ── MODULE VISIBILITY (visibilidade de módulos por filial) ──
       {
         const local = this.get<any[]>('hd_system_module_visibility', []);
         const settings = moduleVisibility.length > 0 ? moduleVisibility[0] : null;
@@ -2312,11 +2312,21 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
             moduleTvShowcase: settings.module_tv_showcase ?? false,
             moduleTvConnect: settings.module_tv_connect ?? false,
           };
-          // ✅ Preserve other branches, update/add current branch
-          const idx = local.findIndex(v => v.storeBranchId === mapped.storeBranchId);
-          if (idx >= 0) local[idx] = { ...local[idx], ...mapped };
-          else local.push(mapped);
-          this.set('hd_system_module_visibility', local);
+          // ✅ Aplica dados da nuvem tanto quando local tem dados
+          // quanto quando está vazio (após LocalStorage clear).
+          // Isso restaura a configuração de módulos após limpeza de dados,
+          // mas mantém o isolamento por filial/organização via storeBranchId.
+          if (local.length > 0) {
+            // Se já tem dados localais: mergeia, preservando outras filiais
+            const idx = local.findIndex(v => v.storeBranchId === mapped.storeBranchId);
+            if (idx >= 0) local[idx] = { ...local[idx], ...mapped };
+            else local.push(mapped);
+            this.set('hd_system_module_visibility', local);
+          } else {
+            // LocalStorage vazio (após clear): aplica cloud como padrão inicial
+            // para evitar que módulos "some" e a aba fique branca.
+            this.set('hd_system_module_visibility', [mapped]);
+          }
         } else if (local.length > 0) {
           this.set('hd_system_module_visibility', local);
         }

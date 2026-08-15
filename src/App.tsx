@@ -841,6 +841,10 @@ export const App: React.FC = () => {
 
   const handleLoginSuccess = (loggedUser: UserProfile) => {
     setUser(loggedUser);
+    // 🛠️ GARANTIR QUE PERFIL SEMPRE SEJA SALVO no localStorage
+    // Isso funciona para ambos os caminhos de login (Supabase + local),
+    // assegurando que getCurrentOrgId() tenha dados disponíveis após login.
+    storageService.saveUserProfile(loggedUser);
     // Re-hidrata com a organização do usuário recém-logado — corrige orgs
     // não-default (ex.: Plantão da Cerveja) que só carregavam dados após F5
     // (a hidratação do mount rodava antes do perfil existir).
