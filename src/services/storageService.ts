@@ -2296,7 +2296,7 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
         const settings = moduleVisibility.length > 0 ? moduleVisibility[0] : null;
         if (settings) {
           const mapped = {
-            id: settings.id,
+            id: StorageService.ensureUuid(settings.id),
             organizationId: settings.organization_id || this.getCurrentOrgId(),
             storeBranchId: settings.store_branch_id || '',
             modulePdv: settings.module_pdv ?? true,
