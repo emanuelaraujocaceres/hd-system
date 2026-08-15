@@ -61,8 +61,8 @@ async function startServer() {
       if (!token) {
         return res.status(401).json({ success: false, message: 'Não autenticado.' });
       }
-      const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
-      if (authErr || !authData?.user) {
+      const { data: authData, error: getUserErr } = await supabaseAdmin.auth.getUser(token);
+      if (getUserErr || !authData?.user) {
         return res.status(401).json({ success: false, message: 'Sessão inválida ou expirada.' });
       }
       const { data: callerProfile } = await supabaseAdmin
@@ -99,18 +99,18 @@ async function startServer() {
       );
 
       // 1. Criar no Supabase Auth
-      const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+      const { data: authUser, error: createUserErr } = await supabaseAdmin.auth.admin.createUser({
         email: email.toLowerCase(),
         password: finalPassword,
         email_confirm: true,
         user_metadata: { name, role: role || "collaborator" },
       });
-      if (authErr) {
+      if (createUserErr) {
         // Erro específico: e-mail já cadastrado no Auth
-        if (authErr.message?.includes("already registered") || authErr.message?.includes("already exists")) {
+        if (createUserErr.message?.includes("already registered") || createUserErr.message?.includes("already exists")) {
           return res.json({ success: false, message: "Este e-mail já possui uma conta no sistema. Use outro e-mail." });
         }
-        return res.status(500).json({ success: false, message: `Erro Auth: ${authErr.message}` });
+        return res.status(500).json({ success: false, message: `Erro Auth: ${createUserErr.message}` });
       }
 
       // 2. Inserir em system_users com o mesmo UUID do Auth
@@ -157,8 +157,8 @@ async function startServer() {
       if (!token) {
         return res.status(401).json({ success: false, message: 'Não autenticado.' });
       }
-      const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
-      if (authErr || !authData?.user) {
+      const { data: authData, error: getUserErr2 } = await supabaseAdmin.auth.getUser(token);
+      if (getUserErr2 || !authData?.user) {
         return res.status(401).json({ success: false, message: 'Sessão inválida ou expirada.' });
       }
       const { data: callerProfile } = await supabaseAdmin
@@ -193,17 +193,17 @@ async function startServer() {
         "@";
 
       // 1. Criar no Supabase Auth
-      const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+      const { data: authUser, error: createUserErr2 } = await supabaseAdmin.auth.admin.createUser({
         email: admin_email.toLowerCase(),
         password: tempPassword,
         email_confirm: true,
         user_metadata: { name: admin_name, role: "admin" },
       });
-      if (authErr) {
-        if (authErr.message?.includes("already registered") || authErr.message?.includes("already exists")) {
+      if (createUserErr2) {
+        if (createUserErr2.message?.includes("already registered") || createUserErr2.message?.includes("already exists")) {
           return res.json({ success: false, message: "Este e-mail já possui uma conta no sistema. Use outro e-mail." });
         }
-        return res.status(500).json({ success: false, message: `Erro Auth: ${authErr.message}` });
+        return res.status(500).json({ success: false, message: `Erro Auth: ${createUserErr2.message}` });
       }
 
       const authUserId = authUser.user.id;
