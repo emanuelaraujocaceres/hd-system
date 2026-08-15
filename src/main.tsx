@@ -3,6 +3,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { PublicMenuView } from './components/CardapioDigital/PublicMenuView.tsx';
+import { UserPlus } from 'lucide-react';
 import './index.css';
 
 // ─── PWA: registra o service worker para funcionar offline ─────────
