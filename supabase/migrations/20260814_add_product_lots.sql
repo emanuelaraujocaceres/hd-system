@@ -66,55 +66,38 @@ CREATE INDEX IF NOT EXISTS idx_stock_loss_log_lot ON stock_loss_log(lot_id);
 -- 3. Habilitar RLS em product_lots
 ALTER TABLE product_lots ENABLE ROW LEVEL SECURITY;
 
--- Policies para product_lots (mesmo padrão das outras tabelas)
+-- Policies para product_lots (simples: superadmin = organization_id IS NULL)
+-- Usuário logado terá organization_id preenchido e acesso via JWT claims
 DROP POLICY IF EXISTS "product_lots_org_isolation" ON product_lots;
-CREATE POLICY "product_lots_org_isolation" ON product_lots
+DROP POLICY IF EXISTS "product_lots_allow_insert" ON product_lots;
+DROP POLICY IF EXISTS "product_lots_allow_select" ON product_lots;
+DROP POLICY IF EXISTS "product_lots_allow_update" ON product_lots;
+DROP POLICY IF EXISTS "product_lots_allow_delete" ON product_lots;
+
+CREATE POLICY "product_lots_superadmin" ON product_lots
+  FOR ALL USING (organization_id IS NULL);
+
+-- Política para usuários autenticados (será aplicada quando JWT estiver disponível)
+-- Usando @ sign para evitar conflito com naming conventions
+CREATE POLICY "product_lots_auth_users" ON product_lots
   FOR ALL USING (
     organization_id::text = current_setting('request.jwt.claims', true)::json->>'organization_id'
-    OR current_setting('request.jwt.claims', true)::json->>'organization_id' IS NULL
   );
-
-DROP POLICY IF EXISTS "product_lots_anon_insert" ON product_lots;
-CREATE POLICY "product_lots_anon_insert" ON product_lots
-  FOR INSERT WITH CHECK (true);
-
-DROP POLICY IF EXISTS "product_lots_anon_select" ON product_lots;
-CREATE POLICY "product_lots_anon_select" ON product_lots
-  FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "product_lots_anon_update" ON product_lots;
-CREATE POLICY "product_lots_anon_update" ON product_lots
-  FOR UPDATE USING (true);
-
-DROP POLICY IF EXISTS "product_lots_anon_delete" ON product_lots;
-CREATE POLICY "product_lots_anon_delete" ON product_lots
-  FOR DELETE USING (true);
 
 -- 4. Habilitar RLS em stock_loss_log
 ALTER TABLE stock_loss_log ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "stock_loss_log_org_isolation" ON stock_loss_log;
-CREATE POLICY "stock_loss_log_org_isolation" ON stock_loss_log
+-- Policies para stock_loss_log (mesmo padrão)
+DROP POLICY IF EXISTS "stock_loss_log_superadmin" ON stock_loss_log;
+DROP POLICY IF EXISTS "stock_loss_log_auth_users" ON stock_loss_log;
+
+CREATE POLICY "stock_loss_log_superadmin" ON stock_loss_log
+  FOR ALL USING (organization_id IS NULL);
+
+CREATE POLICY "stock_loss_log_auth_users" ON stock_loss_log
   FOR ALL USING (
     organization_id::text = current_setting('request.jwt.claims', true)::json->>'organization_id'
-    OR current_setting('request.jwt.claims', true)::json->>'organization_id' IS NULL
   );
-
-DROP POLICY IF EXISTS "stock_loss_log_anon_insert" ON stock_loss_log;
-CREATE POLICY "stock_loss_log_anon_insert" ON stock_loss_log
-  FOR INSERT WITH CHECK (true);
-
-DROP POLICY IF EXISTS "stock_loss_log_anon_select" ON stock_loss_log;
-CREATE POLICY "stock_loss_log_anon_select" ON stock_loss_log
-  FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "stock_loss_log_anon_update" ON stock_loss_log;
-CREATE POLICY "stock_loss_log_anon_update" ON stock_loss_log
-  FOR UPDATE USING (true);
-
-DROP POLICY IF EXISTS "stock_loss_log_anon_delete" ON stock_loss_log;
-CREATE POLICY "stock_loss_log_anon_delete" ON stock_loss_log
-  FOR DELETE USING (true);
 
 -- 5. Adicionar às publicações Realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE product_lots;

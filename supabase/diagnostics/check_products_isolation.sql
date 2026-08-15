@@ -5,7 +5,7 @@
 -- ============================================================
 
 -- A) TODAS as filiais (mapear nome -> id -> org)
-SELECT id, organization_id, name, active
+SELECT id, organization_id, name, is_active
 FROM store_branches
 ORDER BY organization_id, name;
 
