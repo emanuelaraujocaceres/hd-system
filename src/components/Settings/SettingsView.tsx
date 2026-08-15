@@ -102,6 +102,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     }
   }, [errorMessage]);
 
+  // ✅ Reset de aba settings a cada renderização para evitar estado stale
+  // Isso garante que a aba sempre reflita a intenção atual do usuário
+  useEffect(() => {
+    // Sincronizar sessionStorage com o estado sempre que activeSubTab mudar
+    sessionStorage.setItem('settings_active_tab', activeSubTab);
+  }, [activeSubTab]);
+
   // Fiscal & General Settings State
   const [tradeName, setTradeName] = useState(settings.tradeName);
   const [companyName, setCompanyName] = useState(settings.companyName);
