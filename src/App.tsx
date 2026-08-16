@@ -1040,8 +1040,11 @@ export const App: React.FC = () => {
   const hasAccessToTab = (tab: string): boolean => {
     if (isAdmin) return true;
     
-    // Settings and Organizations are always visible (not controlled by module visibility)
-    if (tab === 'settings' || tab === 'organizations') return true;
+    // Organizations: superadmin only
+    if (tab === 'organizations') return !!user?.superadmin;
+    
+    // Settings: gated by permission engine (not hardcoded true)
+    if (tab === 'settings') return !!user?.permissions?.settings;
     
     // ✅ Check module visibility (per branch) - admins bypass this
     const TAB_MODULE_MAP: Record<string, string> = {

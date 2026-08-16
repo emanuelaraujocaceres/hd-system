@@ -3,7 +3,8 @@
  * 
  * Funcionalidades:
  * - Solicita permissão de notificação ao usuário
- * - Escuta novos pedidos via Realtime do Supabase
+ * - Escuta novos pedidos via Realtime do Supabase (filtrado por org + branch)
+ * - Re-subscribe automaticamente quando o usuário troca de filial
  * - Mostra notificação push quando chega novo pedido
  * - Emite som de alerta (opcional)
  */
@@ -21,6 +22,13 @@ export const useDeliveryNotifications = ({ enabled, onNewPedido }: UseDeliveryNo
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [isSupported, setIsSupported] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Track current branch to detect changes and trigger re-subscribe
+  const [currentBranchKey, setCurrentBranchKey] = useState<string>(() => {
+    return `${storageService.getCurrentOrgId() || ''}:${storageService.getSelectedBranchId() || ''}`;
+  });
+  // Ref for onNewPedido to avoid stale closure in Realtime callback
+  const onNewPedidoRef = useRef(onNewPedido);
+  onNewPedidoRef.current = onNewPedido;
 
   useEffect(() => {
     // Verificar suporte a notificações
@@ -32,6 +40,15 @@ export const useDeliveryNotifications = ({ enabled, onNewPedido }: UseDeliveryNo
     // Criar elemento de áudio para alerta
     audioRef.current = new Audio('/notification-sound.mp3');
     audioRef.current.volume = 0.5;
+  }, []);
+
+  // Listen for storage changes to detect branch switch
+  useEffect(() => {
+    const unsubscribe = storageService.subscribe(() => {
+      const newKey = `${storageService.getCurrentOrgId() || ''}:${storageService.getSelectedBranchId() || ''}`;
+      setCurrentBranchKey(prev => (prev !== newKey ? newKey : prev));
+    });
+    return unsubscribe;
   }, []);
 
   const requestPermission = async () => {
@@ -67,20 +84,21 @@ export const useDeliveryNotifications = ({ enabled, onNewPedido }: UseDeliveryNo
     return notification;
   };
 
-  // Escutar novos pedidos via Realtime
+  // Escutar novos pedidos via Realtime — re-subscribe on branch change
   useEffect(() => {
     if (!enabled || permission !== 'granted') return;
 
+    // Parse org + branch from the reactive key
+    const [orgId, branchId] = currentBranchKey.split(':');
+
     // Build server-side filters for org + branch isolation
-    const orgId = storageService.getCurrentOrgId();
-    const branchId = storageService.getSelectedBranchId();
     const filters: string[] = [];
     if (orgId) filters.push(`organization_id=eq.${orgId}`);
     if (branchId) filters.push(`store_branch_id=eq.${branchId}`);
     const filterStr = filters.length > 0 ? { filter: filters.join(',') } : {};
 
     const channel = supabase
-      .channel('delivery-notifications')
+      .channel(`delivery-notifications-${branchId || 'global'}`)
       .on(
         'postgres_changes',
         {
@@ -92,15 +110,15 @@ export const useDeliveryNotifications = ({ enabled, onNewPedido }: UseDeliveryNo
         (payload) => {
           const pedido = payload.new;
           // Defense-in-depth: double-check branch isolation client-side
-          const currentBranchId = storageService.getSelectedBranchId();
-          if (currentBranchId && pedido.store_branch_id && pedido.store_branch_id !== currentBranchId) return;
+          const latestBranchId = storageService.getSelectedBranchId();
+          if (latestBranchId && pedido.store_branch_id && pedido.store_branch_id !== latestBranchId) return;
           if (pedido.status === 'pending') {
             showNotification(
               '🛵 Novo Pedido!',
               `Pedido #${pedido.orderNumber} - ${pedido.customerName}\nR$ ${pedido.total?.toFixed(2)}`,
               `pedido-${pedido.id}`
             );
-            onNewPedido?.(pedido);
+            onNewPedidoRef.current?.(pedido);
           }
         }
       )
@@ -109,7 +127,7 @@ export const useDeliveryNotifications = ({ enabled, onNewPedido }: UseDeliveryNo
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [enabled, permission, onNewPedido]);
+  }, [enabled, permission, currentBranchKey]); // Re-subscribe when branch changes
 
   return {
     isSupported,

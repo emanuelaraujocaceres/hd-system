@@ -273,7 +273,11 @@ getCurrentOrgId(): string {
   // que dados de outra filial vazem para a filial atual.
   private filterBySelectedBranch<T extends { storeBranchId?: string }>(items: T[]): T[] {
     const branchId = this.getSelectedBranchId();
-    if (!branchId) return [];
+    if (!branchId) {
+      // Superadmin global (sem filial selecionada): mostra todos os itens
+      if (this.isSuperAdmin() && !this.getSuperadminViewingOrg()) return items;
+      return [];
+    }
     return items.filter((i) => i.storeBranchId === branchId);
   }
 
