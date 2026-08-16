@@ -1310,6 +1310,11 @@ updateCategoryFromRemote(row: any) {
 
   updateCustomerFromRemote(row: any) {
     this.setChangeSource('remote');
+    // Branch isolation: reject remote customers from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote customer from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const customers = this.get<Customer[]>(KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : []);
     const mapped: Customer = {
       id: row.id,
@@ -1354,6 +1359,12 @@ updateCategoryFromRemote(row: any) {
   }
 
   updateSupplierFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote suppliers from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote supplier from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const suppliers = this.get<Supplier[]>(KEYS.SUPPLIERS, this.isDefaultOrg() ? INITIAL_SUPPLIERS : []);
     const mapped: Supplier = {
       id: row.id,
@@ -1381,6 +1392,12 @@ updateCategoryFromRemote(row: any) {
   }
 
   updateFinancialFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote financial transactions from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote financial transaction from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
     const mapped: FinancialAccount = {
       id: row.id,
@@ -3962,6 +3979,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateScannedBoletoFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote scanned boleto from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<ScannedBoleto[]>(KEYS.SCANNED_BOLETOS, []);
     const mapped: ScannedBoleto = {
       id: row.id, linhaDigitavel: row.linha_digitavel || '',
@@ -4029,6 +4052,11 @@ private updateReceivableFromPayments(saleId: string) {
 
   updateCreditPaymentFromRemote(row: any) {
     this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote credit payment from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []);
     const mapped: CreditPayment = {
       id: row.id, saleId: row.sale_id, customerId: row.customer_id || undefined,
@@ -4092,6 +4120,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateNFRecordFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote NF record from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<NFRecord[]>(KEYS.NF_RECORDS, []);
     const mapped: NFRecord = {
       id: row.id, scanDate: row.scan_date || row.created_at || new Date().toISOString(),
@@ -4154,6 +4188,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateFooterMessageFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote footer message from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<FooterMessage[]>(KEYS.FOOTER_MESSAGES, []);
     const mapped: FooterMessage = {
       id: row.id, message: row.message || '',
@@ -4233,6 +4273,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateMediaDeviceFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote media device from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<MediaDevice[]>(KEYS.MEDIA_DEVICES, []);
     const mapped: MediaDevice = {
       id: row.id, name: row.name || '',
@@ -4449,6 +4495,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updatePrinterFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote printer from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<Printer[]>(KEYS.PRINTERS, []);
     const mapped: Printer = {
       id: row.id, name: row.name || '',
@@ -4501,6 +4553,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateTableFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote table from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<Table[]>(KEYS.TABLES, []);
     const mapped: Table = {
       id: row.id, name: row.name || '',
@@ -4543,6 +4601,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateCustomerSessionFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote customer session from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, []);
     const mapped: CustomerSession = {
       id: row.id, tableId: row.table_id || '',
@@ -4590,6 +4654,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateDigitalMenuConfigFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote digital menu config from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<DigitalMenuConfig[]>(KEYS.DIGITAL_MENU_CONFIG, []);
     const mapped: DigitalMenuConfig = {
       id: row.id, title: row.title || 'Cardápio Digital',
@@ -4640,6 +4710,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateBranchThemeFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote branch theme from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<BranchTheme[]>(KEYS.BRANCH_THEMES, []);
     const mapped: BranchTheme = {
       id: row.id,
@@ -4684,6 +4760,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateApiKeyFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote API key from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<ApiKey[]>(KEYS.API_KEYS, []);
     const mapped: ApiKey = {
       id: row.id, name: row.name || '',
@@ -4783,6 +4865,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateDeliveryNeighborhoodFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote delivery neighborhood from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<DeliveryNeighborhood[]>(KEYS.DELIVERY_NEIGHBORHOODS, []);
     const mapped: DeliveryNeighborhood = {
       id: row.id,
@@ -4832,6 +4920,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateDeliveryDistanceRateFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote delivery distance rate from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<DeliveryDistanceRate[]>(KEYS.DELIVERY_DISTANCE_RATES, []);
     const mapped: DeliveryDistanceRate = {
       id: row.id,
@@ -4901,6 +4995,11 @@ private updateReceivableFromPayments(saleId: string) {
 
   updateDeliveryOrderFromRemote(row: any, eventType?: string) {
     this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote delivery order from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const all = this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []);
     const mapped: DeliveryOrder = {
       id: row.id,
@@ -5063,6 +5162,12 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateModuleVisibilityFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation: reject remote data from other branches
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote module visibility from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const mapped: any = {
       id: row.id,
       organizationId: row.organization_id || this.getCurrentOrgId(),
