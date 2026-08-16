@@ -1046,8 +1046,17 @@ removeUserFromRemote(id: string) {
     this.notify();
   }
 
-  updateCategoryFromRemote(row: any) {
+updateCategoryFromRemote(row: any) {
     const categories = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []);
+    // ✅ Deduplica por nome (evita categorias duplicadas no dropdown)
+    const seen = new Set<string>();
+    const deduped = categories.filter((c) => {
+      const key = (c.name || '').toLowerCase().trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     const branchId = this.getSelectedBranchId();
     const mapped: Category = {
       id: row.id,
@@ -1056,10 +1065,12 @@ removeUserFromRemote(id: string) {
       organizationId: row.organization_id || undefined,
       storeBranchId: row.store_branch_id || branchId,
     };
-    const idx = categories.findIndex((c) => c.id === mapped.id);
-    if (idx >= 0) categories[idx] = mapped;
-    else categories.push(mapped);
-    this.set(KEYS.CATEGORIES, categories);
+    const idx = deduped.findIndex((c) => c.id === mapped.id);
+    if (idx >= 0) deduped[idx] = mapped;
+    else deduped.push(mapped);
+    // Re-add any categories that were filtered out (preserve them for backward compat)
+    const all = [...deduped, ...categories.filter(c => !deduped.some(d => d.id === c.id))];
+    this.set(KEYS.CATEGORIES, all);
     this.notify();
   }
 

@@ -1,3 +1,5 @@
+# HD-System Agents Reference
+
 ## Workflow
 - Sempre executar `git push` ao final de cada alteração (commit, arquivo novo, mudança de config, etc.)
 - Restore point de referência (sincronização tempo real + offline/online OK): tag `restore-point-realtime-ok`
@@ -68,3 +70,6 @@ const handleSetTab = (tab) => { setActiveTab(tab); setSessionStorage(...); };
 **Causa:** `getCreditPayments()` filtrava por `p.sale_id` (snake_case) mas objetos CreditPayment usam `saleId` (camelCase).
 **Regra:** `getCreditPayments()` deve filtrar por `p.saleId`. `getSaleItems()` pode usar `item.sale_id` (sale_items são armazenados com snake_case).
 **Local:** `storageService.ts:2881-2887` (corrigido)
+
+---
+*Este documento é orientação duradoura para o projeto, não um scratchpad.*

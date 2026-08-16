@@ -14,6 +14,7 @@ import {
   X,
   Trash2,
   Loader2,
+  UserPlus,
 } from 'lucide-react';
 import { Sale, Table, CustomerSession, Customer, UserProfile, Product } from '../../types';
 import { storageService } from '../../services/storageService';
