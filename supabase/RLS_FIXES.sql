@@ -9,6 +9,10 @@
 -- ────────────────────────────────────────────────────────────
 
 -- is_superadmin(): retorna true se auth.uid() é superadmin
+-- NOTA: Apenas checa superadmin = true (sem verificar organization_id IS NULL).
+-- O frontend também apenas verifica profile.superadmin === true.
+-- Superadmin pode ter organization_id setado (para acessar sua própria org
+-- via policies de admin quando não está em modo global).
 CREATE OR REPLACE FUNCTION public.is_superadmin()
 RETURNS boolean
 LANGUAGE sql
@@ -19,7 +23,6 @@ AS $$
     SELECT 1 FROM public.system_users
     WHERE id = auth.uid()
       AND superadmin = true
-      AND organization_id IS NULL
   );
 $$;
 
@@ -1245,6 +1248,87 @@ CREATE INDEX IF NOT EXISTS idx_system_users_org ON public.system_users (organiza
 CREATE INDEX IF NOT EXISTS idx_system_users_branch ON public.system_users (store_branch_id);
 CREATE INDEX IF NOT EXISTS idx_store_branches_org ON public.store_branches (organization_id);
 CREATE INDEX IF NOT EXISTS idx_system_settings_org ON public.system_settings (organization_id);
+
+
+-- ────────────────────────────────────────────────────────────
+-- SEÇÃO 6: POLICIES DEFENSIVAS PARA TABELAS AUXILIARES
+-- Tabelas que podem ou não existir. Usar DO block com dynamic SQL.
+-- Se a tabela não existe, o bloco é ignorado silenciosamente.
+-- ────────────────────────────────────────────────────────────
+
+-- Função auxiliar para criar policies defensivas
+CREATE OR REPLACE FUNCTION public._ensure_rls_for_table(
+  p_table text,
+  p_has_org boolean DEFAULT true,
+  p_has_branch boolean DEFAULT true
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_exists boolean;
+  v_sql text;
+BEGIN
+  -- Check if table exists
+  SELECT EXISTS (
+    SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relname = p_table AND c.relkind = 'r'
+  ) INTO v_exists;
+
+  IF NOT v_exists THEN
+    RAISE NOTICE 'Table % does not exist, skipping RLS setup', p_table;
+    RETURN;
+  END IF;
+
+  -- Enable RLS
+  EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', p_table);
+
+  -- Drop existing policies to avoid conflicts
+  EXECUTE format('DROP POLICY IF EXISTS "superadmin_all_%s" ON public.%I', p_table, p_table);
+  EXECUTE format('DROP POLICY IF EXISTS "org_select_%s" ON public.%I', p_table, p_table);
+  EXECUTE format('DROP POLICY IF EXISTS "org_branch_select_%s" ON public.%I', p_table, p_table);
+
+  -- Superadmin policy (always applies)
+  EXECUTE format(
+    'CREATE POLICY "superadmin_all_%s" ON public.%I FOR ALL USING (is_superadmin())',
+    p_table, p_table
+  );
+
+  -- Org-scoped or branch-scoped policy
+  IF p_has_branch THEN
+    EXECUTE format(
+      'CREATE POLICY "org_branch_select_%s" ON public.%I FOR SELECT USING ((organization_id = get_user_org_id()) AND (store_branch_id = get_user_branch_id()))',
+      p_table, p_table
+    );
+  ELSIF p_has_org THEN
+    EXECUTE format(
+      'CREATE POLICY "org_select_%s" ON public.%I FOR SELECT USING (organization_id = get_user_org_id())',
+      p_table, p_table
+    );
+  END IF;
+
+  RAISE NOTICE 'RLS setup complete for table %', p_table;
+END;
+$$;
+
+-- Apply to known auxiliary tables (idempotent — skips if table doesn't exist)
+SELECT public._ensure_rls_for_table('sync_queue', false, false);
+SELECT public._ensure_rls_for_table('product_recipes', true, true);
+SELECT public._ensure_rls_for_table('webhook_events', false, false);
+SELECT public._ensure_rls_for_table('movimentacoes_falhas', true, true);
+SELECT public._ensure_rls_for_table('filial_backups', true, false);
+SELECT public._ensure_rls_for_table('ai_insights', true, false);
+SELECT public._ensure_rls_for_table('sessions', false, false);
+SELECT public._ensure_rls_for_table('user_permissions', true, false);
+SELECT public._ensure_rls_for_table('company_settings', true, false);
+SELECT public._ensure_rls_for_table('pix_config', true, true);
+SELECT public._ensure_rls_for_table('stock_change_log', true, true);
+SELECT public._ensure_rls_for_table('profiles', false, false);
+SELECT public._ensure_rls_for_table('delivery_worker_earnings', true, true);
+
+-- Drop the helper function (temporary, not needed after setup)
+DROP FUNCTION IF EXISTS public._ensure_rls_for_table(text, boolean, boolean);
 
 
 -- ────────────────────────────────────────────────────────────

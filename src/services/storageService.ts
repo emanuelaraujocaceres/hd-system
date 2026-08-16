@@ -960,15 +960,22 @@ expiration_date: p.expirationDate || null,
   }
 
   removeCaixaFromRemote(id: string) {
-    // Only clear if it matches current session
+    // Only clear if it matches current session AND belongs to current branch
     const session = this.getActiveCaixaSession();
     if (session && session.id === id) {
+      // Branch isolation: only close caixa if it belongs to current branch
+      if (session.storeBranchId && !this.isRemoteFromCurrentBranch({ store_branch_id: session.storeBranchId })) {
+        console.log(`[HD-Sync] Ignoring remote caixa close from other branch: ${session.storeBranchId}`);
+        return;
+      }
       this.set(KEYS.CAIXA, { ...session, status: 'closed' });
       this.notify();
     }
   }
 
 removeUserFromRemote(id: string) {
+    // Branch isolation: only remove user if they belong to current branch
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.USERS_LIST, [])) return;
     const users = this.get<UserProfile[]>(KEYS.USERS_LIST, []).filter((u) => u.id !== id);
     this.set(KEYS.USERS_LIST, users);
     this.notify();

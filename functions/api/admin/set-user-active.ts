@@ -44,11 +44,15 @@ export async function onRequestPost(context: any) {
     const callerId = authData.user.id;
     const { data: callerProfile } = await supabaseAdmin
       .from('system_users')
-      .select('superadmin')
+      .select('superadmin, role, organization_id')
       .eq('id', callerId)
       .maybeSingle();
-    if (!callerProfile?.superadmin) {
-      return new Response(JSON.stringify({ success: false, message: 'Acesso negado: apenas superadmin.' }),
+    // Superadmin pode ativar/desativar qualquer usuário.
+    // Admin só pode ativar/desativar usuários da própria organização.
+    const isSuperadmin = callerProfile?.superadmin === true;
+    const isAdmin = callerProfile?.role === 'admin';
+    if (!isSuperadmin && !isAdmin) {
+      return new Response(JSON.stringify({ success: false, message: 'Acesso negado: apenas superadmin ou admin.' }),
         { status: 403, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -73,7 +77,7 @@ export async function onRequestPost(context: any) {
 
     const { data: target, error: targetErr } = await supabaseAdmin
       .from('system_users')
-      .select('id, superadmin, name, email')
+      .select('id, superadmin, name, email, organization_id')
       .eq('id', user_id)
       .maybeSingle();
     if (targetErr) {
@@ -89,6 +93,13 @@ export async function onRequestPost(context: any) {
         success: false,
         message: 'Contas de superadmin não podem ser desativadas.',
       }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    // Admin só pode ativar/desativar usuários da própria organização
+    if (!isSuperadmin && callerProfile?.organization_id !== target.organization_id) {
+      return new Response(JSON.stringify({
+        success: false,
+        message: 'Acesso negado: admin só pode alterar usuários da própria organização.',
+      }), { status: 403, headers: { 'Content-Type': 'application/json' } });
     }
 
     // 4) Aplica o interruptor

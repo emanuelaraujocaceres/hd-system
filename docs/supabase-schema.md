@@ -1,7 +1,7 @@
 # HD-System: Supabase Schema & Architecture Reference
 
 > **Este arquivo é referência duradoura para futuros agentes.**
-> Atualizado em: 2026-08-16 (Auditoria de isolamento por filial + correções RLS)
+> Atualizado em: 2026-08-16 (Auditoria completa RLS + frontend + correções de isolamento)
 
 ---
 
@@ -281,3 +281,45 @@ A fila (`syncQueueService.ts`) NÃO tem metadata de org/branch. A corretude depe
 - **Causa:** 38 chamadas fetchRows mas só 29 variáveis no destructuring (linhas 1714-1735 duplicadas)
 - **Impacto:** moduleVisibility, productLots, stockLossLogs recebiam dados errados
 - **Fix:** Remover 9 linhas duplicadas (tables, customer_sessions, digital_menu_config, branch_themes, api_keys, delivery_*)
+
+### BUG-024: 18 update*FromRemote handlers sem isRemoteFromCurrentBranch
+- **Causa:** Handlers não tinham check de isolamento por filial
+- **Impacto:** Dados de outra filial eram escritos no localStorage local via Realtime
+- **Fix:** Adicionar `isRemoteFromCurrentBranch(row)` em todos os 18 handlers
+
+### BUG-025: removeCaixaFromRemote e removeUserFromRemote sem branch check
+- **Causa:** DELETE de outra filial fechava caixa local ou removia usuário
+- **Fix:** Adicionar `isLocalItemInCurrentBranch()` check
+
+### BUG-026: is_superadmin() SQL verificava organization_id IS NULL
+- **Causa:** Superadmin com organization_id setado não tinha RLS bypass no banco
+- **Fix:** `is_superadmin()` agora checa apenas `superadmin = true`
+
+---
+
+## Pontos de Atenção e Riscos Remanescentes
+
+### 1. sale_items: junction policy funciona mas não é atômica
+- A venda é inserida com `await syncSale()` (garante que existe antes dos itens)
+- sale_items são fire-and-forget (não awaited) — se falhar, não há retry automático
+- **Risco:** Baixo — FIFO queue preserva ordem no offline; online, a venda sempre existe antes
+
+### 2. Collaborator vê apenas a si mesmo em system_users
+- RLS `collaborator_select_self` restringe SELECT a `id = auth.uid()`
+- Se admin der `settings: true` ao colaborador, a tabela de usuários mostra dados incompletos
+- **Mitigation:** UI bloqueia colaborador de Settings por padrão (`perms.settings: false`)
+
+### 3. create-branch/create-user APIs agora permitem admin
+- Antes: apenas superadmin podia criar filial/usuário via Pages Function
+- Agora: admin também pode (na própria organização)
+- **Verificar:** Testar fluxo de criação de filial/usuário como admin
+
+### 4. is_superadmin() — alinhamento frontend/backend
+- Frontend: `profile?.superadmin === true` (sem check de organization_id)
+- Backend SQL: `superadmin = true` (sem check de organization_id)
+- **Status:** Alinhados após FIX 26
+
+### 5. Tabelas auxiliares podem não ter RLS
+- `RLS_FIXES.sql` Seção 6 usa dynamic SQL para aplicar RLS defensivo
+- Tabelas como sync_queue, product_recipes, etc. podem não existir — o bloco é idempotente
+- **Próximo:** Rodar `INSPECTION_SQL.sql` Bloco 21 para listar todas as tabelas reais

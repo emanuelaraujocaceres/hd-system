@@ -67,16 +67,25 @@ async function startServer() {
       }
       const { data: callerProfile } = await supabaseAdmin
         .from('system_users')
-        .select('superadmin')
+        .select('superadmin, role, organization_id')
         .eq('id', authData.user.id)
         .maybeSingle();
-      if (!callerProfile?.superadmin) {
-        return res.status(403).json({ success: false, message: 'Acesso negado: apenas superadmin.' });
+      // Superadmin pode criar usuário em qualquer org.
+      // Admin só pode criar usuário na própria organização.
+      const isSuperadmin = callerProfile?.superadmin === true;
+      const isAdmin = callerProfile?.role === 'admin';
+      if (!isSuperadmin && !isAdmin) {
+        return res.status(403).json({ success: false, message: 'Acesso negado: apenas superadmin ou admin.' });
       }
 
       const { name, email, role, organization_id, store_branch_id, password } = req.body;
       if (!name || !email || !organization_id) {
         return res.status(400).json({ success: false, message: "name, email e organization_id são obrigatórios." });
+      }
+
+      // Admin só pode criar usuário na própria organização
+      if (!isSuperadmin && callerProfile?.organization_id !== organization_id) {
+        return res.status(403).json({ success: false, message: 'Acesso negado: admin só pode criar usuário na própria organização.' });
       }
 
       // Verificar se já existe em system_users

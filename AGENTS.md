@@ -83,6 +83,24 @@ const handleSetTab = (tab) => { setActiveTab(tab); setSessionStorage(...); };
 **Regra:** Usar o nome do parâmetro declarado na arrow function. Não copiar de outro trecho sem renomear.
 **Local:** `storageService.ts:1871-1877` (corrigido — `sll` → `r`)
 
+### BUG-024: 18 update*FromRemote handlers sem isRemoteFromCurrentBranch
+**Sintoma:** Dados de filial交叉chegavam via Realtime e eram escritos no localStorage local
+**Causa:** 18 handlers não tinham check `isRemoteFromCurrentBranch()` — customers, suppliers, financial, scanned_boletos, credit_payments, nf_records, footer_messages, media_devices, printers, tables, customer_sessions, digital_menu_config, branch_themes, api_keys, delivery_neighborhoods, delivery_distance_rates, delivery_orders, module_visibility
+**Regra:** Todo handler `update*FromRemote` para tabela branch-scoped DEVE ter `isRemoteFromCurrentBranch(row)` check após `setChangeSource('remote')`.
+**Local:** `storageService.ts` (corrigido — 18 handlers)
+
+### BUG-025: removeCaixaFromRemote e removeUserFromRemote sem branch check
+**Sintoma:** DELETE de outra filial fechava caixa local ou removia usuário local
+**Causa:** `removeCaixaFromRemote` só checava session.id, `removeUserFromRemote` não checava branch
+**Regra:** Todo handler `remove*FromRemote` para tabela branch-scoped DEVE ter `isLocalItemInCurrentBranch()` check.
+**Local:** `storageService.ts` (corrigido)
+
+### BUG-026: is_superadmin() SQL verificava organization_id IS NULL
+**Sintoma:** Superadmin com organization_id setado no DB não tinha RLS bypass
+**Causa:** `is_superadmin()` checava `superadmin = true AND organization_id IS NULL`, mas o superadmin pode ter org setada
+**Regra:** `is_superadmin()` deve checar apenas `superadmin = true` (alinhado com frontend `isSuperAdmin()`)
+**Local:** `RLS_FIXES.sql` (corrigido)
+
 ### BUG-RLS-001: product_lots policy permissiva (VULNERABILIDADE)
 **Sintoma:** Qualquer usuário autenticado lia todos product_lots de todas as organizações
 **Causa:** Policy "Allow read for authenticated" com `USING (true)` — sem filtro de org/branch

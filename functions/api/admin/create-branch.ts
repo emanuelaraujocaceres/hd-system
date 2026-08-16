@@ -37,11 +37,15 @@ export async function onRequestPost(context: any) {
     }
     const { data: callerProfile } = await supabaseAdmin
       .from('system_users')
-      .select('superadmin')
+      .select('superadmin, role, organization_id')
       .eq('id', authData.user.id)
       .maybeSingle();
-    if (!callerProfile?.superadmin) {
-      return new Response(JSON.stringify({ success: false, message: 'Acesso negado: apenas superadmin.' }),
+    // Superadmin pode criar filial em qualquer org.
+    // Admin só pode criar filial na própria organização.
+    const isSuperadmin = callerProfile?.superadmin === true;
+    const isAdmin = callerProfile?.role === 'admin';
+    if (!isSuperadmin && !isAdmin) {
+      return new Response(JSON.stringify({ success: false, message: 'Acesso negado: apenas superadmin ou admin.' }),
         { status: 403, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -53,6 +57,14 @@ export async function onRequestPost(context: any) {
         success: false,
         message: 'name, code e organization_id são obrigatórios.',
       }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // Admin só pode criar filial na própria organização
+    if (!isSuperadmin && callerProfile?.organization_id !== organization_id) {
+      return new Response(JSON.stringify({
+        success: false,
+        message: 'Acesso negado: admin só pode criar filial na própria organização.',
+      }), { status: 403, headers: { 'Content-Type': 'application/json' } });
     }
 
     const branchId = id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id))
