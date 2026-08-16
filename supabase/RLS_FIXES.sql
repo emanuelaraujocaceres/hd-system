@@ -1405,7 +1405,7 @@ BEGIN
   -- Drop ALL existing policies to avoid conflicts
   -- Use a loop to drop all policies on this table
   FOR v_policy_suffix IN
-    SELECT polname FROM pg_policies
+    SELECT policyname FROM pg_policies
     WHERE schemaname = 'public' AND tablename = p_table
   LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', v_policy_suffix, p_table);
