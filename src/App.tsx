@@ -233,6 +233,7 @@ export const App: React.FC = () => {
         if (result.resolvedBranchId) {
           const orgId = storageService.getCurrentOrgId() || undefined;
           syncService.resubscribeRealtime(orgId, result.resolvedBranchId);
+          lastSubscribedRef.current = { orgId, branchId: result.resolvedBranchId }; // FIX-028: atualizar ref
           // Update health check refs so it reconnects to the new branch if channel dies
           realtimeOrgIdRef.current = orgId;
           realtimeBranchIdRef.current = result.resolvedBranchId;
@@ -293,6 +294,10 @@ export const App: React.FC = () => {
   // Refs for health check — avoid stale closure over realtimeOrgId/BranchId
   const realtimeOrgIdRef = useRef<string | undefined>(undefined);
   const realtimeBranchIdRef = useRef<string | undefined>(undefined);
+  // FIX-028: Guard para evitar hidratação dupla (mount + session restore)
+  const hydrationDoneRef = useRef<boolean>(false);
+  // FIX-028: Guard para evitar resubscribe em loop (org/branch já subscrito)
+  const lastSubscribedRef = useRef<{ orgId?: string; branchId?: string } | null>(null);
 
   // Keep refs in sync
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
@@ -393,7 +398,12 @@ export const App: React.FC = () => {
   // sessão): sem isso, orgs não-default (ex.: Plantão da Cerveja) só carregavam
   // dados após F5, porque a hidratação rodava uma única vez no mount, antes de
   // o perfil/organização do usuário estar disponível.
-  const runHydration = useCallback(async () => {
+  const runHydration = useCallback(async (force = false) => {
+    // FIX-028: skip se já hidratou (mount) e não é forçado (login/branch switch)
+    if (hydrationDoneRef.current && !force) {
+      console.log('[HD-Sync] Hidratação já concluída — pulando (use force=true para re-hidratar)');
+      return;
+    }
     setIsHydrating(true);
     // Trava de mensalidade: org desativada → NADA do cloud; só estado local
     const allowed = await checkOrgAccess();
@@ -438,17 +448,24 @@ export const App: React.FC = () => {
 
       // Re-subscribe Realtime com o branch UUID resolvido.
       // O useEffect inicial pode ter subscrito com '' (antes da hidratação).
-      // A trava de suspensão já foi tratada acima (retorno antecipado).
+      // FIX-028: pular resubscribe se já subscrito no mesmo org+branch (evita loop)
       if (result.resolvedBranchId) {
         const orgId = storageService.getCurrentOrgId() || undefined;
-        syncService.resubscribeRealtime(orgId, result.resolvedBranchId);
-        console.log(`[HD-Sync] Realtime re-subscribed with branch: ${result.resolvedBranchId}`);
+        const prev = lastSubscribedRef.current;
+        if (!prev || prev.orgId !== orgId || prev.branchId !== result.resolvedBranchId) {
+          syncService.resubscribeRealtime(orgId, result.resolvedBranchId);
+          lastSubscribedRef.current = { orgId, branchId: result.resolvedBranchId };
+          console.log(`[HD-Sync] Realtime re-subscribed with branch: ${result.resolvedBranchId}`);
+        } else {
+          console.log(`[HD-Sync] Realtime already subscribed to branch: ${result.resolvedBranchId} — skipping`);
+        }
       }
     } else {
       // Hydration failed — we might be offline on first load
       console.log('[HD-Sync] Cloud hydration skipped — using local data');
       setSyncStatus('offline');
     }
+    hydrationDoneRef.current = true; // FIX-028: marcar hidratação como concluída
     setIsHydrating(false);
   }, [checkOrgAccess, refreshLocalState]);
 
@@ -858,7 +875,7 @@ export const App: React.FC = () => {
           // ainda não estão populadas no localStorage).
           const prevOrg = storageService.getCurrentOrgId();
           if (prevOrg !== orgId) {
-            runHydration();
+            runHydration(true); // force: re-hidratar com nova org
           }
         }).catch((err) => {
           console.warn('[Auth] Error fetching profile on session restore:', err?.message);
@@ -896,7 +913,7 @@ export const App: React.FC = () => {
     // Re-hidrata com a organização do usuário recém-logado — corrige orgs
     // não-default (ex.: Plantão da Cerveja) que só carregavam dados após F5
     // (a hidratação do mount rodava antes do perfil existir).
-    runHydration();
+    runHydration(true); // force: re-hidratar com org do usuário logado
     // IAM: redirect to the first permitted tab using PermissionEngine
     const permEngine = new PermissionEngine(loggedUser);
     if (!permEngine.isDeveloper() && !permEngine.isAdmin()) {
@@ -1387,7 +1404,7 @@ export const App: React.FC = () => {
                     // da nova org ficavam vazias e o fallback global exibia
                     // dados stale da org anterior até o F5.
                     handleTabChange('dashboard');
-                    setTimeout(() => runHydration(), 50);
+                    setTimeout(() => runHydration(true), 50); // force: re-hidratar com nova org de visualização
                   }}
                 />
               )}

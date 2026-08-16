@@ -94,6 +94,9 @@ class StorageService {
   private notifyTimer: ReturnType<typeof setTimeout> | null = null;
   private migrated = false;
   private _saleUpdateVersions: Record<string, number> = {}; // CONSIST-03: race condition guard
+  // FIX-028: Cache de getCurrentOrgId() para eliminar spam de console.
+  // Cache invalidado por-profile: se o raw do localStorage mudou, recalcula.
+  private _orgIdCache: { rawKey: string; result: string } | null = null;
 
   // ─── UUID HELPERS ──────────────────────────────────────────────────────
   // Gera um UUID v4 para novos registros (browser e Node 19+)
@@ -158,48 +161,62 @@ class StorageService {
   // Super Admin (developer) SEM organizationId: fail-OPEN — acesso global.
   // Outros usuários sem org: fail-CLOSED — escrita bloqueada.
   // O fallback para DEFAULT_ORG_ID só ocorre sem perfil salvo (bootstrap/offline).
-getCurrentOrgId(): string {
-    // Superadmin override (visualizando outra org)
+  // FIX-028: resultado cacheado por-profile para evitar re-parse de localStorage a cada chamada.
+  getCurrentOrgId(): string {
+    // Superadmin override (visualizando outra org) — bypass cache
     if (this.isSuperAdmin()) {
       const override = localStorage.getItem(KEYS.VIEWING_ORG);
       if (override) {
-        // Se o override é DEFAULT_ORG_ID, não precisa logar warning
         return override;
       }
-      // Super Admin sem override: acesso global (organization_id = NULL no Supabase)
-      // Retornar '' para indicar "sem filtro de organização" — o superadmin vê tudo.
-      // Mas mantemos compatibilidade: se o perfil ainda tem organizationId salvo
-      // no localStorage (de um login anterior), usamos o valor salvo apenas
-      // para operações que exigem um org específico (como criar novos registros).
+    }
+
+    // Verificar cache (válido enquanto o profile não mudar)
+    const rawProfile = localStorage.getItem('hd_system_user_profile') || '';
+    if (this._orgIdCache && this._orgIdCache.rawKey === rawProfile) {
+      return this._orgIdCache.result;
+    }
+
+    // Calcular e cachear
+    let result: string;
+
+    // Superadmin override (visualizando outra org) — bypass cache
+    if (this.isSuperAdmin()) {
       try {
-        const raw = localStorage.getItem('hd_system_user_profile');
-        if (raw) {
-          const profile = JSON.parse(raw);
-          if (profile?.organizationId) return profile.organizationId;
+        const profile = rawProfile ? JSON.parse(rawProfile) : null;
+        if (profile?.organizationId) {
+          result = profile.organizationId;
+        } else {
+          result = ''; // Sem organizationId salvo: acesso global
         }
       } catch {
         console.error('[Storage] getCurrentOrgId: error parsing user profile from localStorage');
+        result = '';
       }
-      // Sem organizationId salvo: retornar '' para acesso global
-      console.log('[Storage] getCurrentOrgId() — superadmin sem organizationId: acesso global');
-      return '';
-    }
-    try {
-      const raw = localStorage.getItem('hd_system_user_profile');
-      if (raw) {
-        const profile = JSON.parse(raw);
-        if (profile?.organizationId) return profile.organizationId;
-        // Perfil existe mas SEM org: bloquear em vez de poluir outra organização
-        console.error('[Storage] getCurrentOrgId() — usuário logado sem organizationId. Falha fechada: escrita bloqueada até o perfil ser corrigido.');
-        return '';
+    } else {
+      try {
+        if (rawProfile) {
+          const profile = JSON.parse(rawProfile);
+          if (profile?.organizationId) {
+            result = profile.organizationId;
+          } else {
+            console.error('[Storage] getCurrentOrgId() — usuário logado sem organizationId. Falha fechada: escrita bloqueada até o perfil ser corrigido.');
+            result = '';
+          }
+        } else {
+          if (localStorage.getItem('hd_system_logged_in_email') !== 'LOGGED_OUT') {
+            console.warn('[Storage] getCurrentOrgId() fallback to DEFAULT_ORG_ID — bootstrap/offline sem perfil salvo');
+          }
+          result = DEFAULT_ORG_ID;
+        }
+      } catch (err) {
+        console.error('[Storage] getCurrentOrgId: error reading user profile from localStorage', err);
+        result = DEFAULT_ORG_ID;
       }
-    } catch (err) {
-      console.error('[Storage] getCurrentOrgId: error reading user profile from localStorage', err);
     }
-    if (localStorage.getItem('hd_system_logged_in_email') !== 'LOGGED_OUT') {
-      console.warn('[Storage] getCurrentOrgId() fallback to DEFAULT_ORG_ID — bootstrap/offline sem perfil salvo');
-    }
-    return DEFAULT_ORG_ID;
+
+    this._orgIdCache = { rawKey: rawProfile, result };
+    return result;
   }
 
   // Define um override de organização para superadmin (visualizar dados de outra org)
@@ -213,6 +230,7 @@ getCurrentOrgId(): string {
     } else {
       localStorage.removeItem(KEYS.VIEWING_ORG);
     }
+    this._orgIdCache = null; // FIX-028: invalidar cache do getCurrentOrgId()
     // Chama listeners SÍNCRONA E ASSINCRONAMENTE para garantir que a UI
     // atualize imediatamente (evita depender do setTimeout do notify()).
     this.listeners.forEach((fn) => { try { fn(); } catch {} });
@@ -4539,7 +4557,33 @@ private updateReceivableFromPayments(saleId: string) {
 
   // --- TABLES (mesas) ---
   getTables(): Table[] {
-    return this.filterBySelectedBranch(this.filterByOrg(this.get<Table[]>(KEYS.TABLES, [])));
+    const raw = this.get<Table[]>(KEYS.TABLES, []);
+    // FIX-028: Dedup por nome (manter o mais recente) — previne mesas duplicadas
+    // causadas por saveTable() com IDs diferentes + hidratação do cloud.
+    const seen = new Map<string, number>(); // name → index no array
+    for (let i = 0; i < raw.length; i++) {
+      const t = raw[i];
+      const key = (t.name || '').trim().toLowerCase();
+      if (!key) continue; // mesas sem nome não são deduplicadas
+      if (seen.has(key)) {
+        // Manter o mais recente (updatedAt maior)
+        const prevIdx = seen.get(key)!;
+        const prev = raw[prevIdx];
+        const prevTime = prev.updatedAt || prev.createdAt || '';
+        const currTime = t.updatedAt || t.createdAt || '';
+        if (currTime > prevTime) {
+          raw.splice(prevIdx, 1); // remover o antigo
+          seen.set(key, i - 1); // índice mudou após splice
+        } else {
+          raw.splice(i, 1); // remover o novo (duplicata)
+          i--; // ajustar índice
+          continue;
+        }
+      } else {
+        seen.set(key, i);
+      }
+    }
+    return this.filterBySelectedBranch(this.filterByOrg(raw));
   }
 
   saveTable(table: Table) {
@@ -4547,8 +4591,23 @@ private updateReceivableFromPayments(saleId: string) {
     table.organizationId = this.getCurrentOrgId();
     const all = this.get<Table[]>(KEYS.TABLES, []);
     const idx = all.findIndex((t) => t.id === table.id);
-    if (idx >= 0) all[idx] = table;
-    else all.push(table);
+    if (idx >= 0) {
+      all[idx] = table;
+    } else {
+      // FIX-028: Dedup por nome — se já existe mesa com mesmo nome, atualizar em vez de criar nova
+      const nameKey = (table.name || '').trim().toLowerCase();
+      if (nameKey) {
+        const dupIdx = all.findIndex((t) => (t.name || '').trim().toLowerCase() === nameKey);
+        if (dupIdx >= 0) {
+          // Atualizar existente com dados novos (preservar ID original)
+          all[dupIdx] = { ...all[dupIdx], ...table, id: all[dupIdx].id };
+          this.set(KEYS.TABLES, all);
+          this.syncTable(all[dupIdx]);
+          return;
+        }
+      }
+      all.push(table);
+    }
     this.set(KEYS.TABLES, all);
     this.syncTable(table);
   }
@@ -4577,7 +4636,15 @@ private updateReceivableFromPayments(saleId: string) {
       createdAt: row.created_at || new Date().toISOString(),
       updatedAt: row.updated_at || new Date().toISOString(),
     };
-    const idx = all.findIndex((x) => x.id === mapped.id);
+    // FIX-028: Dedup por id OU qrToken — evita duplicatas quando cloud tem UUID diferente
+    let idx = all.findIndex((x) => x.id === mapped.id);
+    if (idx < 0 && mapped.qrToken) {
+      idx = all.findIndex((x) => x.qrToken === mapped.qrToken);
+      if (idx >= 0) {
+        // Mesma qrToken, ID diferente — mesclar (cloud prevalece)
+        mapped.id = all[idx].id; // preservar ID local para não quebrar referências
+      }
+    }
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
     this.set(KEYS.TABLES, all);
@@ -5149,6 +5216,7 @@ private updateReceivableFromPayments(saleId: string) {
     }
     
     this.set('hd_system_module_visibility', all);
+    this.notify('hd_system_module_visibility', 'local', settings); // FIX-028: notificar listeners para Sidebar re-renderizar
     syncService.upsertRow('module_visibility', {
       id: settings.id,
       organization_id: settings.organizationId,
@@ -5486,6 +5554,7 @@ saveUserProfile(user: UserProfile) {
     }
     this.set(KEYS.USER, updatedUser);
     localStorage.setItem(KEYS.LOGGED_IN_EMAIL, user.email);
+    this._orgIdCache = null; // FIX-028: invalidar cache do getCurrentOrgId()
     this.notify();
   }
 
@@ -5572,6 +5641,7 @@ saveUserProfile(user: UserProfile) {
 
   logout() {
     localStorage.setItem(KEYS.LOGGED_IN_EMAIL, 'LOGGED_OUT');
+    this._orgIdCache = null; // FIX-028: invalidar cache do getCurrentOrgId()
     this.notify();
   }
 

@@ -130,6 +130,7 @@ class SupabaseSyncService {
   private _reconnectOrgId: string | undefined;
   private _reconnectBranchId: string | undefined;
   private _reconnectAttempts = 0;
+  private _isResubscribing = false; // FIX-028: guard anti-concorrência
   private static MAX_RECONNECT_ATTEMPTS = 10;
   private static RECONNECT_BASE_DELAY_MS = 2000;
   // Proteção contra loop de re-auth: após falha, cooldown de 5 minutos
@@ -390,22 +391,32 @@ class SupabaseSyncService {
    * Unlike unsubscribeRealtime(), this keeps existing callbacks registered.
    */
   resubscribeRealtime(orgId?: string, branchId?: string) {
-    // Cancel any pending reconnect
-    if (this._reconnectTimer) {
-      clearTimeout(this._reconnectTimer);
-      this._reconnectTimer = null;
+    // FIX-028: Guard anti-concorrência — evitar resubscribe em loop
+    if (this._isResubscribing) {
+      console.log('[HD-Sync] resubscribeRealtime already in progress — skipping');
+      return;
     }
-    // Destroy current channel
-    if (this.channel) {
-      supabase.removeChannel(this.channel);
-      this.channel = null;
+    this._isResubscribing = true;
+    try {
+      // Cancel any pending reconnect
+      if (this._reconnectTimer) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
+      // Destroy current channel
+      if (this.channel) {
+        supabase.removeChannel(this.channel);
+        this.channel = null;
+      }
+      // Update reconnect state
+      this._reconnectOrgId = orgId;
+      this._reconnectBranchId = branchId;
+      this._reconnectAttempts = 0;
+      // Re-create channel (callbacks are still registered)
+      this._doSubscribe(orgId, branchId);
+    } finally {
+      this._isResubscribing = false;
     }
-    // Update reconnect state
-    this._reconnectOrgId = orgId;
-    this._reconnectBranchId = branchId;
-    this._reconnectAttempts = 0;
-    // Re-create channel (callbacks are still registered)
-    this._doSubscribe(orgId, branchId);
   }
 
   /**
