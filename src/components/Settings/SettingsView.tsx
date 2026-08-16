@@ -3297,21 +3297,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         Configure taxas, bairros, distância e horários de entrega para esta filial.
       </p>
     </div>
-    <DeliverySettingsView branch={branches.find(b => b.id === user.storeBranchId) || branches[0]} />
+    {(() => {
+      const branch = branches.find(b => b.id === user.storeBranchId) || branches[0];
+      return branch ? <DeliverySettingsView branch={branch} /> : (
+        <div className="p-6 text-center text-sm text-slate-400 dark:text-[#71717a]">
+          Aguardando filial ser carregada...
+        </div>
+      );
+    })()}
   </div>
 )}
 
 {/* ── MÓDULOS ── */}
 {activeSubTab === 'modules' && (
   <div className="space-y-4">
-    <ModuleVisibilityView branch={branches.find(b => b.id === user.storeBranchId) || branches[0]} />
+    {(() => {
+      const branch = branches.find(b => b.id === user.storeBranchId) || branches[0];
+      return branch ? <ModuleVisibilityView branch={branch} /> : (
+        <div className="p-6 text-center text-sm text-slate-400 dark:text-[#71717a]">
+          Aguardando filial ser carregada...
+        </div>
+      );
+    })()}
   </div>
 )}
 
 {/* ── INTEGRAÇÕES ── */}
 {activeSubTab === 'integrations' && (
   <div className="space-y-4">
-    <IntegrationsView branch={branches.find(b => b.id === user.storeBranchId) || branches[0]} user={user} />
+    {(() => {
+      const branch = branches.find(b => b.id === user.storeBranchId) || branches[0];
+      return branch ? <IntegrationsView branch={branch} user={user} /> : (
+        <div className="p-6 text-center text-sm text-slate-400 dark:text-[#71717a]">
+          Aguardando filial ser carregada...
+        </div>
+      );
+    })()}
   </div>
 )}
 
