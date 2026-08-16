@@ -119,8 +119,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
           if (profileData && !profileError) {
             // Fail-closed: sem organização definida no banco, o login é BLOQUEADO.
             // (antes, caía na org padrão e gravava dados na organização errada)
+            // Exceção: superadmin pode ter organization_id NULL (acesso global).
             const orgId = profileData.organization_id || undefined;
-            if (!orgId) {
+            const isSuper = profileData.superadmin || false;
+            if (!orgId && !isSuper) {
               console.error('[Login] Usuário sem organização configurada no banco:', email);
               setErrorMessage('Sua conta ainda não está vinculada a uma organização. Fale com o administrador do sistema.');
               setIsLoading(false);

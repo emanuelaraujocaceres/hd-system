@@ -828,8 +828,9 @@ export const App: React.FC = () => {
             return;
           }
           const orgId = data.organization_id || undefined;
-          if (!orgId) {
-            // Conta sem organização: fail-closed — não permite operar
+          const isSuper = data.superadmin || false;
+          if (!orgId && !isSuper) {
+            // Conta sem organização (e NÃO é superadmin): fail-closed
             console.error('[Auth] Usuário sem organização configurada. Encerrando sessão:', session.user.email);
             storageService.logout();
             setUser(null);
