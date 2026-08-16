@@ -5469,9 +5469,11 @@ saveUserProfile(user: UserProfile) {
     // Ensure organizationId and storeBranchId are always persisted
     // so that getCurrentOrgId() can read them and avoid DEFAULT_ORG_ID fallback,
     // which would cause 401 Unauthorized errors on API calls.
+    // Superadmin例外: organizationId pode ser undefined/null (acesso global no banco).
+    const isSuper = user.superadmin === true;
     const updatedUser = {
       ...user,
-      organizationId: user.organizationId || DEFAULT_ORG_ID,
+      organizationId: user.organizationId || (isSuper ? undefined : DEFAULT_ORG_ID),
       storeBranchId: user.storeBranchId || undefined,
     };
     // Monitor: log when organizationId falls back to DEFAULT_ORG_ID
