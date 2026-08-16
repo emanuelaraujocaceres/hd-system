@@ -4441,7 +4441,7 @@ private updateReceivableFromPayments(saleId: string) {
 
   // --- TABLES (mesas) ---
   getTables(): Table[] {
-    return this.get<Table[]>(KEYS.TABLES, []);
+    return this.filterBySelectedBranch(this.filterByOrg(this.get<Table[]>(KEYS.TABLES, [])));
   }
 
   saveTable(table: Table) {
@@ -4488,7 +4488,7 @@ private updateReceivableFromPayments(saleId: string) {
 
   // --- CUSTOMER SESSIONS ---
   getCustomerSessions(): CustomerSession[] {
-    return this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, []);
+    return this.filterBySelectedBranch(this.filterByOrg(this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, [])));
   }
 
   saveCustomerSession(session: CustomerSession) {
@@ -4533,7 +4533,8 @@ private updateReceivableFromPayments(saleId: string) {
   // --- DIGITAL MENU CONFIG ---
   getDigitalMenuConfig(): DigitalMenuConfig | null {
     const all = this.get<DigitalMenuConfig[]>(KEYS.DIGITAL_MENU_CONFIG, []);
-    return all[0] || null;
+    const filtered = this.filterBySelectedBranch(this.filterByOrg(all));
+    return filtered[0] || null;
   }
 
   saveDigitalMenuConfig(config: DigitalMenuConfig) {
@@ -4625,7 +4626,7 @@ private updateReceivableFromPayments(saleId: string) {
 
   // --- API KEYS ---
   getApiKeys(): ApiKey[] {
-    return this.get<ApiKey[]>(KEYS.API_KEYS, []);
+    return this.filterBySelectedBranch(this.filterByOrg(this.get<ApiKey[]>(KEYS.API_KEYS, [])));
   }
 
   saveApiKey(key: ApiKey) {
@@ -4669,7 +4670,18 @@ private updateReceivableFromPayments(saleId: string) {
 
   // --- DELIVERY SETTINGS ---
   getDeliverySettings(): DeliverySettings | null {
-    return this.get<DeliverySettings | null>(KEYS.DELIVERY_SETTINGS, null);
+    const all = this.get<DeliverySettings[]>(KEYS.DELIVERY_SETTINGS, []);
+    if (Array.isArray(all)) {
+      const filtered = this.filterBySelectedBranch(this.filterByOrg(all));
+      return filtered[0] || null;
+    }
+    // Legacy: single object format
+    const item = all as any;
+    if (item && item.storeBranchId) {
+      const branchId = this.getSelectedBranchId();
+      if (branchId && item.storeBranchId !== branchId) return null;
+    }
+    return item || null;
   }
 
   saveDeliverySettings(settings: DeliverySettings) {
@@ -4706,7 +4718,7 @@ private updateReceivableFromPayments(saleId: string) {
 
   // --- DELIVERY NEIGHBORHOODS ---
   getDeliveryNeighborhoods(): DeliveryNeighborhood[] {
-    return this.get<DeliveryNeighborhood[]>(KEYS.DELIVERY_NEIGHBORHOODS, []);
+    return this.filterBySelectedBranch(this.filterByOrg(this.get<DeliveryNeighborhood[]>(KEYS.DELIVERY_NEIGHBORHOODS, [])));
   }
 
   saveDeliveryNeighborhood(neighborhood: DeliveryNeighborhood) {
@@ -4754,7 +4766,7 @@ private updateReceivableFromPayments(saleId: string) {
 
   // --- DELIVERY DISTANCE RATES ---
   getDeliveryDistanceRates(): DeliveryDistanceRate[] {
-    return this.get<DeliveryDistanceRate[]>(KEYS.DELIVERY_DISTANCE_RATES, []);
+    return this.filterBySelectedBranch(this.filterByOrg(this.get<DeliveryDistanceRate[]>(KEYS.DELIVERY_DISTANCE_RATES, [])));
   }
 
   saveDeliveryDistanceRate(rate: DeliveryDistanceRate) {
@@ -4803,7 +4815,7 @@ private updateReceivableFromPayments(saleId: string) {
 
   // --- DELIVERY ORDERS ---
   getDeliveryOrders(): DeliveryOrder[] {
-    return this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []);
+    return this.filterBySelectedBranch(this.filterByOrg(this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, [])));
   }
 
   getDeliveryOrdersByCustomer(customerId: string): DeliveryOrder[] {

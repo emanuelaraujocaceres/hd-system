@@ -204,6 +204,7 @@ export const App: React.FC = () => {
     // Re-hidratar dados do cloud com a nova filial para garantir isolamento
     // Completo (limpa dados da filial anterior, carrega dados da nova filial)
     const resolvedBranchId = storageService.resolveBranchId(branch.id);
+    setIsHydrating(true);
     storageService.hydrateFromCloud(resolvedBranchId).then((result) => {
       if (result.ok) {
         // Armazenar branch resolvido para defense-in-depth no Realtime handler
@@ -219,9 +220,11 @@ export const App: React.FC = () => {
           console.log(`[Branch] Realtime re-subscribed for branch: ${branch.name}`);
         }
       }
+      setIsHydrating(false);
     }).catch(() => {
       // Fallback: refresh local mesmo se cloud falhar
       refreshLocalState();
+      setIsHydrating(false);
     });
   };
 
@@ -255,6 +258,7 @@ export const App: React.FC = () => {
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
   const [syncPendingCount, setSyncPendingCount] = useState<number>(0);
   const [syncStatus, setSyncStatus] = useState<'offline' | 'connecting' | 'syncing' | 'online' | 'error'>('connecting');
+  const [isHydrating, setIsHydrating] = useState<boolean>(true); // Bloqueia renderização durante hidratação
   // Acesso online da organização (mensalidade): false = modo local forçado.
   // O app continua funcionando com localStorage, mas todo o tráfego de nuvem
   // (Realtime, hidratação, fila) fica cortado até a organização ser reativada.
@@ -368,6 +372,7 @@ export const App: React.FC = () => {
   // dados após F5, porque a hidratação rodava uma única vez no mount, antes de
   // o perfil/organização do usuário estar disponível.
   const runHydration = useCallback(async () => {
+    setIsHydrating(true);
     // Trava de mensalidade: org desativada → NADA do cloud; só estado local
     const allowed = await checkOrgAccess();
     if (!allowed) {
@@ -377,6 +382,7 @@ export const App: React.FC = () => {
       setIsOnline(false);
       isOnlineRef.current = false;
       refreshLocalState();
+      setIsHydrating(false);
       return;
     }
     // Ler branch ID direto do localStorage (sem validação) — antes das branches
@@ -409,6 +415,7 @@ export const App: React.FC = () => {
       console.log('[HD-Sync] Cloud hydration skipped — using local data');
       setSyncStatus('offline');
     }
+    setIsHydrating(false);
   }, [checkOrgAccess, refreshLocalState]);
 
   useEffect(() => {
@@ -1168,7 +1175,12 @@ export const App: React.FC = () => {
 
         {/* Dynamic Main View Area */}
         <main className="flex-1 overflow-y-auto">
-          {!hasAccessToTab(activeTab) ? (
+          {isHydrating ? (
+            <div className="flex flex-col items-center justify-center h-full min-h-[400px] space-y-4">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+              <p className="text-sm text-slate-500 dark:text-[#a1a1aa]">Carregando dados da filial...</p>
+            </div>
+          ) : !hasAccessToTab(activeTab) ? (
             <div className="p-12 text-center space-y-4 max-w-md mx-auto my-12 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-3xl shadow-xl">
               <div className="w-16 h-16 rounded-3xl bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center justify-center mx-auto">
                 <Lock className="w-8 h-8" />
