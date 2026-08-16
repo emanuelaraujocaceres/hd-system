@@ -1722,18 +1722,7 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
           syncService.fetchRows('delivery_neighborhoods', resolvedBranchId),
           syncService.fetchRows('delivery_distance_rates', resolvedBranchId),
           syncService.fetchRows('delivery_orders', resolvedBranchId),
-// Cardápio Digital / Comandas (2026)
-          syncService.fetchRows('tables', resolvedBranchId),
-          syncService.fetchRows('customer_sessions', resolvedBranchId),
-          syncService.fetchRows('digital_menu_config', resolvedBranchId),
-          syncService.fetchRows('branch_themes', resolvedBranchId),
-          syncService.fetchRows('api_keys', resolvedBranchId),
-          // Delivery (2026)
-          syncService.fetchRows('delivery_settings', resolvedBranchId),
-          syncService.fetchRows('delivery_neighborhoods', resolvedBranchId),
-          syncService.fetchRows('delivery_distance_rates', resolvedBranchId),
-          syncService.fetchRows('delivery_orders', resolvedBranchId),
-          // Visibilidade de Módulos (2026)
+// Visibilidade de Módulos (2026)
           syncService.fetchRows('module_visibility', resolvedBranchId),
           // Controle de Lote/Validade (2026-08-14)
           syncService.fetchRows('product_lots', resolvedBranchId),
@@ -1880,12 +1869,12 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
       {
         const local = this.get<any[]>(KEYS.STOCK_LOSS_LOG, []);
         const merged = mergeBy(KEYS.STOCK_LOSS_LOG, local, stockLossLogs, (r: any) => ({
-          id: sll.id,
-          reason: sll.reason || 'other',
-          quantity: sll.quantity || 0,
-          operatorName: sll.operator_name || undefined,
-          notes: sll.notes || undefined,
-          createdAt: sll.created_at || undefined,
+          id: r.id,
+          reason: r.reason || 'other',
+          quantity: r.quantity || 0,
+          operatorName: r.operator_name || undefined,
+          notes: r.notes || undefined,
+          createdAt: r.created_at || undefined,
         }), (sll) => this.syncStockLossLog(sll), (item: any) => item.id, (localItem, cloudMapped) => {
           // Always keep the most recent entry (higher ID wins)
           return { ...cloudMapped, updatedAt: new Date().toISOString() };

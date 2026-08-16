@@ -275,17 +275,17 @@ class SupabaseSyncService {
       'digital_menu_config',
       'branch_themes',
       'api_keys',
-      // Delivery (2026)
+            // Delivery (2026)
       'delivery_settings',
       'delivery_neighborhoods',
       'delivery_distance_rates',
       'delivery_orders',
-// Visibilidade de Módulos (2026)
-  'module_visibility',
-  // Controle de Lote/Validade (2026-08-14)
-  'product_lots',
-  'stock_loss_log',
-];
+      // Visibilidade de Módulos (2026)
+      'module_visibility',
+      // Controle de Lote/Validade (2026-08-14)
+      'product_lots',
+      'stock_loss_log',
+    ];
 
     this.channel = supabase.channel('hd-system-realtime');
 

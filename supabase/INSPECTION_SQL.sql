@@ -5,14 +5,17 @@
 -- ============================================================
 
 -- ── BLOCO 1: Listar todas as tabelas e status RLS ──────────
+-- Usa pg_class para ver relrowsecurity (mais confiável que pg_tables)
 SELECT
-  schemaname,
-  tablename,
-  rowsecurity AS rls_enabled,
-  forcerowsecurity AS force_rls
-FROM pg_tables
-WHERE schemaname = 'public'
-ORDER BY tablename;
+  n.nspname AS schema,
+  c.relname AS tablename,
+  c.relrowsecurity AS rls_enabled,
+  c.relforcerowsecurity AS force_rls
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND c.relkind = 'r'
+ORDER BY c.relname;
 
 -- ── BLOCO 2: Listar todas as policies RLS ──────────────────
 SELECT
@@ -105,7 +108,6 @@ SELECT
   active,
   CASE
     WHEN store_branch_id IS NULL THEN '⚠️ SEM FILIAL'
-    WHEN store_branch_id = '' THEN '⚠️ FILIAL VAZIA'
     ELSE '✅ OK'
   END AS branch_status
 FROM system_users
@@ -125,7 +127,6 @@ SELECT
   o.name AS org_name,
   CASE
     WHEN sb.organization_id IS NULL THEN '⚠️ SEM ORG'
-    WHEN sb.organization_id = '' THEN '⚠️ ORG VAZIA'
     ELSE '✅ OK'
   END AS org_status
 FROM store_branches sb
@@ -153,7 +154,7 @@ WHERE tc.table_schema = 'public'
     'system_users', 'store_branches', 'organizations',
     'products', 'categories', 'sales', 'sale_items',
     'customer_sessions', 'customers', 'delivery_orders',
-    'credit_payments', 'financial_accounts', 'tables'
+    'credit_payments', 'financial_transactions', 'tables'
   )
 ORDER BY tc.table_name, tc.constraint_type;
 
@@ -171,7 +172,7 @@ UNION ALL SELECT 'customer_sessions', COUNT(*) FROM customer_sessions
 UNION ALL SELECT 'customers', COUNT(*) FROM customers
 UNION ALL SELECT 'delivery_orders', COUNT(*) FROM delivery_orders
 UNION ALL SELECT 'credit_payments', COUNT(*) FROM credit_payments
-UNION ALL SELECT 'financial_accounts', COUNT(*) FROM financial_accounts
+UNION ALL SELECT 'financial_transactions', COUNT(*) FROM financial_transactions
 UNION ALL SELECT 'tables', COUNT(*) FROM tables
 UNION ALL SELECT 'printers', COUNT(*) FROM printers
 UNION ALL SELECT 'api_keys', COUNT(*) FROM api_keys

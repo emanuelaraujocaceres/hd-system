@@ -71,5 +71,29 @@ const handleSetTab = (tab) => { setActiveTab(tab); setSessionStorage(...); };
 **Regra:** `getCreditPayments()` deve filtrar por `p.saleId`. `getSaleItems()` pode usar `item.sale_id` (sale_items são armazenados com snake_case).
 **Local:** `storageService.ts:2881-2887` (corrigido)
 
+### BUG-022: fetchRows duplicados em hydrateFromCloud
+**Sintoma:** moduleVisibility, productLots, stockLossLogs recebiam dados errados durante hidratação
+**Causa:** 38 chamadas `fetchRows` no Promise.all mas apenas 29 variáveis no destructuring — linhas 1714-1735 eram duplicatas exatas (tables, customer_sessions, digital_menu_config, branch_themes, api_keys, delivery_*)
+**Regra:** Manter 1:1 entre fetchRows e variáveis destructuradas. Contar cuidadosamente ao adicionar tabelas novas.
+**Local:** `storageService.ts:1695-1730` (corrigido — removidas 9 linhas duplicadas)
+
+### BUG-023: stock_loss_log usa variável indefinida no map
+**Sintoma:** ReferenceError em runtime durante hidratação de stock_loss_log
+**Causa:** Parâmetro do map é `r` mas o corpo usa `sll` (indefinido neste escopo)
+**Regra:** Usar o nome do parâmetro declarado na arrow function. Não copiar de outro trecho sem renomear.
+**Local:** `storageService.ts:1871-1877` (corrigido — `sll` → `r`)
+
+### BUG-RLS-001: product_lots policy permissiva (VULNERABILIDADE)
+**Sintoma:** Qualquer usuário autenticado lia todos product_lots de todas as organizações
+**Causa:** Policy "Allow read for authenticated" com `USING (true)` — sem filtro de org/branch
+**Regra:** NUNCA criar policies com `USING (true)` em produção. Sempre filtrar por `organization_id` e `store_branch_id`.
+**Local:** Supabase `product_lots` table (fix: DROP policy + criar policies corretas via RLS_FIXES.sql)
+
+### BUG-RLS-002: INSERT policies sem store_branch_id check
+**Sintoma:** Usuário podia inserir dados em qualquer filial dentro da sua organização
+**Causa:** INSERT policies verificavam apenas `organization_id = get_user_org_id()` sem branch check
+**Regra:** INSERT policies devem incluir `AND (store_branch_id = get_user_branch_id())` no WITH CHECK. Exceção: sale_items usa subquery com junction.
+**Local:** Todas as tabelas branch-scoped (fix: RLS_FIXES.sql)
+
 ---
 *Este documento é orientação duradoura para o projeto, não um scratchpad.*
