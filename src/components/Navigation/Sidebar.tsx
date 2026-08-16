@@ -181,8 +181,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Store Branch Dropdown — Admin Only */}
-        {isAdmin && (
+        {/* Store Branch Selector (admin) or Branch Indicator (collaborator) */}
+        {isAdmin ? (
           <div className="relative">
             <select
               value={currentBranch.id}
@@ -199,6 +199,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
               ))}
             </select>
             <Building2 className="w-3.5 h-3.5 text-slate-400 dark:text-[#71717a] absolute right-2.5 top-2.5 pointer-events-none" />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-800/60 dark:bg-[#18181b] rounded-lg border border-slate-700/60 dark:border-[#27272a]">
+            <Building2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <span className="text-xs font-medium text-slate-300 dark:text-[#a1a1aa] truncate">
+              {currentBranch.name}{currentBranch.city ? ` (${currentBranch.city})` : ''}
+            </span>
+            {currentBranch.isHeadquarters && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">MATRIZ</span>
+            )}
           </div>
         )}
       </div>

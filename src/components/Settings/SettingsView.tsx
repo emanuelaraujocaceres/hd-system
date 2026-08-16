@@ -1712,6 +1712,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                   <th className="px-3 py-2">Colaborador</th>
                   <th className="px-3 py-2">E-mail</th>
                   <th className="px-3 py-2">Cargo</th>
+                  <th className="px-3 py-2">Filial</th>
                   <th className="px-3 py-2 text-right">Ações</th>
                 </tr>
               </thead>
@@ -1745,6 +1746,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                           }`}
                         >
                           {isAdmin ? 'ADMIN' : 'COLAB'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="text-[10px] font-medium text-slate-600 dark:text-[#a1a1aa] truncate max-w-[120px] block">
+                          {(() => {
+                            const userBranch = branches.find(b => b.id === u.storeBranchId);
+                            return userBranch
+                              ? `${userBranch.isHeadquarters ? '(Matriz) ' : ''}${userBranch.name}`
+                              : <span className="text-slate-400 dark:text-[#52525b] italic">Sem filial</span>;
+                          })()}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>

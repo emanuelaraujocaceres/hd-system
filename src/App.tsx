@@ -217,6 +217,9 @@ export const App: React.FC = () => {
         if (result.resolvedBranchId) {
           const orgId = storageService.getCurrentOrgId() || undefined;
           syncService.resubscribeRealtime(orgId, result.resolvedBranchId);
+          // Update health check refs so it reconnects to the new branch if channel dies
+          realtimeOrgIdRef.current = orgId;
+          realtimeBranchIdRef.current = result.resolvedBranchId;
           console.log(`[Branch] Realtime re-subscribed for branch: ${branch.name}`);
         }
       }
@@ -271,6 +274,9 @@ export const App: React.FC = () => {
   // Resolved branch UUID — set after hydrateFromCloud resolves short codes.
   // Used by handleRemoteChange for branch isolation (defense-in-depth).
   const resolvedBranchIdRef = useRef<string | undefined>(undefined);
+  // Refs for health check — avoid stale closure over realtimeOrgId/BranchId
+  const realtimeOrgIdRef = useRef<string | undefined>(undefined);
+  const realtimeBranchIdRef = useRef<string | undefined>(undefined);
 
   // Keep refs in sync
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
@@ -621,6 +627,9 @@ export const App: React.FC = () => {
     const realtimeBranchId = storageService.isSuperAdmin()
       ? (storageService.getSuperadminViewingOrg() ? storageService.getSelectedBranchId() : undefined)
       : (storageService.getSelectedBranchId() || undefined);
+    // Store in refs for the health check (avoids stale closure after branch switch)
+    realtimeOrgIdRef.current = realtimeOrgId;
+    realtimeBranchIdRef.current = realtimeBranchId;
     if (user) {
       syncService.subscribeRealtime(handleRemoteChange, realtimeOrgId, realtimeBranchId);
     } else {
@@ -630,16 +639,19 @@ export const App: React.FC = () => {
 
     // Check connection health periodically (use refs to avoid stale closures)
     const checkConnection = async () => {
+      // Read current values from refs (updated on branch switch) to avoid stale closures
+      const currentOrgId = realtimeOrgIdRef.current;
+      const currentBranchId = realtimeBranchIdRef.current;
       // 1) Interruptor de mensalidade: org desativada → corta TODO o tráfego
       //    de nuvem e mantém o app em modo local. Quando reativada, este mesmo
       //    check (a cada 30s) reconecta Realtime + esvazia a fila pendente.
-      if (realtimeOrgId && user) {
+      if (currentOrgId && user) {
         try {
           // 1a) Interruptor da ORGANIZAÇÃO (mensalidade) — já existente
           const { data: orgRow, error: orgErr } = await supabase
             .from('organizations')
             .select('active')
-            .eq('id', realtimeOrgId)
+            .eq('id', currentOrgId)
             .maybeSingle();
           if (!orgErr) {
             const allowed = orgRow?.active !== false;
@@ -692,13 +704,13 @@ export const App: React.FC = () => {
         // Se o canal foi cortado (suspensão) e a org foi reativada, recria a
         // assinatura com o callback de volta.
         if (!syncService.hasChannel()) {
-          syncService.subscribeRealtime(handleRemoteChange, realtimeOrgId, realtimeBranchId);
+          syncService.subscribeRealtime(handleRemoteChange, currentOrgId, currentBranchId);
         }
         // Ressuscita o canal Realtime se ele morreu (reconexão esgotada).
         // Sem isso, após um pico de rede/CLOUDFLARE reset, o dispositivo
         // fica "cego" até F5: vendas de outros dispositivos não chegam
         // em tempo real, só na hidratação manual.
-        syncService.resubscribeIfDead(realtimeOrgId, realtimeBranchId);
+        syncService.resubscribeIfDead(currentOrgId, currentBranchId);
         // Processa pendentes SEMPRE que houver e a conexão estiver OK — não
         // apenas na transição offline→online. Antes, no F5 (com isOnline já
         // true no mount), a fila existente nunca era processada: cada nova

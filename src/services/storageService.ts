@@ -300,6 +300,35 @@ getCurrentOrgId(): string {
     return row.store_branch_id === resolved;
   }
 
+  /**
+   * Verifica se um item no localStorage pertence à filial atual.
+   * Usado nos handlers de DELETE remoto como defense-in-depth:
+   * antes de remover um item, verifica se ele realmente pertence à filial
+   * que está sendo visualizada. Evita que um DELETE cross-branch (que passou
+   * pelo filtro server-side por algum motivo) remova dados da filial errada.
+   */
+  private isLocalItemInCurrentBranch<T extends { storeBranchId?: string }>(
+    id: string, storageKey: string, fallback: T[] = []
+  ): boolean {
+    const rawBranchId = this.getRawBranchId();
+    // Sem filial selecionada (superadmin global): aceita tudo
+    if (!rawBranchId) return true;
+    const items = this.get<T[]>(storageKey, fallback);
+    const item = items.find((i: any) => i.id === id);
+    // Item não encontrado localmente: allow (pode ter sido removido por outro evento)
+    if (!item) return true;
+    // Item sem storeBranchId (legado): bloqueia
+    if (!(item as any).storeBranchId) return false;
+    // Resolve o branchId para comparação
+    let resolved = rawBranchId;
+    if (!StorageService.UUID_RE.test(resolved)) {
+      const branches = this.getBranches();
+      const matched = branches.find((b) => b.id === resolved || b.code === resolved);
+      if (matched) resolved = matched.id;
+    }
+    return (item as any).storeBranchId === resolved;
+  }
+
   // ─── MIGRAÇÃO LEGACY: TEXT → UUID (uma única vez) ─────────────────────
   private static MIGRATION_KEY = 'hd_system_uuid_migration_done_v2';
 
@@ -913,12 +942,14 @@ expiration_date: p.expirationDate || null,
   }
 
   removeProductFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : [])) return;
     const products = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []).filter((p) => p.id !== id);
     this.set(KEYS.PRODUCTS, products);
     this.notify();
   }
 
   removeSaleFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : [])) return;
     const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []).filter((s) => s.id !== id);
     this.set(KEYS.SALES, sales);
     this.notify();
@@ -999,6 +1030,7 @@ removeUserFromRemote(id: string) {
   }
 
   removeProductLotFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.PRODUCT_LOTS)) return;
     const productLots = this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, []).filter((p) => p.id !== id);
     this.set(KEYS.PRODUCT_LOTS, productLots);
     this.notify();
@@ -1041,12 +1073,15 @@ removeUserFromRemote(id: string) {
   }
 
   removeStockLossLogFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.STOCK_LOSS_LOG)) return;
     const stockLossLogs = this.get<StockLossLog[]>(KEYS.STOCK_LOSS_LOG, []).filter((p) => p.id !== id);
     this.set(KEYS.STOCK_LOSS_LOG, stockLossLogs);
     this.notify();
   }
 
 updateCategoryFromRemote(row: any) {
+    // Defense-in-depth: reject if not from current branch
+    if (!this.isRemoteFromCurrentBranch(row)) return;
     const categories = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []);
     // ✅ Deduplica por nome (evita categorias duplicadas no dropdown)
     const seen = new Set<string>();
@@ -1075,6 +1110,7 @@ updateCategoryFromRemote(row: any) {
   }
 
   removeCategoryFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : [])) return;
     const categories = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []).filter((c) => c.id !== id);
     this.set(KEYS.CATEGORIES, categories);
     this.notify();
@@ -1307,6 +1343,7 @@ updateCategoryFromRemote(row: any) {
   }
 
   removeCustomerFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : [])) return;
     const customers = this.get<Customer[]>(KEYS.CUSTOMERS, this.isDefaultOrg() ? INITIAL_CUSTOMERS : []).filter((c) => c.id !== id);
     this.set(KEYS.CUSTOMERS, customers);
     this.notify();
@@ -1333,6 +1370,7 @@ updateCategoryFromRemote(row: any) {
   }
 
   removeSupplierFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.SUPPLIERS, this.isDefaultOrg() ? INITIAL_SUPPLIERS : [])) return;
     const suppliers = this.get<Supplier[]>(KEYS.SUPPLIERS, this.isDefaultOrg() ? INITIAL_SUPPLIERS : []).filter((s) => s.id !== id);
     this.set(KEYS.SUPPLIERS, suppliers);
     this.notify();
@@ -1368,6 +1406,7 @@ updateCategoryFromRemote(row: any) {
   }
 
   removeFinancialFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : [])) return;
     const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []).filter((a) => a.id !== id);
     this.set(KEYS.FINANCIAL, accounts);
     this.notify();
@@ -1525,6 +1564,7 @@ updateCategoryFromRemote(row: any) {
   }
 
   removeStockMovementFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.MOVEMENTS)) return;
     const movements = this.getMovements().filter((m) => m.id !== id);
     this.set(KEYS.MOVEMENTS, movements);
     this.notify();
@@ -3948,6 +3988,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeScannedBoletoFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.SCANNED_BOLETOS)) return;
     const all = this.get<ScannedBoleto[]>(KEYS.SCANNED_BOLETOS, []).filter((x) => x.id !== id);
     this.set(KEYS.SCANNED_BOLETOS, all);
     this.notify();
@@ -4012,6 +4053,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeCreditPaymentFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.CREDIT_PAYMENTS)) return;
     const all = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []).filter((x) => x.id !== id);
     this.set(KEYS.CREDIT_PAYMENTS, all);
     this.notify();
@@ -4075,6 +4117,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeNFRecordFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.NF_RECORDS)) return;
     const all = this.get<NFRecord[]>(KEYS.NF_RECORDS, []).filter((x) => x.id !== id);
     this.set(KEYS.NF_RECORDS, all);
     this.notify();
@@ -4134,6 +4177,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeFooterMessageFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.FOOTER_MESSAGES)) return;
     const all = this.get<FooterMessage[]>(KEYS.FOOTER_MESSAGES, []).filter((x) => x.id !== id);
     this.set(KEYS.FOOTER_MESSAGES, all);
     this.notify();
@@ -4216,6 +4260,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeMediaDeviceFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.MEDIA_DEVICES)) return;
     const all = this.get<MediaDevice[]>(KEYS.MEDIA_DEVICES, []).filter((x) => x.id !== id);
     this.set(KEYS.MEDIA_DEVICES, all);
     this.notify();
@@ -4434,6 +4479,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removePrinterFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.PRINTERS)) return;
     const all = this.get<Printer[]>(KEYS.PRINTERS, []).filter((x) => x.id !== id);
     this.set(KEYS.PRINTERS, all);
     this.notify();
@@ -4481,6 +4527,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeTableFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.TABLES)) return;
     const all = this.get<Table[]>(KEYS.TABLES, []).filter((x) => x.id !== id);
     this.set(KEYS.TABLES, all);
     this.notify(); // Notificar listeners (UI atualiza em tempo real)
@@ -4525,6 +4572,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeCustomerSessionFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.CUSTOMER_SESSIONS)) return;
     const all = this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, []).filter((x) => x.id !== id);
     this.set(KEYS.CUSTOMER_SESSIONS, all);
     this.notify();
@@ -4569,6 +4617,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeDigitalMenuConfigFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.DIGITAL_MENU_CONFIG)) return;
     const all = this.get<DigitalMenuConfig[]>(KEYS.DIGITAL_MENU_CONFIG, []).filter((x) => x.id !== id);
     this.set(KEYS.DIGITAL_MENU_CONFIG, all);
     this.notify();
@@ -4619,6 +4668,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeBranchThemeFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.BRANCH_THEMES)) return;
     const all = this.get<BranchTheme[]>(KEYS.BRANCH_THEMES, []).filter((x) => x.id !== id);
     this.set(KEYS.BRANCH_THEMES, all);
     this.notify();
@@ -4663,6 +4713,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeApiKeyFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.API_KEYS)) return;
     const all = this.get<ApiKey[]>(KEYS.API_KEYS, []).filter((x) => x.id !== id);
     this.set(KEYS.API_KEYS, all);
     this.notify();
@@ -4759,6 +4810,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeDeliveryNeighborhoodFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.DELIVERY_NEIGHBORHOODS)) return;
     const all = this.get<DeliveryNeighborhood[]>(KEYS.DELIVERY_NEIGHBORHOODS, []).filter((x) => x.id !== id);
     this.set(KEYS.DELIVERY_NEIGHBORHOODS, all);
     this.notify();
@@ -4808,6 +4860,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeDeliveryDistanceRateFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.DELIVERY_DISTANCE_RATES)) return;
     const all = this.get<DeliveryDistanceRate[]>(KEYS.DELIVERY_DISTANCE_RATES, []).filter((x) => x.id !== id);
     this.set(KEYS.DELIVERY_DISTANCE_RATES, all);
     this.notify();
@@ -4901,6 +4954,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeDeliveryOrderFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.DELIVERY_ORDERS)) return;
     const all = this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []).filter((x) => x.id !== id);
     this.set(KEYS.DELIVERY_ORDERS, all);
     this.notify();
@@ -5055,6 +5109,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   removeModuleVisibilityFromRemote(id: string) {
+    if (!this.isLocalItemInCurrentBranch(id, 'hd_system_module_visibility' as any)) return;
     const data = this.get<any>('hd_system_module_visibility', []);
     let all: any[];
     

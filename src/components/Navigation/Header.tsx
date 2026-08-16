@@ -16,6 +16,7 @@ import {
   CloudOff,
   RefreshCw,
   QrCode,
+  Building2,
 } from 'lucide-react';
 import { Product, CashRegisterSession, UserProfile, StoreBranch } from '../../types';
 import { posAudio } from '../../services/audioService';
@@ -114,6 +115,16 @@ export const Header: React.FC<HeaderProps> = ({
         <h2 className="font-serif-italic text-sm md:text-lg lg:text-xl text-slate-900 dark:text-white leading-tight truncate">
           {currentInfo.title}
         </h2>
+
+        {/* Branch Indicator — visible for all roles */}
+        {currentBranch && (
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 dark:bg-[#18181b] rounded-lg border border-slate-200 dark:border-[#27272a]">
+            <Building2 className="w-3 h-3 text-indigo-500 dark:text-indigo-400 shrink-0" />
+            <span className="text-[10px] font-bold text-slate-600 dark:text-[#a1a1aa] truncate max-w-[140px]">
+              {currentBranch.isHeadquarters ? '(Matriz) ' : ''}{currentBranch.name}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Action Buttons */}

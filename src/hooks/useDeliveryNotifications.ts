@@ -71,6 +71,14 @@ export const useDeliveryNotifications = ({ enabled, onNewPedido }: UseDeliveryNo
   useEffect(() => {
     if (!enabled || permission !== 'granted') return;
 
+    // Build server-side filters for org + branch isolation
+    const orgId = storageService.getCurrentOrgId();
+    const branchId = storageService.getSelectedBranchId();
+    const filters: string[] = [];
+    if (orgId) filters.push(`organization_id=eq.${orgId}`);
+    if (branchId) filters.push(`store_branch_id=eq.${branchId}`);
+    const filterStr = filters.length > 0 ? { filter: filters.join(',') } : {};
+
     const channel = supabase
       .channel('delivery-notifications')
       .on(
@@ -79,13 +87,13 @@ export const useDeliveryNotifications = ({ enabled, onNewPedido }: UseDeliveryNo
           event: 'INSERT',
           schema: 'public',
           table: 'delivery_orders',
+          ...filterStr,
         },
         (payload) => {
           const pedido = payload.new;
-          // Isolamento estrito por filial: só notifica pedidos da filial selecionada.
-          // Superadmin em modo global (sem filial selecionada) continua recebendo todos.
-          const branchId = storageService.getSelectedBranchId();
-          if (branchId && pedido.store_branch_id && pedido.store_branch_id !== branchId) return;
+          // Defense-in-depth: double-check branch isolation client-side
+          const currentBranchId = storageService.getSelectedBranchId();
+          if (currentBranchId && pedido.store_branch_id && pedido.store_branch_id !== currentBranchId) return;
           if (pedido.status === 'pending') {
             showNotification(
               '🛵 Novo Pedido!',
