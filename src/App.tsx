@@ -190,6 +190,13 @@ export const App: React.FC = () => {
       console.warn('[Branch] Tentativa de acessar filial de outra organização:', branch.id);
       return;
     }
+
+    // Collaborators NÃO podem trocar de filial (bloqueado no frontend)
+    if (user && user.role === 'collaborator' && user.storeBranchId && branch.id !== user.storeBranchId && branch.id !== user.storeBranchId) {
+      console.warn('[Branch] Colaborador não pode trocar de filial');
+      return;
+    }
+
     storageService.setSelectedBranchId(branch.id);
     setCurrentBranch(branch);
     posAudio.click();
@@ -205,6 +212,15 @@ export const App: React.FC = () => {
     // Completo (limpa dados da filial anterior, carrega dados da nova filial)
     const resolvedBranchId = storageService.resolveBranchId(branch.id);
     setIsHydrating(true);
+
+    // Setar filial na sessão do Supabase (set_current_branch RPC)
+    // para que RLS use o branch_id correto nas queries subsequentes.
+    if (resolvedBranchId) {
+      supabase.rpc('set_current_branch', { p_branch_id: resolvedBranchId }).then(({ error }) => {
+        if (error) console.warn('[Branch] set_current_branch RPC failed:', error.message);
+      });
+    }
+
     storageService.hydrateFromCloud(resolvedBranchId).then((result) => {
       if (result.ok) {
         // Armazenar branch resolvido para defense-in-depth no Realtime handler
@@ -395,6 +411,18 @@ export const App: React.FC = () => {
     // serem carregadas, getSelectedBranchId() retornaria '' porque getBranches()
     // ainda está vazio, causando "branch: ALL" mesmo com filial selecionada.
     const rawBranchId = storageService.getRawBranchId();
+
+    // Setar filial na sessão do Supabase (set_current_branch RPC)
+    // para que RLS use o branch_id correto durante a hidratação.
+    if (rawBranchId) {
+      const resolved = storageService.resolveBranchId(rawBranchId);
+      if (resolved) {
+        supabase.rpc('set_current_branch', { p_branch_id: resolved }).then(({ error }) => {
+          if (error) console.warn('[HD-Sync] set_current_branch RPC failed:', error.message);
+        });
+      }
+    }
+
     const result = await storageService.hydrateFromCloud(rawBranchId || undefined);
     // Armazenar o branch UUID resolvido para use no Realtime e defense-in-depth
     resolvedBranchIdRef.current = result.resolvedBranchId;
