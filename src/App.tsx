@@ -1118,7 +1118,8 @@ export const App: React.FC = () => {
   };
 
   const hasAccessToTab = (tab: string): boolean => {
-    if (isAdmin) return true;
+    // Superadmin bypasses ALL module visibility
+    if (user.superadmin) return true;
     
     // Organizations: superadmin only
     if (tab === 'organizations') return !!user?.superadmin;
@@ -1126,7 +1127,7 @@ export const App: React.FC = () => {
     // Settings: gated by permission engine (not hardcoded true)
     if (tab === 'settings') return !!user?.permissions?.settings;
     
-    // ✅ Check module visibility (per branch) - admins bypass this
+    // ✅ Check module visibility (per branch) - admins also respect this
     const TAB_MODULE_MAP: Record<string, string> = {
       pdv: 'modulePdv',
       dashboard: 'moduleDashboard',

@@ -5155,7 +5155,8 @@ private updateReceivableFromPayments(saleId: string) {
     const currentBranchId = this.getSelectedBranchId();
     if (!currentBranchId) return all[0] || null;
     const found = all.find(v => v.storeBranchId === currentBranchId);
-    return found || null;
+    // Fallback: se não encontrou o branch exato, usa o primeiro registro disponível
+    return found || all[0] || null;
   }
 
   /**

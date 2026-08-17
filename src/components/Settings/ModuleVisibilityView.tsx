@@ -62,6 +62,7 @@ export const ModuleVisibilityView: React.FC<ModuleVisibilityViewProps> = ({ bran
         moduleInventory: saved.moduleInventory ?? true,
         moduleFiado: saved.moduleFiado ?? false,
         moduleCrm: saved.moduleCrm ?? false,
+        moduleComanda: saved.moduleComanda ?? false,
         moduleDashboard: saved.moduleDashboard ?? true,
         moduleFinance: saved.moduleFinance ?? false,
         moduleKds: saved.moduleKds ?? false,
