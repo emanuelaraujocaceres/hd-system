@@ -35,6 +35,7 @@ import { Skeleton, TableSkeleton } from '../shared/Skeleton';
 import { BottomSheet } from '../shared/BottomSheet';
 import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
+import { productSchema } from '../../validators/schemas';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { undoManager } from '../../lib/undoManager';
 
@@ -406,16 +407,26 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    const costPrice = parseBrlToNumber(formCostPrice);
-    const salePrice = parseBrlToNumber(formSalePrice);
-    if (salePrice <= 0) {
-      addToast('error', 'O preço de venda deve ser maior que zero.');
+
+    // Zod validation
+    const result = productSchema.safeParse({
+      name: formName,
+      barcode: formBarcode,
+      salePrice: parseBrlToNumber(formSalePrice),
+      costPrice: parseBrlToNumber(formCostPrice),
+      stockQuantity: parseInt(formCurrentStock) || 0,
+      category: formCategory,
+      unit: formUnit,
+      minStock: parseInt(formMinStock) || 0,
+      showOnCardapio: formShowOnCardapio,
+    });
+
+    if (!result.success) {
+      const firstError = result.error.issues[0];
+      addToast('error', firstError.message);
       return;
     }
-    if (costPrice < 0) {
-      addToast('error', 'O preço de custo não pode ser negativo.');
-      return;
-    }
+
     setSavingProduct(true);
     try {
       // Opções de atacado: só entram linhas com quantidade (mín. 2 un) e valor de caixa > 0

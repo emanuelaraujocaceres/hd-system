@@ -44,6 +44,7 @@ import { posAudio } from '../../services/audioService';
 import { printTestPage } from '../../services/printService';
 import { callServerApi } from '../../lib/serverApi';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
+import { userProfileSchema, tableSchema } from '../../validators/schemas';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { BranchCheck } from '../Admin/BranchCheck';
 import { ResetDataButton } from '../shared/ResetDataButton';
@@ -568,12 +569,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userName.trim()) {
-      setErrorMessage('Nome do usuário é obrigatório.');
-      return;
-    }
-    if (!userEmail.includes('@')) {
-      setErrorMessage('Por favor, informe um e-mail de usuário válido.');
+
+    // Zod validation
+    const result = userProfileSchema.safeParse({
+      name: userName,
+      email: userEmail,
+      role: userRole,
+    });
+
+    if (!result.success) {
+      const firstError = result.error.issues[0];
+      setErrorMessage(firstError.message);
       return;
     }
 
@@ -743,10 +749,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
   // ── Cardápio Digital: CRUD de mesas ─────────────────────────────
   const handleAddTable = () => {
-    if (!tableName.trim()) {
-      setErrorMessage('Informe o nome/número da mesa.');
+    // Zod validation
+    const result = tableSchema.safeParse({
+      name: tableName,
+      number: tableNumber,
+    });
+
+    if (!result.success) {
+      const firstError = result.error.issues[0];
+      setErrorMessage(firstError.message);
       return;
     }
+
     setSavingTable(true);
     try {
       const newTable: Table = {

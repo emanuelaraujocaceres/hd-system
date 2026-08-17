@@ -5,6 +5,7 @@ import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
+import { productSchema } from '../../validators/schemas';
 
 interface QuickProductModalProps {
   isOpen: boolean;
@@ -51,13 +52,21 @@ export const QuickProductModal: React.FC<QuickProductModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const price = parseFloat(salePrice.replace(',', '.')) || 0;
-    if (!name.trim()) {
-      addToast('error', 'Informe o nome do produto.');
-      return;
-    }
-    if (price <= 0) {
-      addToast('error', 'O preço de venda deve ser maior que zero.');
+
+    // Zod validation
+    const result = productSchema.safeParse({
+      name,
+      barcode: barcode.trim(),
+      salePrice: parseFloat(salePrice.replace(',', '.')) || 0,
+      costPrice: parseFloat(costPrice.replace(',', '.')) || 0,
+      stockQuantity: parseInt(stock, 10) || 0,
+      category,
+      unit,
+    });
+
+    if (!result.success) {
+      const firstError = result.error.issues[0];
+      addToast('error', firstError.message);
       return;
     }
 

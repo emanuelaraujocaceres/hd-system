@@ -29,6 +29,7 @@ import { Customer, Supplier, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
 import { useToast } from '../shared/Toast';
 import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
+import { customerSchema, supplierSchema } from '../../validators/schemas';
 import { posAudio } from '../../services/audioService';
 
 interface CRMViewProps {
@@ -182,10 +183,30 @@ export const CRMView: React.FC<CRMViewProps> = ({ user }) => {
   // ─── Salvar cliente ────────────────────────────────────────
   const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formCustomerName.trim()) {
-      addToast('error', 'Informe o nome do cliente.');
+
+    // Zod validation
+    const result = customerSchema.safeParse({
+      name: formCustomerName,
+      cpfCnpj: formCustomerCpf,
+      email: formCustomerEmail,
+      phone: formCustomerPhone,
+      whatsapp: formCustomerWhatsapp,
+      customerType: formCustomerType,
+      creditLimit: parseBrlToNumber(formCustomerCreditLimit),
+      birthDate: formCustomerBirthDate,
+      addressStreet: formCustomerAddress,
+      addressCity: formCustomerCity,
+      addressState: formCustomerState,
+      addressNeighborhood: formCustomerNeighborhood,
+      addressZip: formCustomerZip,
+    });
+
+    if (!result.success) {
+      const firstError = result.error.issues[0];
+      addToast('error', firstError.message);
       return;
     }
+
     try {
       const id = editingCustomer?.id || crypto.randomUUID();
       const customer: Customer = {
@@ -251,10 +272,23 @@ export const CRMView: React.FC<CRMViewProps> = ({ user }) => {
   // ─── Salvar fornecedor ─────────────────────────────────────
   const handleSaveSupplier = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formSupplierName.trim()) {
-      addToast('error', 'Informe o nome / razão social do fornecedor.');
+
+    // Zod validation
+    const result = supplierSchema.safeParse({
+      companyName: formSupplierName,
+      tradeName: formSupplierTradeName,
+      cnpj: formSupplierCnpj,
+      contactName: formSupplierContact,
+      email: formSupplierEmail,
+      phone: formSupplierPhone,
+    });
+
+    if (!result.success) {
+      const firstError = result.error.issues[0];
+      addToast('error', firstError.message);
       return;
     }
+
     try {
       const id = editingSupplier?.id || crypto.randomUUID();
       const supplier: Supplier = {
