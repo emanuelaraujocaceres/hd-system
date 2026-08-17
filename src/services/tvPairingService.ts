@@ -51,7 +51,7 @@ export const tvPairing = {
   async heartbeat(deviceId: string): Promise<void> {
     if (!deviceId) return;
     try {
-      await supabase.rpc('heartbeat_media_device', { p_device_id: deviceId });
+      await Promise.resolve(supabase.rpc('heartbeat_media_device', { p_device_id: deviceId }));
     } catch (err) {
       console.warn('[tvPairing] heartbeat falhou:', err);
     }
