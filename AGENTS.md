@@ -218,6 +218,38 @@ WHERE tc.constraint_type = 'FOREIGN KEY'
 ### Frontend: Toda escrita local DEVE notificar
 **Regra:** Qualquer `this.set(KEY, data)` em `storageService.ts` DEVE ser seguido de `this.notify()` — senão hooks React não re-renderizam.
 
+### Frontend: Toasts — usar react-hot-toast via useToast()
+**Regra:** O sistema de toasts usa react-hot-toast. O hook `useToast()` retorna `{ success, error, warning, info, addToast }`. Usar SEMPRE os métodos nomeados:
+```typescript
+// ✅ CORRETO
+const { success, error, warning, info } = useToast();
+success('Produto salvo!');
+error('Erro ao salvar');
+
+// ✅ TAMBÉM FUNCIONA (compatibilidade legada)
+const { addToast } = useToast();
+addToast('error', 'mensagem');
+addToast('success', 'mensagem');
+
+// ❌ ERRADO — objeto não é aceito pelos métodos nomeados
+toastInfo({ type: 'info', message: 'msg' });
+```
+
+### Frontend: Variáveis shorthand devem existir no escopo
+**Regra:** Ao usar shorthand `{costPrice}` em objeto, SEMPRE verificar que a variável `costPrice` foi declarada no escopo. Não confundir com propriedade de estado (`const [salePrice, setSalePrice]`) — shorthand referencia variável, não estado.
+```typescript
+// ❌ ERRADO — salePrice é useState, não variável solta
+const [salePrice, setSalePrice] = useState('');
+const obj = { salePrice }; // ReferenceError!
+
+// ✅ CORRETO — declarar variável no escopo
+const salePrice = parseBrlToNumber(formSalePrice);
+const obj = { salePrice }; // OK
+```
+
+### Frontend: Audio usa Web Audio API (não <audio> tags)
+**Regra:** O sistema de áudio (`src/services/audioService.ts`) usa oscillators Web Audio API. NÃO existem arquivos .mp3/.wav. Se o som não toca, verificar: (1) `posAudio.enabled` no header, (2) interação do usuário (autoplay policy), (3) `posAudio.unlock()` foi chamado.
+
 ---
 
 *Este documento é orientação duradoura para o projeto, não um scratchpad.*
