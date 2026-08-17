@@ -5,6 +5,7 @@ import App from './App.tsx';
 import { PublicMenuView } from './components/CardapioDigital/PublicMenuView.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { QueryProvider } from './providers/QueryProvider';
+import './lib/sentry'; // Initialize Sentry ASAP (captures all subsequent errors)
 import './index.css';
 
 // ─── PWA: registra o service worker para funcionar offline ─────────

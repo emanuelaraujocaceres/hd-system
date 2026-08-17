@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { ErrorFallback } from './ErrorFallback';
+import { sentry } from '../lib/sentry';
 
 interface Props {
   children: ReactNode;
@@ -48,26 +49,17 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   private reportToSentry(error: Error, errorInfo: ErrorInfo) {
-    try {
-      // Dynamic import to avoid bundling Sentry if not configured
-      import('../lib/sentry').then(({ sentry }) => {
-        if (sentry) {
-          sentry.captureException(error, {
-            contexts: {
-              react: {
-                componentStack: errorInfo.componentStack,
-              },
-            },
-            tags: {
-              scope: this.props.scope || 'app',
-            },
-          });
-        }
-      }).catch(() => {
-        // Sentry not configured — silent fail
+    if (sentry) {
+      sentry.captureException(error, {
+        contexts: {
+          react: {
+            componentStack: errorInfo.componentStack,
+          },
+        },
+        tags: {
+          scope: this.props.scope || 'app',
+        },
       });
-    } catch {
-      // Module not found — silent fail
     }
   }
 
