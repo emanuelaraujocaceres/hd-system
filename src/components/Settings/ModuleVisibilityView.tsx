@@ -56,7 +56,7 @@ export const ModuleVisibilityView: React.FC<ModuleVisibilityViewProps> = ({ bran
 
   const loadSettings = () => {
     const saved = storageService.getModuleVisibility();
-    if (saved && saved.storeBranchId === branch.id) {
+    if (saved) {
       setSettings({
         modulePdv: saved.modulePdv ?? true,
         moduleInventory: saved.moduleInventory ?? true,
