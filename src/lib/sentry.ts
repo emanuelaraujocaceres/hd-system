@@ -25,10 +25,10 @@ function initSentry() {
     dsn: DSN,
     environment: import.meta.env.MODE || 'development',
 
-    // Only send errors in production
-    enabled: import.meta.env.PROD,
+    // Send errors in production AND dev (when DSN is configured)
+    enabled: true,
 
-    // Sample rate: 100% of errors
+    // Sample rate: 100% of errors, 10% of performance traces
     tracesSampleRate: 0.1,
 
     // Don't send PII
@@ -69,7 +69,8 @@ function initSentry() {
     },
   });
 
-  console.info('[Sentry] Inicializado com DSN:', DSN.substring(0, 30) + '...');
+  // DSN logged without revealing full key
+  console.info('[Sentry] Inicializado — environment:', import.meta.env.MODE);
   return Sentry;
 }
 
@@ -88,7 +89,8 @@ export function setSentryUser(user: { id: string; email?: string; role?: string 
     sentryInstance.setUser({
       id: user.id,
       email: user.email,
-      role: user.role,
+      // 'role' is not a standard Sentry user field — use segment instead
+      segment: user.role,
     });
   }
 }

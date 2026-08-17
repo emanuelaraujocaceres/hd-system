@@ -6,23 +6,24 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   const plugins = [react(), tailwindcss()];
 
-  // Sentry plugin for source maps (production only)
+  // Sentry plugin for source maps (production only, needs SENTRY_AUTH_TOKEN)
   if (process.env.SENTRY_AUTH_TOKEN) {
-    try {
-      const { sentryVitePlugin } = require('@sentry/vite-plugin');
-      plugins.push(
-        sentryVitePlugin({
-          org: process.env.SENTRY_ORG,
-          project: process.env.SENTRY_PROJECT,
-          authToken: process.env.SENTRY_AUTH_TOKEN,
-          sourcemaps: {
-            assets: './dist/**',
-          },
-        })
-      );
-    } catch {
-      // @sentry/vite-plugin not installed — skip
-    }
+    import('@sentry/vite-plugin')
+      .then(({ sentryVitePlugin }) => {
+        plugins.push(
+          sentryVitePlugin({
+            org: process.env.SENTRY_ORG,
+            project: process.env.SENTRY_PROJECT,
+            authToken: process.env.SENTRY_AUTH_TOKEN,
+            sourcemaps: {
+              assets: './dist/**',
+            },
+          })
+        );
+      })
+      .catch(() => {
+        // @sentry/vite-plugin not installed — skip silently
+      });
   }
 
   return {
