@@ -63,13 +63,11 @@ function initSentry() {
         'Failed to fetch',
         'Load failed',
       ],
-
-      // Tags for context
-      tags: {
-        app: 'hd-system',
-        version: import.meta.env.VITE_APP_VERSION || 'dev',
-      },
     });
+
+    // Set tags after init (not valid in init options for v8)
+    Sentry.setTag('app', 'hd-system');
+    Sentry.setTag('version', import.meta.env.VITE_APP_VERSION || 'dev');
 
     // DSN logged without revealing full key
     console.info('[Sentry] ✅ Inicializado — environment:', import.meta.env.MODE);
