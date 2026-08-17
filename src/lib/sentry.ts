@@ -35,6 +35,10 @@ function initSentry() {
       // Don't send PII
       sendDefaultPii: false,
 
+      // Performance sampling
+      replaysSessionSampleRate: 0,
+      replaysOnErrorSampleRate: 1.0,
+
       // Integrations
       integrations: [
         Sentry.browserTracingIntegration(),
