@@ -3058,6 +3058,7 @@ id: StorageService.ensureUuid(settings.id),
     // If RPC fails, DLQ records it for later retry.
     try {
       const type = quantityDelta > 0 ? 'in' : 'out';
+      const branchId = this.getSelectedBranchId();
       const { data, error } = await supabase.rpc('ajustar_estoque', {
         p_product_id: productId,
         p_quantity: Math.abs(quantityDelta),
@@ -3065,6 +3066,7 @@ id: StorageService.ensureUuid(settings.id),
         p_reason: reason,
         p_operator_name: operatorName,
         p_organization_id: this.getCurrentOrgId(),
+        p_store_branch_id: branchId || null,
       });
       if (error) {
         console.warn('[HD-Sync] ajustar_estoque RPC failed:', error.message);
