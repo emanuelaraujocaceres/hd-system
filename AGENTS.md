@@ -171,6 +171,31 @@ getEntities(): Entity[] {
 ```
 **Local:** `storageService.ts`, `syncService.ts`, `App.tsx` (corrigido — commit d121573)
 
+
+### BUG-029: costPrice/salePrice ReferenceError no InventoryView (2026-08-17)
+**Sintoma:** `ReferenceError: costPrice is not defined` ao salvar produto no Estoque
+**Causa:** Shorthand properties `{costPrice, salePrice}` em objeto `newProd` referenciavam variáveis não declaradas no escopo
+**Regra:** Shorthand properties referenciam variáveis, não propriedades de estado. SEMPRE declarar variável antes de usar shorthand.
+**Local:** `InventoryView.tsx:457-458` (corrigido — `const costPrice = parseBrlToNumber(...)`)
+
+### BUG-030: salePrice: price ReferenceError no QuickProductModal (2026-08-17)
+**Sintoma:** `ReferenceError: price is not defined` ao cadastrar produto rápido no PDV
+**Causa:** `salePrice: price` — variável `price` não existe; o state é `salePrice` (useState)
+**Regra:** Ao usar variável de state como valor de propriedade, usar a variável correta ou converter com fallback.
+**Local:** `QuickProductModal.tsx:82` (corrigido — `parseFloat(salePrice.replace(',', '.')) || 0`)
+
+### BUG-031: Toasts invisíveis — 100+ call sites com assinatura errada (2026-08-17)
+**Sintoma:** Toasts não aparecem em nenhum lugar do app
+**Causa:** `addToast` esperava objeto `{type, msg}` mas 100+ chamadas passavam `addToast('error', 'msg')`. Toasts renderizavam como caixas vazias.
+**Regra:** Toasts usam react-hot-toast. Usar métodos nomeados (`success()`, `error()`, etc.) ou `addToast('type', 'msg')` (posicional). NUNCA `addToast({type, msg})`.
+**Local:** `Toast.tsx` (corrigido — migrado para react-hot-toast, aceita AMBAS as assinaturas)
+
+### BUG-032: SettingsView usa addToast sem importar useToast (2026-08-17)
+**Sintoma:** `ReferenceError: addToast is not defined` ao salvar holerite ou copiar URL
+**Causa:** 3 call sites de `addToast` sem `import { useToast }` nem destructuring
+**Regra:** Toda função que usa `addToast` DEVE ter `const { addToast } = useToast()` no corpo do componente.
+**Local:** `SettingsView.tsx:476,481,3279` (corrigido — import + destructuring adicionados)
+
 ---
 
 ## Padrões Defensivos Obrigatórios
