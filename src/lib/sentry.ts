@@ -21,60 +21,66 @@ function initSentry() {
     return null;
   }
 
-  Sentry.init({
-    dsn: DSN,
-    environment: import.meta.env.MODE || 'development',
+  try {
+    Sentry.init({
+      dsn: DSN,
+      environment: import.meta.env.MODE || 'development',
 
-    // Send errors in production AND dev (when DSN is configured)
-    enabled: true,
+      // Send errors in production AND dev (when DSN is configured)
+      enabled: true,
 
-    // Sample rate: 100% of errors, 10% of performance traces
-    tracesSampleRate: 0.1,
+      // Sample rate: 100% of errors, 10% of performance traces
+      tracesSampleRate: 0.1,
 
-    // Don't send PII
-    sendDefaultPii: false,
+      // Don't send PII
+      sendDefaultPii: false,
 
-    // Integrations
-    integrations: [
-      Sentry.browserTracingIntegration(),
-      Sentry.replayIntegration({
-        maskAllText: false,
-        blockAllMedia: false,
-      }),
-    ],
+      // Integrations
+      integrations: [
+        Sentry.browserTracingIntegration(),
+        Sentry.replayIntegration({
+          maskAllText: false,
+          blockAllMedia: false,
+        }),
+      ],
 
-    // Allow URLs
-    allowUrls: [
-      /localhost/,
-      /hd-system/,
-      /.pages\.dev/,
-    ],
+      // Allow URLs
+      allowUrls: [
+        /localhost/,
+        /hd-system/,
+        /.pages\.dev/,
+      ],
 
-    // Ignore common noise
-    ignoreErrors: [
-      'ResizeObserver loop limit exceeded',
-      'Non-Error promise rejection captured',
-      'Network request failed',
-      'Loading chunk .* failed',
-      'Script error.',
-      // PWA offline errors
-      'Failed to fetch',
-      'Load failed',
-    ],
+      // Ignore common noise
+      ignoreErrors: [
+        'ResizeObserver loop limit exceeded',
+        'Non-Error promise rejection captured',
+        'Network request failed',
+        'Loading chunk .* failed',
+        'Script error.',
+        // PWA offline errors
+        'Failed to fetch',
+        'Load failed',
+      ],
 
-    // Tags for context
-    tags: {
-      app: 'hd-system',
-      version: import.meta.env.VITE_APP_VERSION || 'dev',
-    },
-  });
+      // Tags for context
+      tags: {
+        app: 'hd-system',
+        version: import.meta.env.VITE_APP_VERSION || 'dev',
+      },
+    });
 
-  // DSN logged without revealing full key
-  console.info('[Sentry] Inicializado — environment:', import.meta.env.MODE);
-  return Sentry;
+    // DSN logged without revealing full key
+    console.info('[Sentry] ✅ Inicializado — environment:', import.meta.env.MODE);
+    return Sentry;
+  } catch (err) {
+    console.error('[Sentry] ❌ Falha ao inicializar:', err);
+    return null;
+  }
 }
 
 // Initialize on module load (lazy — only if DSN exists)
+console.log('[Sentry] Module loaded, DSN available:', !!DSN);
 if (DSN) {
   sentryInstance = initSentry();
 }
