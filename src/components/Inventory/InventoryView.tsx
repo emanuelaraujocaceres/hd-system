@@ -37,6 +37,7 @@ import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { productSchema } from '../../validators/schemas';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { uploadProductImage } from '../../lib/supabase';
 import { undoManager } from '../../lib/undoManager';
 
 interface InventoryViewProps {
@@ -429,6 +430,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
     setSavingProduct(true);
     try {
+      // Upload image to Supabase Storage if it's a base64 data URL
+      let finalImageUrl = formImageUrl || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80';
+      if (formImageUrl?.startsWith('data:image/')) {
+        const tempId = editingProduct?.id || `prod-${Date.now()}`;
+        finalImageUrl = await uploadProductImage(formImageUrl, tempId);
+      }
+
       // Opções de atacado: só entram linhas com quantidade (mín. 2 un) e valor de caixa > 0
       const wholesaleOptions: WholesaleOption[] | undefined = formWholesaleEnabled
         ? formWholesaleOptions
@@ -450,7 +458,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         salePrice,
         currentStock: parseInt(formCurrentStock) || 0,
         minStock: parseInt(formMinStock) || 0,
-        imageUrl: formImageUrl || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80',
+        imageUrl: finalImageUrl,
         active: true,
         updatedAt: new Date().toISOString(),
         storeBranchId: storageService.getSelectedBranchId() || user.storeBranchId,

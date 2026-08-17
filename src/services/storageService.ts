@@ -4348,12 +4348,14 @@ private updateReceivableFromPayments(saleId: string) {
     if (idx >= 0) all[idx] = p;
     else all.unshift(p);
     this.set(KEYS.PRINTERS, all);
+    this.notify(KEYS.PRINTERS, 'local');
     this.syncPrinter(p);
   }
 
   deletePrinter(id: string) {
     const all = this.get<Printer[]>(KEYS.PRINTERS, []).filter((x) => x.id !== id);
     this.set(KEYS.PRINTERS, all);
+    this.notify(KEYS.PRINTERS, 'local');
     syncService.deleteRow('printers', id);
   }
 
@@ -4782,6 +4784,7 @@ private updateReceivableFromPayments(saleId: string) {
     if (idx >= 0) all[idx] = theme;
     else all.unshift(theme);
     this.set(KEYS.BRANCH_THEMES, all);
+    this.notify(KEYS.BRANCH_THEMES, 'local');
     this.syncBranchTheme(theme);
   }
 
@@ -5817,6 +5820,42 @@ saveUserProfile(user: UserProfile) {
       if (key && key.startsWith('hd_system_backup_')) keys.push(key);
     }
     return keys.sort().reverse();
+  }
+
+  // --- PRODUCT RECIPES (Realtime) ---
+  updateProductRecipeFromRemote(row: any) {
+    this.setChangeSource('remote');
+    if (!this.isRemoteFromCurrentBranch(row)) return;
+    // Recipes are stored within products — just trigger a re-fetch
+    // The product data already includes recipes via composite_product_id
+    this.notify(KEYS.PRODUCTS, 'remote');
+  }
+
+  // --- DELIVERY WORKER EARNINGS (Realtime) ---
+  updateDeliveryWorkerEarningsFromRemote(row: any) {
+    this.setChangeSource('remote');
+    if (!this.isRemoteFromCurrentBranch(row)) return;
+    const KEY = 'hd_system_delivery_worker_earnings';
+    const all = this.get<any[]>(KEY, []);
+    const idx = all.findIndex((e) => e.id === row.id);
+    const mapped = {
+      id: row.id,
+      organizationId: row.organization_id,
+      storeBranchId: row.store_branch_id,
+      workerId: row.worker_id,
+      deliveryOrderId: row.delivery_order_id,
+      deliveryFee: parseFloat(row.delivery_fee) || 0,
+      workerAmount: parseFloat(row.worker_amount) || 0,
+      companyAmount: parseFloat(row.company_amount) || 0,
+      payType: row.pay_type || 'daily',
+      paid: row.paid || false,
+      paidAt: row.paid_at || null,
+      createdAt: row.created_at,
+    };
+    if (idx >= 0) all[idx] = mapped;
+    else all.unshift(mapped);
+    this.set(KEY, all);
+    this.notify(KEY, 'remote');
   }
 }
 

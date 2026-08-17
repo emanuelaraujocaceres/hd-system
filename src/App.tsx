@@ -611,6 +611,12 @@ export const App: React.FC = () => {
           if (event === 'DELETE') storageService.removeDeliveryOrderFromRemote(row.id);
           else storageService.updateDeliveryOrderFromRemote(row, event);
           break;
+        case 'delivery_worker_earnings':
+          storageService.updateDeliveryWorkerEarningsFromRemote(row);
+          break;
+        case 'product_recipes':
+          storageService.updateProductRecipeFromRemote(row);
+          break;
         case 'module_visibility':
           if (event === 'DELETE') storageService.removeModuleVisibilityFromRemote(row.id);
           else storageService.updateModuleVisibilityFromRemote(row);
@@ -729,6 +735,20 @@ export const App: React.FC = () => {
             setIsSyncConnected(false);
             setSyncStatus('offline');
             return;
+          }
+          // 1c) Cross-device logout: detectar logout feito em outro dispositivo
+          if (myProfile?.last_logout_at) {
+            const cachedLogout = localStorage.getItem('hd_system_last_logout_at');
+            if (cachedLogout && myProfile.last_logout_at !== cachedLogout) {
+              console.warn('[HD-Sync] 🚫 Logout detectado em outro dispositivo — encerrando sessão');
+              syncService.unsubscribeRealtime(handleRemoteChange);
+              await supabase.auth.signOut().catch(() => {});
+              storageService.logout();
+              setUser(null);
+              setIsSyncConnected(false);
+              setSyncStatus('offline');
+              return;
+            }
           }
         } catch (e) {
           console.warn('[HD-Sync] Falha ao verificar status no health check:', e);
@@ -901,13 +921,15 @@ export const App: React.FC = () => {
   }, [runHydration]);
 
   const handleLogout = async () => {
+    // Mark logout timestamp for cross-device detection (other devices will force-logout)
+    await supabase.rpc('mark_user_logout').catch(() => {});
     clearSentryUser();
     await supabase.auth.signOut().catch(() => {});
     storageService.logout();
     setUser(null);
   };
 
-  const handleLoginSuccess = (loggedUser: UserProfile) => {
+  const handleLoginSuccess = async (loggedUser: UserProfile) => {
     setUser(loggedUser);
     // Sentry: set user context for error reports
     setSentryUser({ id: loggedUser.id, email: loggedUser.email, role: loggedUser.role });
@@ -915,6 +937,13 @@ export const App: React.FC = () => {
     // Isso funciona para ambos os caminhos de login (Supabase + local),
     // assegurando que getCurrentOrgId() tenha dados disponíveis após login.
     storageService.saveUserProfile(loggedUser);
+    // Cache last_logout_at for cross-device logout detection
+    try {
+      const { data: profile } = await supabase.rpc('get_my_profile');
+      if (profile?.last_logout_at) {
+        localStorage.setItem('hd_system_last_logout_at', profile.last_logout_at);
+      }
+    } catch { /* ignore */ }
     // Re-hidrata com a organização do usuário recém-logado — corrige orgs
     // não-default (ex.: Plantão da Cerveja) que só carregavam dados após F5
     // (a hidratação do mount rodava antes do perfil existir).

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
+import { supabase } from '../../lib/supabase';
 import { posAudio } from '../../services/audioService';
 import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
 
@@ -149,8 +150,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       return;
     }
 
-    // Verify current password
-    if (currentPassword !== (user.password || '')) {
+    // Verify current password (hash comparison)
+    const inputHash = await storageService.constructor.hashPassword(currentPassword);
+    if (inputHash !== (user.password || '') && currentPassword !== (user.password || '')) {
       setMessage({ type: 'error', text: 'Senha atual incorreta.' });
       posAudio.error();
       return;
@@ -158,6 +160,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
     setLoading(true);
     try {
+      // Update Supabase Auth password (cross-device login)
+      const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
+      if (authError) {
+        console.warn('[Auth] updateUser password failed:', authError.message);
+        // Continue with local save — Supabase Auth might not have this user
+      }
+
       const updatedUser: UserProfile = {
         ...user,
         password: newPassword,
