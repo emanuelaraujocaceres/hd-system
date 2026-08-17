@@ -48,12 +48,9 @@ function initSentry() {
         }),
       ],
 
-      // Allow URLs
-      allowUrls: [
-        /localhost/,
-        /hd-system/,
-        /.pages\.dev/,
-      ],
+      // Allow URLs (disabled — console-thrown errors use VM context, not app URLs)
+      // allowUrls is useful to filter 3rd-party scripts but blocks console tests
+      // allowUrls: [/localhost/, /hd-system/, /.pages\.dev/],
 
       // Ignore common noise
       ignoreErrors: [
