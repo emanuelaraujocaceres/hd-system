@@ -4,6 +4,7 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { PublicMenuView } from './components/CardapioDigital/PublicMenuView.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { QueryProvider } from './providers/QueryProvider';
 import './index.css';
 
 // ─── PWA: registra o service worker para funcionar offline ─────────
@@ -51,25 +52,31 @@ function render() {
   if (route?.type === 'menu') {
     root.render(
       <StrictMode>
-        <ErrorBoundary scope="Cardápio Digital">
-          <PublicMenuView tableToken={route.token} onClose={handleClosePublic} />
-        </ErrorBoundary>
+        <QueryProvider>
+          <ErrorBoundary scope="Cardápio Digital">
+            <PublicMenuView tableToken={route.token} onClose={handleClosePublic} />
+          </ErrorBoundary>
+        </QueryProvider>
       </StrictMode>,
     );
   } else if (route?.type === 'delivery') {
     root.render(
       <StrictMode>
-        <ErrorBoundary scope="Delivery">
-          <PublicMenuView tableToken="delivery" filialId={route.filialId} onClose={handleClosePublic} />
-        </ErrorBoundary>
+        <QueryProvider>
+          <ErrorBoundary scope="Delivery">
+            <PublicMenuView tableToken="delivery" filialId={route.filialId} onClose={handleClosePublic} />
+          </ErrorBoundary>
+        </QueryProvider>
       </StrictMode>,
     );
   } else {
     root.render(
       <StrictMode>
-        <ErrorBoundary scope="HD-System">
-          <App />
-        </ErrorBoundary>
+        <QueryProvider>
+          <ErrorBoundary scope="HD-System">
+            <App />
+          </ErrorBoundary>
+        </QueryProvider>
       </StrictMode>,
     );
   }
