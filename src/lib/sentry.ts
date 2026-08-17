@@ -70,7 +70,6 @@ function initSentry() {
     Sentry.setTag('version', import.meta.env.VITE_APP_VERSION || 'dev');
 
     // DSN logged without revealing full key
-    console.info('[Sentry] ✅ Inicializado — environment:', import.meta.env.MODE);
     return Sentry;
   } catch (err) {
     console.error('[Sentry] ❌ Falha ao inicializar:', err);
@@ -79,10 +78,9 @@ function initSentry() {
 }
 
 // Initialize on module load (lazy — only if DSN exists)
-console.log('[Sentry] Module loaded, DSN available:', !!DSN);
 if (DSN) {
   sentryInstance = initSentry();
-  // Expose on window for console testing: Sentry.captureException(new Error('test'))
+  // Expose on window for console debugging: Sentry.captureException(new Error('test'))
   if (sentryInstance) {
     (window as any).Sentry = sentryInstance;
   }
