@@ -154,28 +154,30 @@ CREATE INDEX IF NOT EXISTS idx_cash_sessions_branch_status
 
 -- ══════════════════════════════════════════════════════════════════════
 -- BLOCO 4: Índices parciais para dados mais acessados
--- Apenas registros ativos (WHERE is_active = true)
+-- Apenas registros mais recentes (created_at DESC)
 -- ══════════════════════════════════════════════════════════════════════
 
--- products ativos (usado no PDV, cardápio)
-CREATE INDEX IF NOT EXISTS idx_products_active
-  ON public.products (store_branch_id, name)
-  WHERE is_active = true AND store_branch_id IS NOT NULL;
+-- customers: busca por filial + tipo (delivery vs walkin) — mais recentes primeiro
+-- NOTA: customers NÃO tem coluna is_active (verificado no schema real)
+CREATE INDEX IF NOT EXISTS idx_customers_branch_type_recent
+  ON public.customers (store_branch_id, customer_type, created_at DESC)
+  WHERE store_branch_id IS NOT NULL;
 
--- customers ativos (usado no CRM, delivery)
-CREATE INDEX IF NOT EXISTS idx_customers_active
-  ON public.customers (store_branch_id, name)
-  WHERE is_active = true AND store_branch_id IS NOT NULL;
+-- products: busca por filial + barcode (PDV rápido)
+-- NOTA: barcode pode ter valores duplicados ('0'), NÃO criar índice único
 
 
 -- ══════════════════════════════════════════════════════════════════════
--- BLOCO 5: Índices para search por barcode (PDV rápido)
+-- BLOCO 5: Limpar barcodes duplicados (valor '0' ou vazio)
+-- Antes de criar qualquer índice único futuro
 -- ══════════════════════════════════════════════════════════════════════
 
--- products: busca por barcode único
-CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode_unique
-  ON public.products (barcode)
-  WHERE barcode IS NOT NULL AND barcode != '';
+-- Ver quantos produtos têm barcode '0' ou vazio
+-- (execute esta query para diagnóstico antes de decidir se quer limpar)
+SELECT barcode, COUNT(*) AS total
+FROM public.products
+WHERE barcode = '0' OR barcode = '' OR barcode IS NULL
+GROUP BY barcode;
 
 
 -- ══════════════════════════════════════════════════════════════════════
@@ -205,8 +207,6 @@ WHERE schemaname = 'public'
     'idx_customers_branch_type',
     'idx_financial_branch_due',
     'idx_cash_sessions_branch_status',
-    'idx_products_active',
-    'idx_customers_active',
-    'idx_products_barcode_unique'
+    'idx_customers_branch_type_recent'
   )
 ORDER BY tablename, indexname;

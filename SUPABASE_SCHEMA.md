@@ -151,7 +151,6 @@ Clientes (walk-in e delivery).
 | address | TEXT | | Endereço (legacy) |
 | credit_limit | NUMERIC(12,2) | | Limite de crédito |
 | notes | TEXT | | Observações |
-| is_active | BOOLEAN | `true` | Cliente ativo? |
 | birth_date | DATE | | Data de nascimento |
 | whatsapp | TEXT | `''` | WhatsApp |
 | address_street | TEXT | `''` | Rua |
@@ -166,6 +165,8 @@ Clientes (walk-in e delivery).
 | customer_type | TEXT | `'walkin'` | 'walkin', 'delivery', 'both' |
 | created_at | TIMESTAMPTZ | `now()` | |
 | updated_at | TIMESTAMPTZ | `now()` | |
+
+> ⚠️ **NOTA:** `customers` NÃO tem coluna `is_active`. O schema doc anterior estava incorreto.
 
 ### suppliers
 Fornecedores.
