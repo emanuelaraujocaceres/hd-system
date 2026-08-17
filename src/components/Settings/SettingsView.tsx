@@ -47,6 +47,7 @@ import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { userProfileSchema, tableSchema } from '../../validators/schemas';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { BranchCheck } from '../Admin/BranchCheck';
+import { useToast } from '../shared/Toast';
 import { ResetDataButton } from '../shared/ResetDataButton';
 import { DeliverySettingsView } from './DeliverySettingsView';
 import { ModuleVisibilityView } from './ModuleVisibilityView';
@@ -61,6 +62,7 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, categories, user }) => {
   const isAdmin = user.role === 'admin';
+  const { addToast } = useToast();
   const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance' | 'cardapio' | 'delivery' | 'modules' | 'integrations'>(() => {
     const saved = sessionStorage.getItem('settings_active_tab');
     return (saved as typeof activeSubTab) || 'fiscal';

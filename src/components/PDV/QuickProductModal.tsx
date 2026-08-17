@@ -79,7 +79,7 @@ export const QuickProductModal: React.FC<QuickProductModalProps> = ({
         category,
         unit,
         costPrice: parseFloat(costPrice.replace(',', '.')) || 0,
-        salePrice: price,
+        salePrice: parseFloat(salePrice.replace(',', '.')) || 0,
         currentStock: parseInt(stock, 10) || 0,
         minStock: 0,
         maxStock: 100,

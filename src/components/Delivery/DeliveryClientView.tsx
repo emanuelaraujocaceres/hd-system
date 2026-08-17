@@ -140,7 +140,7 @@ export const DeliveryClientView: React.FC<DeliveryClientViewProps> = ({ branch, 
         product,
       }]);
     }
-    toastInfo({ type: 'info', message: `${product.name} adicionado!` });
+    toastInfo(`${product.name} adicionado!`);
   };
 
   const removeFromCart = (productId: string) => {
