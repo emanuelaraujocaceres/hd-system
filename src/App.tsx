@@ -45,6 +45,7 @@ import { ToastProvider } from './components/shared/Toast';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useBranchTheme } from './hooks/useBranchTheme';
 import { PermissionEngine } from './lib/iam';
+import { setSentryUser, clearSentryUser, sentryBreadcrumb } from './lib/sentry';
 
 // Lazy-loaded views for code splitting (reduces TDZ risk from scope-hoisting)
 const InventoryView = lazy(() => import('./components/Inventory/InventoryView'));
@@ -85,6 +86,7 @@ export const App: React.FC = () => {
   }, [navHistory]);
 
   const handleTabChange = (tab: string) => {
+    sentryBreadcrumb(`Navigate to ${tab}`, { tab });
     setActiveTab(tab);
     localStorage.setItem('hd_system_active_tab', tab);
     if (navHistory[navHistory.length - 1] !== tab) {
@@ -899,6 +901,7 @@ export const App: React.FC = () => {
   }, [runHydration]);
 
   const handleLogout = async () => {
+    clearSentryUser();
     await supabase.auth.signOut().catch(() => {});
     storageService.logout();
     setUser(null);
@@ -906,6 +909,8 @@ export const App: React.FC = () => {
 
   const handleLoginSuccess = (loggedUser: UserProfile) => {
     setUser(loggedUser);
+    // Sentry: set user context for error reports
+    setSentryUser({ id: loggedUser.id, email: loggedUser.email, role: loggedUser.role });
     // 🛠️ GARANTIR QUE PERFIL SEMPRE SEJA SALVO no localStorage
     // Isso funciona para ambos os caminhos de login (Supabase + local),
     // assegurando que getCurrentOrgId() tenha dados disponíveis após login.

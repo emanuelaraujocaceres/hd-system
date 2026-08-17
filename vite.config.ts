@@ -4,8 +4,29 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
+  const plugins = [react(), tailwindcss()];
+
+  // Sentry plugin for source maps (production only)
+  if (process.env.SENTRY_AUTH_TOKEN) {
+    try {
+      const { sentryVitePlugin } = require('@sentry/vite-plugin');
+      plugins.push(
+        sentryVitePlugin({
+          org: process.env.SENTRY_ORG,
+          project: process.env.SENTRY_PROJECT,
+          authToken: process.env.SENTRY_AUTH_TOKEN,
+          sourcemaps: {
+            assets: './dist/**',
+          },
+        })
+      );
+    } catch {
+      // @sentry/vite-plugin not installed — skip
+    }
+  }
+
   return {
-    plugins: [react(), tailwindcss()],
+    plugins,
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

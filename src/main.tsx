@@ -3,6 +3,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { PublicMenuView } from './components/CardapioDigital/PublicMenuView.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
 // ─── PWA: registra o service worker para funcionar offline ─────────
@@ -50,19 +51,25 @@ function render() {
   if (route?.type === 'menu') {
     root.render(
       <StrictMode>
-        <PublicMenuView tableToken={route.token} onClose={handleClosePublic} />
+        <ErrorBoundary scope="Cardápio Digital">
+          <PublicMenuView tableToken={route.token} onClose={handleClosePublic} />
+        </ErrorBoundary>
       </StrictMode>,
     );
   } else if (route?.type === 'delivery') {
     root.render(
       <StrictMode>
-        <PublicMenuView tableToken="delivery" filialId={route.filialId} onClose={handleClosePublic} />
+        <ErrorBoundary scope="Delivery">
+          <PublicMenuView tableToken="delivery" filialId={route.filialId} onClose={handleClosePublic} />
+        </ErrorBoundary>
       </StrictMode>,
     );
   } else {
     root.render(
       <StrictMode>
-        <App />
+        <ErrorBoundary scope="HD-System">
+          <App />
+        </ErrorBoundary>
       </StrictMode>,
     );
   }
