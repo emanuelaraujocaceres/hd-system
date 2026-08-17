@@ -430,6 +430,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
     setSavingProduct(true);
     try {
+      // Parse prices for product object
+      const costPrice = parseBrlToNumber(formCostPrice);
+      const salePrice = parseBrlToNumber(formSalePrice);
+
       // Upload image to Supabase Storage if it's a base64 data URL
       let finalImageUrl = formImageUrl || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80';
       if (formImageUrl?.startsWith('data:image/')) {
