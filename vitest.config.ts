@@ -25,6 +25,14 @@ export default defineConfig({
         '**/*.config.*',
         '**/index.ts',
       ],
+      thresholds: {
+        // Target: 80% coverage (P3-17)
+        // Currently low — will increase as more tests are added
+        statements: 10,
+        branches: 10,
+        functions: 10,
+        lines: 10,
+      },
     },
   },
 });
