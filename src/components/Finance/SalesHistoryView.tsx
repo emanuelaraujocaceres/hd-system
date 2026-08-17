@@ -18,6 +18,8 @@ import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { useToast } from '../shared/Toast';
 import { undoManager } from '../../lib/undoManager';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
+import { usePagination } from '../../hooks/usePagination';
+import { Pagination } from '../shared/Pagination';
 
 interface SalesHistoryViewProps {
   sales: Sale[];
@@ -75,6 +77,14 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
       return true;
     });
   }, [sales, searchQuery, dateFrom, dateTo]);
+
+  const {
+    paginatedData: paginatedSales,
+    currentPage,
+    totalPages,
+    totalItems,
+    goToPage,
+  } = usePagination({ data: filteredSales, itemsPerPage: 50 });
 
   const toggleExpand = (saleId: string) => {
     setExpandedSaleId(expandedSaleId === saleId ? null : saleId);
@@ -170,7 +180,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
-            {filteredSales.map((sale) => {
+            {paginatedSales.map((sale) => {
               const isExpanded = expandedSaleId === sale.id;
               const itemsCount = (sale.items || []).reduce((sum, item) => sum + item.quantity, 0);
 
@@ -380,6 +390,17 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
               Tente ajustar os filtros de busca ou período.
             </p>
           </div>
+        )}
+
+        {/* Pagination */}
+        {filteredSales.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={totalItems}
+            itemsPerPage={50}
+            onPageChange={goToPage}
+          />
         )}
       </div>
 
