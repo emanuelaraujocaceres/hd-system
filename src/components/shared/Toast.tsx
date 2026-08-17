@@ -1,5 +1,5 @@
 /**
- * Toast - Sistema de notificações toast (backed by react-hot-toast)
+ * Toast - Sistema de notificações toast (custom, sem dependências externas)
  *
  * Aceita AMBOS os padrões de chamada para compatibilidade:
  *   addToast('error', 'mensagem')           ← positional (100+ call sites)
@@ -8,11 +8,17 @@
  *   success('mensagem') / error('mensagem') / warning('mensagem') / info('mensagem')
  */
 
-import React, { createContext, useContext, useCallback } from 'react';
-import { Toaster, toast, type Toast as HotToast } from 'react-hot-toast';
-import { CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
+import { CheckCircle, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
+
+interface ToastMessage {
+  id: string;
+  type: ToastType;
+  message: string;
+  duration?: number;
+}
 
 interface ToastContextType {
   success: (message: string, duration?: number) => void;
@@ -30,134 +36,6 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | null>(null);
 
-/** Map internal ToastType → react-hot-toast method */
-const toastFn = {
-  success: (msg: string, opts?: Record<string, unknown>) => toast.success(msg, opts as any),
-  error: (msg: string, opts?: Record<string, unknown>) => toast.error(msg, opts as any),
-  warning: (msg: string, opts?: Record<string, unknown>) =>
-    toast(msg, { icon: '⚠️', ...opts } as any),
-  info: (msg: string, opts?: Record<string, unknown>) =>
-    toast(msg, { icon: 'ℹ️', ...opts } as any),
-};
-
-const ICONS: Record<ToastType, React.ReactNode> = {
-  success: <CheckCircle className="w-5 h-5 text-emerald-500" />,
-  error: <AlertCircle className="w-5 h-5 text-rose-500" />,
-  warning: <AlertTriangle className="w-5 h-5 text-amber-500" />,
-  info: <Info className="w-5 h-5 text-blue-500" />,
-};
-
-function showHotToast(
-  type: ToastType,
-  message: string,
-  duration = 3000,
-  actionLabel?: string,
-  onAction?: () => void,
-) {
-  const renderIcon = () => ICONS[type];
-
-  // Build custom renderer for rich toast with optional undo
-  toastFn[type](message, {
-    duration,
-    icon: null, // we render icon inside custom div
-    style: {
-      borderRadius: '12px',
-      background: undefined, // let react-hot-toast theme handle it
-      color: undefined,
-    },
-  } as any);
-}
-
-const ToastContextProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const success = useCallback((message: string, duration?: number) => {
-    showHotToast('success', message, duration);
-  }, []);
-
-  const error = useCallback((message: string, duration?: number) => {
-    showHotToast('error', message, duration);
-  }, []);
-
-  const warning = useCallback((message: string, duration?: number) => {
-    showHotToast('warning', message, duration);
-  }, []);
-
-  const info = useCallback((message: string, duration?: number) => {
-    showHotToast('info', message, duration);
-  }, []);
-
-  /**
-   * Flexible addToast — supports:
-   * 1. addToast('error', 'message')           — positional (most common)
-   * 2. addToast({ type, message, duration })   — object
-   * 3. addToast('success', 'msg', 6000, 'Undo', fn) — with undo action
-   */
-  const addToast = useCallback(
-    (
-      typeOrOptions: ToastType | { type: ToastType; message: string; duration?: number },
-      message?: string,
-      duration?: number,
-      actionLabel?: string,
-      onAction?: () => void,
-    ) => {
-      let type: ToastType;
-      let msg: string;
-      let dur: number;
-
-      if (typeof typeOrOptions === 'string') {
-        // Positional: addToast('error', 'message', duration?, actionLabel?, onAction?)
-        type = typeOrOptions;
-        msg = message ?? '';
-        dur = duration ?? 3000;
-      } else {
-        // Object: addToast({ type: 'error', message: 'msg', duration? })
-        type = typeOrOptions.type;
-        msg = typeOrOptions.message;
-        dur = typeOrOptions.duration ?? 3000;
-      }
-
-      showHotToast(type, msg, dur, actionLabel, onAction);
-    },
-    [],
-  );
-
-  return (
-    <ToastContext.Provider value={{ success, error, warning, info, addToast }}>
-      {children}
-      <Toaster
-        position="top-right"
-        gutter={8}
-        containerStyle={{ zIndex: 99999 }}
-        toastOptions={{
-          duration: 3000,
-          style: {
-            borderRadius: '12px',
-            padding: '12px 16px',
-            fontSize: '13px',
-            fontWeight: 600,
-            maxWidth: '380px',
-          },
-          success: {
-            style: {
-              background: '#ecfdf5',
-              color: '#065f46',
-              border: '1px solid #a7f3d0',
-            },
-            iconTheme: { primary: '#10b981', secondary: '#ecfdf5' },
-          },
-          error: {
-            style: {
-              background: '#fef2f2',
-              color: '#991b1b',
-              border: '1px solid #fecaca',
-            },
-            iconTheme: { primary: '#ef4444', secondary: '#fef2f2' },
-          },
-        }}
-      />
-    </ToastContext.Provider>
-  );
-};
-
 export const useToast = () => {
   const context = useContext(ToastContext);
   if (!context) {
@@ -166,16 +44,103 @@ export const useToast = () => {
   return context;
 };
 
-/** For non-component contexts (services, etc.) — direct toast access */
-export const toastDirect = {
-  success: (message: string) => toast.success(message),
-  error: (message: string) => toast.error(message),
-  warning: (message: string) => toast(message, { icon: '⚠️' } as any),
-  info: (message: string) => toast(message, { icon: 'ℹ️' } as any),
+export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToastFn = useCallback((type: ToastType, message: string, duration = 3000) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    setToasts(prev => [...prev, { id, type, message, duration }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, duration);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const success = useCallback((message: string, duration?: number) => addToastFn('success', message, duration), [addToastFn]);
+  const error = useCallback((message: string, duration?: number) => addToastFn('error', message, duration), [addToastFn]);
+  const warning = useCallback((message: string, duration?: number) => addToastFn('warning', message, duration), [addToastFn]);
+  const info = useCallback((message: string, duration?: number) => addToastFn('info', message, duration), [addToastFn]);
+
+  /**
+   * Flexible addToast — supports:
+   * 1. addToast('error', 'message')           — positional (most common)
+   * 2. addToast({ type, message, duration })   — object
+   * 3. addToast('success', 'msg', 6000, 'Undo', fn) — with undo action (ignored for now)
+   */
+  const addToast = useCallback(
+    (
+      typeOrOptions: ToastType | { type: ToastType; message: string; duration?: number },
+      message?: string,
+      duration?: number,
+      _actionLabel?: string,
+      _onAction?: () => void,
+    ) => {
+      let type: ToastType;
+      let msg: string;
+      let dur: number;
+
+      if (typeof typeOrOptions === 'string') {
+        type = typeOrOptions;
+        msg = message ?? '';
+        dur = duration ?? 3000;
+      } else {
+        type = typeOrOptions.type;
+        msg = typeOrOptions.message;
+        dur = typeOrOptions.duration ?? 3000;
+      }
+
+      addToastFn(type, msg, dur);
+    },
+    [addToastFn],
+  );
+
+  return (
+    <ToastContext.Provider value={{ success, error, warning, info, addToast }}>
+      {children}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+    </ToastContext.Provider>
+  );
 };
 
-export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  return <ToastContextProvider>{children}</ToastContextProvider>;
+const ToastContainer: React.FC<{ toasts: ToastMessage[]; onRemove: (id: string) => void }> = ({ toasts, onRemove }) => {
+  if (toasts.length === 0) return null;
+
+  return (
+    <div className="fixed top-4 right-4 z-[9999] space-y-2 max-w-sm">
+      {toasts.map(toast => (
+        <ToastItem key={toast.id} toast={toast} onRemove={onRemove} />
+      ))}
+    </div>
+  );
+};
+
+const ToastItem: React.FC<{ toast: ToastMessage; onRemove: (id: string) => void }> = ({ toast, onRemove }) => {
+  const icons: Record<ToastType, React.ReactNode> = {
+    success: <CheckCircle className="w-5 h-5 text-emerald-500" />,
+    error: <AlertCircle className="w-5 h-5 text-rose-500" />,
+    warning: <AlertTriangle className="w-5 h-5 text-amber-500" />,
+    info: <Info className="w-5 h-5 text-blue-500" />,
+  };
+
+  const bgColors: Record<ToastType, string> = {
+    success: 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800',
+    error: 'bg-rose-50 dark:bg-rose-900/30 border-rose-200 dark:border-rose-800',
+    warning: 'bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800',
+    info: 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800',
+  };
+
+  return (
+    <div className={`flex items-center gap-3 p-3 rounded-xl border shadow-lg animate-[slideIn_0.3s_ease-out] ${bgColors[toast.type]}`}>
+      {icons[toast.type]}
+      <span className="flex-1 text-xs font-semibold text-slate-900 dark:text-white">{toast.message}</span>
+      <button onClick={() => onRemove(toast.id)} className="p-1 hover:bg-black/5 rounded">
+        <X className="w-3 h-3 text-slate-400" />
+      </button>
+    </div>
+  );
 };
 
 export default ToastProvider;
