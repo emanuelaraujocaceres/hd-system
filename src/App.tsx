@@ -922,9 +922,9 @@ export const App: React.FC = () => {
 
   const handleLogout = async () => {
     // Mark logout timestamp for cross-device detection (other devices will force-logout)
-    await supabase.rpc('mark_user_logout').catch(() => {});
+    try { await supabase.rpc('mark_user_logout'); } catch { /* RPC may not exist yet */ }
     clearSentryUser();
-    await supabase.auth.signOut().catch(() => {});
+    try { await supabase.auth.signOut(); } catch { /* signOut must not block */ }
     storageService.logout();
     setUser(null);
   };
