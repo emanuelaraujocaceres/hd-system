@@ -39,32 +39,38 @@ O HD-System é um sistema **multi-tenant, multi-branch** com:
 
 ### Tabelas Branch-Scoped (isoladas por filial)
 
-| Tabela | Descrição | Colunas-chave |
-|--------|-----------|---------------|
-| `products` | Produtos | `id, name, price, stock_quantity, organization_id, store_branch_id` |
-| `categories` | Categorias | `id, name, color, organization_id, store_branch_id` |
-| `sales` | Vendas | `id, total, payment_method, organization_id, store_branch_id` |
-| `sale_items` | Itens da venda | `id, sale_id, product_id, quantity, price` |
-| `customer_sessions` | Comandas/Mesas | `id, table_number, status, organization_id, store_branch_id` |
-| `customers` | Clientes | `id, name, phone, organization_id, store_branch_id` |
-| `delivery_orders` | Pedidos delivery | `id, order_number, status, total, organization_id, store_branch_id` |
-| `credit_payments` | Pagamentos fiado | `id, sale_id, amount, organization_id, store_branch_id` |
-| `financial_transactions` | Transações financeiras | `id, description, amount, type, organization_id, store_branch_id` |
-| `tables` | Mesas | `id, name, number, status, organization_id, store_branch_id` |
-| `printers` | Impressoras | `id, name, role, organization_id, store_branch_id` |
-| `api_keys` | Chaves API | `id, name, key_hash, organization_id, store_branch_id` |
-| `footer_messages` | Mensagens rodapé TV | `id, text, organization_id, store_branch_id` |
-| `media_devices` | TVs/vitrines pareadas | `id, name, pairing_code, organization_id, store_branch_id` |
-| `nf_records` | Notas fiscais | `id, chave_acesso, organization_id, store_branch_id` |
-| `scanned_boletos` | Boletos escaneados | `id, linha_digitavel, organization_id, store_branch_id` |
-| `movements` | Movimentações estoque | `id, type, quantity, organization_id, store_branch_id` |
-| `delivery_neighborhoods` | Bairros delivery | `id, name, fee, organization_id, store_branch_id` |
-| `delivery_distance_rates` | Taxas distância | `id, km, fee, organization_id, store_branch_id` |
-| `digital_menu_config` | Config cardápio digital | `id, title, layout_mode, organization_id, store_branch_id` |
-| `branch_themes` | Tema por filial | `id, primary_color, organization_id, store_branch_id` |
-| `module_visibility` | Visibilidade módulos | `id, module, enabled, organization_id, store_branch_id` |
-| `product_lots` | Lotes de produto | `id, lot_number, quantity, organization_id, store_branch_id` |
-| `stock_loss_log` | Log perdas estoque | `id, quantity, reason, organization_id, store_branch_id` |
+| Tabela | Descrição | Colunas-chave | Foreign Keys |
+|--------|-----------|---------------|--------------|
+| `products` | Produtos | `id, name, price, stock_quantity, organization_id, store_branch_id` | — |
+| `categories` | Categorias | `id, name, color, organization_id, store_branch_id` | — |
+| `sales` | Vendas | `id, total, payment_method, organization_id, store_branch_id, table_id, customer_session_id` | `table_id → tables.id`, `customer_session_id → customer_sessions.id` |
+| `sale_items` | Itens da venda | `id, sale_id, product_id, quantity, price` | `sale_id → sales.id` |
+| `customer_sessions` | Comandas/Mesas | `id, table_id, session_token, status, opened_at, closed_at, customer_name, organization_id, store_branch_id` | `table_id → tables.id` |
+| `customers` | Clientes | `id, name, phone, organization_id, store_branch_id` | — |
+| `delivery_orders` | Pedidos delivery | `id, order_number, status, total, organization_id, store_branch_id` | — |
+| `credit_payments` | Pagamentos fiado | `id, sale_id, amount, organization_id, store_branch_id` | `sale_id → sales.id` |
+| `financial_transactions` | Transações financeiras | `id, description, amount, type, organization_id, store_branch_id` | — |
+| `tables` | Mesas | `id, name, number, qr_token, status, organization_id, store_branch_id` | — |
+| `printers` | Impressoras | `id, name, role, category, transport, organization_id, store_branch_id` | — |
+| `api_keys` | Chaves API | `id, name, key_hash, organization_id, store_branch_id` | — |
+| `footer_messages` | Mensagens rodapé TV | `id, text, organization_id, store_branch_id` | — |
+| `media_devices` | TVs/vitrines pareadas | `id, name, pairing_code, organization_id, store_branch_id` | — |
+| `nf_records` | Notas fiscais | `id, chave_acesso, organization_id, store_branch_id` | — |
+| `scanned_boletos` | Boletos escaneados | `id, linha_digitavel, organization_id, store_branch_id` | — |
+| `movements` | Movimentações estoque | `id, type, quantity, organization_id, store_branch_id` | — |
+| `delivery_neighborhoods` | Bairros delivery | `id, name, fee, organization_id, store_branch_id` | — |
+| `delivery_distance_rates` | Taxas distância | `id, km, fee, organization_id, store_branch_id` | — |
+| `digital_menu_config` | Config cardápio digital | `id, title, layout_mode, organization_id, store_branch_id` | — |
+| `branch_themes` | Tema por filial | `id, primary_color, organization_id, store_branch_id` | — |
+| `module_visibility` | Visibilidade módulos | `id, module_pdv, module_inventory, organization_id, store_branch_id` | — |
+| `product_lots` | Lotes de produto | `id, lot_number, quantity, organization_id, store_branch_id` | — |
+| `stock_loss_log` | Log perdas estoque | `id, quantity, reason, organization_id, store_branch_id` | — |
+
+> ⚠️ **Constraints importantes:**
+> - `customer_sessions`: constraint `one_active_session_per_table` — apenas 1 session `status='active'` por `table_id`
+> - `tables`: constraint única em `(LOWER(name), store_branch_id)` — previne mesas duplicadas por nome+filial
+> - `customer_sessions.table_id` → `tables.id` — FK com ON DELETE RESTRICT (não pode deletar mesa com sessions)
+> - `sales.table_id` → `tables.id`, `sales.customer_session_id` → `customer_sessions.id`
 
 ---
 

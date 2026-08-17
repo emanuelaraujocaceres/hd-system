@@ -113,5 +113,111 @@ const handleSetTab = (tab) => { setActiveTab(tab); setSessionStorage(...); };
 **Regra:** INSERT policies devem incluir `AND (store_branch_id = get_user_branch_id())` no WITH CHECK. Exceção: sale_items usa subquery com junction.
 **Local:** Todas as tabelas branch-scoped (fix: RLS_FIXES.sql)
 
+### BUG-028: Console spam + module visibility + hydration loops + table duplication (2026-08-16)
+**Sintoma:** Console inundado de logs "getCurrentOrgId()", module visibility não atualizava Sidebar, hidratação rodava 2x, mesas duplicadas no banco
+**Causas:**
+1. `getCurrentOrgId()` re-parsava localStorage a cada chamada (amplificado por notify())
+2. `saveModuleVisibility()` não chamava `this.notify()` — Sidebar não re-renderizava
+3. `runHydration()` chamado no mount + session restore sem guard anti-duplicação
+4. `resubscribeRealtime()` chamado múltiplas vezes sem dedup de org/branch
+5. `saveTable()` deduplicava apenas por `id`, não por `name` — UI criava novos IDs a cada chamada
+**Regas ( padrões defensivos obrigatórios):**
+```typescript
+// ✅ PADRÃO: Cache para operações custosas chamadas frequentemente
+private _cache: { key: string; value: any } | null = null;
+getCurrentExpensiveOp() {
+  const raw = localStorage.getItem('key');
+  if (this._cache && this._cache.key === raw) return this._cache.value;
+  const result = /* cálculo */;
+  this._cache = { key: raw, value: result };
+  return result;
+}
+// Invalidar em: saveUserProfile(), logout(), superadminSetViewingOrg()
+
+// ✅ PADRÃO: Toda escrita em localStorage DEVE chamar notify()
+saveX(x: X) {
+  this.set(KEY, data);
+  this.notify();  // ← OBRIGATÓRIO senão UI não atualiza
+  syncService.upsertRow(...);
+}
+
+// ✅ PADRÃO: Guard anti-duplicação para operações async
+const hydrationDoneRef = useRef<boolean>(false);
+const runOp = useCallback(async (force = false) => {
+  if (hydrationDoneRef.current && !force) return;
+  // ... operação
+  hydrationDoneRef.current = true;
+}, []);
+// Chamadas que precisam forçar: login, branch switch, org switch
+
+// ✅ PADRÃO: Guard anti-resubscribe para conexões
+const lastSubscribedRef = useRef<{ a?: string; b?: string } | null>(null);
+if (!lastSubscribedRef.current || lastSubscribedRef.current.a !== a) {
+  subscribe(a, b);
+  lastSubscribedRef.current = { a, b };
+}
+
+// ✅ PADRÃO: Dedup por nome em entidades que o UI cria com IDs novos
+getEntities(): Entity[] {
+  const raw = this.get<Entity[]>(KEY, []);
+  const seen = new Map<string, number>();
+  for (let i = 0; i < raw.length; i++) {
+    const key = (raw[i].name || '').trim().toLowerCase();
+    if (seen.has(key)) { /* manter mais recente */ }
+    else seen.set(key, i);
+  }
+  return this.filterByBranch(this.filterByOrg(raw));
+}
+```
+**Local:** `storageService.ts`, `syncService.ts`, `App.tsx` (corrigido — commit d121573)
+
 ---
+
+## Padrões Defensivos Obrigatórios
+
+### SQL: Verificar schema ANTES de escrever
+**Regra:** NUNCA assumir que uma coluna/tabela/constraint existe. Sempre verificar:
+```sql
+-- 1. Verificar se tabela existe
+SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'minha_tabela');
+
+-- 2. Verificar colunas
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns WHERE table_name = 'minha_tabela';
+
+-- 3. Verificar constraints (FK, UNIQUE, etc.)
+SELECT conname, contype, pg_get_constraintdef(oid)
+FROM pg_constraint WHERE conrelid = 'minha_tabela'::regclass;
+
+-- 4. Verificar policies RLS
+SELECT policyname, cmd, qual, with_check
+FROM pg_policies WHERE tablename = 'minha_tabela';
+```
+
+### SQL: Cleanup scripts devem respeitar dependências
+**Regra:** Antes de DELETE, verificar FKs que referenciam a tabela:
+```sql
+-- Verificar o que referencia esta tabela
+SELECT
+  tc.table_name AS referencing_table,
+  kcu.column_name AS referencing_column,
+  ccu.table_name AS referenced_table
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
+WHERE tc.constraint_type = 'FOREIGN KEY'
+  AND ccu.table_name = 'tabela_que_vou_deletar';
+```
+
+### Frontend: Padrões anti-loop
+**Regra:** Toda operação async que pode ser chamada múltiplas vezes DEVE ter guard:
+1. `useRef<boolean>` para marcar conclusão
+2. Parâmetro `force = false` para chamadas que precisam re-executar
+3. Verificar se já está no estado desejado antes de executar
+
+### Frontend: Toda escrita local DEVE notificar
+**Regra:** Qualquer `this.set(KEY, data)` em `storageService.ts` DEVE ser seguido de `this.notify()` — senão hooks React não re-renderizam.
+
+---
+
 *Este documento é orientação duradoura para o projeto, não um scratchpad.*
