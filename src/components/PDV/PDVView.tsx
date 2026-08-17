@@ -269,9 +269,10 @@ export const PDVView: React.FC<PDVViewProps> = ({
     e.preventDefault();
     if (!searchTerm.trim()) return;
 
-    // Try exact barcode match first
+    // Try exact barcode match first (skip barcode='0' or empty — treat as placeholder)
+    const trimmed = searchTerm.trim();
     const exactMatch = products.find(
-      (p) => p.barcode === searchTerm.trim()
+      (p) => p.barcode && p.barcode !== '0' && p.barcode !== '' && p.barcode === trimmed
     );
 
     if (exactMatch) {
@@ -424,8 +425,8 @@ export const PDVView: React.FC<PDVViewProps> = ({
   const handleBarcodeDetected = (barcode: string) => {
     setScannedBarcode(barcode);
 
-    // Search product by barcode (trim both sides for robust matching)
-    const found = productsRef.current.find((p) => p.barcode && p.barcode.trim() === barcode.trim());
+    // Search product by barcode (skip barcode='0' or empty — treat as placeholder)
+    const found = productsRef.current.find((p) => p.barcode && p.barcode !== '0' && p.barcode.trim() === barcode.trim());
 
     if (found) {
       // Product found - check if caixa is open

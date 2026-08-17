@@ -217,7 +217,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     // Also trim the stored barcode for comparison to handle whitespace differences
     const existing = allProds
       .filter(p => p.active !== false) // Só produtos ativos
-      .find((p) => p.barcode && p.barcode.trim() === barcode.trim());
+      .find((p) => p.barcode && p.barcode !== '0' && p.barcode.trim() === barcode.trim());
 
     console.log('🔍 [BarcodeScanner] Product found:', existing ? existing.name : '❌ NOT FOUND');
 

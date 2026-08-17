@@ -1618,7 +1618,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       const val = e.target.value;
                       setStockBarcodeSearch(val);
                       if (val.trim()) {
-                        const found = products.find(p => p.barcode === val.trim());
+                        const found = products.find(p => p.barcode && p.barcode !== '0' && p.barcode === val.trim());
                         if (found) {
                           setStockTargetProduct(found);
                         }
