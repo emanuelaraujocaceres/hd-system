@@ -82,6 +82,10 @@ function initSentry() {
 console.log('[Sentry] Module loaded, DSN available:', !!DSN);
 if (DSN) {
   sentryInstance = initSentry();
+  // Expose on window for console testing: Sentry.captureException(new Error('test'))
+  if (sentryInstance) {
+    (window as any).Sentry = sentryInstance;
+  }
 }
 
 export { sentryInstance as sentry };
