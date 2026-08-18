@@ -92,13 +92,15 @@ Produtos do estoque. **NÃO tem trigger de estoque — o desconto é feito pelo 
 | show_on_cardapio | BOOLEAN | `false` | Exibir no cardápio digital |
 | expiration_date | DATE | | Data de validade (alertas no Dashboard) |
 | is_composite | BOOLEAN | `false` | Produto composto (desconta ingredientes) |
+| use_lots | BOOLEAN | `false` | Controle por lote (FEFO) — produtos com useLots=True usam product_lots |
 | created_at | TIMESTAMPTZ | `now()` | |
 | updated_at | TIMESTAMPTZ | `now()` | |
 
-**⚠️ COLUNAS RECÉM ADICIONADAS (2026-08-13):**
-- `expiration_date DATE` — Data de validade do produto
+**⚠️ COLUNAS RECÉM ADICIONADAS (2026-08-13/14):**
+- `expiration_date DATE` — Data de validade do produto (para produtos sem lote)
 - `is_composite BOOLEAN` — Produto composto (usa product_recipes)
 - `image_url TEXT` — URL da imagem (mapeado como `imageUrl` no frontend)
+- `use_lots BOOLEAN` — Habilita rastreamento por lote (FEFO)
 
 ### categories
 Categorias de produtos.
@@ -111,6 +113,51 @@ Categorias de produtos.
 | name | TEXT NOT NULL | | Nome da categoria |
 | created_at | TIMESTAMPTZ | `now()` | |
 | updated_at | TIMESTAMPTZ | `now()` | |
+
+### product_lots
+Lotes de produto para rastreamento por validade (FEFO). Cada lote representa uma remessa de compra com sua própria data de validade e quantidade.
+
+| Coluna | Tipo | Default | Descrição |
+|--------|------|---------|-----------|
+| id | UUID PK | `gen_random_uuid()` | PK |
+| organization_id | UUID NOT NULL | | FK → organizations (CASCADE) |
+| store_branch_id | UUID NOT NULL | | FK → store_branches (CASCADE) |
+| product_id | UUID NOT NULL | | FK → products (CASCADE) |
+| lot_number | TEXT NOT NULL | | Código do lote do fornecedor |
+| expiration_date | DATE NOT NULL | | Data de validade do lote |
+| quantity | INTEGER NOT NULL | `0` | Quantidade em estoque deste lote |
+| cost_price | NUMERIC(12,2) | | Custo específico deste lote |
+| status | TEXT NOT NULL | `'active'` | `active`, `expired`, `disposed` |
+| supplier_id | UUID | | FK → suppliers |
+| received_at | TIMESTAMPTZ | `now()` | Data de recebimento |
+| created_at | TIMESTAMPTZ | `now()` | |
+| updated_at | TIMESTAMPTZ | `now()` | |
+| UNIQUE(product_id, lot_number) | | | Lote único por produto |
+
+**Notas:**
+- Índices: `product_lots_fefo` (product_id, status, expiration_date) para FEFO
+- RLS: branch-scoped via `create_branch_policy()`
+- Realtime: habilitado com REPLICA IDENTITY FULL
+
+### stock_loss_log
+Registro de perdas de estoque (validade, avaria, etc.).
+
+| Coluna | Tipo | Default | Descrição |
+|--------|------|---------|-----------|
+| id | UUID PK | `gen_random_uuid()` | PK |
+| organization_id | UUID NOT NULL | | FK → organizations (CASCADE) |
+| store_branch_id | UUID NOT NULL | | FK → store_branches (CASCADE) |
+| product_id | UUID NOT NULL | | FK → products (CASCADE) |
+| lot_id | UUID | | FK → product_lots (SET NULL) |
+| quantity | INTEGER NOT NULL | | Quantidade perdida |
+| reason | TEXT NOT NULL | | `expired`, `damaged`, `other` |
+| operator_name | TEXT | | Nome do operador |
+| notes | TEXT | | Observações |
+| created_at | TIMESTAMPTZ | `now()` | |
+
+**Notas:**
+- RLS: branch-scoped via `create_branch_policy()`
+- Realtime: habilitado com REPLICA IDENTITY FULL
 
 ### product_recipes
 Receitas de produtos compostos (Bill of Materials). Cada ingrediente é um produto do estoque.
