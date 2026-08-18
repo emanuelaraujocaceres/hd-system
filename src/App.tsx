@@ -1107,18 +1107,12 @@ export const App: React.FC = () => {
 
   // Check current user permissions
   const isAdmin = user.role === 'admin' || user.superadmin;
-  const perms = user.permissions || {
-    pdv: true,
-    inventory: true,
-    crm: true,
-    finance: true,
-    dashboard: true,
-    settings: true,
-    comanda: true,
-    kds: true,
-    cardapioDigital: true,
-    delivery: true,
-    tvShowcase: true,
+  // MERGE defaults with user permissions — `||` only works when permissions is null/undefined
+  const perms = {
+    pdv: true, inventory: true, crm: true, finance: true,
+    dashboard: true, settings: true, comanda: true, kds: true,
+    cardapioDigital: true, delivery: true, tvShowcase: true,
+    ...(user.permissions || {}),
   };
 
   const hasAccessToTab = (tab: string): boolean => {
@@ -1128,8 +1122,8 @@ export const App: React.FC = () => {
     // Organizations: superadmin only
     if (tab === 'organizations') return !!user?.superadmin;
     
-    // Settings: gated by permission engine (not hardcoded true)
-    if (tab === 'settings') return !!user?.permissions?.settings;
+    // Settings: gated by permission engine
+    if (tab === 'settings') return !!perms.settings;
     
     // ✅ Check module visibility (per branch) - admins also respect this
     const TAB_MODULE_MAP: Record<string, string> = {
@@ -1289,7 +1283,7 @@ export const App: React.FC = () => {
                 Acesso Restrito
               </h3>
               <p className="text-xs text-slate-500 dark:text-[#a1a1aa]">
-                Você está conectado como <strong className="text-indigo-500">{user.name}</strong> (Colaborador). Seu perfil não possui permissão para acessar o módulo <span className="uppercase font-bold">{activeTab}</span>.
+                Você está conectado como <strong className="text-indigo-500">{user.name}</strong> ({user.superadmin ? 'Super Admin' : user.role === 'admin' ? 'Administrador' : 'Colaborador'}). Seu perfil não possui permissão para acessar o módulo <span className="uppercase font-bold">{activeTab}</span>.
               </p>
               {(() => {
                 const fallbackTab = (['pdv', 'inventory', 'finance', 'crm', 'dashboard', 'settings'] as const)
