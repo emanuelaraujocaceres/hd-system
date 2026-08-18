@@ -113,7 +113,13 @@ export type TableName =
   | 'delivery_distance_rates'
   | 'delivery_orders'
   // Visibilidade de Módulos (2026)
-  | 'module_visibility';
+  | 'module_visibility'
+  // Lotes / Receitas (2026)
+  | 'product_lots'
+  | 'product_recipes'
+  | 'stock_loss_log'
+  // Delivery Worker Earnings (2026)
+  | 'delivery_worker_earnings';
 
 type SyncChangeCallback = (table: TableName, payload: any) => void;
 type ConnectionListener = (online: boolean) => void;
@@ -526,6 +532,8 @@ class SupabaseSyncService {
     'tables', 'customer_sessions', 'digital_menu_config', 'branch_themes',
     // Delivery (2026): têm updated_at
     'delivery_settings', 'delivery_neighborhoods', 'delivery_distance_rates', 'delivery_orders',
+    // Lotes / Receitas (2026): têm updated_at
+    'product_lots', 'product_recipes',
   ];
 
   /**

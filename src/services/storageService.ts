@@ -3432,6 +3432,9 @@ id: StorageService.ensureUuid(settings.id),
               }
               this.saveProductLot(lot);
             }
+            if (remaining > 0) {
+              console.warn(`[FEFO] Produto ${item.productId}: ${remaining} unidades não deduzidas dos lotes (estoque insuficiente nos lotes)`);
+            }
           }
         }
       }

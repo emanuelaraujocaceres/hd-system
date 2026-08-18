@@ -181,6 +181,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setFormTvHighlightTag('');
       setFormExpirationDate('');
       setFormIsComposite(false);
+      setFormUseLots(false);
       setImageSuggestions([]);
       setIsSearchingImages(false);
       setIsProductModalOpen(true);
@@ -370,6 +371,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormWholesaleOptions([{ boxQuantity: '', salePrice: '' }]);
     setFormExpirationDate('');
     setFormIsComposite(false);
+    setFormUseLots(false);
     setImageSuggestions([]);
     setIsSearchingImages(false);
   };
@@ -1147,6 +1149,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     <Edit2 className="w-3.5 h-3.5" />
                     Editar
                   </button>
+                  {p.useLots && (
+                    <button
+                      onClick={() => setLotManagerProduct(p)}
+                      className="py-2 px-3 rounded-xl text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors flex items-center justify-center min-h-[44px] min-w-[44px]"
+                      title="Gerenciar Lotes"
+                    >
+                      <Package className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => setConfirmDeleteProduct(p)}
                     className="py-2 px-3 rounded-xl text-rose-500 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 transition-colors flex items-center justify-center min-h-[44px] min-w-[44px]"
