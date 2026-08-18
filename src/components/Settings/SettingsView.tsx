@@ -735,9 +735,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
         updatedAt: new Date().toISOString(),
       };
       storageService.saveBranchTheme(themeData);
-      
-      // Apply theme immediately
-      setBranchTheme(themeData);
+      // App.tsx subscribes to storageService.notify() and re-reads theme automatically
+      // No need to call setBranchTheme here — it's not in SettingsView's scope
       
       posAudio.chime();
       setSuccessMessage('Paleta de cores salva e aplicada! Mudanças visíveis imediatamente no modo claro.');

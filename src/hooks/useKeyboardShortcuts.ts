@@ -42,13 +42,10 @@ export function useKeyboardShortcuts(shortcuts: Shortcut[], deps: any[] = []) {
   );
 
   useEffect(() => {
-    // Listen on both document and window for PWA compatibility
-    const handler = (e: KeyboardEvent) => handleKeyDown(e);
-    document.addEventListener('keydown', handler);
-    window.addEventListener('keydown', handler);
+    // Listen on document only — window causes duplicate fires since events bubble
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('keydown', handler);
-      window.removeEventListener('keydown', handler);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleKeyDown]);
 }

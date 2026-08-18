@@ -6,7 +6,7 @@
  *     usePagination({ data: sales, itemsPerPage: 50 });
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 interface UsePaginationOptions<T> {
   data: T[];
@@ -38,6 +38,11 @@ export function usePagination<T>({
     () => Math.max(1, Math.ceil(data.length / itemsPerPage)),
     [data.length, itemsPerPage]
   );
+
+  // Clamp currentPage when data shrinks (e.g., filter reduces results)
+  useEffect(() => {
+    setCurrentPage((prev) => Math.min(prev, totalPages));
+  }, [totalPages]);
 
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;

@@ -409,7 +409,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
     if (!table) return;
     const allSales = storageService.getSales();
     const tableSales = allSales.filter(
-      (s) => s.tableId === table.id && s.orderSource === 'cardapio_digital'
+      (s) => s.tableId === table.id && (s.orderSource === 'cardapio_digital' || s.orderSource === 'delivery')
     );
     setMyOrders(tableSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   }, [table]);

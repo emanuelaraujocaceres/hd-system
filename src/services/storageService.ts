@@ -610,7 +610,7 @@ expiration_date: p.expirationDate || null,
   getProductLots(productId?: string): ProductLot[] {
     const all = this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, []);
     const filtered = productId ? all.filter(pl => pl.productId === productId) : all;
-    return this.filterByBranch(this.filterByOrg(filtered));
+    return this.filterBySelectedBranch(this.filterByOrg(filtered));
   }
 
   saveProductLot(lot: ProductLot): void {

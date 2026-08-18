@@ -220,7 +220,7 @@ export const App: React.FC = () => {
     if (resolvedBranchId) {
       supabase.rpc('set_current_branch', { p_branch_id: resolvedBranchId }).then(({ error }) => {
         if (error) console.warn('[Branch] set_current_branch RPC failed:', error.message);
-      });
+      }).catch(() => {}); // Supabase rpc() may not return a standard Promise — catch prevents unhandled rejection
     }
 
     storageService.hydrateFromCloud(resolvedBranchId).then((result) => {
@@ -431,7 +431,7 @@ export const App: React.FC = () => {
       if (resolved) {
         supabase.rpc('set_current_branch', { p_branch_id: resolved }).then(({ error }) => {
           if (error) console.warn('[HD-Sync] set_current_branch RPC failed:', error.message);
-        });
+        }).catch(() => {}); // Supabase rpc() may not return a standard Promise — catch prevents unhandled rejection
       }
     }
 
@@ -841,11 +841,10 @@ export const App: React.FC = () => {
   useEffect(() => {
     // Restore user from Supabase session — SEMPRE revalida o perfil no banco
     // (evita que uma org antiga/errada continue no localStorage após o login)
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        supabase
-          .rpc('get_my_profile')
-        .then(({ data, error }) => {
+        try {
+          const { data, error } = await supabase.rpc('get_my_profile');
           if (error) {
             // Falha de rede/banco: mantém o perfil local (offline-first)
             console.warn('[Auth] get_my_profile indisponível, mantendo perfil local:', error.message);
@@ -899,9 +898,9 @@ export const App: React.FC = () => {
           if (prevOrg !== orgId) {
             runHydration(true); // force: re-hidratar com nova org
           }
-        }).catch((err) => {
+        } catch (err: any) {
           console.warn('[Auth] Error fetching profile on session restore:', err?.message);
-        });
+        }
       }
     }).catch((err) => {
       console.warn('[Auth] Error checking session on mount:', err?.message);
@@ -1115,6 +1114,11 @@ export const App: React.FC = () => {
     finance: true,
     dashboard: true,
     settings: true,
+    comanda: true,
+    kds: true,
+    cardapioDigital: true,
+    delivery: true,
+    tvShowcase: true,
   };
 
   const hasAccessToTab = (tab: string): boolean => {
