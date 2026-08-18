@@ -30,6 +30,7 @@ import { globalNotificationService } from '../../services/globalNotificationServ
 import { useToast } from '../shared/Toast';
 import { BarcodeLabelModal } from './BarcodeLabelModal';
 import { CategoryManagerModal } from './CategoryManagerModal';
+import { LotManagerModal } from './LotManagerModal';
 import { StockCameraScannerModal } from './StockCameraScannerModal';
 import { Skeleton, TableSkeleton } from '../shared/Skeleton';
 import { BottomSheet } from '../shared/BottomSheet';
@@ -117,6 +118,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   ]);
   const [formExpirationDate, setFormExpirationDate] = useState('');
   const [formIsComposite, setFormIsComposite] = useState(false);
+  const [formUseLots, setFormUseLots] = useState(false);
 
   // Estoque Inteligente: Inventário (ajuste com motivo)
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
@@ -401,6 +403,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     );
     setFormExpirationDate(product.expirationDate || '');
     setFormIsComposite(product.isComposite || false);
+    setFormUseLots(product.useLots || false);
     setIsProductModalOpen(true);
   };
 
@@ -473,6 +476,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         wholesaleOptions,
         expirationDate: formExpirationDate || undefined,
         isComposite: formIsComposite || undefined,
+        useLots: formUseLots || undefined,
       };
 
       storageService.saveProduct(newProd);
@@ -492,6 +496,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   };
 
   const [confirmDeleteProduct, setConfirmDeleteProduct] = useState<Product | null>(null);
+  const [lotManagerProduct, setLotManagerProduct] = useState<Product | null>(null);
 
   // ── ESTOQUE INTELIGENTE: INVENTÁRIO (ajuste com motivo) ────────
   const openInventoryModal = (product: Product) => {
@@ -1025,6 +1030,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
+                          {p.useLots && (
+                            <button
+                              onClick={() => setLotManagerProduct(p)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors min-h-[44px] min-w-[44px]"
+                              title="Gerenciar Lotes"
+                            >
+                              <Package className="w-4 h-4" />
+                            </button>
+                          )}
                           {canCreateEdit && (
                           <button
                             onClick={() => setConfirmDeleteProduct(p)}
@@ -1300,6 +1314,25 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     ⚠️ Produtos próximos à validade aparecem no Dashboard
                   </p>
                 )}
+              </div>
+
+              {/* Controle por Lotes */}
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]">
+                <input
+                  type="checkbox"
+                  id="useLots"
+                  checked={formUseLots}
+                  onChange={(e) => setFormUseLots(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div>
+                  <label htmlFor="useLots" className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] cursor-pointer">
+                    Controlar por Lotes (FEFO)
+                  </label>
+                  <p className="text-[10px] text-slate-400 dark:text-[#52525b]">
+                    First Expired, First Out — venda desconta do lote mais antigo
+                  </p>
+                </div>
               </div>
 
               {/* Product Photo Management */}
@@ -1919,6 +1952,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Lot Manager Modal */}
+      <LotManagerModal
+        isOpen={lotManagerProduct !== null}
+        productId={lotManagerProduct?.id || ''}
+        productName={lotManagerProduct?.name || ''}
+        onClose={() => setLotManagerProduct(null)}
+      />
     </div>
   );
 };
