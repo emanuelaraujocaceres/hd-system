@@ -21,6 +21,7 @@ import {
   DigitalMenuConfig,
   BranchTheme,
   ApiKey,
+  ProductLot,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -605,6 +606,47 @@ expiration_date: p.expirationDate || null,
     });
   }
 
+  // ── PRODUCT_LOTS CRUD ───────────────────────────────────────────
+  getProductLots(productId?: string): ProductLot[] {
+    const all = this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, []);
+    const filtered = productId ? all.filter(pl => pl.productId === productId) : all;
+    return this.filterByBranch(this.filterByOrg(filtered));
+  }
+
+  saveProductLot(lot: ProductLot): void {
+    const branchId = lot.storeBranchId || this.getSelectedBranchId() || '';
+    const lotWithBranch = { ...lot, storeBranchId: branchId };
+    const all = this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, []);
+    const idx = all.findIndex(pl => pl.id === lot.id);
+    if (idx >= 0) all[idx] = lotWithBranch; else all.push(lotWithBranch);
+    this.set(KEYS.PRODUCT_LOTS, all);
+    this.notify(KEYS.PRODUCT_LOTS, 'local');
+    this.syncProductLot(lotWithBranch);
+  }
+
+  deleteProductLot(lotId: string): void {
+    const all = this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, []);
+    const lot = all.find(pl => pl.id === lotId);
+    if (!lot) return;
+    this.set(KEYS.PRODUCT_LOTS, all.filter(pl => pl.id !== lotId));
+    this.notify(KEYS.PRODUCT_LOTS, 'local');
+    syncService.deleteRow('product_lots', lotId);
+  }
+
+  /** Soma quantidades dos lotes ativos de um produto */
+  getLotQuantityForProduct(productId: string): number {
+    return this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, [])
+      .filter(pl => pl.productId === productId && pl.status === 'active')
+      .reduce((sum, pl) => sum + (pl.quantity || 0), 0);
+  }
+
+  /** FEFO: retorna lotes ativos ordenados por validade (mais antigo primeiro) */
+  getLotesForFEFO(productId: string): ProductLot[] {
+    return this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, [])
+      .filter(pl => pl.productId === productId && pl.status === 'active' && pl.quantity > 0)
+      .sort((a, b) => (a.expirationDate || '').localeCompare(b.expirationDate || ''));
+  }
+
   // ── STOCK_LOSS_LOG ──────────────────────────────────────────────
   private syncStockLossLog(sll: any) {
     let branchId = sll.storeBranchId || this.getSelectedBranchId() || '';
@@ -1014,6 +1056,7 @@ removeUserFromRemote(id: string) {
     if (productLots.length === 0) {
       const newLot: ProductLot = {
         id: row.id,
+        productId: row.product_id || '',
         lotNumber: row.lot_number || '',
         expirationDate: row.expiration_date || undefined,
         quantity: row.quantity || 0,
@@ -1021,6 +1064,7 @@ removeUserFromRemote(id: string) {
         status: row.status || 'active',
         supplierId: row.supplier_id || undefined,
         receivedAt: row.received_at || undefined,
+        storeBranchId: row.store_branch_id || undefined,
       };
       productLots.unshift(newLot);
       this.set(KEYS.PRODUCT_LOTS, productLots);
@@ -1031,6 +1075,7 @@ removeUserFromRemote(id: string) {
     if (idx >= 0) {
       const updated: ProductLot = {
         id: row.id,
+        productId: row.product_id || productLots[idx].productId,
         lotNumber: row.lot_number || productLots[idx].lotNumber,
         expirationDate: row.expiration_date || productLots[idx].expirationDate,
         quantity: row.quantity !== undefined ? row.quantity : productLots[idx].quantity,
@@ -1038,12 +1083,14 @@ removeUserFromRemote(id: string) {
         status: row.status || productLots[idx].status,
         supplierId: row.supplier_id || productLots[idx].supplierId,
         receivedAt: row.received_at || productLots[idx].receivedAt,
+        storeBranchId: row.store_branch_id || productLots[idx].storeBranchId,
       };
       productLots[idx] = updated;
     } else {
       // Lote não existe localmente — inserir novo registo
       const newLot: ProductLot = {
         id: row.id,
+        productId: row.product_id || '',
         lotNumber: row.lot_number || '',
         expirationDate: row.expiration_date || undefined,
         quantity: row.quantity || 0,
@@ -1051,6 +1098,7 @@ removeUserFromRemote(id: string) {
         status: row.status || 'active',
         supplierId: row.supplier_id || undefined,
         receivedAt: row.received_at || undefined,
+        storeBranchId: row.store_branch_id || undefined,
       };
       productLots.unshift(newLot);
     }
@@ -1886,6 +1934,7 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
         const local = this.get<any[]>(KEYS.PRODUCT_LOTS, []);
         const merged = mergeBy(KEYS.PRODUCT_LOTS, local, productLots, (r: any) => ({
           id: r.id,
+          productId: r.product_id || '',
           lotNumber: r.lot_number || '',
           expirationDate: r.expiration_date || undefined,
           quantity: r.quantity || 0,
@@ -1893,6 +1942,7 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
           status: r.status || 'active',
           supplierId: r.supplier_id || undefined,
           receivedAt: r.received_at || undefined,
+          storeBranchId: r.store_branch_id || undefined,
         }), (c) => this.syncProductLot(c), (item: any) => item.id, (localItem, cloudMapped) => {
           // Preserve local quantity if cloud sent 0
           if (localItem.quantity > 0 && cloudMapped.quantity <= 0) {
@@ -3367,21 +3417,21 @@ id: StorageService.ensureUuid(settings.id),
       for (const item of sale.items) {
         const product = this.get<Product>(KEYS.PRODUCTS, []).find((p) => p.id === item.productId);
         if (product && product.useLots) {
-          // Encontrar lote ativo com data de validade mais próxima (FEFO)
-          const productLots = this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, []).filter(
-            (pl) => pl.product_id === item.productId && pl.status === 'active'
-          );
-          if (productLots.length > 0) {
-            // Ordenar por expiration_date (mais antiga primeiro)
-            productLots.sort((a, b) => new Date(a.expirationDate).getTime() - new Date(b.expirationDate).getTime());
-            const fefoLot = productLots[0];
-            // Diminuir quantidade do lote
-            fefoLot.quantity -= item.quantity;
-            if (fefoLot.quantity <= 0) {
-              fefoLot.quantity = 0;
-              fefoLot.status = 'disposed';
+          // FEFO: lote mais antigo primeiro
+          const fefoLotes = this.getLotesForFEFO(item.productId);
+          if (fefoLotes.length > 0) {
+            let remaining = item.quantity;
+            for (const lot of fefoLotes) {
+              if (remaining <= 0) break;
+              const deduction = Math.min(lot.quantity, remaining);
+              lot.quantity -= deduction;
+              remaining -= deduction;
+              if (lot.quantity <= 0) {
+                lot.quantity = 0;
+                lot.status = 'disposed';
+              }
+              this.saveProductLot(lot);
             }
-            this.set(KEYS.PRODUCT_LOTS, this.get<ProductLot[]>(KEYS.PRODUCT_LOTS, []));
           }
         }
       }

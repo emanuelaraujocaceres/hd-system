@@ -62,6 +62,7 @@ export interface StoreBranch {
 
 export interface ProductLot {
   id: string;
+  productId: string;          // ID do produto (obrigatório)
   lotNumber: string;         // Código do lote (ex: LOTE-2026-001)
   expirationDate: string;    // Data de validade (YYYY-MM-DD)
   quantity: number;          // Quantidade em estoque deste lote
@@ -69,6 +70,7 @@ export interface ProductLot {
   status: 'active' | 'expired' | 'disposed'; // active = em estoque; expired = vencido; disposed = descartado
   supplierId?: string;       // Fornecedor (opcional)
   receivedAt?: string;       // Data de recebimento (opcional)
+  storeBranchId?: string;    // Filial
 }
 
 export interface StockLossLog {
