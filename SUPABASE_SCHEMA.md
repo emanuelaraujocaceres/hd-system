@@ -354,18 +354,18 @@ Colaboradores (não confundir com auth.users).
 | updated_at | TIMESTAMPTZ | `now()` | |
 
 ### system_settings
-Configurações do sistema (key-value por filial).
+Configurações do sistema — **uma linha por organização** (`id` = `organization_id`). NÃO é key-value.
 
 | Coluna | Tipo | Default | Descrição |
 |--------|------|---------|-----------|
-| id | UUID PK | | PK |
+| id | UUID PK | | PK = organization_id (1 linha por org) |
+| settings | JSONB | | Blob completo de configurações do app |
 | organization_id | UUID NOT NULL | | FK → organizations |
-| store_branch_id | UUID | | FK → store_branches |
-| key | TEXT | | Chave da config |
-| value | JSONB | | Valor (JSON) |
-| version | BIGINT | `0` | Versão (concorrência otimista) |
-| created_at | TIMESTAMPTZ | `now()` | |
-| updated_at | TIMESTAMPTZ | `now()` | |
+| store_branch_id | UUID | | FK → store_branches (filial que salvou por último — informativo; escrever/ler NÃO é filtrado por filial) |
+| updated_at | TIMESTAMPTZ | | |
+| version | INTEGER | | Versão (concorrência otimista) |
+
+> Estrutura real confirmada via `information_schema.columns` (2026-08-19). O frontend faz upsert com `id: organization_id` (syncSettings). Realtime: NÃO filtrar por `store_branch_id` — é org-scoped.
 
 ---
 

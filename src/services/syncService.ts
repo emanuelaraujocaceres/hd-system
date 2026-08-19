@@ -52,7 +52,9 @@ export function isOrgOnlineAllowed(): boolean {
 
 
 // Tabelas que exigem store_branch_id válido (UUID) — exceto store_branches
-// e system_settings (globais/por-org, sem coluna de filial).
+// (o identificador da filial é a coluna `id`, não `store_branch_id`) e
+// system_settings (org-scoped: 1 linha por org, id = organization_id;
+// a coluna store_branch_id existe mas é informativa).
 const BRANCH_REQUIRED_TABLES: TableName[] = [
   'products', 'categories', 'customers', 'suppliers',
   'sales', 'sale_items', 'financial_transactions',
@@ -252,8 +254,9 @@ class SupabaseSyncService {
     // Filtro por filial APENAS nas tabelas que possuem a coluna store_branch_id
     // (mesmo conjunto de BRANCH_REQUIRED_TABLES). Exclui store_branches (é a
     // própria tabela de filiais — coluna é `id`, não `store_branch_id`) e
-    // system_settings (org-scoped) — filtrar por store_branch_id nelas causa
-    // "invalid column for filter store_branch_id" no Realtime.
+    // system_settings (org-scoped: 1 linha por org, id = organization_id; a
+    // coluna store_branch_id existe mas é informativa — filtrar por ela faria
+    // os settings salvos na filial "dona" nunca chegarem às demais da org).
     const branchScopedTables: TableName[] = BRANCH_REQUIRED_TABLES;
 
     const tables: TableName[] = [

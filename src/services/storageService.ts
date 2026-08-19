@@ -1626,6 +1626,16 @@ updateCategoryFromRemote(row: any) {
   }
 
   updateSettingsFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Org isolation (defense-in-depth): system_settings é UMA linha por org
+    // (id = organization_id). Se estamos vendo uma org específica e o evento
+    // vem de outra org, descartar — evita que superadmin vendo a org A receba
+    // settings da org B via Realtime (superadmin passa do filtro global no App).
+    const currentOrgId = this.getCurrentOrgId();
+    if (currentOrgId && row.organization_id && row.organization_id !== currentOrgId) {
+      console.log(`[HD-Sync] Ignorando settings remoto de outra org (remote: ${row.organization_id}, current: ${currentOrgId})`);
+      return;
+    }
     if (row.settings) {
       this.set(KEYS.SETTINGS, row.settings);
       this.notify();
