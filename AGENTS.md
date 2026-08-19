@@ -198,6 +198,18 @@ getEntities(): Entity[] {
 **Regra:** Toda função que usa `addToast` DEVE ter `const { addToast } = useToast()` no corpo do componente.
 **Local:** `SettingsView.tsx:476,481,3279` (corrigido — import + destructuring adicionados)
 
+### BUG-033: Filiais invisíveis para usuário autenticado (2026-08-19)
+**Sintoma:** Usuária logada (org não-default) não vê NENHUMA filial; org default "funciona" normalmente
+**Causas:**
+1. Policy org-scoped de `store_branches` (`org_select_branches`) SUMIU do banco — restavam só `store_branches_select_anon` (anon, cardápio) e `superadmin_all_branches`. SELECT com JWT de usuário comum → 0 linhas → hidratação sem filiais → lista vazia.
+2. A org default (Adega) mascarava o problema: quando `fetchRows('store_branches')` volta vazio, o prune da hidratação é PULADO e os `INITIAL_BRANCHES` locais sobrevivem — orgs não-default caem com lista zerada.
+3. Usuários criados pelo fluxo SQL antigo tinham `system_users.id ≠ auth.users.id` (UUID aleatório sem conta Auth) → `auth.uid()` não acha a linha → `get_user_org_id()` NULL → login Supabase falha fechado (`get_my_profile`).
+**Regras:**
+- `store_branches` DEVE ter SEMPRE as policies org-scoped (`org_select/insert/update/delete_branches`, `TO authenticated`, condição `organization_id = get_user_org_id()`) — verificar em `pg_policies` antes de qualquer alteração de RLS nessa tabela.
+- NUNCA criar usuário/usuario sem criar a conta no Supabase Auth com o MESMO UUID (`system_users.id` = `auth.users.id`). Criação de org/usuário é via Cloudflare Function `/api/admin/create-organization` e `/api/admin/create-user` (IDs consistentes) — NÃO usar o RPC SQL antigo `admin_create_organization`/`admin_add_user` que gera UUID aleatório.
+- Hidratação/prune de branches depende de RLS: `fetchRows` vazio pode mascarar policies faltando em orgs default — validar com `DIAG_20260819_regina_branch.sql` (seções A/C/D).
+**Local:** `supabase/RLS_FIXES.sql:1179-1214` (policies originais), `supabase/FIX_20260819_store_branches_policies.sql` (recreated), `functions/api/admin/create-organization.ts` + `create-user.ts` (fluxo correto)
+
 ---
 
 ## Padrões Defensivos Obrigatórios
