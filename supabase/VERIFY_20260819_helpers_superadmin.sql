@@ -42,7 +42,7 @@ ORDER BY table_name;
 -- CRÍTICO: se is_superadmin() ativo exige organization_id IS NULL e o
 -- superadmin tem org setada, o bypass RLS morre e ele fica bloqueado.
 -- (Colunas `superadmin` podem não existir — resultado da 3.2 confirma.)
-SELECT id, email, name, organization_id, role, store_branch_id, is_active
+SELECT id, email, name, organization_id, role, store_branch_id, active
 FROM system_users
 ORDER BY email;
 
