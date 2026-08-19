@@ -1,81 +1,83 @@
 -- =====================================================================
--- FIX 2026-08-19: FILIAIS INVISÍVEIS PARA USUÁRIO AUTENTICADO (caso Regina)
+-- FIX 2026-08-19 (v3): FILIAIS INVISÍVEIS PARA USUÁRIO AUTENTICADO (caso Regina)
 --
--- CAUSA RAIZ (confirmada por DIAG_20260819_regina_branch.sql, seção C):
--- a policy org-scoped de store_branches NÃO EXISTE mais no banco — restaram
--- apenas 'store_branches_select_anon' (role anon, USING(true) — exceção
--- documentada do cardápio) e 'superadmin_all_branches' (is_superadmin()).
--- Consequência: SELECT em store_branches com JWT de usuário comum
--- (authenticated) retorna 0 linhas → a hidratação não encontra filiais da
--- org → usuário (não-superadmin) vê ZERO filiais. A org default (Adega)
--- "funcionava" porque o prune da hidratação é pulado quando o fetch volta
--- vazio (INITIAL_BRANCHES sobrevive localmente) — por isso só orgs
--- não-default (Salgados da Regina, Plantão, Consultório, Adega 2) sofrem.
+-- v2 falhou por 2 motivos confirmados no SQL Editor:
+--   1. DEADLOCK (40P01) no DROP/CREATE POLICY: a hidratação/Realtime do app
+--      aberto segura AccessShareLock em store_branches; o DDL quer lock
+--      exclusivo → colisão transitória. Solução: criar policy SÓ SE FALTAR
+--      (guarda em pg_policies), sem DROP, e em statement curto.
+--   2. 23503 no alinhamento de IDs: a FK fk_cash_sessions_user é verificada
+--      TAMBÉM no UPDATE do pai (system_users) — "chave ainda referenciada".
+--      Solução: DROPA a FK, atualiza pai+cash_sessions, RECRIA a FK com a
+--      definição original (pg_get_constraintdef) — tudo num único DO atômico.
 --
--- PARTE 2: funcionaria@gmail.com e juninho@gmail.com têm system_users.id
--- DIFERENTE do auth.users.id (fluxo SQL antigo que gerava UUID aleatório
--- sem criar conta Auth). auth.uid() não acha a linha → get_user_org_id()
--- NULL → não veem dados E o login Supabase (get_my_profile) falha fechado.
--- Alinha os IDs (cuidando de FKs que referenciam system_users).
---
--- Idempotente. Rode depois de DIAG_20260819_regina_branch.sql.
+-- Idempotente. Se o Passo 1 der deadlock e o app estiver aberto: rode de
+-- novo (colisão transitória) ou feche/deslogue o app por 1 minuto.
 -- =====================================================================
 
 -- ═════════════════════════════════════════════════════════════════════
--- 1. RECRIAR POLICIES ORG-SCOPED DE store_branches (paridade RLS_FIXES)
---    Sem o guard "NOT is_superadmin()": RLS faz OR entre policies e o
---    superadmin já é coberto por superadmin_all_branches (FOR ALL).
+-- 1. POLICIES ORG-SCOPED DE store_branches (cria apenas as ausentes)
 -- ═════════════════════════════════════════════════════════════════════
-DROP POLICY IF EXISTS "org_select_branches" ON public.store_branches;
-DROP POLICY IF EXISTS "org_insert_branches" ON public.store_branches;
-DROP POLICY IF EXISTS "org_update_branches" ON public.store_branches;
-DROP POLICY IF EXISTS "org_delete_branches" ON public.store_branches;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'store_branches'
+      AND policyname = 'org_select_branches'
+  ) THEN
+    CREATE POLICY "org_select_branches" ON public.store_branches
+      FOR SELECT TO authenticated
+      USING (organization_id = public.get_user_org_id());
+  END IF;
 
-CREATE POLICY "org_select_branches" ON public.store_branches
-  FOR SELECT TO authenticated
-  USING (organization_id = public.get_user_org_id());
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'store_branches'
+      AND policyname = 'org_insert_branches'
+  ) THEN
+    CREATE POLICY "org_insert_branches" ON public.store_branches
+      FOR INSERT TO authenticated
+      WITH CHECK (organization_id = public.get_user_org_id());
+  END IF;
 
-CREATE POLICY "org_insert_branches" ON public.store_branches
-  FOR INSERT TO authenticated
-  WITH CHECK (organization_id = public.get_user_org_id());
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'store_branches'
+      AND policyname = 'org_update_branches'
+  ) THEN
+    CREATE POLICY "org_update_branches" ON public.store_branches
+      FOR UPDATE TO authenticated
+      USING (organization_id = public.get_user_org_id())
+      WITH CHECK (organization_id = public.get_user_org_id());
+  END IF;
 
-CREATE POLICY "org_update_branches" ON public.store_branches
-  FOR UPDATE TO authenticated
-  USING (organization_id = public.get_user_org_id())
-  WITH CHECK (organization_id = public.get_user_org_id());
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'store_branches'
+      AND policyname = 'org_delete_branches'
+  ) THEN
+    CREATE POLICY "org_delete_branches" ON public.store_branches
+      FOR DELETE TO authenticated
+      USING (organization_id = public.get_user_org_id());
+  END IF;
 
-CREATE POLICY "org_delete_branches" ON public.store_branches
-  FOR DELETE TO authenticated
-  USING (organization_id = public.get_user_org_id());
-
-DO $$ BEGIN
-  RAISE NOTICE '✅ Policies org-scoped de store_branches recriadas (authenticated)';
+  RAISE NOTICE '✅ Policies org-scoped de store_branches garantidas (authenticated)';
 END $$;
 
 -- ═════════════════════════════════════════════════════════════════════
--- 2. ALINHAR system_users.id → auth.users.id (mismatch de identidade)
---    IMPORTANTE: NÃO rode junto com a Parte 1 numa conexão com o app
---    aberto (ver deadlock abaixo). Rode cada Parte separada.
---
---    ERRATA 2026-08-19 (2ª execução): a versão anterior atualizava os
---    dependentes ANTES do pai → violava a FK fk_cash_sessions_user
---    (23503: o novo id ainda não existia em system_users). Ordem correta:
---    1º atualiza o PAI (system_users.id), 2º os dependentes (cash_sessions).
---    ⚠️ NO ACTION em FK não valida o UPDATE do pai — então trocar o id do
---    pai primeiro é seguro e destrava a correção dos filhos.
+-- 2. ALINHAR system_users.id → auth.users.id (funcionaria / juninho)
+--    Um único DO atômico: captura+dropa FKs → atualiza pai → atualiza
+--    filhos → recria FKs. Se qualquer passo falhar, nada é aplicado.
 -- ═════════════════════════════════════════════════════════════════════
 
--- 2a. Mostrar quem está com mismatch (pré-alinhamento)
+-- 2a. Prévia: quem está com mismatch
 SELECT su.id AS old_id, au.id AS new_id, su.email
 FROM system_users su
 JOIN auth.users au ON au.email = su.email
 WHERE su.id <> au.id;
 
--- 2b. Quais FKs referenciam system_users (para atualizar dependentes)
-SELECT
-  tc.table_name AS tabela_filha,
-  kcu.column_name AS coluna_fk,
-  ccu.table_name AS tabela_pai
+-- 2b. FKs que referenciam system_users (o que será dropado/recriado)
+SELECT tc.table_name AS tabela_filha, kcu.column_name AS coluna_fk
 FROM information_schema.table_constraints tc
 JOIN information_schema.key_column_usage kcu
   ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
@@ -84,45 +86,79 @@ JOIN information_schema.constraint_column_usage ccu
 WHERE tc.constraint_type = 'FOREIGN KEY'
   AND ccu.table_name = 'system_users' AND tc.table_schema = 'public';
 
--- 2c. Alinhamento (ORDEM CORRETA: pai → dependentes). Dentro de um DO
---     tudo roda em transação única — se algo falhar, nada é aplicado.
+-- 2c. ALINHAMENTO ATÔMICO (drop FK → update pai → update filhos → re-add FK)
+-- Pré-requisito: temp table com as FKs que referenciam system_users
+-- (SEM ON COMMIT DROP: o SQL Editor pode commitar por statement e droparia
+--  a tabela na hora; o DROP explícito está no fim deste bloco).
+CREATE TEMP TABLE IF NOT EXISTS _system_users_fks (
+  conname TEXT, tbl TEXT, col TEXT, def TEXT
+);
+
+TRUNCATE _system_users_fks;
+
+INSERT INTO _system_users_fks (conname, tbl, col, def)
+SELECT
+  c.conname,
+  cl.relname AS tbl,
+  kcu.column_name AS col,
+  pg_get_constraintdef(c.oid) AS def
+FROM pg_constraint c
+JOIN pg_class cl ON cl.oid = c.conrelid
+JOIN pg_namespace n ON n.oid = cl.relnamespace AND n.nspname = 'public'
+JOIN information_schema.table_constraints tc
+  ON tc.constraint_name = c.conname AND tc.table_schema = n.nspname
+JOIN information_schema.key_column_usage kcu
+  ON kcu.constraint_name = c.conname
+ AND kcu.table_schema = n.nspname
+ AND kcu.table_name = cl.relname
+WHERE c.contype = 'f'
+  AND c.confrelid = 'system_users'::regclass;
+
 DO $$
 DECLARE
   r RECORD;
   fk RECORD;
 BEGIN
+  -- 1) DROPA as FKs (libera a troca de id no pai)
+  FOR fk IN SELECT * FROM _system_users_fks LOOP
+    EXECUTE format('ALTER TABLE public.%I DROP CONSTRAINT IF EXISTS %I', fk.tbl, fk.conname);
+  END LOOP;
+
+  -- 2) Atualiza o PAI (agora sem FK bloqueando) e depois os FILHOS
   FOR r IN
     SELECT su.id AS old_id, au.id AS new_id, su.email
     FROM system_users su
     JOIN auth.users au ON au.email = su.email
     WHERE su.id <> au.id
   LOOP
-    -- 1) ALTERA O PAI PRIMEIRO: novo id agora existe em system_users.
-    --    UPDATE no pai não dispara validação da FK dos filhos (NO ACTION).
     UPDATE public.system_users SET id = r.new_id WHERE id = r.old_id;
 
-    -- 2) AGORA varre FKs dependentes e aponta para o novo id.
-    FOR fk IN
-      SELECT tc.table_name, kcu.column_name
-      FROM information_schema.table_constraints tc
-      JOIN information_schema.key_column_usage kcu
-        ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
-      JOIN information_schema.constraint_column_usage ccu
-        ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
-      WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND ccu.table_name = 'system_users' AND tc.table_schema = 'public'
-    LOOP
+    FOR fk IN SELECT * FROM _system_users_fks LOOP
       EXECUTE format(
         'UPDATE public.%I SET %I = $1 WHERE %I = $2 AND $1 IS DISTINCT FROM $2',
-        fk.table_name, fk.column_name, fk.column_name
+        fk.tbl, fk.col, fk.col
       ) USING r.new_id, r.old_id;
     END LOOP;
 
     RAISE NOTICE '✅ ID alinhado: % (% → %)', r.email, r.old_id, r.new_id;
   END LOOP;
+
+  -- 3) RECRIA as FKs com a definição original
+  FOR fk IN SELECT * FROM _system_users_fks LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint WHERE conname = fk.conname AND conrelid = (fk.tbl)::regclass
+    ) THEN
+      EXECUTE format('ALTER TABLE public.%I ADD CONSTRAINT %I %s', fk.tbl, fk.conname, fk.def);
+    END IF;
+  END LOOP;
+
+  RAISE NOTICE '✅ Alinhamento concluído — % FK(s) recriada(s)',
+    (SELECT COUNT(*) FROM _system_users_fks);
 END $$;
 
--- 2d. Re-checagem: não deve sobrar mismatch
+DROP TABLE IF EXISTS _system_users_fks;
+
+-- 2d. Re-checagem: tem que voltar VAZIO
 SELECT su.id, su.email, au.id AS auth_id
 FROM system_users su
 JOIN auth.users au ON au.email = su.email
@@ -136,7 +172,7 @@ FROM pg_policies
 WHERE schemaname = 'public' AND tablename = 'store_branches'
 ORDER BY policyname;
 
--- Sanidade: quantas filiais cada org tem (Regina deve ter 1)
+-- Sanidade: filiais por org (Regina deve ter 1; Plantão/Consultório/Adega idem)
 SELECT
   o.name AS org_nome,
   (SELECT COUNT(*) FROM store_branches sb WHERE sb.organization_id = o.id) AS filiais
