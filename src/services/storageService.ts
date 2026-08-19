@@ -4672,6 +4672,11 @@ private updateReceivableFromPayments(saleId: string) {
   saveTable(table: Table) {
     table.id = StorageService.ensureUuid(table.id);
     table.organizationId = this.getCurrentOrgId();
+    // QR do cardápio: toda mesa precisa de token único — gerar se ausente
+    // (mesas antigas/importadas sem qr_token imprimem '#/mesa/' quebrado).
+    if (!table.qrToken) {
+      table.qrToken = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    }
     const all = this.get<Table[]>(KEYS.TABLES, []);
     const idx = all.findIndex((t) => t.id === table.id);
     if (idx >= 0) {
@@ -4709,10 +4714,13 @@ private updateReceivableFromPayments(saleId: string) {
       return;
     }
     const all = this.get<Table[]>(KEYS.TABLES, []);
+    // Preservar token local quando o cloud vem com qr_token vazio —
+    // senão um upsert com token '' apaga o QR já impresso.
+    const existing = all.find((x) => x.id === row.id);
     const mapped: Table = {
       id: row.id, name: row.name || '',
       number: parseInt(row.number) || undefined,
-      qrToken: row.qr_token || '',
+      qrToken: row.qr_token || existing?.qrToken || '',
       status: row.status || 'active',
       storeBranchId: row.store_branch_id || undefined,
       organizationId: row.organization_id || undefined,

@@ -823,6 +823,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   }, [qrModalTable]);
 
   const handlePrintQRCode = (table: Table) => {
+    // Mesas antigas/importadas podem não ter qrToken — gerar e persistir
+    // antes de imprimir, senão o QR aponta para '#/mesa/' quebrado.
+    if (!table.qrToken) {
+      table = {
+        ...table,
+        qrToken: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+      };
+      storageService.saveTable(table);
+      setTables(storageService.getTables());
+    }
     setQrModalTable(table);
   };
 
@@ -857,7 +867,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
 
     // Generate QR codes using api.qrserver.com
     const qrCodeSize = 150;
-    const qrCodeCells = tables.map((table) => {
+    // Garantir token em mesas sem qr_token antes de imprimir o lote
+    const printTables = tables.map((table) => {
+      if (!table.qrToken) {
+        const fixed = {
+          ...table,
+          qrToken: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+        };
+        storageService.saveTable(fixed);
+        return fixed;
+      }
+      return table;
+    });
+    const qrCodeCells = printTables.map((table) => {
       const menuUrl = `${baseUrl}#/mesa/${table.qrToken}`;
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrCodeSize}x${qrCodeSize}&data=${encodeURIComponent(menuUrl)}`;
       return `

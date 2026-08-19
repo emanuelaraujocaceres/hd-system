@@ -88,7 +88,25 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         if (isDeliveryMode) {
           const baseUrl = import.meta.env.VITE_SUPABASE_URL;
           const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-          if (!filialId || filialId === 'default') {
+
+          // URLs legadas (#/delivery ou #/cardapio sem UUID) e o fallback 'default'
+          // do Settings caem aqui. Detecta a filial pelo cloud em vez de quebrar:
+          // store_branches tem policy SELECT anon do cardápio.
+          let resolvedFilialId = filialId;
+          if (!resolvedFilialId || resolvedFilialId === 'default') {
+            try {
+              const branchesRes = await fetch(
+                `${baseUrl}/rest/v1/store_branches?select=id&order=name.asc`,
+                { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json' } }
+              );
+              if (branchesRes.ok) {
+                const branchList = await branchesRes.json();
+                const firstBranch = branchList && branchList[0];
+                if (firstBranch && firstBranch.id) resolvedFilialId = firstBranch.id;
+              }
+            } catch { /* offline → deixa o erro amigável abaixo */ }
+          }
+          if (!resolvedFilialId || resolvedFilialId === 'default') {
             setError('Delivery não configurado para esta filial.');
             setLoading(false);
             return;
@@ -97,7 +115,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           // Buscar a filial para obter o organization_id REAL (necessário p/ o
           // Realtime do operador entregar o pedido na filial correta).
           const branchRes = await fetch(
-            `${baseUrl}/rest/v1/store_branches?id=eq.${encodeURIComponent(filialId)}&select=*`,
+            `${baseUrl}/rest/v1/store_branches?id=eq.${encodeURIComponent(resolvedFilialId)}&select=*`,
             { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json' } }
           );
           const branchesData = branchRes.ok ? await branchRes.json() : [];
@@ -165,7 +183,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           const deliveryTable: Table = {
             id: `delivery-${branchData.id}`,
             name: 'Delivery',
-            qrToken: `delivery-${branchData.id}`,
+            qrToken: `delivery-${resolvedFilialId}`,
             status: 'active',
             storeBranchId: branchData.id,
             organizationId: branchOrg || '',
