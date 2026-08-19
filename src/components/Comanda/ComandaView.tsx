@@ -66,7 +66,7 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
   products,
   user,
 }) => {
-  const isAdmin = user.role === 'admin';
+  const isAdmin = user.role === 'admin' || !!user.superadmin;
   const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedTableId, setExpandedTableId] = useState<string | null>(null);

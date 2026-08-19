@@ -34,7 +34,7 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
 }) => {
   const { addToast } = useToast();
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
-  const isAdmin = user.role === 'admin';
+  const isAdmin = user.role === 'admin' || !!user.superadmin;
   const [loading, setLoading] = useState(false);
 
   // Forms state

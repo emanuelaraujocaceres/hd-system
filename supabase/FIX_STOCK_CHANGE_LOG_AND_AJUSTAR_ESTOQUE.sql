@@ -56,7 +56,6 @@ CREATE POLICY "user_delete_stock_change_log" ON stock_change_log
     AND store_branch_id = get_user_branch_id()
   );
 
-RAISE NOTICE 'stock_change_log: RLS policies created with org + branch isolation';
 
 -- ═══════════════════════════════════════════════════════════════════
 -- 2. FIX ajustar_estoque: adicionar p_store_branch_id
@@ -131,7 +130,6 @@ BEGIN
 END;
 $$;
 
-RAISE NOTICE 'ajustar_estoque: updated with p_store_branch_id parameter';
 
 -- ═══════════════════════════════════════════════════════════════════
 -- 3. FIX fn_log_stock_changes: incluir store_branch_id no INSERT
@@ -166,4 +164,3 @@ BEGIN
 END;
 $$;
 
-RAISE NOTICE 'fn_log_stock_changes: updated with store_branch_id';

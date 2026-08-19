@@ -57,7 +57,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateTab,
   onOpenCaixaModal,
 }) => {
-  const isAdmin = user.role === 'admin';
+  const isAdmin = user.role === 'admin' || !!user.superadmin;
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [period, setPeriod] = useState<PeriodFilter>('today');

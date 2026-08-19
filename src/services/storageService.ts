@@ -4950,6 +4950,11 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   updateDeliverySettingsFromRemote(row: any) {
+    this.setChangeSource('remote');
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote delivery settings from other branch: ${row.store_branch_id}`);
+      return;
+    }
     const mapped: DeliverySettings = {
       id: row.id,
       organizationId: row.organization_id || this.getCurrentOrgId(),

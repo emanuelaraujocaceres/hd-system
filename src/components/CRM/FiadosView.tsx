@@ -63,7 +63,7 @@ interface FiadosViewProps {
 
 // ─── Component ──────────────────────────────────────────────────
 export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, caixaSession }) => {
-  const isAdmin = user.role === 'admin';
+  const isAdmin = user.role === 'admin' || !!user.superadmin;
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
   const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');

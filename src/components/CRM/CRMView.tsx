@@ -91,17 +91,11 @@ export const CRMView: React.FC<CRMViewProps> = ({ user }) => {
   }, []);
 
   const loadData = () => {
-    const allCustomers = storageService.getCustomers();
-    const filtered = user.superadmin
-      ? allCustomers
-      : allCustomers.filter(c => c.storeBranchId === user.storeBranchId);
-    setCustomers(filtered);
-
-    const allSuppliers = storageService.getSuppliers();
-    const filteredSuppliers = user.superadmin
-      ? allSuppliers
-      : allSuppliers.filter(s => s.storeBranchId === user.storeBranchId);
-    setSuppliers(filteredSuppliers);
+    // storageService.getCustomers/getSuppliers já aplica filterBySelectedBranch
+    // Remover filtro manual por user.storeBranchId — ele usa a filial do LOGIN,
+    // não a filial SELECIONADA no sidebar, causando dados vazios ao trocar de filial
+    setCustomers(storageService.getCustomers());
+    setSuppliers(storageService.getSuppliers());
   };
 
   // ─── Filtrar clientes ──────────────────────────────────────

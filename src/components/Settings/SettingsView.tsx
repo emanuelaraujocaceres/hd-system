@@ -61,7 +61,7 @@ interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, categories, user }) => {
-  const isAdmin = user.role === 'admin';
+  const isAdmin = user.role === 'admin' || !!user.superadmin;
   const { addToast } = useToast();
   const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance' | 'cardapio' | 'delivery' | 'modules' | 'integrations'>(() => {
     const saved = sessionStorage.getItem('settings_active_tab');
