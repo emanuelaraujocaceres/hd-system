@@ -41,31 +41,29 @@ BEGIN
 END $$;
 
 -- ─── 2. VERIFICAÇÃO — quem tem EXECUTE em cada função ─────────────────
--- Deve mostrar anon, authenticated, service_role
+-- Deve mostrar anon=true para as duas (e authenticated/service_role=true).
+-- NOTA: role_routine_grants.specific_name não casa com p.oid::text (o
+-- sql_identifier tem aspas) — usar has_function_privilege() de forma direta.
 SELECT
   p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS funcao,
-  array_agg(DISTINCT grantee ORDER BY grantee) AS grantees
+  has_function_privilege('anon', p.oid, 'EXECUTE')         AS anon_exec,
+  has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth_exec,
+  has_function_privilege('service_role', p.oid, 'EXECUTE')  AS svc_exec
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
-LEFT JOIN information_schema.role_routine_grants g
-  ON g.specific_name = p.oid::text
 WHERE n.nspname = 'public'
   AND p.proname IN ('process_sale_transaction', 'fn_insserir_dlq')
-GROUP BY p.proname, p.oid
+  AND p.prokind = 'f'
 ORDER BY p.proname;
 
--- ─── 3. SANIDADE: garantir que NENHUMA OUTRA função de escrita tem anon ─
--- Esperado: apenas process_sale_transaction e fn_insserir_dlq (e helpers
--- read-only do cardápio, se houver). Nenhuma admin_*/ajustar_estoque/etc.
+-- ─── 3. SANIDADE: garantir que NENHUMA OUTRA função tem EXECUTE anon ──
+-- Esperado: apenas process_sale_transaction e fn_insserir_dlq.
+-- (ajustar_estoque/admin_*/debug_auth/reprocessar/etc. devem ter anon=false)
 SELECT
-  p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS funcao,
-  array_agg(DISTINCT grantee ORDER BY grantee) AS grantees
+  p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' AS funcao
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
-LEFT JOIN information_schema.role_routine_grants g
-  ON g.specific_name = p.oid::text
 WHERE n.nspname = 'public'
-  AND g.grantee = 'anon'
   AND p.prokind = 'f'
-GROUP BY p.proname, p.oid
+  AND has_function_privilege('anon', p.oid, 'EXECUTE')
 ORDER BY p.proname;
