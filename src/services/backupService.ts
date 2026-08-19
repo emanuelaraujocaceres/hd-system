@@ -182,7 +182,7 @@ class BackupServiceClass {
   /**
    * Create a backup for a filial
    */
-  async createBackup(branchId: string, name: string, isAutomatic: false): Promise<string> {
+  async createBackup(branchId: string, name: string, isAutomatic: boolean): Promise<string> {
     const orgId = storageService.getCurrentOrgId();
     const data = this.collectFilialData(branchId);
     const backupData = { ...data, exportedAt: new Date().toISOString() };
@@ -292,11 +292,12 @@ class BackupServiceClass {
       }
 
       // Mark backup as restored
+      const { data: { user } } = await supabase.auth.getUser();
       await supabase
         .from('filial_backups')
         .update({
           restored_at: new Date().toISOString(),
-          restored_by: supabase.auth.getUser()?.data?.user?.id,
+          restored_by: user?.id,
         })
         .eq('id', backupId);
 

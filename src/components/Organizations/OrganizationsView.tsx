@@ -1063,16 +1063,16 @@ const OrganizationsManager: React.FC<{ user: UserProfile; onEnterOrg?: (orgId: s
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{backup.backup_name}</p>
-                            {backup.is_automatic && (
+                            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{backup.backupName}</p>
+                            {backup.isAutomatic && (
                               <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[9px] font-bold">AUTO</span>
                             )}
                           </div>
                           <p className="text-[10px] text-slate-500 mt-1">
-                            {new Date(backup.created_at).toLocaleString('pt-BR')}
+                            {new Date(backup.createdAt).toLocaleString('pt-BR')}
                           </p>
                           <p className="text-[10px] text-slate-400 mt-0.5">
-                            {backup.record_count} registros • {(backup.data_size_bytes / 1024).toFixed(1)} KB
+                            {backup.recordCount} registros • {(backup.dataSizeBytes / 1024).toFixed(1)} KB
                           </p>
                         </div>
                         <button
@@ -1090,9 +1090,9 @@ const OrganizationsManager: React.FC<{ user: UserProfile; onEnterOrg?: (orgId: s
                           Restaurar
                         </button>
                       </div>
-                      {backup.restored_at && (
+                      {backup.restoredAt && (
                         <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-2 font-bold">
-                          ✅ Restaurado em {new Date(backup.restored_at).toLocaleString('pt-BR')}
+                          ✅ Restaurado em {new Date(backup.restoredAt).toLocaleString('pt-BR')}
                         </p>
                       )}
                     </div>

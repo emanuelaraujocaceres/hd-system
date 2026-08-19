@@ -44,8 +44,8 @@ export function useProductsQuery() {
 
 export function useSaveProductMutation() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (product: Product) => {
+  return useMutation<Product, Error, Product>({
+    mutationFn: async (product: Product) => {
       storageService.saveProduct(product);
       syncService.upsertRow('products', product as any);
       return product;
@@ -66,8 +66,8 @@ export function useCustomersQuery() {
 
 export function useSaveCustomerMutation() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (customer: Customer) => {
+  return useMutation<Customer, Error, Customer>({
+    mutationFn: async (customer: Customer) => {
       storageService.saveCustomer(customer);
       return customer;
     },
@@ -106,7 +106,7 @@ export function useSalesQuery() {
 export function useCashSessionsQuery() {
   return useQuery({
     queryKey: queryKeys.cashSessions,
-    queryFn: () => storageService.getCashSessions(),
+    queryFn: () => storageService.getCaixaSessions(),
   });
 }
 

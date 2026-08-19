@@ -218,7 +218,7 @@ export const App: React.FC = () => {
     // Setar filial na sessão do Supabase (set_current_branch RPC)
     // para que RLS use o branch_id correto nas queries subsequentes.
     if (resolvedBranchId) {
-      supabase.rpc('set_current_branch', { p_branch_id: resolvedBranchId }).then(({ error }) => {
+      Promise.resolve(supabase.rpc('set_current_branch', { p_branch_id: resolvedBranchId })).then(({ error }) => {
         if (error) console.warn('[Branch] set_current_branch RPC failed:', error.message);
       }).catch(() => {}); // Supabase rpc() may not return a standard Promise — catch prevents unhandled rejection
     }
@@ -429,7 +429,7 @@ export const App: React.FC = () => {
     if (rawBranchId) {
       const resolved = storageService.resolveBranchId(rawBranchId);
       if (resolved) {
-        supabase.rpc('set_current_branch', { p_branch_id: resolved }).then(({ error }) => {
+        Promise.resolve(supabase.rpc('set_current_branch', { p_branch_id: resolved })).then(({ error }) => {
           if (error) console.warn('[HD-Sync] set_current_branch RPC failed:', error.message);
         }).catch(() => {}); // Supabase rpc() may not return a standard Promise — catch prevents unhandled rejection
       }
@@ -646,7 +646,7 @@ export const App: React.FC = () => {
           // { sale_id }, e updateSaleFromRemote com payload parcial zerava a
           // venda local (code/total/date sobrescritos com undefined/0).
           if (event !== 'DELETE' && row?.sale_id) {
-            supabase.from('sales').select('*').eq('id', row.sale_id).maybeSingle().then(({ data: sale, error: saleError }) => {
+            Promise.resolve(supabase.from('sales').select('*').eq('id', row.sale_id).maybeSingle()).then(({ data: sale, error: saleError }) => {
               if (saleError || !sale) {
                 console.warn(`[HD-Sync] ⚠️ Sale ${row.sale_id} not found for sale_items event — skipping remote update`, saleError?.message);
                 return;
@@ -1370,7 +1370,7 @@ export const App: React.FC = () => {
               )}
 
               {activeTab === 'crm' && (
-                <CRMView customers={customers} suppliers={suppliers} user={user} />
+                <CRMView user={user} />
               )}
 
               {activeTab === 'fiados' && (

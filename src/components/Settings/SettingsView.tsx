@@ -1797,7 +1797,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setConfirmDeleteUser({ id: u.id, name: u.name });
+                                setConfirmDeleteUser(u);
                               }}
                               className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors"
                               title="Excluir"

@@ -27,7 +27,7 @@ interface KDSViewProps {
   user: UserProfile;
 }
 
-type KdsStatus = 'pending' | 'preparing' | 'ready' | 'delivered';
+type KdsStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'closing_request';
 
 interface KdsOrder {
   sale: Sale;
@@ -218,7 +218,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
   const handleReprint = async (sale: Sale) => {
     try {
       const printers = storageService.getPrinters();
-      const settings = storageService.getSystemSettings();
+      const settings = storageService.getSettings();
       const table = tables.find((t) => t.id === sale.tableId) || null;
       await printSaleReceipt(sale, settings, printers, { type: 'pedido', table });
       addToast('success', 'Cupom de pedido enviado para impressão.');
@@ -245,7 +245,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
     addToast('success', `Delivery ${sale.code} entregue e computado!`);
     try {
       const printers = storageService.getPrinters();
-      const settings = storageService.getSystemSettings();
+      const settings = storageService.getSettings();
       await printSaleReceipt(finalized, settings, printers, { type: 'venda' });
     } catch { /* silencioso */ }
   };

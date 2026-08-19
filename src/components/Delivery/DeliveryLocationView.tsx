@@ -11,6 +11,7 @@
 import React, { useState } from 'react';
 import { MapPin, Navigation, ExternalLink, Share2, Clock, Phone, X } from 'lucide-react';
 import { StoreBranch } from '../../types';
+import { storageService } from '../../services/storageService';
 
 interface DeliveryLocationViewProps {
   branch: StoreBranch;

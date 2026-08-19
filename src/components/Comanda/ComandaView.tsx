@@ -224,22 +224,22 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
 
   // Abrir uma nova comanda manualmente (sem QR Code)
   const openNewComanda = () => {
+    const now = new Date().toISOString();
     // Cria uma sessão de cliente para a mesa "Caixa" (sem mesa específica)
     const newSession: CustomerSession = {
       id: crypto.randomUUID(),
-      tableId: null,
+      tableId: '',
       sessionToken: crypto.randomUUID(),
       status: 'active',
-      openedAt: new Date().toISOString(),
+      openedAt: now,
       deviceFingerprint: '',
-      storeBranchId: storageService.getCurrentOrgId(),
+      storeBranchId: storageService.getSelectedBranchId(),
       organizationId: storageService.getCurrentOrgId(),
+      createdAt: now,
+      updatedAt: now,
     };
     storageService.saveCustomerSession(newSession);
     setCloseModalTable(null);
-    // Recarrega as comandas para o novo session aparecer
-    loadMyOrders();
-    setOrderSuccess(true);
   };
 
   const handleDeleteSale = (saleId: string) => {

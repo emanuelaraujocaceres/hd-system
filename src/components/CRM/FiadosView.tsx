@@ -30,9 +30,13 @@ import { ConfirmDialog } from '../shared/ConfirmDialog';
 interface CreditPayment {
   id: string;
   saleId: string;
-  customerId: string;
+  customerId?: string;
+  customerName?: string;
   amount: number;
   date: string;
+  paymentMethod?: string;
+  storeBranchId?: string;
+  organizationId?: string;
 }
 
 interface SaleItemPaymentStatus {
@@ -307,7 +311,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
           storageService.saveFinancialAccount({
             id: crypto.randomUUID(),
             title: `Pagamento Fiado - ${debt.customer.name}`,
-            type: 'income',
+            type: 'receivable',
             category: 'fiado_payment',
             amount,
             dueDate: new Date().toISOString().slice(0, 10),

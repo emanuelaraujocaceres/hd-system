@@ -8,6 +8,7 @@ export default defineConfig(() => {
 
   // Sentry plugin for source maps (production only, needs SENTRY_AUTH_TOKEN)
   if (process.env.SENTRY_AUTH_TOKEN) {
+    // @ts-ignore — @sentry/vite-plugin is optional; not installed in dev/CI
     import('@sentry/vite-plugin')
       .then(({ sentryVitePlugin }) => {
         plugins.push(

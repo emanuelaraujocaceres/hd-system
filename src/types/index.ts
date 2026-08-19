@@ -71,6 +71,7 @@ export interface ProductLot {
   supplierId?: string;       // Fornecedor (opcional)
   receivedAt?: string;       // Data de recebimento (opcional)
   storeBranchId?: string;    // Filial
+  organizationId?: string;   // Organização
 }
 
 export interface StockLossLog {
@@ -85,8 +86,9 @@ export interface StockLossLog {
 
 export interface Product {
   id: string;
-  barcode: string; // EAN-13
+  barcode: string;
   name: string;
+  description?: string;
   category: string;
   unit: 'un' | 'kg' | 'cx' | 'lit' | 'm';
   costPrice: number;
@@ -208,6 +210,7 @@ export interface Customer {
 
 export interface Supplier {
   id: string;
+  name?: string;
   companyName: string;
   tradeName: string;
   cnpj: string;
@@ -269,7 +272,7 @@ export interface CashRegisterSession {
   totalSalesCreditAccount: number;
   suprimentos: number; // Add money
   sangrias: number; // Withdraw money
-  status: 'open' | 'closed';
+  status: 'open' | 'closed' | 'final_closed';
   notes?: string;
   storeBranchId?: string;
   organizationId?: string; // multi-tenant
@@ -366,7 +369,9 @@ export interface CreditPayment {
 // Nota fiscal importada (sincronizado — tabela nf_records)
 export interface NFRecord {
   id: string;
+  nfNumber?: string;
   scanDate: string;
+  createdAt?: string;
   supplierName: string;
   items: { productName: string; quantity: number; unitPrice: number }[];
   totalValue: number;
@@ -504,6 +509,13 @@ export interface BranchTheme {
   storeBranchId: string;
   organizationId: string;
   updatedAt: string;
+  // Extended colors (2026)
+  buttonBg?: string;
+  buttonText?: string;
+  menuBg?: string;
+  signalRed?: string;
+  signalGreen?: string;
+  signalYellow?: string;
 }
 
 // Chave de API para integrações externas — por filial (tabela api_keys)

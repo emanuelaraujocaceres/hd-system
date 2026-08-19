@@ -146,7 +146,7 @@ export const DeliveryHoursDisplay: React.FC<{ branchId: string; compact?: boolea
     <div className="space-y-1">
       {dayOrder.map(day => {
         const schedule = hours[day];
-        const isToday = new Date().toLocaleDateString('en-US', { weekday: 'lowercase' }) === day;
+        const isToday = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() === day;
         return (
           <div key={day} className={`flex items-center justify-between text-[10px] ${isToday ? 'font-bold text-orange-500' : 'text-slate-500'}`}>
             <span>{fullDays[day]}</span>

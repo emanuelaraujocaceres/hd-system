@@ -16,7 +16,7 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
-import { Product, Supplier } from '../../types';
+import { Product, Supplier, NFRecord as StoredNFRecord } from '../../types';
 import { storageService } from '../../services/storageService';
 
 import { NFAddModal } from './NFAddModal';
@@ -27,18 +27,10 @@ interface NFItem {
   unitPrice: number;
 }
 
-interface NFRecord {
-  id: string;
-  scanDate: string;
-  nfNumber: string;
-  supplierName: string;
+interface NFRecord extends StoredNFRecord {
   supplierCNPJ?: string;
-  items: NFItem[];
-  totalValue: number;
-  note: string;
   accessKey?: string;
   pdfFile?: string | null;
-  createdAt: string;
 }
 
 interface NFHistoryViewProps {
@@ -53,6 +45,9 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedNFs, setSelectedNFs] = useState<string[]>([]);
   const [showBulkWhatsapp, setShowBulkWhatsapp] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [scannedImage, setScannedImage] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const [bulkWhatsappNumber, setBulkWhatsappNumber] = useState('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [showWhatsappModal, setShowWhatsappModal] = useState<string | null>(null);

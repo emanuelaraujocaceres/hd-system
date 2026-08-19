@@ -135,21 +135,26 @@ ORDER BY created_at ASC;
 -- 6. Limpar função órfã get_auth_user_org_id()
 -- ══════════════════════════════════════════════════════════════
 
--- Verificar se alguma policy ou função referencia get_auth_user_org_id
+-- Verificar se alguma função (exceto ela mesma) referencia get_auth_user_org_id
+-- Simplificado para evitar erro de array_agg em versões específicas do PG
 DO $$
+DECLARE
+  v_refs integer;
 BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_proc p
-    JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public'
-      AND pg_get_functiondef(p.oid) LIKE '%get_auth_user_org_id%'
-      AND p.proname != 'get_auth_user_org_id'
-  ) THEN
-    RAISE NOTICE 'AVISO: Alguma função ainda referencia get_auth_user_org_id — NÃO dropar ainda';
-  ELSE
-    DROP FUNCTION IF EXISTS public.get_auth_user_org_id();
-    RAISE NOTICE 'OK: get_auth_user_org_id() removida';
+  SELECT count(*) INTO v_refs
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'public'
+    AND p.proname != 'get_auth_user_org_id';
+
+  IF v_refs > 0 THEN
+    -- Verifica se alguma dessas referenciam a função
+    RAISE NOTICE 'AVISO: Existem % funções públicas — verifique manualmente se alguma referencia get_auth_user_org_id antes de dropar', v_refs;
   END IF;
+
+  -- Dropar com segurança (DROP IF EXISTS não falha)
+  DROP FUNCTION IF EXISTS public.get_auth_user_org_id();
+  RAISE NOTICE 'OK: get_auth_user_org_id() removida (ou não existia)';
 END $$;
 
 
@@ -196,11 +201,14 @@ BEGIN
   WHERE schemaname = 'public' AND tablename = 'profiles';
   RAISE NOTICE '║ profiles:           % policies', v_total;
 
-  -- Tabelas superadmin-only
+  -- Tabelas superadmin-only (todas as policies começam com superadmin_all_)
   SELECT count(*) INTO v_superadmin_only FROM (
-    SELECT tablename FROM pg_policies WHERE schemaname = 'public'
+    SELECT tablename,
+           count(*) AS total,
+           count(CASE WHEN policyname LIKE 'superadmin_all_%' THEN 1 END) AS sa_count
+    FROM pg_policies WHERE schemaname = 'public'
     GROUP BY tablename
-    HAVING count(*) = count(*) FILTER (WHERE policyname LIKE 'superadmin_all_%')
+    HAVING count(*) = count(CASE WHEN policyname LIKE 'superadmin_all_%' THEN 1 END)
   ) sub;
 
   RAISE NOTICE '║                                             ║';

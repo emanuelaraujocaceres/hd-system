@@ -174,10 +174,10 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
     if (!order.saleRef) return;
     const sale = storageService.getSales().find((s) => s.id === order.saleRef);
     if (!sale) return;
-    const kitchenStatusMap: Record<string, string> = {
+    const kitchenStatusMap: Record<string, Sale['kitchenStatus']> = {
       confirmed: 'preparing', preparing: 'preparing', ready: 'ready', out_for_delivery: 'ready', delivered: 'delivered', cancelled: 'cancelled',
     };
-    const ks = kitchenStatusMap[newStatus] || 'preparing';
+    const ks: Sale['kitchenStatus'] = kitchenStatusMap[newStatus] || 'preparing';
     if (newStatus === 'delivered') {
       const payments = sale.payments && sale.payments.length > 0 ? sale.payments : ([{ method: 'cash', amount: sale.total }] as any);
       const finalized: Sale = { ...sale, status: 'completed', kitchenStatus: 'delivered', payments, updatedAt: new Date().toISOString() };
@@ -186,7 +186,7 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
       globalNotificationService.notify({ type: 'info', title: '🛵 Delivery Entregue', message: `Pedido ${sale.code} computado`, playSound: true });
       try {
         const printers = storageService.getPrinters();
-        const settings = storageService.getSystemSettings();
+        const settings = storageService.getSettings();
         await printSaleReceipt(finalized, settings, printers, { type: 'venda' });
       } catch { /* silencioso */ }
     } else {

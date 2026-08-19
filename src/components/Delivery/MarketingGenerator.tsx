@@ -16,7 +16,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { Download, Image, Type, Palette, Sparkles, CheckCircle } from 'lucide-react';
+import { Download, Image as ImageIcon, Type, Palette, Sparkles, CheckCircle } from 'lucide-react';
 import { StoreBranch, Product } from '../../types';
 import { storageService } from '../../services/storageService';
 
@@ -259,7 +259,7 @@ export const MarketingGenerator: React.FC<MarketingGeneratorProps> = ({ branch }
           {/* Plataforma */}
           <div className="p-4 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-3">
             <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
-              <Image className="w-4 h-4" /> Plataforma
+              <ImageIcon className="w-4 h-4" /> Plataforma
             </h4>
             <div className="grid grid-cols-2 gap-2">
               {(Object.entries(PLATFORM_SIZES) as [SocialPlatform, typeof PLATFORM_SIZES.instagram][]).map(([key, val]) => (

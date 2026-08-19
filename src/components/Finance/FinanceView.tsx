@@ -26,7 +26,7 @@ import { printSaleReceipt } from '../../services/printService';
 async function reprintSaleReceipt(sale: Sale) {
   try {
     const printers = storageService.getPrinters();
-    const settings = storageService.getSystemSettings();
+    const settings = storageService.getSettings();
     await printSaleReceipt(sale, settings, printers, { type: 'venda' });
   } catch { /* silencioso */ }
 }

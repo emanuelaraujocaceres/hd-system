@@ -31,7 +31,7 @@ export const NotificationBridge: React.FC = () => {
       }
     });
 
-    return unsubscribe;
+    return () => { unsubscribe(); };
   }, [toast]);
 
   return null;

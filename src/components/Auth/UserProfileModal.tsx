@@ -13,7 +13,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { UserProfile } from '../../types';
-import { storageService } from '../../services/storageService';
+import { storageService, StorageService } from '../../services/storageService';
 import { supabase } from '../../lib/supabase';
 import { posAudio } from '../../services/audioService';
 import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
@@ -151,7 +151,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     }
 
     // Verify current password (hash comparison)
-    const inputHash = await storageService.constructor.hashPassword(currentPassword);
+    const inputHash = await StorageService.hashPassword(currentPassword);
     if (inputHash !== (user.password || '') && currentPassword !== (user.password || '')) {
       setMessage({ type: 'error', text: 'Senha atual incorreta.' });
       posAudio.error();

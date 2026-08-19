@@ -48,7 +48,7 @@ export const useDeliveryNotifications = ({ enabled, onNewPedido }: UseDeliveryNo
       const newKey = `${storageService.getCurrentOrgId() || ''}:${storageService.getSelectedBranchId() || ''}`;
       setCurrentBranchKey(prev => (prev !== newKey ? newKey : prev));
     });
-    return unsubscribe;
+    return () => { unsubscribe(); };
   }, []);
 
   const requestPermission = async () => {
@@ -69,7 +69,7 @@ export const useDeliveryNotifications = ({ enabled, onNewPedido }: UseDeliveryNo
       tag: tag || 'delivery-pedido',
       requireInteraction: true,
       vibrate: [200, 100, 200],
-    });
+    } as NotificationOptions & { vibrate?: number[] });
 
     notification.onclick = () => {
       window.focus();

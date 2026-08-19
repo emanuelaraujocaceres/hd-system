@@ -22,7 +22,7 @@ export function useModuleVisibility() {
     // Initial load
     setModuleVisibility(storageService.getModuleVisibility());
     
-    return unsub;
+    return () => { unsub(); };
   }, []);
 
   return moduleVisibility;

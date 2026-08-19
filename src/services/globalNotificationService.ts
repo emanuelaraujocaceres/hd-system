@@ -271,7 +271,7 @@ class GlobalNotificationServiceClass {
         tag: `hdsystem-${Date.now()}`,
         requireInteraction: false,
         vibrate: [200, 100, 200],
-      });
+      } as NotificationOptions & { vibrate?: number[] });
       notification.onclick = () => { window.focus(); notification.close(); };
       setTimeout(() => notification.close(), 5000);
     } catch { /* ignore */ }

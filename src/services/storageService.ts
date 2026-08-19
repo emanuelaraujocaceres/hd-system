@@ -489,7 +489,7 @@ class StorageService {
     return this.changeSource;
   }
 
-  private notify(key?: string, source?: 'local' | 'sync' | 'hydration' | 'remote', payload?: any) {
+  notify(key?: string, source?: 'local' | 'sync' | 'hydration' | 'remote', payload?: any) {
     // FILA (não single-slot): o debounce original com `if (this.notifyTimer) return`
     // DROPAVA qualquer notificação que chegasse enquanto um timer estava pendente.
     // Em rajadas do Realtime (venda + item + caixa chegam juntos), a notificação da
@@ -3420,7 +3420,7 @@ id: StorageService.ensureUuid(settings.id),
     // FEFO (First Expired First Out): vende primeiro o que vence primeiro.
     if (sale.items && sale.items.length > 0) {
       for (const item of sale.items) {
-        const product = this.get<Product>(KEYS.PRODUCTS, []).find((p) => p.id === item.productId);
+        const product = this.get<Product[]>(KEYS.PRODUCTS, []).find((p) => p.id === item.productId);
         if (product && product.useLots) {
           // FEFO: lote mais antigo primeiro
           const fefoLotes = this.getLotesForFEFO(item.productId);
@@ -5123,7 +5123,7 @@ private updateReceivableFromPayments(saleId: string) {
     const all = this.get<DeliveryOrder[]>(KEYS.DELIVERY_ORDERS, []);
     const idx = all.findIndex((o) => o.id === orderId);
     if (idx >= 0) {
-      all[idx] = { ...all[idx], status, ...extraData, updatedAt: new Date().toISOString() };
+      all[idx] = { ...all[idx], status: status as DeliveryOrder['status'], ...extraData, updatedAt: new Date().toISOString() };
       this.set(KEYS.DELIVERY_ORDERS, all);
       this.syncDeliveryOrder(all[idx]);
     }
@@ -5924,6 +5924,7 @@ saveUserProfile(user: UserProfile) {
 }
 
 export const storageService = new StorageService();
+export { StorageService };
 
 
 
