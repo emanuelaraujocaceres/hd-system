@@ -1,9 +1,9 @@
 # SUPABASE SCHEMA — Referência Completa do Banco de Dados
 
-> **Última atualização:** 2026-08-13 (MIGRATIONS CONFIRMADAS NO SUPABASE ✅)
+> **Última atualização:** 2026-08-19 (AUDITORIA TOTAL CONFIRMADA NO SUPABASE ✅)
 > **Projeto:** `tixwhmgzibvazkqbqoev` (https://tixwhmgzibvazkqbqoev.supabase.co)
 > **Migrations:** 78 arquivos em `supabase/migrations/`
-> **Total tabelas na realtime:** 32
+> **Total tabelas na realtime:** 35 (verificado via pg_publication em 2026-08-19)
 
 ## Regra de Manutenção
 
@@ -216,20 +216,19 @@ Clientes (walk-in e delivery).
 > ⚠️ **NOTA:** `customers` NÃO tem coluna `is_active`. O schema doc anterior estava incorreto.
 
 ### suppliers
-Fornecedores.
+Fornecedores. (Colunas reais confirmadas em 2026-08-19 — tem `store_branch_id` e usa `corporate_name`/`trade_name`, NÃO `name`/`address`.)
 
 | Coluna | Tipo | Default | Descrição |
 |--------|------|---------|-----------|
 | id | UUID PK | | PK |
 | organization_id | UUID NOT NULL | | FK → organizations |
-| name | TEXT NOT NULL | | Nome / Razão Social |
+| store_branch_id | UUID | | FK → store_branches |
+| corporate_name | TEXT | | Razão Social (frontend mapeia como `name`) |
+| trade_name | TEXT | | Nome fantasia |
 | cnpj | TEXT | | CNPJ |
-| phone | TEXT | | Telefone |
-| email | TEXT | | Email |
-| address | TEXT | | Endereço |
 | contact_person | TEXT | | Pessoa de contato |
-| notes | TEXT | | Observações |
-| is_active | BOOLEAN | `true` | Fornecedor ativo? |
+| email | TEXT | | Email |
+| phone | TEXT | | Telefone |
 | created_at | TIMESTAMPTZ | `now()` | |
 | updated_at | TIMESTAMPTZ | `now()` | |
 
@@ -309,7 +308,9 @@ Movimentações de estoque (log).
 | new_stock | INTEGER | | Estoque novo |
 | reason | TEXT | | Motivo |
 | operator_name | TEXT | | Operador |
+| store_branch_id | UUID | | FK → store_branches |
 | created_at | TIMESTAMPTZ | `now()` | |
+| updated_at | TIMESTAMPTZ | `now()` | |
 
 ### financial_transactions
 Contas a pagar / receber.
@@ -582,7 +583,9 @@ Insights diários de IA.
 | today_revenue | NUMERIC(10,2) | `0` | Receita do dia |
 | total_sales | INTEGER | `0` | Total de vendas |
 | ticket_medio | NUMERIC(10,2) | `0` | Ticket médio |
+| store_branch_id | UUID | | FK → store_branches (NÃO tem organization_id — escopo por filial apenas) |
 | created_at | TIMESTAMPTZ NOT NULL | `NOW()` | |
+| updated_at | TIMESTAMPTZ | | |
 
 ### sync_queue
 Fila de sincronização offline → online.
@@ -628,17 +631,21 @@ Dead Letter Queue — registros que falharam na sincronização.
 | resolution_notes | TEXT | | Notas |
 
 ### stock_change_log
-Log de alterações de estoque (trigger).
+Log de alterações de estoque — **LEGADO / NÃO USAR** (contradiz AGENTS.md regra 8: estoque é responsabilidade do frontend). Triggers `trigger_log_stock_changes`/`trigger_stock_not_negative` são legados duplicados; a tabela segue com RLS org+branch.
 
 | Coluna | Tipo | Default | Descrição |
 |--------|------|---------|-----------|
 | id | UUID PK | | PK |
 | product_id | UUID | | FK → products (CASCADE) |
-| field_name | TEXT | | Campo alterado |
-| old_value | TEXT | | Valor antigo |
-| new_value | TEXT | | Valor novo |
-| changed_at | TIMESTAMPTZ | `now()` | Quando |
+| organization_id | UUID | | FK → organizations |
+| store_branch_id | UUID | | FK → store_branches |
+| old_stock_quantity | INTEGER | | Estoque antigo |
+| new_stock_quantity | INTEGER | | Estoque novo |
 | changed_by | TEXT | | Quem |
+| change_type | TEXT | | Tipo da mudança |
+| sale_id | TEXT | | Venda relacionada |
+| created_at | TIMESTAMPTZ | `now()` | Quando |
+| updated_at | TIMESTAMPTZ | | |
 
 ### scanned_boletos
 Boletos escaneados.
@@ -847,22 +854,112 @@ View para relatórios (join de sales + sale_items + products + system_users).
 
 ---
 
+### company_settings
+Configurações da empresa (org-scoped; RLS `user_*_company_settings` por org).
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| id | UUID PK | PK |
+| organization_id | UUID NOT NULL | FK → organizations |
+| store_branch_id | UUID | FK → store_branches |
+| company_name | VARCHAR | Razão social |
+| trade_name | VARCHAR | Nome fantasia |
+| cnpj | VARCHAR | CNPJ |
+| ie | VARCHAR | Inscrição estadual |
+| phone | VARCHAR | Telefone |
+| email | VARCHAR | Email |
+| address | TEXT | Endereço |
+| logo_url | TEXT | Logo |
+| primary_color | VARCHAR | Cor primária |
+| created_at | TIMESTAMPTZ | |
+| updated_at | TIMESTAMPTZ | |
+
+### sessions
+Sessões de token (escopo por filial; RLS `user_*_sessions` por `store_branch_id`).
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| session_id | UUID PK | PK (nome real: `session_id`) |
+| user_id | UUID | FK → auth.users |
+| email | TEXT | Email do usuário |
+| created_at | TIMESTAMPTZ | |
+| not_after | TIMESTAMPTZ | Expiração |
+| tag | TEXT | Etiqueta |
+| store_branch_id | UUID | FK → store_branches |
+
+### pix_config
+Configuração PIX por filial (RLS `user_*_pix_config` por org+branch).
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| id | UUID PK | PK |
+| store_branch_id | UUID NOT NULL | FK → store_branches |
+| organization_id | UUID NOT NULL | FK → organizations |
+| chave_pix | TEXT | Chave PIX |
+| tipo_chave | TEXT | Tipo da chave |
+| nome_titular | TEXT | Nome do titular |
+| cidade | TEXT | Cidade |
+| ativo | BOOLEAN | Ativo? |
+| created_at | TIMESTAMPTZ | |
+| updated_at | TIMESTAMPTZ | |
+
+### webhook_events
+Eventos de webhook (pagamentos). Escrita via service_role; authenticated só leitura.
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| id | UUID PK | PK |
+| organization_id | UUID NOT NULL | FK → organizations |
+| store_branch_id | UUID | FK → store_branches |
+| payment_id | TEXT | ID do pagamento |
+| event_type | TEXT | Tipo do evento |
+| payload | JSONB | Payload |
+| processed | BOOLEAN | Processado? |
+| processed_at | TIMESTAMPTZ | |
+| error_message | TEXT | |
+| created_at | TIMESTAMPTZ | |
+
+### audit_log
+Log de auditoria. RLS só com `superadmin_all_audit_log` (escrita via service_role).
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| id | UUID PK | PK |
+| organization_id | UUID | FK → organizations |
+| store_branch_id | UUID | FK → store_branches |
+| user_id | UUID | Quem |
+| user_name | TEXT | |
+| user_email | TEXT | |
+| action | TEXT | Ação |
+| entity_type | TEXT | |
+| entity_id | TEXT | |
+| entity_name | TEXT | |
+| old_value | JSONB | |
+| new_value | JSONB | |
+| ip_address | TEXT | |
+| user_agent | TEXT | |
+| created_at | TIMESTAMPTZ | |
+
+---
+
 ## Realtime Publication
 
-Tabelas na publicação `supabase_realtime`:
+Tabelas na publicação `supabase_realtime` (verificado via `pg_publication_rel` em 2026-08-19) — **35 tabelas, todas com `REPLICA IDENTITY FULL`**:
+
 - products, categories, customers, suppliers
 - sales, sale_items
 - cash_sessions, stock_movements
 - financial_transactions
-- delivery_orders, delivery_settings
-- system_users, system_settings
+- store_branches, system_users, system_settings
+- scanned_boletos, credit_payments, nf_records
 - footer_messages, media_devices, printers
-- module_visibility, branch_themes
-- scanned_boletos, credit_payments
-- tables, customer_sessions
-- sync_queue, movimentacoes_falhas
+- tables, customer_sessions, digital_menu_config, branch_themes, api_keys
+- delivery_settings, delivery_neighborhoods, delivery_distance_rates, delivery_orders, delivery_worker_earnings
+- module_visibility
+- product_lots, stock_loss_log, product_recipes
+- filial_backups, webhook_events, audit_log
 
-Todas com `REPLICA IDENTITY FULL` para payload completo de UPDATE/DELETE.
+> NÃO estão na publicação: sync_queue, movimentacoes_falhas, ai_insights, stock_change_log, sessions, company_settings, pix_config, user_permissions, profiles, organizations (o frontend não assina essas).
 
 ---
 
@@ -882,8 +979,10 @@ Todas com `REPLICA IDENTITY FULL` para payload completo de UPDATE/DELETE.
 
 ## Pendências Conhecidas
 
-1. **`suppliers`** — Colunas `company_name`, `trade_name`, `contact_name` mapeadas como `name`, `contact_person` no banco
+1. **`suppliers`** — ✅ Resolvido (auditoria 2026-08-19): colunas reais são `corporate_name`, `trade_name`, `contact_person`; frontend mapeia `name`→`corporate_name`.
 2. **Sistema de produtos compostos** — ✅ Migration EXECUTADA e CONFIRMADA (tabela `product_recipes` + coluna `is_composite`)
    - **Pendente frontend:** UI de edição de receitas no InventoryView (modal para adicionar/remover ingredientes)
    - **Pendente frontend:** Lógica de desconto automático no PDV ao vender produto composto
    - **Pendente frontend:** Sub-itens no recibo térmico para produtos compostos
+3. **Triggers legados de estoque** (produtos) — `trigger_stock_not_negative` e `trigger_log_stock_changes` são duplicados legados (AGENTS.md regra 8). Decisão de DROP pendente.
+4. **`is_superadmin()`** — versão ativa exige `organization_id IS NULL` (RLS_FIXES v3); dados atuais compatíveis (emanuel tem org NULL). AGENTS.md BUG-026 defende checar só `superadmin = true` — reavaliar se um dia o superadmin ganhar org.
