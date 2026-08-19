@@ -1162,6 +1162,7 @@ removeUserFromRemote(id: string) {
   }
 
 updateCategoryFromRemote(row: any) {
+    this.setChangeSource('remote');
     // Defense-in-depth: reject if not from current branch
     if (!this.isRemoteFromCurrentBranch(row)) return;
     const categories = this.get<Category[]>(KEYS.CATEGORIES, this.isDefaultOrg() ? INITIAL_CATEGORIES : []);
@@ -1512,6 +1513,7 @@ updateCategoryFromRemote(row: any) {
   }
 
   updateCaixaFromRemote(row: any) {
+    this.setChangeSource('remote');
     // Branch isolation: não sobrescrever caixa local se o evento é de outra filial
     // Usar getRawBranchId() + resolver UUID para comparação correta
     const rawBranchId = this.getRawBranchId();
@@ -1591,6 +1593,7 @@ updateCategoryFromRemote(row: any) {
   }
 
   updateBranchFromRemote(row: any) {
+    this.setChangeSource('remote');
     const branches = this.get<StoreBranch[]>(KEYS.BRANCHES, this.isDefaultOrg() ? INITIAL_BRANCHES : []);
     const mapped: StoreBranch = {
       id: row.id,
@@ -1680,6 +1683,7 @@ updateCategoryFromRemote(row: any) {
   }
 
   updateUserFromRemote(row: any) {
+    this.setChangeSource('remote');
     // Superadmin é nível de sistema — não sincronizar como membro de org.
     // Compara por id OU email: após a migração de IDs para auth.uid(),
     // o id do banco difere dos UUIDs determinísticos (ex: usr-01), então
@@ -1805,7 +1809,7 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
           syncService.fetchRows('suppliers', resolvedBranchId),
           syncService.fetchRows('sales', resolvedBranchId),
           syncService.fetchRows('financial_transactions', resolvedBranchId),
-          syncService.fetchRows('system_settings', resolvedBranchId),
+          syncService.fetchRows('system_settings'), // org-scoped (1 linha por org, id = organization_id) — SEM filtro de branch, senão os settings somem no F5/troca de filial
           syncService.fetchRows('system_users', resolvedBranchId),
           syncService.fetchRows('stock_movements', resolvedBranchId),
           syncService.fetchRows('cash_sessions', resolvedBranchId),
@@ -3040,19 +3044,26 @@ id: StorageService.ensureUuid(settings.id),
       this.set(KEYS.FINANCIAL, accounts.filter((a) => a.id !== id));
       syncService.deleteRow('financial_transactions', id);
     }
-    // Also delete sale_items from Supabase to prevent orphaned records
-    if (saleToDelete && saleToDelete.items) {
-      // Delete sale_items from Supabase (we don't have individual IDs — delete by sale_id)
+    // Also delete sale_items from Supabase to prevent orphaned records.
+    // Via syncService.deleteRow (fila offline + validação de branch) em vez de
+    // supabase direto — antes, o DELETE por sale_id era fire-and-forget e
+    // falhava silenciosamente offline, deixando sale_items órfãos no cloud.
+    // ATENÇÃO: os ids individuais ficam em KEYS.SALE_ITEMS (criados com newId()),
+    // NÃO em saleToDelete.items (shape de carrinho {productId, quantity, ...}).
+    const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
+    const itemsToDelete = existingItems.filter((i: any) => i.sale_id === id);
+    if (itemsToDelete.length > 0) {
       (async () => {
         try {
-          await supabase.from('sale_items').delete().eq('sale_id', id);
+          for (const item of itemsToDelete) {
+            if (item?.id) await syncService.deleteRow('sale_items', item.id);
+          }
         } catch (err: any) {
           console.warn('[Storage] Erro ao limpar sale_items do Supabase:', err?.message);
         }
       })();
     }
     // Also remove from separate localStorage key
-    const existingItems = this.get<any[]>(KEYS.SALE_ITEMS, []);
     const filtered = existingItems.filter((i: any) => i.sale_id !== id);
     this.set(KEYS.SALE_ITEMS, filtered);
     if (saleToDelete) {

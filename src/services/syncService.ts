@@ -473,13 +473,15 @@ class SupabaseSyncService {
         console.warn(`[HD-Sync] 🔍 EMPTY FIELDS ${table}:`, emptyFields.length ? emptyFields.join(', ') : '(nenhum — payload 100% limpo)');
         // DIAGNÓSTICO: details/hint do Postgres apontam a coluna exata do 22P02
         console.warn(`[HD-Sync] 📋 DB DETAILS:`, error.details ?? '(sem details)', `| hint:`, error.hint ?? '(sem hint)', `| code:`, error.code ?? '(sem code)');
-        // Log to DLQ
+        // Log to DLQ — p_payload é JSONB no banco: enviar OBJETO (não string),
+        // senão o Postgres armazena um JSON *string* (double-encode) e as
+        // queries de diagnóstico sobre o payload ficam inúteis.
         try {
           await supabase.rpc('fn_insserir_dlq', {
             p_operation_type: 'upsert',
             p_table_name: table,
             p_record_id: row.id || 'unknown',
-            p_payload: JSON.stringify(row).slice(0, 1000),
+            p_payload: JSON.parse(JSON.stringify(row).slice(0, 1000)),
             p_error_message: error.message,
             p_source: 'tryUpsert',
             p_browser_id: navigator.userAgent.slice(0, 50),
