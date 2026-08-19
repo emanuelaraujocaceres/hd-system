@@ -26,7 +26,7 @@ export interface UserProfile {
   active: boolean;
   createdAt?: string;
   password?: string;
-  superadmin?: string;
+  superadmin?: boolean;
   // Holerite / Payroll
   whatsapp?: string;
   salary?: number;
@@ -218,7 +218,7 @@ export interface Supplier {
   organizationId?: string; // multi-tenant
 }
 
-export type OrderSource = 'pdv' | 'cardapio_digital' | 'fiado';
+export type OrderSource = 'pdv' | 'cardapio_digital' | 'fiado' | 'delivery';
 export type KitchenStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'closing_request';
 
 export interface Sale {
@@ -251,6 +251,8 @@ export interface Sale {
   kitchenStatus?: KitchenStatus; // status no KDS
   // Payment Provider
   payment_id?: string;          // ID do pagamento no provedor (Mercado Pago, Stripe, etc.)
+  // Observações
+  notes?: string;               // Observações da venda (usado no cupom e syncSale)
 }
 
 export interface CashRegisterSession {

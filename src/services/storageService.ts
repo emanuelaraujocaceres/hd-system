@@ -22,6 +22,11 @@ import {
   BranchTheme,
   ApiKey,
   ProductLot,
+  StockLossLog,
+  DeliverySettings,
+  DeliveryNeighborhood,
+  DeliveryDistanceRate,
+  DeliveryOrder,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -91,7 +96,7 @@ VIEWING_ORG: 'hd_system_viewing_org',
 };
 
 class StorageService {
-  private listeners: Set<() => void> = new Set();
+  private listeners: Set<(key?: string, source?: string, payload?: any) => void> = new Set();
   private notifyTimer: ReturnType<typeof setTimeout> | null = null;
   private migrated = false;
   private _saleUpdateVersions: Record<string, number> = {}; // CONSIST-03: race condition guard
@@ -457,7 +462,7 @@ class StorageService {
     this.migrateLegacyIds();
   }
 
-  public subscribe(listener: (key?: string, source?: 'local' | 'sync' | 'hydration' | 'remote') => void) {
+  public subscribe(listener: (key?: string, source?: 'local' | 'sync' | 'hydration' | 'remote', payload?: any) => void) {
     this.listeners.add(listener as any);
     return () => this.listeners.delete(listener as any);
   }

@@ -42,7 +42,12 @@ type TableName =
   | 'delivery_distance_rates'
   | 'delivery_orders'
   // Module Visibility (2026)
-  | 'module_visibility';
+  | 'module_visibility'
+  // Product Lots + Recipes + Stock Loss + Delivery Worker (2026)
+  | 'product_lots'
+  | 'product_recipes'
+  | 'stock_loss_log'
+  | 'delivery_worker_earnings';
 
 type QueueAction = 'upsert' | 'delete' | 'upsert_batch';
 
