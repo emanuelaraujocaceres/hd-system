@@ -54,7 +54,15 @@ END $$;
 
 -- ═════════════════════════════════════════════════════════════════════
 -- 2. ALINHAR system_users.id → auth.users.id (mismatch de identidade)
---    Verifica FKs que referenciam system_users(id) e atualiza também.
+--    IMPORTANTE: NÃO rode junto com a Parte 1 numa conexão com o app
+--    aberto (ver deadlock abaixo). Rode cada Parte separada.
+--
+--    ERRATA 2026-08-19 (2ª execução): a versão anterior atualizava os
+--    dependentes ANTES do pai → violava a FK fk_cash_sessions_user
+--    (23503: o novo id ainda não existia em system_users). Ordem correta:
+--    1º atualiza o PAI (system_users.id), 2º os dependentes (cash_sessions).
+--    ⚠️ NO ACTION em FK não valida o UPDATE do pai — então trocar o id do
+--    pai primeiro é seguro e destrava a correção dos filhos.
 -- ═════════════════════════════════════════════════════════════════════
 
 -- 2a. Mostrar quem está com mismatch (pré-alinhamento)
@@ -76,14 +84,12 @@ JOIN information_schema.constraint_column_usage ccu
 WHERE tc.constraint_type = 'FOREIGN KEY'
   AND ccu.table_name = 'system_users' AND tc.table_schema = 'public';
 
--- 2c. Alinhamento: para cada mismatch, atualiza as FKs de dependentes
---     e depois o próprio system_users.id (dentro de transação única —
---     no SQL Editor cada bloco DO acima roda separado; rode TUDO junto).
+-- 2c. Alinhamento (ORDEM CORRETA: pai → dependentes). Dentro de um DO
+--     tudo roda em transação única — se algo falhar, nada é aplicado.
 DO $$
 DECLARE
   r RECORD;
   fk RECORD;
-  v_depend INTEGER;
 BEGIN
   FOR r IN
     SELECT su.id AS old_id, au.id AS new_id, su.email
@@ -91,7 +97,11 @@ BEGIN
     JOIN auth.users au ON au.email = su.email
     WHERE su.id <> au.id
   LOOP
-    -- Atualizar dependentes (FKs para system_users.id)
+    -- 1) ALTERA O PAI PRIMEIRO: novo id agora existe em system_users.
+    --    UPDATE no pai não dispara validação da FK dos filhos (NO ACTION).
+    UPDATE public.system_users SET id = r.new_id WHERE id = r.old_id;
+
+    -- 2) AGORA varre FKs dependentes e aponta para o novo id.
     FOR fk IN
       SELECT tc.table_name, kcu.column_name
       FROM information_schema.table_constraints tc
@@ -108,9 +118,6 @@ BEGIN
       ) USING r.new_id, r.old_id;
     END LOOP;
 
-    -- Dependências pendentes no PRÓPRIO system_users (auto-FK, ex.: criado_por)
-    EXECUTE 'UPDATE public.system_users SET id = $1 WHERE id = $2'
-      USING r.new_id, r.old_id;
     RAISE NOTICE '✅ ID alinhado: % (% → %)', r.email, r.old_id, r.new_id;
   END LOOP;
 END $$;
