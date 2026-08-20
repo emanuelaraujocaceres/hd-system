@@ -59,29 +59,44 @@ export const useDeliveryNotifications = ({ enabled, onNewPedido }: UseDeliveryNo
     return result;
   };
 
-  const showNotification = (title: string, body: string, tag?: string) => {
+  const showNotification = async (title: string, body: string, tag?: string) => {
     if (permission !== 'granted') return;
 
-    const notification = new Notification(title, {
+    const options: NotificationOptions & { vibrate?: number[] } = {
       body,
       icon: '/icon-192x192.png',
       badge: '/badge-72x72.png',
       tag: tag || 'delivery-pedido',
       requireInteraction: true,
       vibrate: [200, 100, 200],
-    } as NotificationOptions & { vibrate?: number[] });
-
-    notification.onclick = () => {
-      window.focus();
-      notification.close();
     };
+
+    // Prefer ServiceWorker-based notifications (required on mobile Chrome/Android)
+    if ('serviceWorker' in navigator) {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.showNotification(title, options);
+      } catch {
+        // Fall back to Notification constructor on environments without an active SW
+        const notification = new Notification(title, options);
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+        };
+      }
+    } else {
+      // Desktop browsers without Service Worker support
+      const notification = new Notification(title, options);
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+    }
 
     // Tocar som de notificação
     if (audioRef.current) {
       audioRef.current.play().catch(() => {});
     }
-
-    return notification;
   };
 
   // Escutar novos pedidos via Realtime — re-subscribe on branch change
