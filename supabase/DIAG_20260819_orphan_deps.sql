@@ -28,12 +28,12 @@ JOIN information_schema.constraint_column_usage ccu
 WHERE tc.constraint_type = 'FOREIGN KEY'
   AND ccu.table_name = 'system_users' AND tc.table_schema = 'public';
 
--- 3. Contar registros órfãos referenciados em cada tabela filha
-SELECT 'cash_sessions' AS tabela, COUNT(*) AS refs_orphan
-FROM cash_sessions WHERE user_id IN ('d341889d-306f-458f-8f24-f31a0b48d5ce','5a6aedfa-d206-45d5-a885-6cb4eefdb535')
+-- 3. Contar registros órfãos referenciados nas tabelas filhas conhecidas
+--    (colunas verificadas no SUPABASE_SCHEMA.md; credit_payments NÃO tem
+--     FK para system_users, por isso não aparece aqui)
+SELECT 'sales' AS tabela, COUNT(*) AS refs_orphan
+FROM sales WHERE user_id IN ('d341889d-306f-458f-8f24-f31a0b48d5ce','5a6aedfa-d206-45d5-a885-6cb4eefdb535')
 UNION ALL
-SELECT 'sales', COUNT(*) FROM sales WHERE user_id IN ('d341889d-306f-458f-8f24-f31a0b48d5ce','5a6aedfa-d206-45d5-a885-6cb4eefdb535')
+SELECT 'cash_sessions', COUNT(*) FROM cash_sessions WHERE user_id IN ('d341889d-306f-458f-8f24-f31a0b48d5ce','5a6aedfa-d206-45d5-a885-6cb4eefdb535')
 UNION ALL
-SELECT 'credit_payments', COUNT(*) FROM credit_payments WHERE user_id IN ('d341889d-306f-458f-8f24-f31a0b48d5ce','5a6aedfa-d206-45d5-a885-6cb4eefdb535')
-UNION ALL
-SELECT 'financial_transactions', COUNT(*) FROM financial_transactions WHERE user_id IN ('d341889d-306f-458f-8f24-f31a0b48d5ce','5a6aedfa-d206-45d5-a885-6cb4eefdb535');
+SELECT 'delivery_worker_earnings', COUNT(*) FROM delivery_worker_earnings WHERE worker_id IN ('d341889d-306f-458f-8f24-f31a0b48d5ce','5a6aedfa-d206-45d5-a885-6cb4eefdb535');
