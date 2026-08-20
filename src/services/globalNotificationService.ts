@@ -30,6 +30,7 @@
 
 import { storageService } from '../services/storageService';
 import { posAudio } from '../services/audioService';
+import { showSystemNotification } from './notificationHelper';
 
 type NotificationType = 'success' | 'error' | 'warning' | 'info';
 
@@ -262,19 +263,21 @@ class GlobalNotificationServiceClass {
     if (event.playSound) posAudio.chime();
   }
 
-  private showBrowserNotification(event: NotificationEvent) {
+  private async showBrowserNotification(event: NotificationEvent) {
     if (!this.isSupported || this.notificationPermission !== 'granted') return;
-    try {
-      const notification = new Notification(event.title, {
-        body: event.message,
-        icon: '/logo-hd-system/android-chrome-192x192.png',
-        tag: `hdsystem-${Date.now()}`,
-        requireInteraction: false,
-        vibrate: [200, 100, 200],
-      } as NotificationOptions & { vibrate?: number[] });
+    // Usa o Service Worker quando disponível (única via legal no mobile
+    // Chrome). O construtor fica encapsulado no helper com try/catch.
+    const notification = await showSystemNotification(event.title, {
+      body: event.message,
+      tag: `hdsystem-${Date.now()}`,
+      requireInteraction: false,
+      vibrate: [200, 100, 200],
+    });
+    // onclick só é aplicável no caminho do construtor (desktop).
+    if (notification) {
       notification.onclick = () => { window.focus(); notification.close(); };
       setTimeout(() => notification.close(), 5000);
-    } catch { /* ignore */ }
+    }
   }
 
   notifySale(amount: number, paymentMethod: string, customerName?: string) {

@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { storageService } from '../services/storageService';
+import { showSystemNotification } from '../services/notificationHelper';
 
 interface UseDeliveryNotificationsProps {
   enabled: boolean;
@@ -59,22 +60,26 @@ export const useDeliveryNotifications = ({ enabled, onNewPedido }: UseDeliveryNo
     return result;
   };
 
-  const showNotification = (title: string, body: string, tag?: string) => {
+  const showNotification = async (title: string, body: string, tag?: string) => {
     if (permission !== 'granted') return;
 
-    const notification = new Notification(title, {
+    // Usa o Service Worker quando disponível (única via legal no mobile
+    // Chrome). O construtor new Notification() fica encapsulado no helper com
+    // try/catch para desktop.
+    const notification = await showSystemNotification(title, {
       body,
-      icon: '/icon-192x192.png',
-      badge: '/badge-72x72.png',
       tag: tag || 'delivery-pedido',
       requireInteraction: true,
       vibrate: [200, 100, 200],
-    } as NotificationOptions & { vibrate?: number[] });
+    });
 
-    notification.onclick = () => {
-      window.focus();
-      notification.close();
-    };
+    // onclick só é aplicável no caminho do construtor (desktop).
+    if (notification) {
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+    }
 
     // Tocar som de notificação
     if (audioRef.current) {

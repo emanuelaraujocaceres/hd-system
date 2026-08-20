@@ -8,6 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, BellOff, X, CheckCircle } from 'lucide-react';
 import { globalNotificationService } from '../../services/globalNotificationService';
+import { showSystemNotification } from '../../services/notificationHelper';
 
 export const NotificationBanner: React.FC = () => {
   const [showBanner, setShowBanner] = useState(false);
@@ -25,10 +26,9 @@ export const NotificationBanner: React.FC = () => {
     setPermissionStatus(globalNotificationService.getPermissionStatus());
     if (granted) {
       setShowBanner(false);
-      // Show test notification
-      new Notification('🔔 Notificações Ativas!', {
+      // Show test notification (via Service Worker no mobile, construtor no desktop)
+      await showSystemNotification('🔔 Notificações Ativas!', {
         body: 'Você será avisado de todas as atualizações do sistema.',
-        icon: '/logo-hd-system/android-chrome-192x192.png',
       });
     }
   };
