@@ -139,6 +139,7 @@ class SupabaseSyncService {
   private _reconnectBranchId: string | undefined;
   private _reconnectAttempts = 0;
   private _isResubscribing = false; // FIX-028: guard anti-concorrência
+  private _isReloading = false;     // Guard anti-duplo do force-reload remoto
   private static MAX_RECONNECT_ATTEMPTS = 10;
   private static RECONNECT_BASE_DELAY_MS = 2000;
   // Proteção contra loop de re-auth: após falha, cooldown de 5 minutos
@@ -301,6 +302,16 @@ class SupabaseSyncService {
 
     this.channel = supabase.channel('hd-system-realtime');
 
+    // ─── Force-reload remoto (superadmin → todos os dispositivos) ─────
+    // Escuta um broadcast 'force-reload' enviado pelo superadmin e recarrega a
+    // página, forçando renovação de sessão/token ou aplicação de novo deploy.
+    // Não usa tabela (evita o risco de CHANNEL_ERROR no realtime do AGENTS.md).
+    this.channel.on(
+      'broadcast',
+      { event: 'force-reload' },
+      () => this._handleForceReloadBroadcast(),
+    );
+
     // Subscribe to INSERT, UPDATE, DELETE on each table
     for (const table of tables) {
       // Montar filtros server-side:
@@ -446,6 +457,40 @@ class SupabaseSyncService {
     }
     console.warn('[HD-Sync] 🔌 Canal Realtime morto (reconexão esgotada) — recriando canal');
     this.resubscribeRealtime(orgId, branchId);
+  }
+
+  /**
+   * Recebe o broadcast 'force-reload' e recarrega a página uma única vez.
+   * Usado para forçar todos os dispositivos conectados a renovarem a sessão
+   * (ex.: após correção de clock/skew no Supabase ou em novos deploys).
+   */
+  private _handleForceReloadBroadcast() {
+    if (this._isReloading) return; // já disparou — evita reload em duplicidade
+    this._isReloading = true;
+    console.log('[HD-Sync] 🔄 Recebido force-reload via Realtime — recarregando página...');
+    // Pequeno atraso para não interromper uma escrita crítica em andamento.
+    setTimeout(() => window.location.reload(), 400);
+  }
+
+  /**
+   * Envia um broadcast 'force-reload' para TODOS os dispositivos conectados
+   * ao canal Realtime (independentemente de org/filial). Apenas superadmin.
+   * Retorna true se o sinal foi enviado.
+   */
+  triggerForceReload(): boolean {
+    if (!isSuperAdmin()) {
+      console.warn('[HD-Sync] triggerForceReload bloqueado — usuário não é superadmin');
+      return false;
+    }
+    if (!this.channel) {
+      console.warn('[HD-Sync] triggerForceReload sem canal Realtime ativo');
+      return false;
+    }
+    this.channel
+      .send({ type: 'broadcast', event: 'force-reload', payload: {} })
+      .then(() => console.log('[HD-Sync] 📡 force-reload broadcast enviado'))
+      .catch((err) => console.warn('[HD-Sync] falha ao enviar force-reload:', err));
+    return true;
   }
 
   // ─── GENERIC CRUD OPERATIONS (OFFLINE-FIRST) ───────────────────

@@ -10,7 +10,7 @@
  *  - demais GET same-origin: network-first com gravação no cache.
  *  - Requisições cross-origin (ex.: API do Supabase) não passam pelo SW.
  */
-const CACHE_NAME = "hd-system-v2";
+const CACHE_NAME = "hd-system-v3";
 const SHELL_CACHE = [
   "/",
   "/index.html",

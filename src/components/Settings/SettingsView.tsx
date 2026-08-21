@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, PrinterRole, MediaDevice, BranchTheme, Category, Table, DigitalMenuConfig } from '../../types';
 import { storageService } from '../../services/storageService';
+import { syncService } from '../../services/syncService';
 import { posAudio } from '../../services/audioService';
 import { printTestPage } from '../../services/printService';
 import { callServerApi } from '../../lib/serverApi';
@@ -62,7 +63,19 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, categories, user }) => {
   const isAdmin = user.role === 'admin' || !!user.superadmin;
+  const isSuper = storageService.isSuperAdmin();
   const { addToast } = useToast();
+  const [confirmForceReload, setConfirmForceReload] = useState(false);
+
+  const handleForceReloadAll = () => {
+    const ok = syncService.triggerForceReload();
+    setConfirmForceReload(false);
+    if (ok) {
+      addToast('success', 'Sinal enviado — todos os dispositivos conectados estão recarregando.');
+    } else {
+      addToast('error', 'Não foi possível enviar o sinal (canal offline ou permissão insuficiente).');
+    }
+  };
   const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance' | 'cardapio' | 'delivery' | 'modules' | 'integrations'>(() => {
     const saved = sessionStorage.getItem('settings_active_tab');
     return (saved as typeof activeSubTab) || 'fiscal';
@@ -1140,6 +1153,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             Gerencie dados fiscais, filiais e equipe do sistema
           </p>
         </div>
+
+        {isSuper && (
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+            <div className="flex items-start gap-3">
+              <MonitorPlay className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-bold text-amber-700 dark:text-amber-300">Manutenção — Atualização em massa</p>
+                <p className="text-xs text-amber-600/80 dark:text-amber-300/80 mt-1">
+                  Força todos os dispositivos conectados (PDV, tablets, TVs) a recarregarem a página,
+                  renovando a sessão. Use após o Supabase corrigir o relógio ou em novos deploys.
+                </p>
+                {!confirmForceReload ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmForceReload(true)}
+                    className="mt-3 px-3 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold hover:bg-amber-600"
+                  >
+                    Forçar atualização de todos os dispositivos
+                  </button>
+                ) : (
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleForceReloadAll}
+                      className="px-3 py-2 rounded-xl bg-rose-500 text-white text-xs font-bold hover:bg-rose-600"
+                    >
+                      Sim, recarregar tudo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmForceReload(false)}
+                      className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold hover:opacity-80"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Sub-tab pills - fully responsive */}
         <div className="flex flex-wrap items-center gap-1 bg-slate-200/80 dark:bg-[#18181b] p-1.5 rounded-2xl border border-slate-300 dark:border-[#27272a] text-xs font-bold w-full lg:w-auto">
