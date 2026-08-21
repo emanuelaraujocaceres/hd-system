@@ -112,8 +112,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({ onLoginSuccess }) => {
 
           if (profileError) {
             console.error('[Login] Erro ao buscar perfil no Supabase:', profileError.message);
+            // Skew de relógio do servidor ("JWT issued at future") é transitório e
+            // afeta TODO o app — NÃO é erro de conta/senha. Mostra mensagem clara e
+            // evita cair no fallback enganoso de "sem registro em system_users".
+            if (/jwt/i.test(profileError.message) && /(future|not yet valid)/i.test(profileError.message)) {
+              setErrorMessage('Serviço temporariamente indisponível (problema de relógio no servidor). Tente novamente em alguns instantes.');
+              setIsLoading(false);
+              return;
+            }
             setAuthMode('local');
             if (await tryLocalLogin()) { setIsLoading(false); return; }
+            // Se o login local também falhou, NÃO prosseguir para o branch de
+            // "sem registro em system_users" (isso só ocorre quando auth ok + sem
+            // linha em system_users, nunca quando o perfil falhou por erro).
+            setIsLoading(false);
+            return;
           }
 
           if (profileData && !profileError) {
