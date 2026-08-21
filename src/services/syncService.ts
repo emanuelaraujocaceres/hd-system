@@ -956,6 +956,21 @@ class SupabaseSyncService {
       if (error) {
         this._lastAuthFailAt = Date.now();
         console.warn('[HD-Sync] Re-login automático falhou (senha local ≠ Supabase?):', error.message);
+        // Credencial inválida (ex.: "Invalid login credentials"): a senha cacheada
+        // em hd_system_user_profile está stale/errada. Não fica em loop reenviando
+        // a mesma senha — apaga a senha cacheada para forçar login manual e evitar
+        // que o app fique preso em papel anon (BUG que travava junior/juninho).
+        if (/invalid login credentials/i.test(error.message || '')) {
+          try {
+            const cached = localStorage.getItem('hd_system_user_profile');
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              delete parsed.password;
+              localStorage.setItem('hd_system_user_profile', JSON.stringify(parsed));
+              console.warn('[HD-Sync] 🔑 Senha cacheada removida (credencial inválida) — exigir login manual.');
+            }
+          } catch { /* ignora falha de parse */ }
+        }
         return false;
       }
       this._lastAuthFailAt = 0; // limpa cooldown em caso de sucesso
