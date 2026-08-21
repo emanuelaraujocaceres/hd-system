@@ -116,7 +116,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           // Realtime do operador entregar o pedido na filial correta).
           const branchRes = await fetch(
             `${baseUrl}/rest/v1/store_branches?id=eq.${encodeURIComponent(resolvedFilialId)}&select=*`,
-            { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json' } }
+            { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json', 'x-branch-id': resolvedFilialId } }
           );
           const branchesData = branchRes.ok ? await branchRes.json() : [];
           const branchData = branchesData[0];
@@ -130,7 +130,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           // Buscar produtos da filial (anon)
           const productsRes = await fetch(
             `${baseUrl}/rest/v1/products?store_branch_id=eq.${branchData.id}&is_active=eq.true&show_on_cardapio=eq.true&stock_quantity=gt.0&select=*`,
-            { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json' } }
+            { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json', 'x-branch-id': branchData.id } }
           );
           if (productsRes.ok) {
             const cloudProducts = await productsRes.json();
@@ -159,7 +159,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           // Buscar config do cardápio
           const configRes = await fetch(
             `${baseUrl}/rest/v1/digital_menu_config?store_branch_id=eq.${branchData.id}&select=*`,
-            { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json' } }
+            { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json', 'x-branch-id': branchData.id } }
           );
           if (configRes.ok) {
             const configs = await configRes.json();
@@ -271,6 +271,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
               'apikey': anonKey,
               'Authorization': `Bearer ${anonKey}`,
               'Content-Type': 'application/json',
+              'x-branch-id': foundTable.storeBranchId,
             },
           }
         );
@@ -308,6 +309,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
               'apikey': anonKey,
               'Authorization': `Bearer ${anonKey}`,
               'Content-Type': 'application/json',
+              'x-branch-id': foundTable.storeBranchId,
             },
           }
         );
