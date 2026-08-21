@@ -632,11 +632,14 @@ class SupabaseSyncService {
     }
 
     let result = await this.tryUpsert(table, rowWithTimestamp);
-    if (!result.ok && this.isAuthError(result.error)) {
+    if (!result.ok && this.isAuthError(result.error) && !this.isTransientAuthError(result.error)) {
       // Sem sessão Supabase válida (ex.: login OFFLINE não cria JWT): re-login
       // silencioso com as credenciais locais + 1 tentativa extra. Sem isso a
       // escrita morreria aqui (PGRST301 não é erro de conexão → nem enfileira)
       // e a venda ficaria só no aparelho, invisível para os outros.
+      // (Skew de relógio "JWT issued at future" é transitório: o re-login não
+      // resolve, então pulamos e enfileiramos para repetir quando o relógio
+      // do servidor for corrigido.)
       console.warn('[HD-Sync] 🔑 Auth error — re-autenticando com credenciais locais...');
       const reauthed = await this.ensureSession(true);
       if (reauthed) {
@@ -644,11 +647,11 @@ class SupabaseSyncService {
       }
     }
     if (!result.ok) {
-      // Só enfileira erros de CONEXÃO. Erros permanentes (RLS/permissão,
-      // org inválida) nunca vão passar com retry — enfileirar só faria a
-      // fila crescer sem limite. O erro já foi logado no console + DLQ.
-      if (this.isConnectionError(result.error)) {
-        console.log(`[HD-Sync] 📝 Queuing ${table} upsert (network error — will retry)`);
+      // Enfileira erros de CONEXÃO OU auth transitório (clock skew "JWT issued
+      // at future"). Erros permanentes (RLS/permissão, org inválida) nunca
+      // passariam com retry — enfileirar só faria a fila crescer sem limite.
+      if (this.isConnectionError(result.error) || this.isTransientAuthError(result.error)) {
+        console.log(`[HD-Sync] 📝 Queuing ${table} upsert (${this.isTransientAuthError(result.error) ? 'transient auth skew' : 'network error'} — will retry)`);
         syncQueue.enqueue(table, 'upsert', { data: rowWithTimestamp });
         this._pendingCount = syncQueue.getPendingCount();
       }
@@ -669,9 +672,10 @@ class SupabaseSyncService {
     }
 
     let result = await this.tryDelete(table, id);
-    if (!result.ok && this.isAuthError(result.error)) {
+    if (!result.ok && this.isAuthError(result.error) && !this.isTransientAuthError(result.error)) {
       // Mesma regra do upsert: login offline não deixa JWT — re-autentica e
-      // tenta 1x de novo antes de descartar.
+      // tenta 1x de novo antes de descartar. (Skew "JWT issued at future" é
+      // transitório — pula o re-login e enfileira para repetir depois.)
       console.warn('[HD-Sync] 🔑 Auth error — re-autenticando com credenciais locais...');
       const reauthed = await this.ensureSession(true);
       if (reauthed) {
@@ -679,9 +683,9 @@ class SupabaseSyncService {
       }
     }
     if (!result.ok) {
-      // Só enfileira erros de CONEXÃO (mesma regra do upsert — evita fila infinita)
-      if (this.isConnectionError(result.error)) {
-        console.log(`[HD-Sync] 📝 Queuing ${table} delete (network error — will retry)`);
+      // Enfileira CONEXÃO OU auth transitório (skew). Erros permanentes não.
+      if (this.isConnectionError(result.error) || this.isTransientAuthError(result.error)) {
+        console.log(`[HD-Sync] 📝 Queuing ${table} delete (${this.isTransientAuthError(result.error) ? 'transient auth skew' : 'network error'} — will retry)`);
         syncQueue.enqueue(table, 'delete', { rowId: id });
         this._pendingCount = syncQueue.getPendingCount();
       }
@@ -730,9 +734,10 @@ class SupabaseSyncService {
     }
 
     let result = await this.tryUpsertBatch(table, rowsWithTimestamp);
-    if (!result.ok && this.isAuthError(result.error)) {
+    if (!result.ok && this.isAuthError(result.error) && !this.isTransientAuthError(result.error)) {
       // Mesma regra do upsert: login offline não deixa JWT — re-autentica e
-      // tenta 1x de novo antes de descartar.
+      // tenta 1x de novo antes de descartar. (Skew "JWT issued at future" é
+      // transitório — pula o re-login e enfileira para repetir depois.)
       console.warn('[HD-Sync] 🔑 Auth error — re-autenticando com credenciais locais...');
       const reauthed = await this.ensureSession(true);
       if (reauthed) {
@@ -740,9 +745,9 @@ class SupabaseSyncService {
       }
     }
     if (!result.ok) {
-      // Só enfileira erros de CONEXÃO (mesma regra do upsert — evita fila infinita)
-      if (this.isConnectionError(result.error)) {
-        console.log(`[HD-Sync] 📝 Queuing ${table} batch upsert (network error — will retry)`);
+      // Enfileira CONEXÃO OU auth transitório (skew). Erros permanentes não.
+      if (this.isConnectionError(result.error) || this.isTransientAuthError(result.error)) {
+        console.log(`[HD-Sync] 📝 Queuing ${table} batch upsert (${this.isTransientAuthError(result.error) ? 'transient auth skew' : 'network error'} — will retry)`);
         syncQueue.enqueue(table, 'upsert_batch', { dataArray: rowsWithTimestamp });
         this._pendingCount = syncQueue.getPendingCount();
       }
@@ -1024,6 +1029,21 @@ class SupabaseSyncService {
       msg.includes('could not connect') ||
       msg.includes('channel')
     );
+  }
+
+  /**
+   * Erro de autenticação TRANSITÓRIO causado por dessincronização de relógio
+   * (clock skew) no servidor — ex.: "JWT issued at future". O token em si é
+   * VÁLIDO; quem está errado é o relógio do nó que serve o /rest/v1. Por isso
+   * NÃO é tratado como erro de auth permanente: deve ser enfileirado e repetido,
+   * pois quando o relógio do servidor for corrigido a mesma escrita passa a ser
+   * aceita. (Caso real: 2026-08-21 — 100% das chamadas /rest/v1 retornavam 401
+   * "JWT issued at future" por skew no PostgREST, sem nenhum dado corrompido.)
+   */
+  private isTransientAuthError(error: any): boolean {
+    if (!error) return false;
+    const msg = (error.message || '').toLowerCase();
+    return msg.includes('jwt') && (msg.includes('future') || msg.includes('not yet valid'));
   }
 }
 

@@ -12,6 +12,15 @@
 
 import { supabase } from '../lib/supabase';
 
+// Erro de auth transitório por clock skew (ex.: "JWT issued at future"): o
+// token é válido, o relógio do servidor que está errado. Essas operações não
+// devem virar 'failed' na fila — ficam 'pending' até o relógio ser corrigido.
+// (Duplicado de syncService.isTransientAuthError para evitar import circular.)
+function isTransientAuthErrorMsg(err: any): boolean {
+  const msg = (err?.message || '').toLowerCase();
+  return msg.includes('jwt') && (msg.includes('future') || msg.includes('not yet valid'));
+}
+
 type TableName =
   | 'products'
   | 'categories'
@@ -242,15 +251,23 @@ class SyncQueueService {
       } catch (err: any) {
         op.retries++;
         op.lastError = err?.message || 'Unknown error';
-        op.status = op.retries >= op.maxRetries ? 'failed' : 'pending';
-        
-        if (op.status === 'failed') {
-          failed++;
-          console.error(`[SyncQueue] ❌ ${op.action} on ${op.table} failed permanently after ${op.retries} retries:`, op.lastError);
+        if (isTransientAuthErrorMsg(err)) {
+          // Skew de relógio ("JWT issued at future"): o token é válido, o
+          // relógio do servidor que está errado. Mantém 'pending' (nunca
+          // 'failed') para ser repetido quando o relógio for corrigido.
+          op.status = 'pending';
+          console.warn(`[SyncQueue] ⏳ ${op.action} on ${op.table} adiado (auth transitório/skew):`, op.lastError);
         } else {
-          console.warn(`[SyncQueue] ⚠️ ${op.action} on ${op.table} failed (retry ${op.retries}/${op.maxRetries}):`, op.lastError);
+          op.status = op.retries >= op.maxRetries ? 'failed' : 'pending';
+
+          if (op.status === 'failed') {
+            failed++;
+            console.error(`[SyncQueue] ❌ ${op.action} on ${op.table} failed permanently after ${op.retries} retries:`, op.lastError);
+          } else {
+            console.warn(`[SyncQueue] ⚠️ ${op.action} on ${op.table} failed (retry ${op.retries}/${op.maxRetries}):`, op.lastError);
+          }
         }
-        
+
         // Sem backoff por item: com centenas de operações pendentes, o sleep
         // exponencial por item tornaria o processamento da fila inviável.
         this.saveQueue([...this.getQueue().filter((q) => q.id !== op.id), op]);
