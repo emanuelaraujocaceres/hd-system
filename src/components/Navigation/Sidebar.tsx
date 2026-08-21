@@ -117,7 +117,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
     kds: 'moduleKds',
     delivery: 'moduleDelivery',
     cardapioDigital: 'moduleCardapioDigital',
+    tvShowcase: 'moduleTvShowcase',
+    tvConnect: 'moduleTvConnect',
+    cardapioPreview: 'moduleCardapioPreview',
     settings: 'moduleSettings',
+  };
+
+  // ✅ Override: some menu items were gated by the wrong visibility key.
+  // Map the menu item id to the correct module-visibility key from the Settings → Módulos tab.
+  const MODULE_VISIBILITY_OVERRIDE: Record<string, string> = {
+    'tv-showcase': 'tvShowcase', // "Ofertas / TV" → moduleTvShowcase
+    'connect-tv': 'tvConnect',   // "Conectar TV" → moduleTvConnect
+    'cardapio_preview': 'cardapioPreview', // "Cardápio Preview" → moduleCardapioPreview
   };
 
   // ✅ Check if module is enabled for this branch
@@ -147,8 +158,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (item.id === 'organizations') return isDev;
     // Check user permission (IAM)
     if (!permEngine.hasPermission(item.module, 'view')) return false;
-    // ✅ Check module visibility (per branch)
-    return isModuleEnabled(item.module);
+    // ✅ Check module visibility (per branch). Use the override key when present
+    // so the Settings → Módulos toggle controls the correct menu item.
+    return isModuleEnabled(MODULE_VISIBILITY_OVERRIDE[item.id] ?? item.module);
   });
 
   const handleNavClick = (id: string) => {
