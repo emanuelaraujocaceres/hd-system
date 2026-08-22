@@ -652,6 +652,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
           organization_id: orgId,
           store_branch_id: branchId,
           password: userPassword || undefined, // Envia senha manual se fornecida
+          // Envia as permissões por módulo selecionadas no modal (colaborador).
+          // Admin/manager ignoram no engine, mas persistimos para consistência.
+          permissions: newUser.role === 'admin' ? undefined : userPermissions,
         });
         if (!data?.success) {
           setErrorMessage(`Não foi possível criar o usuário no Supabase: ${error || data?.message || 'erro desconhecido'}`);

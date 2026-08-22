@@ -1107,11 +1107,14 @@ export const App: React.FC = () => {
 
   // Check current user permissions
   const isAdmin = user.role === 'admin' || user.superadmin;
-  // MERGE defaults with user permissions — `||` only works when permissions is null/undefined
+  // MERGE defaults RESTRITOS com as permissões do usuário. O base NUNCA é
+  // "all-true" — se o colaborador não tem o módulo em user.permissions, ele
+  // fica OCULTO (incl. comanda/kds/delivery que o role antes liberava).
   const perms = {
-    pdv: true, inventory: true, crm: true, finance: true,
-    dashboard: true, settings: true, comanda: true, kds: true,
-    cardapioDigital: true, delivery: true, tvShowcase: true,
+    pdv: true, inventory: true, crm: true,
+    finance: false, dashboard: false, settings: false,
+    comanda: false, kds: false, delivery: false,
+    cardapioDigital: false, tvShowcase: false,
     ...(user.permissions || {}),
   };
 

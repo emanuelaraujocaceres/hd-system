@@ -1713,7 +1713,11 @@ updateCategoryFromRemote(row: any) {
       role: row.role || 'collaborator',
       organizationId: row.organization_id || this.getCurrentOrgId(),
       storeBranchId: row.store_branch_id || '',
-      permissions: row.permissions || { pdv: true, inventory: true, crm: true, finance: true, dashboard: true, settings: true },
+      // NUNCA usar fallback "all-true" — isso concedia TODOS os módulos a
+      // colaboradores cujo cloud tem permissions nulo. O PermissionEngine
+      // aplica o default RESTRITO (DEFAULT_COLLABORATOR_PERMISSIONS) quando
+      // permissions é null.
+      permissions: row.permissions ?? null,
       active: row.active !== false,
       avatarUrl: row.avatar_url || undefined,
     };
@@ -2689,7 +2693,9 @@ id: StorageService.ensureUuid(settings.id),
           id: r.id, name: r.name, email: r.email, role: r.role || 'collaborator',
           organizationId: r.organization_id || orgId,
           storeBranchId: r.store_branch_id || '',
-          permissions: r.permissions || { pdv: true, inventory: true, crm: true, finance: true, dashboard: true, settings: true },
+          // NUNCA fallback "all-true" — PermissionEngine aplica o default
+          // restrito quando permissions é null (ver DEFAULT_COLLABORATOR_PERMISSIONS).
+          permissions: r.permissions ?? null,
           active: r.active !== false, avatarUrl: r.avatar_url || undefined,
         }));
         const initialIds = new Set(INITIAL_USERS.filter(u => u.organizationId === orgId || (!u.organizationId && this.isDefaultOrg())).map((u) => u.id));

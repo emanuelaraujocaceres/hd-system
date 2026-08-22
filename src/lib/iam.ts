@@ -187,9 +187,29 @@ export const TAB_MODULE_MAP: Record<string, Module> = {
   tv: 'pdv',
 };
 
-// ─── CORE PERMISSION ENGINE ────────────────────────────────────
+  // ─── CORE PERMISSION ENGINE ────────────────────────────────────
 
-export class PermissionEngine {
+  /**
+   * Permissão padrão RESTRITA para colaborador que não tem `permissions`
+   * explícito (ex.: cloud com coluna nula). NUNCA concede finance/settings/
+   * users/branches — apenas PDV + Estoque (leitura) + CRM. É a fonte única
+   * da verdade para o "default" de colaborador (LoginModal/App também usam
+   * um mapa equivalente, mas o engine é quem garante o comportamento).
+   */
+  export const DEFAULT_COLLABORATOR_PERMISSIONS: Record<string, boolean> = {
+    pdv: true,
+    inventory: true,
+    crm: true,
+    finance: false,
+    dashboard: false,
+    settings: false,
+    comanda: false,
+    kds: false,
+    delivery: false,
+    cardapioDigital: false,
+  };
+
+  export class PermissionEngine {
   private user: UserProfile | null;
   private level: AccessLevel;
   private effectivePermissions: Permission[];
@@ -225,30 +245,34 @@ export class PermissionEngine {
       return allPermissions;
     }
 
-    // Start with role-based defaults
-    const rolePerms = [...(ROLE_PERMISSIONS[user.role] || ROLE_PERMISSIONS.collaborator)];
-
-    // Merge with custom user permissions (from DB)
-    if (user.permissions) {
-      const customMap = user.permissions as unknown as Record<string, boolean>;
-      // If a custom permission is explicitly set to false, remove it
-      // If explicitly set to true, add it
-      for (const mod of Object.keys(customMap)) {
-        if (customMap[mod] === false) {
-          // Remove all permissions for this module
-          const idx = rolePerms.findIndex(p => p.module === mod);
-          if (idx >= 0) rolePerms.splice(idx, rolePerms.length);
-        } else if (customMap[mod] === true) {
-          // Add view + create for this module if not already present
-          if (!rolePerms.some(p => p.module === mod && p.action === 'view')) {
-            rolePerms.push({ module: mod as Module, action: 'view' });
-            rolePerms.push({ module: mod as Module, action: 'create' });
-          }
-        }
-      }
+    // Admin / Manager: acesso total dentro da org (ignora mapa custom de
+    // permissões — o admin só restringe COLABORADORES, não a si mesmo).
+    if (user.role === 'admin' || user.role === 'manager') {
+      return [...(ROLE_PERMISSIONS[user.role] || ROLE_PERMISSIONS.admin)];
     }
 
-    return rolePerms;
+    // Colaborador (e demais não-admin): `permissions` é uma ALLOWLIST
+    // (Record<module, boolean>). Apenas os módulos marcados como `true`
+    // são concedidos; os demais ficam OCULTOS — inclusive os que o role
+    // "collaborator" costumava liberar por padrão (comanda/kds/delivery).
+    // Isso garante que "selecionei apenas PDV/Estoque/CRM" resulte
+    // EXATAMENTE nesses 3 módulos, sem vazamento.
+    const rawMap = user.permissions;
+    const permsMap: Record<string, boolean> =
+      rawMap && typeof rawMap === 'object' && Object.keys(rawMap).length > 0
+        ? (rawMap as unknown as Record<string, boolean>)
+        : { ...DEFAULT_COLLABORATOR_PERMISSIONS };
+
+    const allowed: Permission[] = [];
+    const addModule = (mod: string) => {
+      if (allowed.some((p) => p.module === (mod as Module) && p.action === 'view')) return;
+      allowed.push({ module: mod as Module, action: 'view' });
+      allowed.push({ module: mod as Module, action: 'create' });
+    };
+    for (const mod of Object.keys(permsMap)) {
+      if (permsMap[mod] === true) addModule(mod);
+    }
+    return allowed;
   }
 
   // ─── PUBLIC API ───────────────────────────────────────────────

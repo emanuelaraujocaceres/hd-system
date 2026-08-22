@@ -601,6 +601,7 @@ export interface Database {
           email: string;
           role: string;
           active: boolean;
+          permissions: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -612,6 +613,7 @@ export interface Database {
           email: string;
           role?: string;
           active?: boolean;
+          permissions?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -622,6 +624,7 @@ export interface Database {
           email?: string;
           role?: string;
           active?: boolean;
+          permissions?: Json | null;
           updated_at?: string;
         };
       };

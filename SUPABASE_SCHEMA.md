@@ -351,6 +351,7 @@ Colaboradores (não confundir com auth.users).
 | is_active | BOOLEAN | `true` | Ativo? |
 | store_branch_id | UUID | | Filial |
 | commission_rate | NUMERIC(5,2) | `0` | Taxa de comissão (%) |
+| permissions | jsonb | `NULL` | Permissões por módulo (Record<module, boolean>). Ex.: `{"pdv":true,"inventory":true,"crm":true,"finance":false}`. `NULL` = default restrito do frontend (apenas PDV/Estoque/CRM). Nunca "all-true". Adicionado em `20260822_system_users_permissions.sql`. |
 | created_at | TIMESTAMPTZ | `now()` | |
 | updated_at | TIMESTAMPTZ | `now()` | |
 

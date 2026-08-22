@@ -48,7 +48,7 @@ export async function onRequestPost(context: any) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { name, email, role, organization_id, store_branch_id, password } = body;
+    const { name, email, role, organization_id, store_branch_id, password, permissions } = body;
 
     if (!name || !email || !organization_id) {
       return new Response(JSON.stringify({
@@ -120,6 +120,10 @@ export async function onRequestPost(context: any) {
       active: true,
       store_branch_id: store_branch_id || null,
       superadmin: false,
+      // Permissões explícitas por módulo (Record<module, boolean>). Se o
+      // criador não enviou, fica NULL e o frontend aplica o default restrito
+      // (DEFAULT_COLLABORATOR_PERMISSIONS) — NUNCA "all-true".
+      permissions: permissions ? permissions : null,
     });
 
     if (dbErr) {
