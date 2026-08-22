@@ -849,6 +849,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     setQrModalTable(table);
   };
 
+  // ── Ver Cardápio da mesa (preview anon, igual ao fluxo do QR) ──
+  const handleViewCardapio = (table: Table) => {
+    // Mesas antigas/importadas podem não ter qrToken — gerar e persistir
+    // antes de abrir, senão a URL '#/mesa/' cai no App e não no cardápio.
+    if (!table.qrToken) {
+      table = {
+        ...table,
+        qrToken: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+      };
+      storageService.saveTable(table);
+      setTables(storageService.getTables());
+    }
+    window.open(`${window.location.origin}${window.location.pathname}#/mesa/${table.qrToken}`, '_blank');
+  };
+
   const handlePrintFromModal = () => {
     if (!qrModalTable) return;
     const baseUrl = window.location.origin + window.location.pathname;
@@ -3218,7 +3233,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                       {table.status === 'active' ? 'Ativa' : 'Inativa'}
                     </span>
                     <button
-                      onClick={() => window.open(`${window.location.origin}${window.location.pathname}#/mesa/${table.qrToken}`, '_blank')}
+                      onClick={() => handleViewCardapio(table)}
                       className="p-2 rounded-lg text-teal-500 hover:bg-teal-500/10"
                       title="Ver Cardápio"
                     >
