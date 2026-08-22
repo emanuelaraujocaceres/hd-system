@@ -20,3 +20,15 @@ test_sql_auth.cjs
 
 # Temporary files
 pawwork-tmp/
+
+# Scratch / diagnostic scripts (untracked artifacts from investigations)
+query_*.js
+query_*.mjs
+query_*.ps1
+query_*.md
+run_query*
+runquery*
+run_queries*
+output.json
+test_rpc.ps1
+supabase/.temp/
