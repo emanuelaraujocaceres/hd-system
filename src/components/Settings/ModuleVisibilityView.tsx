@@ -52,6 +52,11 @@ export const ModuleVisibilityView: React.FC<ModuleVisibilityViewProps> = ({ bran
 
   useEffect(() => {
     loadSettings();
+    // Reage a mudanças remotas (Realtime): quando outro dispositivo da mesma
+    // filial salva a visibilidade de módulos, este acesso reflete na hora sem
+    // precisar reabrir a aba.
+    const unsub = storageService.subscribe(() => loadSettings());
+    return () => unsub();
   }, [branch.id]);
 
   const loadSettings = () => {

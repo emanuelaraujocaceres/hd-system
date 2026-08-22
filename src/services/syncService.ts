@@ -506,7 +506,19 @@ class SupabaseSyncService {
    */
   private async tryUpsert(table: TableName, row: Record<string, any>): Promise<{ ok: boolean; error?: any }> {
     try {
-      const { error } = await supabase.from(table).upsert(row, { onConflict: 'id' });
+      // module_visibility tem UNIQUE(store_branch_id) — uma linha por filial.
+      // O app gera um `id` aleatório por dispositivo, então fazer upsert no PK
+      // `id` faz o SEGUNDO dispositivo da mesma filial tentar INSERT com o mesmo
+      // store_branch_id → violação UNIQUE → falha silenciosa (não é erro de
+      // conexão/auth, então não entra na fila) → a mudança NUNCA chega na nuvem
+      // e o Realtime não dispara. Conflict em store_branch_id faz todo
+      // dispositivo convergir na única linha da filial. Também removemos `id`
+      // do payload para o PK não mudar após a criação.
+      const onConflict = table === 'module_visibility' ? 'store_branch_id' : 'id';
+      const payload = table === 'module_visibility'
+        ? (() => { const { id, ...rest } = row; return rest; })()
+        : row;
+      const { error } = await supabase.from(table).upsert(payload, { onConflict });
       if (error) {
         console.warn(`[HD-Sync] ❌ Upsert ${table} failed:`, error.message, `(row id: ${row.id})`);
         // DIAGNÓSTICO: loga o payload completo para revelar qual coluna UUID vai vazia ("")
