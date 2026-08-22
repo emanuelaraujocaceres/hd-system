@@ -1784,6 +1784,63 @@ updateCategoryFromRemote(row: any) {
     };
   }
 
+  /**
+   * Merge de vendas durante a hidratação (cloud + local).
+   * REGRA CRÍTICA (BUG de duplicata no KDS): uma venda que já existe no cloud
+   * NUNCA deve ser re-adicionada a partir do local — a checagem de cloud vem
+   * ANTES da de sessão-ativa. Antes, vendas de comanda (cardápio/delivery têm
+   * customerSessionId ativo) eram incluídas 2x → 2 cartões no KDS, um com
+   * status antigo ("Entregue") e outro correto ("Fechamento Solicitado").
+   * Rede de segurança: dedupe final por id (mantém a PRIMEIRA ocorrência, que
+   * é a versão do cloud, fonte da verdade).
+   */
+  private mergeSalesForHydration(
+    localSales: Sale[],
+    cloudMapped: Sale[],
+    safeSales: any[],
+    resolvedBranchId?: string,
+  ): Sale[] {
+    const cloudSaleIds = new Set(safeSales.map((r: any) => r.id));
+    // CRITICAL: filtra vendas locais por filial resolvida para evitar vazamento
+    // cross-branch (ex.: vendas de Campinas aparecendo em São Paulo). Porém
+    // preserva vendas de sessões de cliente ativas (comandas em aberto).
+    const activeSessions = this.getCustomerSessions()
+      .filter((s) => s.status === 'active')
+      .map((s) => s.id);
+
+    const mergedSales = [
+      ...cloudMapped,
+      ...localSales.filter((s) => {
+        // NUNCA duplicar venda que já veio do cloud (mesmo id). Esta checagem
+        // DEVE vir ANTES da sessão-ativa (ver BUG acima).
+        if (cloudSaleIds.has(s.id)) return false; // já em cloudMapped
+        // Sempre preservar vendas de sessões de cliente ativas (comandas em aberto)
+        if (activeSessions.includes(s.customerSessionId)) return true;
+        // Se há filial resolvida, manter apenas vendas DESTA filial
+        if (resolvedBranchId) return s.storeBranchId === resolvedBranchId;
+        return true; // sem filtro de filial: manter tudo (edge case)
+      }),
+    ];
+
+    // Sort: newest first by date (defensive — cloud ORDER BY + local safety net)
+    mergedSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // Dedupe final por id (rede de segurança): NENHUMA venda 2x no array local.
+    // Mantém a PRIMEIRA ocorrência — cloudMapped vem antes, então a versão do
+    // cloud (fonte da verdade) vence sobre duplicata local.
+    const seenSaleIds = new Set<string>();
+    const deduped = mergedSales.filter((s) => {
+      if (!s.id || seenSaleIds.has(s.id)) return false;
+      seenSaleIds.add(s.id);
+      return true;
+    });
+
+    if (deduped.length !== mergedSales.length) {
+      console.warn(`[HD-Sync] ⚠️ ${mergedSales.length - deduped.length} venda(s) duplicada(s) removida(s) no merge de hidratação`);
+    }
+    return deduped;
+  }
+
   // ─── INITIAL LOAD FROM SUPABASE ──────────────────────────────────
   // Called once on app startup to hydrate localStorage from cloud.
 
@@ -2160,37 +2217,9 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
             const items = cloudItems.length > 0 ? cloudItems : (localSalesById.get(r.id)?.items || []);
             return this.mapSaleFromCloud(r, items, localSalesById.get(r.id));
           });
-// CRITICAL: Filter local-only sales by resolved branch to prevent
-            // cross-branch data leaks (e.g. Campinas sales appearing in São Paulo).
-            // However, preserve sales from active customer sessions (comandas em aberto),
-            // para que pedidos não sumam da comanda ao mudar de filial ou recarregar o app.
-            const activeSessions = this.getCustomerSessions()
-              .filter((s) => s.status === 'active')
-              .map((s) => s.id);
-            const mergedSales = [
-              ...cloudMapped,
-              ...localSales.filter((s) => {
-                // Sempre preservar vendas de sessões de cliente ativas (comandas em aberto)
-                // activeSessions é um array (string[]), usar includes e não has
-                if (activeSessions.includes(s.customerSessionId)) return true;
-                if (cloudSaleIds.has(s.id)) return false; // já no cloud
-                // If we have a resolved branch, only keep local sales from THIS branch
-                if (resolvedBranchId) return s.storeBranchId === resolvedBranchId;
-                return true; // no branch filter: keep all (edge case)
-              }),
-            ];
-          // Sort: newest first by date (defensive — cloud ORDER BY + local safety net)
-          mergedSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          console.log(`[HD-Sync] 📊 Merged ${mergedSales.length} sales (cloud: ${cloudMapped.length}, local-only: ${mergedSales.length - cloudMapped.length})`);
-          if (cloudMapped.length > 0) console.log(`[HD-Sync] 📊 Cloud sale IDs:`, cloudMapped.map(s => `${s.id} (customer: ${s.customerName || 'N/A'})`));
-          // Defensive: warn if any local sale with unique ID went missing
-          const mergedIds = new Set(mergedSales.map(s => s.id));
-          for (const ls of localSales) {
-            if (!mergedIds.has(ls.id)) {
-              console.warn(`[HD-Sync] ⚠️ Local sale ${ls.id} (${ls.customerName || 'no name'}) LOST during merge!`);
-            }
-          }
-          this.set(KEYS.SALES, mergedSales);
+
+          const dedupedSales = this.mergeSalesForHydration(localSales, cloudMapped, safeSales, resolvedBranchId);
+          this.set(KEYS.SALES, dedupedSales);
         }
       }
 

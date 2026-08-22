@@ -100,4 +100,33 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     expect(rec.storeBranchId).toBe('b1');
     expect(rec.organizationId).toBe('o1');
   });
+
+  // ─── REGRESSÃO: duplicata de venda na hidratação (BUG comanda/KDS) ───
+  // Venda de comanda (cardápio/delivery) existe no cloud E localmente com o
+  // MESMO id e numa sessão de cliente ativa. Antes do fix, a checagem de
+  // sessão-ativa vinha ANTES da checagem de cloud → a venda local era
+  // re-adicionada → 2 cartões no KDS (um "Entregue", outro "Fechamento
+  // Solicitado"). O merge deve produzir APENAS 1 venda (versão do cloud).
+  function seedActiveSession(id: string) {
+    const org = (svc as any).getCurrentOrgId?.() || '';
+    localStorage.setItem('hd_system_customer_sessions', JSON.stringify([{ id, status: 'active', organizationId: org }]));
+  }
+
+  it('mergeSalesForHydration não duplica venda do cloud que está em sessão ativa', () => {
+    seedActiveSession('cs-active');
+    const cloudSale = { id: 'sale-dup', code: '1', date: '2026-01-01T00:00:00Z', total: 10, kitchenStatus: 'closing_request', customerSessionId: 'cs-active', storeBranchId: 'b1' } as any;
+    const localSale = { id: 'sale-dup', code: '1', date: '2026-01-01T00:00:00Z', total: 10, kitchenStatus: 'delivered', customerSessionId: 'cs-active', storeBranchId: 'b1' } as any;
+    const result = (svc as any).mergeSalesForHydration([localSale], [cloudSale], [{ id: 'sale-dup' }], 'b1');
+    const dups = result.filter((s: any) => s.id === 'sale-dup');
+    expect(dups.length).toBe(1);
+    // A versão do cloud vem primeiro e vence (fonte da verdade).
+    expect(result.find((s: any) => s.id === 'sale-dup').kitchenStatus).toBe('closing_request');
+  });
+
+  it('mergeSalesForHydration preserva venda local-only de sessão ativa ausente no cloud', () => {
+    seedActiveSession('cs-local');
+    const localOnly = { id: 'local-1', code: '2', date: '2026-01-01T00:00:00Z', total: 5, kitchenStatus: 'pending', customerSessionId: 'cs-local', storeBranchId: 'b1' } as any;
+    const result = (svc as any).mergeSalesForHydration([localOnly], [], [], 'b1');
+    expect(result.find((s: any) => s.id === 'local-1')).toBeTruthy();
+  });
 });
