@@ -5247,8 +5247,51 @@ private updateReceivableFromPayments(saleId: string) {
     const currentBranchId = this.getSelectedBranchId();
     if (!currentBranchId) return all[0] || null;
     const found = all.find(v => v.storeBranchId === currentBranchId);
-    // Fallback: se não encontrou o branch exato, usa o primeiro registro disponível
-    return found || all[0] || null;
+    // ✅ Não faz fallback para outra filial: se a filial atual não tem registro,
+    // retorna null e o mapa efetivo usa os defaults (evita vazar a config de uma
+    // filial para outra recém-criada — regra de isolamento de filial).
+    return found || null;
+  }
+
+  /**
+   * Default module visibility (single source of truth).
+   * Usado TANTO pelo menu (Sidebar) QUANTO pela aba Módulos, para que nunca
+   * divergentam. Filiais/orgs novas sem registro usam exatamente estes defaults.
+   */
+  getDefaultModuleVisibility(): Record<string, boolean> {
+    return {
+      modulePdv: true,
+      moduleInventory: true,
+      moduleFiado: false,
+      moduleCrm: false,
+      moduleComanda: false,
+      moduleDashboard: true,
+      moduleFinance: false,
+      moduleKds: false,
+      moduleDelivery: false,
+      moduleCardapioDigital: false,
+      moduleCardapioPreview: false,
+      moduleTvShowcase: false,
+      moduleTvConnect: false,
+    };
+  }
+
+  /**
+   * Visibilidade efetiva da filial atual = registro salvo mesclado sobre os
+   * defaults. SEMPRE retorna um objeto completo (toda chave é boolean, nunca
+   * undefined/null). Garante que menu e aba Módulos mostram exatamente as
+   * mesmas páginas em qualquer filial/org — inclusive recém-criadas.
+   */
+  getEffectiveModuleVisibility(): Record<string, boolean> {
+    const rec = this.getModuleVisibility();
+    const defaults = this.getDefaultModuleVisibility();
+    const eff: Record<string, boolean> = { ...defaults };
+    if (rec) {
+      for (const k of Object.keys(defaults)) {
+        if (typeof rec[k] === 'boolean') eff[k] = rec[k];
+      }
+    }
+    return eff;
   }
 
   /**

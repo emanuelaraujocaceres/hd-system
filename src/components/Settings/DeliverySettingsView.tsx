@@ -99,7 +99,7 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
 
     setNeighborhoods(storageService.getDeliveryNeighborhoods().filter(n => n.storeBranchId === branch.id));
     setDistanceRates(storageService.getDeliveryDistanceRates().filter(r => r.storeBranchId === branch.id));
-    setCardapioDigitalEnabled(storageService.getModuleVisibility()?.moduleCardapioDigital ?? false);
+    setCardapioDigitalEnabled(storageService.getEffectiveModuleVisibility().moduleCardapioDigital ?? false);
   };
 
   const handleSaveSettings = () => {
@@ -132,7 +132,7 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
     setSettings(newSettings);
 
     // Controla a visibilidade do Cardápio Digital via module_visibility (realtime)
-    const cur = storageService.getModuleVisibility() || {};
+    const cur = storageService.getEffectiveModuleVisibility();
     storageService.saveModuleVisibility({
       id: cur.id || crypto.randomUUID(),
       organizationId: branch.organizationId || '',

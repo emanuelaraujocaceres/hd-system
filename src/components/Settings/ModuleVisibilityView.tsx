@@ -59,27 +59,10 @@ export const ModuleVisibilityView: React.FC<ModuleVisibilityViewProps> = ({ bran
   }, [branch.id]);
 
   const loadSettings = () => {
-    const saved = storageService.getModuleVisibility();
-    if (saved) {
-      setSettings({
-        modulePdv: saved.modulePdv ?? true,
-        moduleInventory: saved.moduleInventory ?? true,
-        moduleFiado: saved.moduleFiado ?? false,
-        moduleCrm: saved.moduleCrm ?? false,
-        moduleComanda: saved.moduleComanda ?? false,
-        moduleDashboard: saved.moduleDashboard ?? true,
-        moduleFinance: saved.moduleFinance ?? false,
-        moduleKds: saved.moduleKds ?? false,
-        moduleDelivery: saved.moduleDelivery ?? false,
-        moduleCardapioPreview: saved.moduleCardapioPreview ?? false,
-        moduleTvShowcase: saved.moduleTvShowcase ?? false,
-        moduleTvConnect: saved.moduleTvConnect ?? false,
-      });
-    } else {
-      const defaults: Record<string, boolean> = {};
-      MODULES.forEach(m => { defaults[m.key] = m.defaultValue; });
-      setSettings(defaults);
-    }
+    // ✅ Usa o mapa EFETIVO (registro da filial mesclado com defaults). Assim a
+    // aba Módulos mostra EXATAMENTE as mesmas páginas que aparecem no menu da
+    // filial — nunca diverge, mesmo em filial/org recém-criada sem registro.
+    setSettings(storageService.getEffectiveModuleVisibility());
   };
 
   const handleToggle = (key: string, value: boolean) => {

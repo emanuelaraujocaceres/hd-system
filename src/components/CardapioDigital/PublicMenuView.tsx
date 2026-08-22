@@ -93,21 +93,12 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           // do Settings caem aqui. Detecta a filial pelo cloud em vez de quebrar:
           // store_branches tem policy SELECT anon do cardápio.
           let resolvedFilialId = filialId;
+          // R2: URL legada sem filial ('#/delivery' ou filialId='default') NÃO deve
+          // vincular silenciosamente à primeira filial por ordem alfabética — isso
+          // pode mostrar o cardápio de outra filial em org multi-filial. Exige o
+          // QR Code correto (com o id da filial) em vez de advinhar a filial.
           if (!resolvedFilialId || resolvedFilialId === 'default') {
-            try {
-              const branchesRes = await fetch(
-                `${baseUrl}/rest/v1/store_branches?select=id&order=name.asc`,
-                { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json' } }
-              );
-              if (branchesRes.ok) {
-                const branchList = await branchesRes.json();
-                const firstBranch = branchList && branchList[0];
-                if (firstBranch && firstBranch.id) resolvedFilialId = firstBranch.id;
-              }
-            } catch { /* offline → deixa o erro amigável abaixo */ }
-          }
-          if (!resolvedFilialId || resolvedFilialId === 'default') {
-            setError('Delivery não configurado para esta filial.');
+            setError('Cardápio de delivery indisponível. Escaneie o QR Code da loja.');
             setLoading(false);
             return;
           }

@@ -1143,7 +1143,7 @@ export const App: React.FC = () => {
       'connect-tv': 'moduleTvConnect',
     };
     
-    const moduleVisibility = storageService.getModuleVisibility();
+    const moduleVisibility = storageService.getEffectiveModuleVisibility();
     if (moduleVisibility) {
       const key = TAB_MODULE_MAP[tab];
       if (key && moduleVisibility[key] === false) {

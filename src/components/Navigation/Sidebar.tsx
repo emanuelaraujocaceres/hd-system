@@ -135,21 +135,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isModuleEnabled = (module: string): boolean => {
     // Settings and Organizations are always visible
     if (module === 'settings' || module === 'organizations') return true;
-    
-    // Superadmin bypasses module visibility
-    if (user.superadmin) return true;
-    
-    // If no visibility settings exist, allow all (backward compatible)
-    if (!moduleVisibility) return true;
-    
+
     const key = MODULE_VISIBILITY_MAP[module];
-    if (!key) return true; // No mapping = always enabled
-    
-    const value = moduleVisibility[key];
-    // If undefined, use defaults (most modules default to true)
-    if (value === undefined) return true;
-    
-    return value === true;
+    // Sem mapeamento = módulo sempre visível (não controlado por visibilidade)
+    if (!key) return true;
+
+    // moduleVisibility é o mapa EFETIVO (defaults preenchidos), então a chave
+    // sempre existe e é boolean. Menu e aba Módulos usam a MESMA fonte, logo
+    // nunca divergem — inclusive para superadmin e filiais recém-criadas.
+    return moduleVisibility[key] === true;
   };
 
   // IAM: filter menu items using PermissionEngine AND module visibility

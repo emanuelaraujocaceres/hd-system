@@ -10,17 +10,17 @@ import { storageService } from '../services/storageService';
 
 export function useModuleVisibility() {
   const [moduleVisibility, setModuleVisibility] = useState(() => 
-    storageService.getModuleVisibility()
+    storageService.getEffectiveModuleVisibility()
   );
 
   useEffect(() => {
     // Subscribe to storage changes
     const unsub = storageService.subscribe(() => {
-      setModuleVisibility(storageService.getModuleVisibility());
+      setModuleVisibility(storageService.getEffectiveModuleVisibility());
     });
     
     // Initial load
-    setModuleVisibility(storageService.getModuleVisibility());
+    setModuleVisibility(storageService.getEffectiveModuleVisibility());
     
     return () => { unsub(); };
   }, []);
