@@ -413,6 +413,14 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   const [myOrders, setMyOrders] = useState<Sale[]>([]);
   const [showMyComanda, setShowMyComanda] = useState(false);
   const [closingComanda, setClosingComanda] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<string>('');
+  const PAYMENT_OPTIONS = [
+    { value: 'cash', label: '💵 Dinheiro' },
+    { value: 'pix', label: '📱 Pix' },
+    { value: 'credit_card', label: '💳 Crédito' },
+    { value: 'debit_card', label: '💳 Débito' },
+  ];
   const submittingRef = useRef(false);
 
   // Load my orders on mount and after submit
@@ -529,17 +537,20 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
     }
   };
 
-  const handleRequestCloseComanda = async () => {
-    if (!table || myOrders.length === 0) return;
+  const handleRequestCloseComanda = async (paymentMethod: string) => {
+    if (!table || myOrders.length === 0 || !paymentMethod) return;
     setClosingComanda(true);
     try {
-      // Cliente SOLICITA o fechamento (não cobra). Operador fecha e cobra na
-      // página de Comandas. kitchenStatus='closing_request' sinaliza o Pedidos.
+      // Cliente SOLICITA o fechamento informando a FORMA DE PAGAMENTO desejada.
+      // Operador fecha e cobra na página de Comandas. kitchenStatus='closing_request'
+      // sinaliza o Pedidos (KDS) e payments[0].method exibe a forma escolhida.
       for (const sale of myOrders) {
+        const saleTotal = sale.total > 0 ? sale.total : (sale.items?.reduce((a, i) => a + (i.total || 0), 0) || 0);
         const updatedSale: Sale = {
           ...sale,
           status: 'pending', // Aguardando operador finalizar
           kitchenStatus: 'closing_request', // Sinaliza pedido de fechamento
+          payments: [{ method: paymentMethod, amount: saleTotal }] as any, // forma de pagamento solicitada
           updatedAt: new Date().toISOString(),
         };
         storageService.saveSale(updatedSale);
@@ -547,6 +558,8 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
 
       // NÃO fecha a sessão — operador faz isso ao finalizar
       // Cliente vê mensagem de aguardando
+      setShowPaymentModal(false);
+      setSelectedPayment('');
       setShowMyComanda(false);
       setOrderSuccess(true); // Mostra tela de sucesso
     } catch (err: any) {
@@ -976,16 +989,62 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
                 <div className="space-y-2">
                   <p className="text-[10px] font-bold text-slate-500 uppercase">Fechamento</p>
                   <button
-                    onClick={handleRequestCloseComanda}
+                    onClick={() => setShowPaymentModal(true)}
                     disabled={closingComanda}
                     className="w-full py-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60 transition-colors"
                   >
                     {closingComanda ? 'Solicitando...' : 'Solicitar fechamento de comanda'}
                   </button>
-                  <p className="text-[10px] text-slate-400 text-center">O operador irá fechar e cobrar na comanda.</p>
+                  <p className="text-[10px] text-slate-400 text-center">Escolha a forma de pagamento e o operador fechará a comanda.</p>
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: cliente escolhe forma de pagamento para fechar a comanda */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4" onClick={() => !closingComanda && setShowPaymentModal(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Solicitar fechamento da comanda</h3>
+              <p className="text-[11px] text-slate-500 dark:text-[#71717a] mt-1">
+                Total da comanda: <strong className="text-slate-900 dark:text-white">R$ {(myComandaTotal ?? 0).toFixed(2)}</strong>
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-[#71717a] mt-1">Escolha a forma de pagamento desejada:</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {PAYMENT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setSelectedPayment(opt.value)}
+                  className={`py-3 rounded-xl text-sm font-bold border transition-colors ${
+                    selectedPayment === opt.value
+                      ? 'bg-teal-600 border-teal-600 text-white'
+                      : 'bg-slate-50 dark:bg-[#09090b] border-slate-200 dark:border-[#27272a] text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                disabled={closingComanda}
+                className="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] text-slate-600 dark:text-slate-300 text-xs font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleRequestCloseComanda(selectedPayment)}
+                disabled={!selectedPayment || closingComanda}
+                className="flex-1 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white text-xs font-bold"
+              >
+                {closingComanda ? 'Enviando...' : 'Confirmar fechamento'}
+              </button>
+            </div>
           </div>
         </div>
       )}
