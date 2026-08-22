@@ -294,6 +294,26 @@ const obj = { salePrice }; // OK
 ### Frontend: Audio usa Web Audio API (não <audio> tags)
 **Regra:** O sistema de áudio (`src/services/audioService.ts`) usa oscillators Web Audio API. NÃO existem arquivos .mp3/.wav. Se o som não toca, verificar: (1) `posAudio.enabled` no header, (2) interação do usuário (autoplay policy), (3) `posAudio.unlock()` foi chamado.
 
+## Blindagem / Prevenção de regressão
+
+**Regra OBRIGATÓRIA — coluna nova em tabela sync deve entrar nos 3 caminhos:** qualquer coluna adicionada a uma tabela sincronizada (ex.: `module_visibility`, `sales`, `financial`, `stock_loss_log`, etc.) DEVE ser adicionada em TODOS estes pontos, senão ela é "dropada" silenciosamente e o dado some após reset/hidratação:
+1. **Upsert payload** — `saveX()` / `syncX()` (o que vai pro `syncService.upsertRow`).
+2. **Mapper remoto** — `update*FromRemote()` (realtime).
+3. **Mapper de hidratação** — o bloco dentro de `hydrateFromCloud` (`mergeBy` ou o helper `mapSaleFromCloud`).
+4. Quando aplicável: `DEFAULT_*`, `getEffective*`, e o tipo em `src/types/index.ts`.
+
+**Checklist pré-deploy (rodar antes de subir):**
+- `npm run lint` (tsc --noEmit) — typecheck.
+- `npm test` (vitest run) — a suíte inclui `src/services/storageService.sync.test.ts` que trava o padrão acima.
+
+**Bugs de "coluna dropada" já corrigidos (NUNCA reintroduzir):**
+- `module_comanda` (Comandas): faltava no upsert, no `updateModuleVisibilityFromRemote` e no mapper de `hydrateFromCloud` — corrigido em `saveModuleVisibility`, `updateModuleVisibilityFromRemote` e no mapper de hidratação (commits afe4688 / 20f427c).
+- `sales`: hidratação dropava `table_id`/`customer_session_id`/`order_source`/`kitchen_status`/`organization_id` → comanda/mesa perdia vínculo e KDS perdia status após reset. Corrigido extraindo `mapSaleFromCloud` (ponto único de mapeamento).
+- `financial`: `updateFinancialFromRemote` dropava `recurrences`/`installments` (arrays de recorrência/parcelamento) → UPDATE remoto apagava esses dados. Corrigido.
+- `stock_loss_log`: `updateStockLossLogFromRemote` e a hidratação dropavam `product_id`/`lot_id`/`store_branch_id`/`organization_id` → log perdia vínculo de produto e isolamento de filial. Tipo estendido em `src/types/index.ts` e mappers corrigidos.
+
+**Guard de runtime:** `getEffectiveModuleVisibility()` emite `console.warn` se o registro gravado estiver sem alguma coluna do `DEFAULT_MODULE_VISIBILITY` (canário de drift de schema).
+
 ---
 
 *Este documento é orientação duradoura para o projeto, não um scratchpad.*

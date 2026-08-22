@@ -1130,24 +1130,32 @@ removeUserFromRemote(id: string) {
     const stockLossLogs = this.get<StockLossLog[]>(KEYS.STOCK_LOSS_LOG, []);
     const idx = stockLossLogs.findIndex((p) => p.id === row.id);
     if (idx >= 0) {
-      const updated: StockLossLog = {
-        id: row.id,
-        reason: row.reason || stockLossLogs[idx].reason,
-        quantity: row.quantity !== undefined ? row.quantity : stockLossLogs[idx].quantity,
-        operatorName: row.operator_name || stockLossLogs[idx].operatorName,
-        notes: row.notes || stockLossLogs[idx].notes,
-        createdAt: row.created_at || stockLossLogs[idx].createdAt,
-      };
+        const updated: StockLossLog = {
+          id: row.id,
+          reason: row.reason || stockLossLogs[idx].reason,
+          quantity: row.quantity !== undefined ? row.quantity : stockLossLogs[idx].quantity,
+          productId: row.product_id || stockLossLogs[idx].productId,
+          lotId: row.lot_id || stockLossLogs[idx].lotId,
+          storeBranchId: row.store_branch_id || stockLossLogs[idx].storeBranchId,
+          organizationId: row.organization_id || stockLossLogs[idx].organizationId,
+          operatorName: row.operator_name || stockLossLogs[idx].operatorName,
+          notes: row.notes || stockLossLogs[idx].notes,
+          createdAt: row.created_at || stockLossLogs[idx].createdAt,
+        };
       stockLossLogs[idx] = updated;
     } else {
-      const newLoss: StockLossLog = {
-        id: row.id,
-        reason: row.reason || 'other',
-        quantity: row.quantity || 0,
-        operatorName: row.operator_name || undefined,
-        notes: row.notes || undefined,
-        createdAt: row.created_at || undefined,
-      };
+        const newLoss: StockLossLog = {
+          id: row.id,
+          reason: row.reason || 'other',
+          quantity: row.quantity || 0,
+          productId: row.product_id || undefined,
+          lotId: row.lot_id || null,
+          storeBranchId: row.store_branch_id || undefined,
+          organizationId: row.organization_id || undefined,
+          operatorName: row.operator_name || undefined,
+          notes: row.notes || undefined,
+          createdAt: row.created_at || undefined,
+        };
       stockLossLogs.unshift(newLoss);
     }
     this.set(KEYS.STOCK_LOSS_LOG, stockLossLogs);
@@ -1497,6 +1505,8 @@ updateCategoryFromRemote(row: any) {
       recurrenceCount: row.recurrence_count || undefined,
       recurrenceParentId: row.recurrence_parent_id || undefined,
       installmentNumber: row.installment_number || undefined,
+      recurrences: row.recurrences_json ? safeParseJson(row.recurrences_json) : undefined,
+      installments: row.installments_json ? safeParseJson(row.installments_json) : undefined,
     };
     const idx = accounts.findIndex((a) => a.id === mapped.id);
     if (idx >= 0) accounts[idx] = mapped;
@@ -1733,6 +1743,45 @@ updateCategoryFromRemote(row: any) {
         this.saveUserProfile({ ...current, ...mapped, password: current.password || mapped.password });
       }
     }
+  }
+
+  /**
+   * Mapeia uma linha `sales` vinda do cloud (realtime ou hidratação) para o
+   * objeto Sale local. PONTO ÚNICO de verdade — garante que TODOS os campos
+   * (tableId, customerSessionId, orderSource, kitchenStatus, organizationId, …)
+   * sejam mapeados, evitando o bug de colunas dropadas na hidratação
+   * (venda perdia vínculo de mesa/comanda e status da cozinha após reset).
+   */
+  private mapSaleFromCloud(r: any, items: any[], localSale?: any): any {
+    const storedTotal = parseFloat(r.total) || 0;
+    const computedItemsTotal = items.reduce((sum: number, item: any) => sum + (item.total || 0), 0);
+    const fixedTotal = (storedTotal === 0 && computedItemsTotal > 0) ? computedItemsTotal : storedTotal;
+    const fixedSubtotal = parseFloat(r.subtotal) || fixedTotal;
+    return {
+      id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
+      operatorId: r.user_id || '', operatorName: r.operator_name || 'Sistema',
+      customerId: r.customer_id || localSale?.customerId || undefined,
+      customerName: (r.customer_name ?? r.notes) || localSale?.customerName || undefined,
+      storeBranchId: r.store_branch_id || '',
+      tableId: r.table_id || localSale?.tableId || undefined,
+      customerSessionId: r.customer_session_id || localSale?.customerSessionId || undefined,
+      items,
+      subtotal: fixedSubtotal, discount: parseFloat(r.discount) || 0,
+      total: fixedTotal,
+      payments: r.payments_json
+        ? safeParseJson(r.payments_json).map((p: any) => ({
+            method: p.method || 'cash',
+            amount: parseFloat(p.amount) || 0,
+            cashGiven: p.cashGiven,
+            changeDue: p.changeDue,
+          }))
+        : [{ method: r.payment_method || 'cash', amount: fixedTotal }],
+      orderSource: r.order_source || localSale?.orderSource || 'pdv',
+      kitchenStatus: r.kitchen_status || localSale?.kitchenStatus || 'pending',
+      status: r.status || 'completed',
+      organizationId: r.organization_id || localSale?.organizationId || undefined,
+      updatedAt: r.updated_at || new Date().toISOString(),
+    };
   }
 
   // ─── INITIAL LOAD FROM SUPABASE ──────────────────────────────────
@@ -1983,6 +2032,10 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
           id: r.id,
           reason: r.reason || 'other',
           quantity: r.quantity || 0,
+          productId: r.product_id || undefined,
+          lotId: r.lot_id || null,
+          storeBranchId: r.store_branch_id || undefined,
+          organizationId: r.organization_id || undefined,
           operatorName: r.operator_name || undefined,
           notes: r.notes || undefined,
           createdAt: r.created_at || undefined,
@@ -2085,28 +2138,7 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
           // First time: replace INITIAL_SALES with cloud data
           const cloudMapped = safeSales.map((r: any) => {
             const cloudItems = itemsBySaleId[r.id] || [];
-            const storedTotal = parseFloat(r.total) || 0;
-            const computedItemsTotal = cloudItems.reduce((sum: number, item: any) => sum + (item.total || 0), 0);
-            const fixedTotal = (storedTotal === 0 && computedItemsTotal > 0) ? computedItemsTotal : storedTotal;
-            return {
-              id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
-              operatorId: r.user_id || '', operatorName: r.operator_name || 'Sistema',
-              customerId: r.customer_id || undefined, customerName: r.customer_name || r.notes || undefined,
-              storeBranchId: r.store_branch_id || '',
-              items: cloudItems,
-              subtotal: parseFloat(r.subtotal) || fixedTotal, discount: parseFloat(r.discount) || 0,
-              total: fixedTotal,
-              payments: r.payments_json
-                ? safeParseJson(r.payments_json).map((p: any) => ({
-                    method: p.method || 'cash',
-                    amount: parseFloat(p.amount) || 0,
-                    cashGiven: p.cashGiven,
-                    changeDue: p.changeDue,
-                  }))
-                : [{ method: r.payment_method || 'cash', amount: fixedTotal }],
-              status: r.status || 'completed',
-              updatedAt: r.updated_at || new Date().toISOString(),
-            };
+            return this.mapSaleFromCloud(r, cloudItems);
           });
           this.set(KEYS.SALES, cloudMapped);
         } else {
@@ -2126,30 +2158,7 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
           const cloudMapped = safeSales.map((r: any) => {
             const cloudItems = itemsBySaleId[r.id] || [];
             const items = cloudItems.length > 0 ? cloudItems : (localSalesById.get(r.id)?.items || []);
-            const storedTotal = parseFloat(r.total) || 0;
-            const computedItemsTotal = items.reduce((sum: number, item: any) => sum + (item.total || 0), 0);
-            const fixedTotal = (storedTotal === 0 && computedItemsTotal > 0) ? computedItemsTotal : storedTotal;
-            const fixedSubtotal = parseFloat(r.subtotal) || fixedTotal;
-            return {
-              id: r.id, code: r.code, date: r.created_at || new Date().toISOString(),
-              operatorId: r.user_id || '', operatorName: r.operator_name || 'Sistema',
-              customerId: r.customer_id || localSalesById.get(r.id)?.customerId || undefined,
-              customerName: (r.customer_name ?? r.notes) || localSalesById.get(r.id)?.customerName || undefined,
-              storeBranchId: r.store_branch_id || '',
-              items,
-              subtotal: fixedSubtotal, discount: parseFloat(r.discount) || 0,
-              total: fixedTotal,
-              payments: r.payments_json
-                ? safeParseJson(r.payments_json).map((p: any) => ({
-                    method: p.method || 'cash',
-                    amount: parseFloat(p.amount) || 0,
-                    cashGiven: p.cashGiven,
-                    changeDue: p.changeDue,
-                  }))
-                : [{ method: r.payment_method || 'cash', amount: fixedTotal }],
-              status: r.status || 'completed',
-              updatedAt: r.updated_at || new Date().toISOString(),
-            };
+            return this.mapSaleFromCloud(r, items, localSalesById.get(r.id));
           });
 // CRITICAL: Filter local-only sales by resolved branch to prevent
             // cross-branch data leaks (e.g. Campinas sales appearing in São Paulo).
@@ -5290,6 +5299,15 @@ private updateReceivableFromPayments(saleId: string) {
     if (rec) {
       for (const k of Object.keys(defaults)) {
         if (typeof rec[k] === 'boolean') eff[k] = rec[k];
+        // Blindagem: coluna de module_visibility ausente no registro gravado
+        // (ex.: nova coluna add no banco mas esquecida num dos mappers save/
+        // update/hydrate) — avisa em vez de falhar silenciosamente.
+        else if (!(k in rec)) {
+          console.warn(
+            `[Blindagem] module_visibility está sem a coluna '${k}' — ` +
+            `verifique saveModuleVisibility, updateModuleVisibilityFromRemote e o mapper de hydrateFromCloud.`
+          );
+        }
       }
     }
     return eff;

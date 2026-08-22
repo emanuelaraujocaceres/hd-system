@@ -79,6 +79,10 @@ export interface StockLossLog {
   reason: 'expired' | 'damaged' | 'other';
   quantity: number;
   productName?: string;
+  productId?: string;
+  lotId?: string;
+  storeBranchId?: string;
+  organizationId?: string;
   operatorName?: string;
   notes?: string;
   createdAt?: string;
