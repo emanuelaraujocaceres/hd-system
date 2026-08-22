@@ -542,6 +542,7 @@ Visibilidade de módulos por filial.
 | module_inventory | BOOLEAN | `true` | Estoque |
 | module_fiado | BOOLEAN | `false` | Fiados |
 | module_crm | BOOLEAN | `false` | CRM |
+| module_comanda | BOOLEAN | `false` | Comandas |
 | module_dashboard | BOOLEAN | `true` | Dashboard |
 | module_finance | BOOLEAN | `false` | Financeiro |
 | module_kds | BOOLEAN | `false` | KDS/Cozinha |
