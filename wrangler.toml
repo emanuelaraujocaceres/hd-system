@@ -4,4 +4,3 @@ pages_build_output_dir = "dist"
 
 # Variáveis de ambiente (valores placeholder — configure via Cloudflare Dashboard)
 # [vars]
-# GEMINI_API_KEY = ""

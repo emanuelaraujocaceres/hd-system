@@ -4,6 +4,7 @@
 - Sempre executar `git push` ao final de cada alteração (commit, arquivo novo, mudança de config, etc.)
 - Restore point de referência (sincronização tempo real + offline/online OK): tag `restore-point-realtime-ok`
 - **Referência do Supabase:** O arquivo `SUPABASE_SCHEMA.md` na raiz do projeto contém a estrutura completa do banco (tabelas, colunas, tipos, RPCs, views). DEVE ser atualizado a cada migration aplicada. Antes de criar/modificar qualquer tabela, consultar este arquivo primeiro.
+- **Sem IA neste aplicativo:** Decisão do usuário (2026-08-22). Não usar LLMs/visão computacional (Gemini, OpenAI, etc.) nem features de reconhecimento de produto por imagem. A função `functions/api/ai/scan-product.ts` (Gemini) foi removida intencionalmente — não reintroduzir. Busca de imagens por termo (Wikimedia Commons) no cadastro de produtos NÃO é IA e pode permanecer.
 
 ## Regras de sincronização (nunca quebrar)
 
