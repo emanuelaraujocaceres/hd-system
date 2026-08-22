@@ -38,7 +38,6 @@ const MODULES: ModuleConfig[] = [
   { key: 'moduleFinance', label: 'Financeiro', description: 'Contas e despesas', defaultValue: false, requires: ['modulePdv'], icon: '💵' },
   { key: 'moduleKds', label: 'Pedidos', description: 'Cozinha', defaultValue: false, requires: ['modulePdv'], icon: '🍳' },
   { key: 'moduleDelivery', label: 'Delivery', description: 'Pedidos de entrega', defaultValue: false, requires: ['moduleInventory'], icon: '🛵' },
-  { key: 'moduleCardapioDigital', label: 'Cardápio Digital', description: 'QR Code nas mesas', defaultValue: false, requires: ['moduleInventory'], icon: '📱' },
   { key: 'moduleCardapioPreview', label: 'Cardápio Preview', description: 'Visualização do cardápio', defaultValue: false, requires: ['moduleInventory'], icon: '👁️' },
   { key: 'moduleTvShowcase', label: 'Ofertas/TV', description: 'Vitrine de ofertas', defaultValue: false, requires: ['moduleInventory'], icon: '📺' },
   { key: 'moduleTvConnect', label: 'Conectar TV', description: 'Parear TV/vitrine', defaultValue: false, requires: ['moduleInventory'], icon: '📡' },
@@ -56,7 +55,7 @@ export const ModuleVisibilityView: React.FC<ModuleVisibilityViewProps> = ({ bran
     // filial salva a visibilidade de módulos, este acesso reflete na hora sem
     // precisar reabrir a aba.
     const unsub = storageService.subscribe(() => loadSettings());
-    return () => unsub();
+    return () => { unsub(); };
   }, [branch.id]);
 
   const loadSettings = () => {
@@ -72,7 +71,6 @@ export const ModuleVisibilityView: React.FC<ModuleVisibilityViewProps> = ({ bran
         moduleFinance: saved.moduleFinance ?? false,
         moduleKds: saved.moduleKds ?? false,
         moduleDelivery: saved.moduleDelivery ?? false,
-        moduleCardapioDigital: saved.moduleCardapioDigital ?? false,
         moduleCardapioPreview: saved.moduleCardapioPreview ?? false,
         moduleTvShowcase: saved.moduleTvShowcase ?? false,
         moduleTvConnect: saved.moduleTvConnect ?? false,

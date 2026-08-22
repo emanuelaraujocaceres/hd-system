@@ -38,6 +38,7 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
   const [maxDistance, setMaxDistance] = useState(15);
   const [whatsappPhone, setWhatsappPhone] = useState('');
   const [fullAddress, setFullAddress] = useState('');
+  const [cardapioDigitalEnabled, setCardapioDigitalEnabled] = useState(false);
   
   // Configurações do colaborador do delivery
   const [workerFeePercent, setWorkerFeePercent] = useState(100);
@@ -98,6 +99,7 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
 
     setNeighborhoods(storageService.getDeliveryNeighborhoods().filter(n => n.storeBranchId === branch.id));
     setDistanceRates(storageService.getDeliveryDistanceRates().filter(r => r.storeBranchId === branch.id));
+    setCardapioDigitalEnabled(storageService.getModuleVisibility()?.moduleCardapioDigital ?? false);
   };
 
   const handleSaveSettings = () => {
@@ -126,8 +128,29 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
         createdAt: settings?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      storageService.saveDeliverySettings(newSettings);
-      setSettings(newSettings);
+    storageService.saveDeliverySettings(newSettings);
+    setSettings(newSettings);
+
+    // Controla a visibilidade do Cardápio Digital via module_visibility (realtime)
+    const cur = storageService.getModuleVisibility() || {};
+    storageService.saveModuleVisibility({
+      id: cur.id || crypto.randomUUID(),
+      organizationId: branch.organizationId || '',
+      storeBranchId: branch.id,
+      modulePdv: cur.modulePdv ?? true,
+      moduleInventory: cur.moduleInventory ?? true,
+      moduleFiado: cur.moduleFiado ?? false,
+      moduleCrm: cur.moduleCrm ?? false,
+      moduleComanda: cur.moduleComanda ?? false,
+      moduleDashboard: cur.moduleDashboard ?? true,
+      moduleFinance: cur.moduleFinance ?? false,
+      moduleKds: cur.moduleKds ?? false,
+      moduleDelivery: cur.moduleDelivery ?? false,
+      moduleCardapioDigital: cardapioDigitalEnabled,
+      moduleCardapioPreview: cur.moduleCardapioPreview ?? false,
+      moduleTvShowcase: cur.moduleTvShowcase ?? false,
+      moduleTvConnect: cur.moduleTvConnect ?? false,
+    });
       setSuccessMessage('Configurações de delivery salvas!');
       posAudio.chime();
       onSaved?.();
@@ -225,6 +248,19 @@ export const DeliverySettingsView: React.FC<DeliverySettingsViewProps> = ({ bran
               className="w-4 h-4 rounded accent-orange-500"
             />
             <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Retirada no local</span>
+          </label>
+        </div>
+
+        <div className="flex items-center gap-3 mt-4 pt-4 border-t border-slate-200 dark:border-[#27272a] cursor-pointer">
+          <input
+            type="checkbox"
+            id="cardapioDigitalEnabled"
+            checked={cardapioDigitalEnabled}
+            onChange={(e) => setCardapioDigitalEnabled(e.target.checked)}
+            className="w-4 h-4 rounded accent-orange-500"
+          />
+          <label htmlFor="cardapioDigitalEnabled" className="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+            Cardápio Digital (QR Code nas mesas)
           </label>
         </div>
       </div>

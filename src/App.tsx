@@ -1138,7 +1138,7 @@ export const App: React.FC = () => {
       comanda: 'moduleComanda',
       kds: 'moduleKds',
       delivery: 'moduleDelivery',
-      cardapio_preview: 'moduleCardapioDigital',
+      cardapio_preview: 'moduleCardapioPreview',
       tv_showcase: 'moduleTvShowcase',
       'connect-tv': 'moduleTvConnect',
     };
