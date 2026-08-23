@@ -1200,3 +1200,51 @@ Principais migracoes recentes de projeto (por data):
 | 7 | Alta (processo) | Nenhuma migration de projeto em storage.migrations (so storage-schema). Risco de DR / ambiente limpo. | - |
 
 Notas de integracao (fora deescopo de correcao nesta audite): IntegrationsView so coleta chaves em localStorage; webhook em server.ts e dev-only; sales.payment_id nunca setado; PIX e exibicao manual. Ver relatorio de auditoria de pagamentos (Fase 1/2) para arquitetura multi-filial proposta (payment_integrations -> payment_terminals -> payment_transactions -> webhook_events, via Cloudflare Functions).
+## System Schemas (Supabase-managed)
+
+> NOTA: estes schemas sao gerenciados pelo proprio Supabase (nao sao tabelas de negocio do HD-System). O app nao cria, altera nem droppa estas tabelas. A estrutura abaixo reflete o padrao de um projeto Supabase (pode variar por versao/regiao). Listadas para referencia de integracao (auth.users, storage.buckets/objects, cron.job).
+> COLUNAS-CHAVE baseadas no schema padrao do Supabase e NAO verificadas contra esta instancia nesta sessao. Para exatidao total, rode: SELECT table_schema, table_name, column_name, data_type FROM information_schema.columns WHERE table_schema IN ('auth','storage','cron','realtime','vault') ORDER BY 1,2,3 e cole o resultado.
+> SEGURANCA: vault.secrets NAO tem colunas listadas (armazena segredos cifrados). Nao inclua valores de segredos neste arquivo versionado.
+
+### auth (autenticacao)
+Tabela central de contas. system_users.id e profiles.id DEVEM ser iguais a auth.users.id (BUG-033).
+
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| id | UUID | PK; = system_users.id / profiles.id |
+| email | TEXT | Email de login |
+| encrypted_password | TEXT | Hash da senha |
+| email_confirmed_at | TIMESTAMPTZ | Confirmacao |
+| last_sign_in_at | TIMESTAMPTZ | Ultimo login |
+| raw_app_meta_data | JSONB | Metadados do app |
+| raw_user_meta_data | JSONB | Metadados do usuario |
+| created_at | TIMESTAMPTZ | Criacao |
+| updated_at | TIMESTAMPTZ | Atualizacao |
+
+Outras tabelas de auth: identities (logins OAuth/provider), sessions (sessoes de auth - nao confundir com public.sessions), refresh_tokens, instances (interno), mfa_factors / mfa_challenges / mfa_amr_claims (MFA), one_time_tokens (OTP), flow_state (fluxo OAuth), saml_providers / saml_relay_states / sso_providers / sso_domains (SSO/SAML), oauth_authorizations / oauth_clients / oauth_client_states / oauth_consents (OAuth server), webauthn_credentials / webauthn_challenges (passkeys), audit_log_entries (auditoria), schema_migrations (migrations de auth).
+
+### storage (arquivos)
+Backend de arquivos (imagens de produto, anexos).
+
+| Tabela | Colunas-chave | Descricao |
+|--------|---------------|-----------|
+| buckets | id, name, owner, public (bool), created_at, updated_at | Containers de arquivos |
+| objects | id, bucket_id (FK->buckets), name, owner, metadata (jsonb), created_at, updated_at, last_accessed_at, path_tokens | Arquivos |
+
+Internas: buckets_analytics, buckets_vectors, vector_indexes, s3_multipart_uploads, s3_multipart_uploads_parts, migrations (ledger de migrations do storage - ver Flag 7).
+
+### realtime (tempo real)
+Plumbing interno do Realtime. messages_AAAA_MM_DD sao particoes diarias automaticas de messages (ex.: 2026-08-20 a 2026-08-26) - nao documentar individualmente.
+- messages - log de mensagens
+- messages_2026_08_20 ... messages_2026_08_26 - particoes diarias
+- subscription - inscricoes de realtime
+- schema_migrations - migrations do realtime
+
+### cron (agendamentos - pg_cron)
+| Tabela | Colunas-chave | Descricao |
+|--------|---------------|-----------|
+| job | jobid, schedule, command, database, username, active (bool), secret | Jobs agendados |
+| job_run_details | jobid, runid, status, return_message, start_time, end_time | Historico de execucoes |
+
+### vault (segredos)
+- secrets - armazena segredos cifrados (chaves de API, credenciais). [NAO documentado por seguranca - nao listar colunas nem valores.]
