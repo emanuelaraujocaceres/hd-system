@@ -1168,9 +1168,12 @@ Por tabela (funcao -> trigger):
 
 Tabela storage.migrations contem APENAS as migracoes internas do storage do Supabase (ids 0-64: storage-schema, buckets, objects, search, s3-multipart, iceberg, etc.). NENHUMA migration de projeto esta registrada la.
 
-O schema de negocio (45 tabelas + RLS + funcoes + triggers) foi construido via SQL Editor, nao via sistema de migrations. Ha 88 arquivos .sql de projeto no repo:
-- supabase/migrations/ : 86 arquivos (20260726 a 20260821), dos quais muitos sao scripts diagnosticos one-shot (verificar_*, verificacao_*, limpeza_*, sincronizar_tudo_no_banco) que deveriam estar em supabase/legacy-sql/ (nao foram movidos - user optou por "Apenas relatorio").
-- migrations/ (raiz): 20260821_add_module_comanda.sql, 20260822_system_users_permissions.sql (este ultimo aplicado via SQL Editor e NAO registrado em storage.migrations - risco de regressao em ambiente limpo).
+O schema de negocio (45 tabelas + RLS + funcoes + triggers) foi construido via SQL Editor, nao via sistema de migrations. **Limpeza de 2026-08-23:** scripts de diagnostico/verificacao one-shot e limpeza ja aplicada foram removidos; os `FIX_*` e variantes superadas de RLS foram movidos para `supabase/legacy-sql/` (arquivo); a pasta `migrations/` da raiz foi consolidada em `supabase/migrations/` (agora unica pasta canonica de migrations).
+
+Localizacao atual dos .sql de projeto:
+- `supabase/migrations/` : migrations de schema propriamente ditas (20260726 a 20260822, incluindo as 2 que estavam na raiz: `20260821_add_module_comanda.sql`, `20260822_system_users_permissions.sql`).
+- `supabase/legacy-sql/` : scripts antigos/diagnosticos/FIX_* (arquivo historico, nao ativos).
+- `supabase/RLS_FIXES.sql`, `supabase/ATOMIC_RPCS.sql` : referencias canonicas de RLS/RPCs (mantidas na raiz de `supabase/`).
 
 Principais migracoes recentes de projeto (por data):
 - 20260822_system_users_permissions.sql (permissions em system_users)
