@@ -26,7 +26,7 @@ DROP FUNCTION IF EXISTS public.get_is_superadmin();
 -- ==============================================================================
 
 -- 1. Verificar se o usuário atual é superadmin
-CREATE FUNCTION public.get_is_superadmin()
+CREATE OR REPLACE FUNCTION public.get_is_superadmin()
 RETURNS BOOLEAN
 LANGUAGE sql STABLE SECURITY DEFINER
 AS $$
@@ -34,7 +34,7 @@ AS $$
 $$;
 
 -- 2. Listar organizações (retorna JSON array)
-CREATE FUNCTION public.admin_fetch_organizations()
+CREATE OR REPLACE FUNCTION public.admin_fetch_organizations()
 RETURNS JSON
 LANGUAGE plpgsql SECURITY DEFINER
 AS $$
@@ -55,7 +55,7 @@ END;
 $$;
 
 -- 3. Listar filiais de uma organização (retorna JSON array)
-CREATE FUNCTION public.admin_fetch_branches(p_org_id UUID)
+CREATE OR REPLACE FUNCTION public.admin_fetch_branches(p_org_id UUID)
 RETURNS JSON
 LANGUAGE plpgsql SECURITY DEFINER
 AS $$
@@ -75,7 +75,7 @@ END;
 $$;
 
 -- 4. Listar usuários de uma organização (retorna JSON array)
-CREATE FUNCTION public.admin_fetch_users(p_org_id UUID)
+CREATE OR REPLACE FUNCTION public.admin_fetch_users(p_org_id UUID)
 RETURNS JSON
 LANGUAGE plpgsql SECURITY DEFINER
 AS $$
@@ -99,7 +99,7 @@ $$;
 -- ==============================================================================
 
 -- 5. Criar nova organização
-CREATE FUNCTION public.admin_create_organization(
+CREATE OR REPLACE FUNCTION public.admin_create_organization(
   p_name TEXT, p_admin_email TEXT, p_admin_name TEXT
 )
 RETURNS TABLE(success BOOLEAN, message TEXT, org_id UUID, admin_id TEXT, password TEXT)
@@ -127,7 +127,7 @@ END;
 $$;
 
 -- 6. Adicionar usuário admin a uma organização/filial
-CREATE FUNCTION public.admin_add_user(
+CREATE OR REPLACE FUNCTION public.admin_add_user(
   p_org_id UUID, p_branch_id UUID, p_name TEXT, p_email TEXT, p_role TEXT DEFAULT 'admin'
 )
 RETURNS TABLE(success BOOLEAN, message TEXT, user_id UUID)

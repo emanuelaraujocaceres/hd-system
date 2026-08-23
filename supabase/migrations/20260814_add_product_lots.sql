@@ -74,11 +74,13 @@ DROP POLICY IF EXISTS "product_lots_allow_select" ON product_lots;
 DROP POLICY IF EXISTS "product_lots_allow_update" ON product_lots;
 DROP POLICY IF EXISTS "product_lots_allow_delete" ON product_lots;
 
+DROP POLICY IF EXISTS "product_lots_superadmin";
 CREATE POLICY "product_lots_superadmin" ON product_lots
   FOR ALL USING (organization_id IS NULL);
 
 -- Política para usuários autenticados (será aplicada quando JWT estiver disponível)
 -- Usando @ sign para evitar conflito com naming conventions
+DROP POLICY IF EXISTS "product_lots_auth_users";
 CREATE POLICY "product_lots_auth_users" ON product_lots
   FOR ALL USING (
     organization_id::text = current_setting('request.jwt.claims', true)::json->>'organization_id'

@@ -44,9 +44,13 @@ CREATE INDEX IF NOT EXISTS idx_dwe_order ON delivery_worker_earnings(delivery_or
 
 -- RLS
 ALTER TABLE delivery_worker_earnings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "dwe_select";
 CREATE POLICY "dwe_select" ON delivery_worker_earnings FOR SELECT USING (true);
+DROP POLICY IF EXISTS "dwe_insert";
 CREATE POLICY "dwe_insert" ON delivery_worker_earnings FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "dwe_update";
 CREATE POLICY "dwe_update" ON delivery_worker_earnings FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "dwe_delete";
 CREATE POLICY "dwe_delete" ON delivery_worker_earnings FOR DELETE USING (true);
 
 -- Realtime

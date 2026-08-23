@@ -9,16 +9,20 @@ DROP POLICY IF EXISTS "api_keys_a" ON public.api_keys;
 DROP POLICY IF EXISTS "api_keys_u" ON public.api_keys;
 DROP POLICY IF EXISTS "api_keys_d" ON public.api_keys;
 
+DROP POLICY IF EXISTS "api_keys_select";
 CREATE POLICY "api_keys_select" ON public.api_keys FOR SELECT TO authenticated
   USING (organization_id = get_user_org_id() OR get_user_org_id() IS NULL);
 
+DROP POLICY IF EXISTS "api_keys_insert";
 CREATE POLICY "api_keys_insert" ON public.api_keys FOR INSERT TO authenticated
   WITH CHECK (organization_id = get_user_org_id() OR get_user_org_id() IS NULL);
 
+DROP POLICY IF EXISTS "api_keys_update";
 CREATE POLICY "api_keys_update" ON public.api_keys FOR UPDATE TO authenticated
   USING (organization_id = get_user_org_id() OR get_user_org_id() IS NULL)
   WITH CHECK (organization_id = get_user_org_id() OR get_user_org_id() IS NULL);
 
+DROP POLICY IF EXISTS "api_keys_delete";
 CREATE POLICY "api_keys_delete" ON public.api_keys FOR DELETE TO authenticated
   USING (organization_id = get_user_org_id() OR get_user_org_id() IS NULL);
 

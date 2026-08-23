@@ -11,14 +11,18 @@
 -- ==============================================================================
 
 -- system_users: permitir que o próprio usuário gerencie seu registro
+DROP POLICY IF EXISTS "RLS_system_users_self_insert";
 CREATE POLICY "RLS_system_users_self_insert" ON system_users
   FOR INSERT WITH CHECK (id = auth.uid());
+DROP POLICY IF EXISTS "RLS_system_users_self_update";
 CREATE POLICY "RLS_system_users_self_update" ON system_users
   FOR UPDATE USING (id = auth.uid());
 
 -- system_settings: permitir que o próprio usuário gerencie settings da sua org
+DROP POLICY IF EXISTS "RLS_system_settings_self_insert";
 CREATE POLICY "RLS_system_settings_self_insert" ON system_settings
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_system_settings_self_update";
 CREATE POLICY "RLS_system_settings_self_update" ON system_settings
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
 

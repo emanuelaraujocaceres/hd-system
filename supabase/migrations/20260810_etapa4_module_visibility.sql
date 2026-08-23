@@ -45,9 +45,13 @@ CREATE TABLE IF NOT EXISTS module_visibility (
 -- ==============================================================================
 ALTER TABLE module_visibility ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "module_visibility_select";
 CREATE POLICY "module_visibility_select" ON module_visibility FOR SELECT USING (true);
+DROP POLICY IF EXISTS "module_visibility_insert";
 CREATE POLICY "module_visibility_insert" ON module_visibility FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "module_visibility_update";
 CREATE POLICY "module_visibility_update" ON module_visibility FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "module_visibility_delete";
 CREATE POLICY "module_visibility_delete" ON module_visibility FOR DELETE USING (true);
 
 -- ==============================================================================

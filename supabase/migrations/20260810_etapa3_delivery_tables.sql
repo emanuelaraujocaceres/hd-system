@@ -135,27 +135,43 @@ ALTER TABLE delivery_distance_rates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE delivery_orders ENABLE ROW LEVEL SECURITY;
 
 -- Policies delivery_settings
+DROP POLICY IF EXISTS "delivery_settings_select";
 CREATE POLICY "delivery_settings_select" ON delivery_settings FOR SELECT USING (true);
+DROP POLICY IF EXISTS "delivery_settings_insert";
 CREATE POLICY "delivery_settings_insert" ON delivery_settings FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "delivery_settings_update";
 CREATE POLICY "delivery_settings_update" ON delivery_settings FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "delivery_settings_delete";
 CREATE POLICY "delivery_settings_delete" ON delivery_settings FOR DELETE USING (true);
 
 -- Policies delivery_neighborhoods
+DROP POLICY IF EXISTS "delivery_neighborhoods_select";
 CREATE POLICY "delivery_neighborhoods_select" ON delivery_neighborhoods FOR SELECT USING (true);
+DROP POLICY IF EXISTS "delivery_neighborhoods_insert";
 CREATE POLICY "delivery_neighborhoods_insert" ON delivery_neighborhoods FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "delivery_neighborhoods_update";
 CREATE POLICY "delivery_neighborhoods_update" ON delivery_neighborhoods FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "delivery_neighborhoods_delete";
 CREATE POLICY "delivery_neighborhoods_delete" ON delivery_neighborhoods FOR DELETE USING (true);
 
 -- Policies delivery_distance_rates
+DROP POLICY IF EXISTS "delivery_distance_rates_select";
 CREATE POLICY "delivery_distance_rates_select" ON delivery_distance_rates FOR SELECT USING (true);
+DROP POLICY IF EXISTS "delivery_distance_rates_insert";
 CREATE POLICY "delivery_distance_rates_insert" ON delivery_distance_rates FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "delivery_distance_rates_update";
 CREATE POLICY "delivery_distance_rates_update" ON delivery_distance_rates FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "delivery_distance_rates_delete";
 CREATE POLICY "delivery_distance_rates_delete" ON delivery_distance_rates FOR DELETE USING (true);
 
 -- Policies delivery_orders
+DROP POLICY IF EXISTS "delivery_orders_select";
 CREATE POLICY "delivery_orders_select" ON delivery_orders FOR SELECT USING (true);
+DROP POLICY IF EXISTS "delivery_orders_insert";
 CREATE POLICY "delivery_orders_insert" ON delivery_orders FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "delivery_orders_update";
 CREATE POLICY "delivery_orders_update" ON delivery_orders FOR UPDATE USING (true);
+DROP POLICY IF EXISTS "delivery_orders_delete";
 CREATE POLICY "delivery_orders_delete" ON delivery_orders FOR DELETE USING (true);
 
 -- ==============================================================================

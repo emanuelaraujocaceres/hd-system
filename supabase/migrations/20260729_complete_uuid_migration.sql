@@ -389,154 +389,209 @@ ALTER TABLE sync_queue ENABLE ROW LEVEL SECURITY;
 -- Regra: usuários veem/apenas registros da sua própria organização.
 
 -- organizations: qualquer um na organização pode ver, só admin pode modificar
+DROP POLICY IF EXISTS "RLS_organizations_select";
 CREATE POLICY "RLS_organizations_select" ON organizations
   FOR SELECT USING (id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_organizations_insert";
 CREATE POLICY "RLS_organizations_insert" ON organizations
   FOR INSERT WITH CHECK (id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_organizations_update";
 CREATE POLICY "RLS_organizations_update" ON organizations
   FOR UPDATE USING (id = get_auth_user_org_id());
 
 -- store_branches: isolamento por organização
+DROP POLICY IF EXISTS "RLS_store_branches_select";
 CREATE POLICY "RLS_store_branches_select" ON store_branches
   FOR SELECT USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_store_branches_insert";
 CREATE POLICY "RLS_store_branches_insert" ON store_branches
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_store_branches_update";
 CREATE POLICY "RLS_store_branches_update" ON store_branches
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_store_branches_delete";
 CREATE POLICY "RLS_store_branches_delete" ON store_branches
   FOR DELETE USING (organization_id = get_auth_user_org_id());
 
 -- products: isolamento por organização
+DROP POLICY IF EXISTS "RLS_products_select";
 CREATE POLICY "RLS_products_select" ON products
   FOR SELECT USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_products_insert";
 CREATE POLICY "RLS_products_insert" ON products
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_products_update";
 CREATE POLICY "RLS_products_update" ON products
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_products_delete";
 CREATE POLICY "RLS_products_delete" ON products
   FOR DELETE USING (organization_id = get_auth_user_org_id());
 
 -- categories
+DROP POLICY IF EXISTS "RLS_categories_select";
 CREATE POLICY "RLS_categories_select" ON categories
   FOR SELECT USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_categories_insert";
 CREATE POLICY "RLS_categories_insert" ON categories
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_categories_update";
 CREATE POLICY "RLS_categories_update" ON categories
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_categories_delete";
 CREATE POLICY "RLS_categories_delete" ON categories
   FOR DELETE USING (organization_id = get_auth_user_org_id());
 
 -- customers
+DROP POLICY IF EXISTS "RLS_customers_select";
 CREATE POLICY "RLS_customers_select" ON customers
   FOR SELECT USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_customers_insert";
 CREATE POLICY "RLS_customers_insert" ON customers
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_customers_update";
 CREATE POLICY "RLS_customers_update" ON customers
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_customers_delete";
 CREATE POLICY "RLS_customers_delete" ON customers
   FOR DELETE USING (organization_id = get_auth_user_org_id());
 
 -- suppliers
+DROP POLICY IF EXISTS "RLS_suppliers_select";
 CREATE POLICY "RLS_suppliers_select" ON suppliers
   FOR SELECT USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_suppliers_insert";
 CREATE POLICY "RLS_suppliers_insert" ON suppliers
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_suppliers_update";
 CREATE POLICY "RLS_suppliers_update" ON suppliers
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_suppliers_delete";
 CREATE POLICY "RLS_suppliers_delete" ON suppliers
   FOR DELETE USING (organization_id = get_auth_user_org_id());
 
 -- sales
+DROP POLICY IF EXISTS "RLS_sales_select";
 CREATE POLICY "RLS_sales_select" ON sales
   FOR SELECT USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_sales_insert";
 CREATE POLICY "RLS_sales_insert" ON sales
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_sales_update";
 CREATE POLICY "RLS_sales_update" ON sales
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_sales_delete";
 CREATE POLICY "RLS_sales_delete" ON sales
   FOR DELETE USING (organization_id = get_auth_user_org_id());
 
 -- sale_items (herda segurança via sale.organization_id indiretamente)
+DROP POLICY IF EXISTS "RLS_sale_items_select";
 CREATE POLICY "RLS_sale_items_select" ON sale_items
   FOR SELECT USING (
     EXISTS (SELECT 1 FROM sales WHERE sales.id = sale_items.sale_id AND sales.organization_id = get_auth_user_org_id())
   );
+DROP POLICY IF EXISTS "RLS_sale_items_insert";
 CREATE POLICY "RLS_sale_items_insert" ON sale_items
   FOR INSERT WITH CHECK (
     EXISTS (SELECT 1 FROM sales WHERE sales.id = sale_items.sale_id AND sales.organization_id = get_auth_user_org_id())
   );
+DROP POLICY IF EXISTS "RLS_sale_items_update";
 CREATE POLICY "RLS_sale_items_update" ON sale_items
   FOR UPDATE USING (
     EXISTS (SELECT 1 FROM sales WHERE sales.id = sale_items.sale_id AND sales.organization_id = get_auth_user_org_id())
   );
+DROP POLICY IF EXISTS "RLS_sale_items_delete";
 CREATE POLICY "RLS_sale_items_delete" ON sale_items
   FOR DELETE USING (
     EXISTS (SELECT 1 FROM sales WHERE sales.id = sale_items.sale_id AND sales.organization_id = get_auth_user_org_id())
   );
 
 -- financial_transactions
+DROP POLICY IF EXISTS "RLS_financial_select";
 CREATE POLICY "RLS_financial_select" ON financial_transactions
   FOR SELECT USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_financial_insert";
 CREATE POLICY "RLS_financial_insert" ON financial_transactions
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_financial_update";
 CREATE POLICY "RLS_financial_update" ON financial_transactions
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_financial_delete";
 CREATE POLICY "RLS_financial_delete" ON financial_transactions
   FOR DELETE USING (organization_id = get_auth_user_org_id());
 
 -- cash_sessions
+DROP POLICY IF EXISTS "RLS_cash_sessions_select";
 CREATE POLICY "RLS_cash_sessions_select" ON cash_sessions
   FOR SELECT USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_cash_sessions_insert";
 CREATE POLICY "RLS_cash_sessions_insert" ON cash_sessions
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_cash_sessions_update";
 CREATE POLICY "RLS_cash_sessions_update" ON cash_sessions
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_cash_sessions_delete";
 CREATE POLICY "RLS_cash_sessions_delete" ON cash_sessions
   FOR DELETE USING (organization_id = get_auth_user_org_id());
 
 -- stock_movements
+DROP POLICY IF EXISTS "RLS_stock_movements_select";
 CREATE POLICY "RLS_stock_movements_select" ON stock_movements
   FOR SELECT USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_stock_movements_insert";
 CREATE POLICY "RLS_stock_movements_insert" ON stock_movements
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_stock_movements_update";
 CREATE POLICY "RLS_stock_movements_update" ON stock_movements
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_stock_movements_delete";
 CREATE POLICY "RLS_stock_movements_delete" ON stock_movements
   FOR DELETE USING (organization_id = get_auth_user_org_id());
 
 -- system_users
+DROP POLICY IF EXISTS "RLS_system_users_select";
 CREATE POLICY "RLS_system_users_select" ON system_users
   FOR SELECT USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_system_users_insert";
 CREATE POLICY "RLS_system_users_insert" ON system_users
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_system_users_update";
 CREATE POLICY "RLS_system_users_update" ON system_users
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_system_users_delete";
 CREATE POLICY "RLS_system_users_delete" ON system_users
   FOR DELETE USING (organization_id = get_auth_user_org_id());
 
 -- system_settings
+DROP POLICY IF EXISTS "RLS_system_settings_select";
 CREATE POLICY "RLS_system_settings_select" ON system_settings
   FOR SELECT USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_system_settings_insert";
 CREATE POLICY "RLS_system_settings_insert" ON system_settings
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_system_settings_update";
 CREATE POLICY "RLS_system_settings_update" ON system_settings
   FOR UPDATE USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_system_settings_delete";
 CREATE POLICY "RLS_system_settings_delete" ON system_settings
   FOR DELETE USING (organization_id = get_auth_user_org_id());
 
 -- stock_change_log
+DROP POLICY IF EXISTS "RLS_stock_change_log_select";
 CREATE POLICY "RLS_stock_change_log_select" ON stock_change_log
   FOR SELECT USING (
     EXISTS (SELECT 1 FROM products WHERE products.id = stock_change_log.product_id AND products.organization_id = get_auth_user_org_id())
   );
 
 -- movimentacoes_falhas (DLQ): acesso da própria organização
+DROP POLICY IF EXISTS "RLS_movimentacoes_falhas_select";
 CREATE POLICY "RLS_movimentacoes_falhas_select" ON movimentacoes_falhas
   FOR SELECT USING (organization_id = get_auth_user_org_id());
+DROP POLICY IF EXISTS "RLS_movimentacoes_falhas_insert";
 CREATE POLICY "RLS_movimentacoes_falhas_insert" ON movimentacoes_falhas
   FOR INSERT WITH CHECK (organization_id = get_auth_user_org_id());
 
 -- sync_queue: acesso da própria organização
+DROP POLICY IF EXISTS "RLS_sync_queue_select";
 CREATE POLICY "RLS_sync_queue_select" ON sync_queue
   FOR SELECT USING (organization_id = get_auth_user_org_id());
 
@@ -544,10 +599,12 @@ CREATE POLICY "RLS_sync_queue_select" ON sync_queue
 -- profiles: usuário vê seu próprio perfil + outros da mesma organização
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "RLS_profiles_select";
 CREATE POLICY "RLS_profiles_select" ON profiles
   FOR SELECT USING (
     id = auth.uid() OR organization_id = get_auth_user_org_id()
   );
+DROP POLICY IF EXISTS "RLS_profiles_update";
 CREATE POLICY "RLS_profiles_update" ON profiles
   FOR UPDATE USING (id = auth.uid());
 
