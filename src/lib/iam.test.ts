@@ -4,7 +4,7 @@
  * sobre o role default (que já liberava comanda/kds/delivery) e os mappers
  * usavam fallback "all-true" quando o cloud tinha permissions nulo (a
  * coluna nem existia). Agora `permissions` é uma ALLOWLIST: só os módulos
- * marcados `true` são concedidos; nulo → default RESTRITO (PDV/Estoque/CRM).
+ * marcados `true` são concedidos; nulo → default (PDV/Estoque/CRM/Comanda/Kds; delivery off).
  */
 import { describe, it, expect } from 'vitest';
 import { PermissionEngine } from './iam';
@@ -12,8 +12,8 @@ import { PermissionEngine } from './iam';
 const collab = (permissions: any) =>
   new PermissionEngine({ role: 'collaborator', permissions } as any);
 
-describe('PermissionEngine — colaborador (fechamento de módulos)', () => {
-  it('permissões explícitas = allowlist exata (apenas os marcados true)', () => {
+describe('PermissionEngine — colaborador (comanda/kds por padrão)', () => {
+  it('permissões explícitas mescladas com default (comanda/kds por padrão)', () => {
     const e = collab({
       pdv: true, inventory: true, crm: true,
       finance: false, dashboard: false, settings: false,
@@ -21,24 +21,27 @@ describe('PermissionEngine — colaborador (fechamento de módulos)', () => {
     expect(e.hasPermission('pdv', 'view')).toBe(true);
     expect(e.hasPermission('inventory', 'view')).toBe(true);
     expect(e.hasPermission('crm', 'view')).toBe(true);
-    // não selecionados → ocultos, inclusive os que o role costumava liberar
+    // comanda/kds são concedidos por padrão mesmo sem marcação explícita
+    expect(e.hasPermission('comanda', 'view')).toBe(true);
+    expect(e.hasPermission('kds', 'view')).toBe(true);
+    // delivery continua oculto por padrão
+    expect(e.hasPermission('delivery', 'view')).toBe(false);
+    // não selecionados e não-default → ocultos
     expect(e.hasPermission('finance', 'view')).toBe(false);
     expect(e.hasPermission('dashboard', 'view')).toBe(false);
-    expect(e.hasPermission('comanda', 'view')).toBe(false);
-    expect(e.hasPermission('kds', 'view')).toBe(false);
-    expect(e.hasPermission('delivery', 'view')).toBe(false);
     expect(e.hasPermission('settings', 'view')).toBe(false);
     expect(e.isAdmin()).toBe(false);
   });
 
-  it('permissions nulo cai no default RESTRITO (NUNCA all-true)', () => {
+  it('permissions nulo cai no default (comanda/kds true por padrão)', () => {
     const e = collab(null);
     expect(e.hasPermission('pdv', 'view')).toBe(true);
     expect(e.hasPermission('inventory', 'view')).toBe(true);
     expect(e.hasPermission('crm', 'view')).toBe(true);
+    expect(e.hasPermission('comanda', 'view')).toBe(true);
+    expect(e.hasPermission('kds', 'view')).toBe(true);
+    expect(e.hasPermission('delivery', 'view')).toBe(false);
     expect(e.hasPermission('finance', 'view')).toBe(false);
-    expect(e.hasPermission('comanda', 'view')).toBe(false);
-    expect(e.hasPermission('kds', 'view')).toBe(false);
     expect(e.hasPermission('settings', 'view')).toBe(false);
   });
 
@@ -50,6 +53,13 @@ describe('PermissionEngine — colaborador (fechamento de módulos)', () => {
     expect(e.hasPermission('comanda', 'view')).toBe(true);
     expect(e.hasPermission('kds', 'view')).toBe(true);
     expect(e.hasPermission('delivery', 'view')).toBe(false);
+  });
+
+  it('admin pode revogar comanda/kds do colaborador via false explícito', () => {
+    const e = collab({ pdv: true, comanda: false, kds: false });
+    expect(e.hasPermission('comanda', 'view')).toBe(false);
+    expect(e.hasPermission('kds', 'view')).toBe(false);
+    expect(e.hasPermission('pdv', 'view')).toBe(true);
   });
 });
 

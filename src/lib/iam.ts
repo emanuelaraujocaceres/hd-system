@@ -203,8 +203,8 @@ export const TAB_MODULE_MAP: Record<string, Module> = {
     finance: false,
     dashboard: false,
     settings: false,
-    comanda: false,
-    kds: false,
+    comanda: true,
+    kds: true,
     delivery: false,
     cardapioDigital: false,
   };
@@ -252,15 +252,16 @@ export const TAB_MODULE_MAP: Record<string, Module> = {
     }
 
     // Colaborador (e demais não-admin): `permissions` é uma ALLOWLIST
-    // (Record<module, boolean>). Apenas os módulos marcados como `true`
-    // são concedidos; os demais ficam OCULTOS — inclusive os que o role
-    // "collaborator" costumava liberar por padrão (comanda/kds/delivery).
-    // Isso garante que "selecionei apenas PDV/Estoque/CRM" resulte
-    // EXATAMENTE nesses 3 módulos, sem vazamento.
+    // (Record<module, boolean>), MESCLADA sobre DEFAULT_COLLABORATOR_PERMISSIONS.
+    // Comanda e KDS são concedidos POR PÁRÃO (o colaborador roda garçom/cozinha);
+    // delivery continua OFF por padrão. Um admin ainda pode REVOGAR qualquer
+    // módulo marcando `false` explicitamente no allowlist (ex.: comanda:false).
+    // Isso garante privilégio mínimo por padrão, porém com Comandas/Pedidos
+    // visíveis para o colaborador sem configuração extra.
     const rawMap = user.permissions;
     const permsMap: Record<string, boolean> =
       rawMap && typeof rawMap === 'object' && Object.keys(rawMap).length > 0
-        ? (rawMap as unknown as Record<string, boolean>)
+        ? { ...DEFAULT_COLLABORATOR_PERMISSIONS, ...(rawMap as unknown as Record<string, boolean>) }
         : { ...DEFAULT_COLLABORATOR_PERMISSIONS };
 
     const allowed: Permission[] = [];
