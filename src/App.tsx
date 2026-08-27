@@ -78,7 +78,7 @@ async function autoSelectSuperadminOrg() {
   }
 }
 import { useBranchTheme } from './hooks/useBranchTheme';
-import { PermissionEngine } from './lib/iam';
+import { PermissionEngine, DEFAULT_COLLABORATOR_PERMISSIONS } from './lib/iam';
 import { setSentryUser, clearSentryUser, sentryBreadcrumb } from './lib/sentry';
 
 // Lazy-loaded views for code splitting (reduces TDZ risk from scope-hoisting)
@@ -1145,14 +1145,13 @@ export const App: React.FC = () => {
 
   // Check current user permissions
   const isAdmin = user.role === 'admin' || user.superadmin;
-  // MERGE defaults RESTRITOS com as permissões do usuário. O base NUNCA é
-  // "all-true" — se o colaborador não tem o módulo em user.permissions, ele
-  // fica OCULTO (incl. comanda/kds/delivery que o role antes liberava).
+  // `perms` é a allowlist efetiva do usuário, derivada da MESMA fonte única
+  // do PermissionEngine (DEFAULT_COLLABORATOR_PERMISSIONS). Comanda e KDS são
+  // concedidos por padrão ao colaborador; delivery/cardapioDigital/tvShowcase
+  // seguem false por padrão. user.permissions sobrepõe (false explícito revoga).
   const perms = {
-    pdv: true, inventory: true, crm: true,
-    finance: false, dashboard: false, settings: false,
-    comanda: false, kds: false, delivery: false,
-    cardapioDigital: false, tvShowcase: false,
+    ...DEFAULT_COLLABORATOR_PERMISSIONS,
+    tvShowcase: false,
     ...(user.permissions || {}),
   };
 

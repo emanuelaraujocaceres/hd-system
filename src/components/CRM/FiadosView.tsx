@@ -48,7 +48,7 @@ interface SaleItemPaymentStatus {
   paidAmount: number; // how much of this item has been paid
 }
 
-interface CustomerDebt {
+export interface CustomerDebt {
   customer: Customer;
   sales: Sale[];
   totalDebt: number;
@@ -64,6 +64,19 @@ interface FiadosViewProps {
   user: UserProfile;
   caixaSession: CashRegisterSession;
 }
+
+// Filtra apenas débitos em aberto (remaining > 0.01). Contas quitadas somem
+// do Fiados — o card do cliente não aparece quando não há nada pendente.
+export const filterOpenDebts = (debts: CustomerDebt[], term = ''): CustomerDebt[] => {
+  const open = debts.filter((d) => d.remaining > 0.01);
+  if (!term.trim()) return open;
+  const t = term.toLowerCase();
+  return open.filter(
+    (d) =>
+      d.customer.name.toLowerCase().includes(t) ||
+      d.customer.cpfCnpj.includes(term),
+  );
+};
 
 // ─── Component ──────────────────────────────────────────────────
 export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, caixaSession }) => {
@@ -202,16 +215,11 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
     return result;
   }, [sales, customers, creditPayments]);
 
-  // ── Filtered list ──────────────────────────────────────────────
-  const filteredDebts = useMemo(() => {
-    if (!searchTerm.trim()) return customerDebts;
-    const term = searchTerm.toLowerCase();
-    return customerDebts.filter(
-      (d) =>
-        d.customer.name.toLowerCase().includes(term) ||
-        d.customer.cpfCnpj.includes(term)
-    );
-  }, [customerDebts, searchTerm]);
+  // ── Filtered list (só débitos em aberto) ──────────────────────
+  const filteredDebts = useMemo(
+    () => filterOpenDebts(customerDebts, searchTerm),
+    [customerDebts, searchTerm],
+  );
 
   // ── Totals ─────────────────────────────────────────────────────
   const grandTotalDebt = customerDebts.reduce((acc, d) => acc + d.remaining, 0);
