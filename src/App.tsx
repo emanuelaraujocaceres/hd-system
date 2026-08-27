@@ -43,6 +43,40 @@ import {
 } from './types';
 import { ToastProvider } from './components/shared/Toast';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+
+// ─── Opção 1: auto-seleção de organização para superadmin ───────────────
+// Normaliza o retorno da RPC admin_fetch_organizations no formato { id }[].
+function parseOrgIds(raw: any): { id: string }[] {
+  if (!raw) return [];
+  const arr = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'string'
+      ? (() => {
+          try {
+            const p = JSON.parse(raw);
+            return Array.isArray(p) ? p : [];
+          } catch {
+            return [];
+          }
+        })()
+      : [];
+  return arr
+    .filter((o: any) => o && typeof o.id === 'string')
+    .map((o: any) => ({ id: o.id }));
+}
+
+// Superadmin sem org ativa -> auto-seleciona a última utilizada ou a primeira.
+// O modo global permanece disponível apenas quando o usuário limpa a seleção (Sair).
+async function autoSelectSuperadminOrg() {
+  if (!storageService.isSuperAdmin()) return;
+  if (storageService.getSuperadminViewingOrg()) return;
+  try {
+    const { data } = await supabase.rpc('admin_fetch_organizations');
+    storageService.ensureSuperadminViewingOrg(parseOrgIds(data));
+  } catch {
+    /* silencioso: mantém modo global; usuário pode selecionar manualmente */
+  }
+}
 import { useBranchTheme } from './hooks/useBranchTheme';
 import { PermissionEngine } from './lib/iam';
 import { setSentryUser, clearSentryUser, sentryBreadcrumb } from './lib/sentry';
@@ -891,6 +925,8 @@ export const App: React.FC = () => {
           };
           storageService.saveUserProfile(restoredProfile);
           setUser(restoredProfile);
+          // Opção 1: garante org ativa para superadmin também na restauração de sessão
+          autoSelectSuperadminOrg();
           // Se a organização revalidada difere da que o mount hidratou,
           // re-hidrata (mesma classe do bug do login: as chaves da nova org
           // ainda não estão populadas no localStorage).
@@ -947,6 +983,8 @@ export const App: React.FC = () => {
     // não-default (ex.: Plantão da Cerveja) que só carregavam dados após F5
     // (a hidratação do mount rodava antes do perfil existir).
     runHydration(true); // force: re-hidratar com org do usuário logado
+    // Opção 1: superadmin sem org ativa -> auto-seleciona primeira/última org
+    await autoSelectSuperadminOrg();
     // IAM: redirect to the first permitted tab using PermissionEngine
     const permEngine = new PermissionEngine(loggedUser);
     if (!permEngine.isDeveloper() && !permEngine.isAdmin()) {

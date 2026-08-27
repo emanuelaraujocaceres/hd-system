@@ -585,6 +585,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Opção 2: superadmin só cria/edita usuários com uma org ativa selecionada.
+    // Bloqueia ANTES da chamada à API para não criar usuário órfão no cloud.
+    if (storageService.isSuperAdmin() && !storageService.getSuperadminViewingOrg()) {
+      setErrorMessage(
+        'Selecione uma organização (Organizações → "Visualizar dados") antes de criar ou editar usuários.',
+      );
+      posAudio.error();
+      return;
+    }
+
     // Zod validation
     const result = userProfileSchema.safeParse({
       name: userName,

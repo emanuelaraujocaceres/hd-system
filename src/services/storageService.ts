@@ -90,7 +90,8 @@ const KEYS = {
   DELIVERY_NEIGHBORHOODS: 'hd_system_delivery_neighborhoods',
   DELIVERY_DISTANCE_RATES: 'hd_system_delivery_distance_rates',
   DELIVERY_ORDERS: 'hd_system_delivery_orders',
-VIEWING_ORG: 'hd_system_viewing_org',
+  VIEWING_ORG: 'hd_system_viewing_org',
+  LAST_VIEWING_ORG: 'hd_system_last_viewing_org',
   PRODUCT_LOTS: 'hd_system_product_lots',
   STOCK_LOSS_LOG: 'hd_system_stock_loss_log',
 };
@@ -233,8 +234,13 @@ class StorageService {
     }
     if (orgId) {
       localStorage.setItem(KEYS.VIEWING_ORG, orgId);
+      // Mantém histórico da última org usada para a auto-seleção (Opção 1).
+      localStorage.setItem(KEYS.LAST_VIEWING_ORG, orgId);
     } else {
       localStorage.removeItem(KEYS.VIEWING_ORG);
+      // Intencionalmente NÃO limpamos LAST_VIEWING_ORG: o modo global só existe
+      // quando o usuário limpa a seleção explicitamente; no próximo login a
+      // auto-seleção restaura a última org utilizada.
     }
     this._orgIdCache = null; // FIX-028: invalidar cache do getCurrentOrgId()
     // Chama listeners SÍNCRONA E ASSINCRONAMENTE para garantir que a UI
@@ -247,6 +253,31 @@ class StorageService {
   getSuperadminViewingOrg(): string | null {
     if (!this.isSuperAdmin()) return null;
     return localStorage.getItem(KEYS.VIEWING_ORG);
+  }
+
+  getLastViewingOrg(): string | null {
+    if (!this.isSuperAdmin()) return null;
+    return localStorage.getItem(KEYS.LAST_VIEWING_ORG);
+  }
+
+  // Opção 1 (autorizado): superadmin sem org ativa selecionada -> auto-seleciona
+  // a última utilizada (se ainda existir na lista) ou a primeira disponível.
+  ensureSuperadminViewingOrg(orgs: { id: string }[]): void {
+    if (!this.isSuperAdmin()) return;
+    if (this.getSuperadminViewingOrg()) return; // já há seleção explícita
+    if (!orgs || orgs.length === 0) return;
+    const last = this.getLastViewingOrg();
+    const target = (last && orgs.some((o) => o.id === last)) ? last : orgs[0].id;
+    this.superadminSetViewingOrg(target);
+  }
+
+  // Opção 2 (autorizado): superadmin só pode gravar com uma org ativa selecionada.
+  private assertSuperadminOrgSelected(context: string): void {
+    if (this.isSuperAdmin() && !this.getSuperadminViewingOrg()) {
+      throw new Error(
+        `Selecione uma organização (Organizações → "Visualizar dados") antes de ${context}.`,
+      );
+    }
   }
 
   // Retorna true se a organização atual for a DEFAULT_ORG_ID (Adega dos Parças)
@@ -2995,6 +3026,7 @@ id: StorageService.ensureUuid(settings.id),
   }
 
   saveProduct(product: Product): Product {
+    this.assertSuperadminOrgSelected('salvar produto');
     product.id = StorageService.ensureUuid(product.id);
     product.organizationId = this.getCurrentOrgId();
     // Isolamento por filial: produto criado/alterado pertence à filial selecionada
@@ -3288,6 +3320,7 @@ id: StorageService.ensureUuid(settings.id),
   }
 
   saveCustomer(customer: Customer) {
+    this.assertSuperadminOrgSelected('salvar cliente');
     customer.id = StorageService.ensureUuid(customer.id);
     customer.organizationId = this.getCurrentOrgId();
     const branchId = this.getSelectedBranchId();
@@ -3327,6 +3360,7 @@ id: StorageService.ensureUuid(settings.id),
   }
 
   saveSupplier(supplier: Supplier) {
+    this.assertSuperadminOrgSelected('salvar fornecedor');
     supplier.id = StorageService.ensureUuid(supplier.id);
     supplier.organizationId = this.getCurrentOrgId();
     const branchId = this.getSelectedBranchId();
@@ -5532,6 +5566,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   saveBranch(branch: StoreBranch) {
+    this.assertSuperadminOrgSelected('salvar filial');
     branch.id = StorageService.ensureUuid(branch.id);
     branch.organizationId = this.getCurrentOrgId();
     const branches = this.get<StoreBranch[]>(KEYS.BRANCHES, this.isDefaultOrg() ? INITIAL_BRANCHES : []);
@@ -5674,6 +5709,7 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   saveUser(user: UserProfile) {
+    this.assertSuperadminOrgSelected('salvar usuário');
     user.id = StorageService.ensureUuid(user.id);
     user.organizationId = this.getCurrentOrgId();
     const users = this.get<UserProfile[]>(KEYS.USERS_LIST, []);
