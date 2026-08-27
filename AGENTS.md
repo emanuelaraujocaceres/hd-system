@@ -6,6 +6,78 @@
 - **Referência do Supabase:** O arquivo `SUPABASE_SCHEMA.md` na raiz do projeto contém a estrutura completa do banco (tabelas, colunas, tipos, RPCs, views). DEVE ser atualizado a cada migration aplicada. Antes de criar/modificar qualquer tabela, consultar este arquivo primeiro.
 - **Sem IA neste aplicativo:** Decisão do usuário (2026-08-22). Não usar LLMs/visão computacional (Gemini, OpenAI, etc.) nem features de reconhecimento de produto por imagem. A função `functions/api/ai/scan-product.ts` (Gemini) foi removida intencionalmente — não reintroduzir. Busca de imagens por termo (Wikimedia Commons) no cadastro de produtos NÃO é IA e pode permanecer.
 
+## 🛡️ Princípio SRE — "Primeiro, não cause danos" (Site Reliability Engineering)
+
+Regra de ouro para **TODAS as alterações futuras**: antes de corrigir o problema o mais rápido possível, garantir que a correção **não introduza novos problemas** em nenhuma outra parte do sistema. Este é um app **multi-tenant rigoroso** com 3 perfis — **Superadmin** (acesso global a todas as organizações/filiais), **Administrador de Organização** (todas as filiais da sua org) e **Colaborador de Filial** (apenas sua filial) — e sincronização **local-first** sobre Supabase Auth / RLS / Realtime + Cloudflare Workers. Qualquer alteração pode afetar autenticação, isolamento de dados, tempo real e telas de PDV / Estoque / Financeiro / Relatórios.
+
+Antes de escrever uma linha, siga o checklist obrigatório abaixo.
+
+### 1. Mapeamento de Dependências (Leitura Obrigatória)
+Antes de alterar qualquer função/classe, liste **todas** as chamadas a ela:
+```bash
+grep -rn "nomeDaFuncao" src/                 # chamadas em TS/TSX
+grep -rn "saveProduct\|getBranches" src/     # exemplo real
+```
+Classifique cada chamada em:
+- **Telas de leitura** (listar produtos, clientes, filiais…)
+- **Telas de gravação** (criar/editar usuários, produtos, vendas…)
+- **Sincronização em tempo real** (handlers `*FromRemote`, Realtime, WebSocket)
+- **Testes automatizados** existentes (`*.test.ts`)
+
+Se a função for usada em Realtime, qualquer mudança de assinatura/comportamento pode quebrar a hidratação ou o canal — trate como de **alto risco**.
+
+### 2. Análise de Impacto por Perfil (Multi-tenant)
+Responda por escrito **antes** de codar:
+- *"Quem será afetado?"* (Superadmin? Admin? Colaborador? Todas as filiais?)
+- *"A mudança quebra o isolamento de dados entre organizações ou filiais?"* → Se quebrar, a alteração está **PROIBIDA**.
+- *"Qual o pior cenário se a alteração falhar?"* (ex.: vazamento de dados de outra org, canal Realtime em `CHANNEL_ERROR` em loop, vendas duplicadas).
+
+Sempre valide contra as **Regras de sincronização** (RLS obrigatório, `isRemoteFromCurrentBranch`, publicação `supabase_realtime`, `REPLICA IDENTITY FULL`, ressuscitação do Realtime) deste arquivo.
+
+### 3. Escopo Mínimo (Navalha de Occam)
+- **Nunca** refatore ou "melhore" código fora do problema.
+- **Nunca** altere arquivos que não são estritamente necessários.
+- Se a correção exige 5 arquivos, altere **apenas** esses 5. Não "aproveite" para organizar imports, renomear variáveis ou mexer em lint cosmético.
+
+### 4. Proibições Absolutas (Segurança em Primeiro Lugar)
+- ❌ **Não altere RLS, migrations ou funções SQL** sem autorização explícita + backup prévio do banco.
+- ❌ **Não execute SQL de escrita** (`UPDATE/DELETE/ALTER/DROP`) em produção sem transação e script de rollback planejado.
+- ❌ **Não ignore** erros de console, `lint` ou testes "só para testar rápido".
+- ❌ **Não proponha mudanças arquiteturais** (ex.: trocar localStorage→IndexedDB, Context→Redux) para resolver um bug pontual.
+
+### 5. Testes Automatizados (Não Negociável)
+Cada nova lógica precisa de **pelo menos**:
+- 1 teste de cenário feliz (funciona como esperado)
+- 1 teste de cenário de falha (dados faltando, permissão negada, branch errada)
+
+E **execute** antes de finalizar:
+```bash
+npm run lint     # tsc --noEmit (typecheck)
+npm test         # vitest run
+```
+Se algum falhar, **a correção não pode ser entregue** (mesmo que "pareça funcionar"). Use `src/services/storageService.*.test.ts` como base de regressão (blindagem de mappers de sync).
+
+### 6. Backward Compatibility
+- A mudança não pode quebrar o comportamento esperado para **nenhum** perfil existente.
+- Teste mental: *"O que acontece se um admin comum fizer isso? E um colaborador?"*
+- **Nunca** remova campos/parâmetros antigos; adicione novos com **defaults seguros**. Prefira logs/silencioso a `throw` quando possível — mas `throw` é aceito para **bloquear escrita ilegal**, desde que o caller tenha `try/catch` com mensagem amigável ao usuário.
+
+### 7. Estratégia de Rollback
+Sempre documente a reversão rápida:
+- **Frontend:** `git revert <commit-hash>` (cria commit de reversão, sem `--force`).
+- **SQL:** prepare o script `ROLLBACK`/revert antes de aplicar; rode em transação.
+- **Realtime/Cloudflare:** mantenha a versão anterior deployada; prefira recompor versão a hotfix em produção.
+
+### 8. Relatório de Risco e Conformidade (Entregável Obrigatório)
+Antes de marcar a tarefa como concluída, gere um relatório contendo:
+1. **Arquivos alterados** (lista completa).
+2. **Justificativa** de por que cada alteração foi necessária.
+3. **Riscos identificados** (ex.: "afeta Estoque porque `X` é usada lá"; impacto em Realtime/hidratação).
+4. **Evidências** de que `npm run lint` e `npm test` passaram (logs).
+5. **Estratégia de rollback** detalhada.
+
+> Exemplo de como pensar: *"Vou alterar `getBranches()`. Ela é usada em `Dashboard`, `Relatórios` e `handleLoginSuccess`. Minha mudança só adiciona um `if` para o contexto do superadmin; o fluxo do admin/colaborador fica igual. Escrevo teste simulando login de superadmin (só filiais da org selecionada) e de admin (sem regressão). Rolo back via `git revert` se quebrar."*
+
 ## Regras de sincronização (nunca quebrar)
 
 0. **RLS obrigatório em todas as tabelas.** Sempre habilitar RLS (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY`) e criar policies. Nunca deixar tabelas sem policies — acesso anônimo (sem auth.uid()) deve ser BLOQUEADO.
