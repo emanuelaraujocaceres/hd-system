@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { PermissionEngine } from '../../lib/iam';
 import { useDebounce } from '../../hooks/useDebounce';
 import {
   Package,
@@ -60,7 +61,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   initialBarcode,
   onClearInitialBarcode,
 }) => {
-  const canCreateEdit = user.role === 'admin' || !!user.superadmin;
+  const permEngine = new PermissionEngine(user);
+  const canCreateEdit = permEngine.hasPermission('inventory', 'create');
   // ============================================================
   // 1. TODOS OS useState PRIMEIRO
   // ============================================================
