@@ -45,6 +45,7 @@ import { posAudio } from '../../services/audioService';
 import { printTestPage } from '../../services/printService';
 import { callServerApi } from '../../lib/serverApi';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
+import { canManageUser } from '../../lib/userManagement';
 import { userProfileSchema, tableSchema } from '../../validators/schemas';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { BranchCheck } from '../Admin/BranchCheck';
@@ -1839,7 +1840,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
                 {usersList.map((u) => {
-                  const isAdmin = u.role === 'admin';
+                  const isTargetAdmin = u.role === 'admin';
                   return (
                     <tr
                       key={u.id}
@@ -1861,12 +1862,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                       <td className="px-3 py-2">
                         <span
                           className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border ${
-                            isAdmin
+                            isTargetAdmin
                               ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30'
                               : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
                           }`}
                         >
-                          {isAdmin ? 'ADMIN' : 'COLAB'}
+                          {isTargetAdmin ? 'ADMIN' : 'COLAB'}
                         </span>
                       </td>
                       <td className="px-3 py-2">
@@ -1881,28 +1882,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                       </td>
                       <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => handleOpenHoleriteModal(u)}
-                            className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
-                            title="Holerite"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                          </button>
-                          {isAdmin && (
-                          <button
-                            onClick={() => handleOpenUserModal(u)}
+                            {canManageUser(user, u, currentBranchId) && (
+                            <button
+                              onClick={() => handleOpenHoleriteModal(u)}
+                              className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors"
+                              title="Holerite"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                            </button>
+                            )}
+                            {canManageUser(user, u, currentBranchId) && (
+                            <button
+                              onClick={() => handleOpenUserModal(u)}
                             className="p-1.5 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 hover:text-indigo-600 transition-colors"
                             title="Editar"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           )}
-                          {isAdmin && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setConfirmDeleteUser(u);
-                              }}
+                            {canManageUser(user, u, currentBranchId) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDeleteUser(u);
+                                }}
                               className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 transition-colors"
                               title="Excluir"
                             >
