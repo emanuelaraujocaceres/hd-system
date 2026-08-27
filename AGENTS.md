@@ -287,7 +287,22 @@ getEntities(): Entity[] {
 - Hidratação/prune de branches depende de RLS: `fetchRows` vazio pode mascarar policies faltando em orgs default — validar as policies em `pg_policies` antes de qualquer alteração de RLS em `store_branches`.
 **Local:** `supabase/RLS_FIXES.sql:1179-1214` (policies originais), `supabase/legacy-sql/FIX_20260819_store_branches_policies.sql` (recreated), `functions/api/admin/create-organization.ts` + `create-user.ts` (fluxo correto)
 
+### BUG-034: Admin/Manager bloqueado em Financeiro/Dashboard/Configurações/Usuários/Filiais (2026-08-27)
+**Sintoma:** Admin (e manager) consegue ver as abas no Sidebar, mas ao clicar recebe "Acesso Restrito" (página bloqueada). Colaborador normal.
+**Causa:** O guard de página `hasAccessToTab` em `App.tsx` só fazia bypass de `superadmin`. Para `admin`/`manager` ele caía no default restrito de colaborador (`DEFAULT_COLLABORATOR_PERMISSIONS` + `user.permissions`) e retornava `false` para finance/dashboard/settings/users/branches. A Sidebar usa `PermissionEngine` (que dá acesso total ao admin) → inconsistência "menu aparece, página bloqueia".
+**Regra (NUNCA reintroduzir):**
+- A decisão de acesso por aba é feita EM ÚNICO lugar: `src/lib/tabAccess.ts` (`canAccessTab`). `App.tsx` apenas chama `canAccessTab(user, getEffectiveModuleVisibility(), tab)`.
+- Admin/Manager têm acesso total na org. A FONTE É O ROLE (`user.role`), **NUNCA** `user.permissions` (que pode ser `null` ou o default de colaborador persistido no login). `PermissionEngine` já ignora `user.permissions` para admin — o guard de página agora também.
+- Module visibility por filial (`module_visibility`) é respeitada por TODOS os não-superadmin, inclusive admin/manager (módulo desligado na filial some para todos — comportamento intencional).
+- NUNCA ler `user.permissions` para decidir acesso de admin/manager no frontend.
+**Local:** `src/lib/tabAccess.ts` (novo), `src/App.tsx` (guard usa `canAccessTab`), `src/lib/tabAccess.test.ts` (regressão: 9 testes). Commit posterior a 5de88fd.
+
 ---
+
+## Regra de acesso (anti-recorrência BUG-034)
+**Regra:** `canAccessTab` (guard de página) e `PermissionEngine.canAccessTab` (Sidebar/atalhos) DEVEM concordar. Se mudar um, mude o outro ou chame a mesma função. Para admin/manager, o critério é SEMPRE o `role`, não `permissions`. Qualquer novo módulo de navegação deve ser adicionado no `TAB_VISIBILITY_KEY` de `tabAccess.ts` e no `TAB_MODULE_MAP` de `iam.ts` (manter 1:1).
+
+
 
 ## Padrões Defensivos Obrigatórios
 

@@ -78,7 +78,8 @@ async function autoSelectSuperadminOrg() {
   }
 }
 import { useBranchTheme } from './hooks/useBranchTheme';
-import { PermissionEngine, DEFAULT_COLLABORATOR_PERMISSIONS } from './lib/iam';
+import { PermissionEngine } from './lib/iam';
+import { canAccessTab } from './lib/tabAccess';
 import { setSentryUser, clearSentryUser, sentryBreadcrumb } from './lib/sentry';
 
 // Lazy-loaded views for code splitting (reduces TDZ risk from scope-hoisting)
@@ -1145,70 +1146,11 @@ export const App: React.FC = () => {
 
   // Check current user permissions
   const isAdmin = user.role === 'admin' || user.superadmin;
-  // `perms` é a allowlist efetiva do usuário, derivada da MESMA fonte única
-  // do PermissionEngine (DEFAULT_COLLABORATOR_PERMISSIONS). Comanda e KDS são
-  // concedidos por padrão ao colaborador; delivery/cardapioDigital/tvShowcase
-  // seguem false por padrão. user.permissions sobrepõe (false explícito revoga).
-  const perms = {
-    ...DEFAULT_COLLABORATOR_PERMISSIONS,
-    tvShowcase: false,
-    ...(user.permissions || {}),
-  };
-
-  const hasAccessToTab = (tab: string): boolean => {
-    // Superadmin bypasses ALL module visibility
-    if (user.superadmin) return true;
-    
-    // Organizations: superadmin only
-    if (tab === 'organizations') return !!user?.superadmin;
-    
-    // Settings: gated by permission engine
-    if (tab === 'settings') return !!perms.settings;
-    
-    // ✅ Check module visibility (per branch) - admins also respect this
-    const TAB_MODULE_MAP: Record<string, string> = {
-      pdv: 'modulePdv',
-      dashboard: 'moduleDashboard',
-      inventory: 'moduleInventory',
-      'nf-history': 'moduleInventory',
-      finance: 'moduleFinance',
-      'sales-history': 'moduleFinance',
-      crm: 'moduleCrm',
-      fiados: 'moduleFiado', // visibilidade própria (corrige caixa ≠ menu)
-      comanda: 'moduleComanda',
-      kds: 'moduleKds',
-      delivery: 'moduleDelivery',
-      cardapio_preview: 'moduleCardapioPreview',
-      tv_showcase: 'moduleTvShowcase',
-      'connect-tv': 'moduleTvConnect',
-    };
-    
-    const moduleVisibility = storageService.getEffectiveModuleVisibility();
-    if (moduleVisibility) {
-      const key = TAB_MODULE_MAP[tab];
-      if (key && moduleVisibility[key] === false) {
-        return false; // Module disabled for this branch
-      }
-    }
-    
-    if (tab === 'pdv') return !!perms.pdv;
-    if (tab === 'dashboard') return !!perms.dashboard;
-    if (tab === 'inventory') return !!perms.inventory;
-    if (tab === 'nf-history') return !!perms.inventory;
-    if (tab === 'finance') return !!perms.finance;
-    if (tab === 'sales-history') return !!perms.finance;
-    if (tab === 'crm') return !!perms.crm;
-    if (tab === 'fiados') return !!perms.crm;
-    if (tab === 'comanda') return !!perms.comanda;
-    if (tab === 'kds') return !!perms.kds;
-    if (tab === 'delivery') return !!perms.delivery;
-    if (tab === 'cardapio_preview') return !!perms.cardapioDigital;
-    if (tab === 'tv-showcase') return perms.tvShowcase !== false;
-    if (tab === 'connect-tv') return perms.tvShowcase !== false;
-    if (tab === 'settings') return !!perms.settings;
-    if (tab === 'organizations') return !!user.superadmin;
-    return false;
-  };
+  // Guard de acesso por aba — fonte única de verdade em src/lib/tabAccess.ts.
+  // Admin/Manager têm acesso total (respeitando module_visibility por filial);
+  // colaborador usa DEFAULT_COLLABORATOR_PERMISSIONS + allowlist. BUG-034.
+  const hasAccessToTab = (tab: string): boolean =>
+    canAccessTab(user, storageService.getEffectiveModuleVisibility(), tab);
 
   // Modo TV: vitrine e tela de pareamento escondem sidebar/header/rodapé.
   const isTvMode = activeTab === 'tv-showcase' || activeTab === 'connect-tv';
