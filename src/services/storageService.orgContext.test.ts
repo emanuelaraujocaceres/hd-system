@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StorageService } from './storageService';
+import { syncService } from './syncService';
 
 describe('storageService — contexto de organização do superadmin (Opção 1 e 2)', () => {
   let svc: StorageService;
@@ -84,6 +85,29 @@ describe('storageService — contexto de organização do superadmin (Opção 1 
       );
       const spy = vi.spyOn(svc as any, 'syncSystemUser').mockImplementation(() => {});
       expect(() => svc.saveUser({ ...sampleUser })).not.toThrow();
+      spy.mockRestore();
+    });
+  });
+
+  describe('syncSystemUser — superadmin sem filial (regressão Meu Perfil)', () => {
+    it('superadmin SEM filial selecionada AINDA sincroniza perfil (chama upsertRow, não baila)', () => {
+      svc.superadminSetViewingOrg('org-1'); // org ativa, porém sem branch
+      const spy = vi.spyOn(syncService, 'upsertRow').mockResolvedValue(undefined as any);
+      (svc as any).syncSystemUser({
+        id: 'usr-sa', name: 'SA', email: 'sa@x.com', role: 'admin',
+        organizationId: '', storeBranchId: '', permissions: {}, active: true, superadmin: true,
+      });
+      expect(spy).toHaveBeenCalledWith('system_users', expect.objectContaining({ id: 'usr-sa', store_branch_id: null }));
+      spy.mockRestore();
+    });
+
+    it('não-superadmin SEM filial NÃO sincroniza (mantém bloqueio anterior)', () => {
+      const spy = vi.spyOn(syncService, 'upsertRow').mockResolvedValue(undefined as any);
+      (svc as any).syncSystemUser({
+        id: 'usr-1', name: 'U', email: 'u@x.com', role: 'admin',
+        organizationId: 'org-x', storeBranchId: '', permissions: {}, active: true, superadmin: false,
+      });
+      expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
     });
   });

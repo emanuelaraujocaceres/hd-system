@@ -949,15 +949,20 @@ expiration_date: p.expirationDate || null,
       const resolved = this.resolveBranchId(branchId);
       if (resolved) branchId = resolved;
     }
-    if (!branchId) {
-      console.error('❌ syncSystemUser: Nenhuma filial selecionada!', u.id);
+    // Superadmin (acesso global) pode não ter filial vinculada; mesmo assim o
+    // perfil deve sincronizar (caso contrário a alteração de nome/e-mail/avatar
+    // é perdida ao limpar o localStorage — BUG reportado). Demais perfis sem
+    // filial seguem sem sync (mantém o comportamento anterior e evita violar
+    // políticas de INSERT por branch).
+    if (!branchId && !u.superadmin) {
+      console.warn('[syncSystemUser] sem filial e não-superadmin; pulando sync de perfil', u.id);
       return;
     }
-    const orgId = this.orgIdForBranch(branchId, u.organizationId);
+    const orgId = branchId ? this.orgIdForBranch(branchId, u.organizationId) : (u.organizationId || null);
     syncService.upsertRow('system_users', {
       id: u.id,
       organization_id: orgId,
-      store_branch_id: branchId,
+      store_branch_id: branchId || null,
       name: u.name,
       email: u.email,
       role: u.role,
