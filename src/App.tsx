@@ -1137,7 +1137,7 @@ export const App: React.FC = () => {
       finance: 'moduleFinance',
       'sales-history': 'moduleFinance',
       crm: 'moduleCrm',
-      fiados: 'moduleCrm',
+      fiados: 'moduleFiado', // visibilidade própria (corrige caixa ≠ menu)
       comanda: 'moduleComanda',
       kds: 'moduleKds',
       delivery: 'moduleDelivery',

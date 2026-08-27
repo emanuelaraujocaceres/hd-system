@@ -43,6 +43,35 @@ interface SidebarProps {
   isTvMode?: boolean;
 }
 
+// ✅ Module visibility: map module name → visibility key.
+// Deve espelhar EXATAMENTE as chaves da aba Configurações → Módulos
+// (ModuleVisibilityView.MODULES). Divergência aqui quebra a regra
+// "o que tem no menu tem a caixa marcada / o que não tem não tem caixa".
+export const MODULE_VISIBILITY_MAP: Record<string, string> = {
+  pdv: 'modulePdv',
+  inventory: 'moduleInventory',
+  finance: 'moduleFinance',
+  crm: 'moduleCrm',
+  fiado: 'moduleFiado', // "Fiados" é controlado pela própria chave moduleFiado
+  dashboard: 'moduleDashboard',
+  comanda: 'moduleComanda',
+  kds: 'moduleKds',
+  delivery: 'moduleDelivery',
+  cardapioDigital: 'moduleCardapioDigital',
+  tvShowcase: 'moduleTvShowcase',
+  tvConnect: 'moduleTvConnect',
+  cardapioPreview: 'moduleCardapioPreview',
+}; // nota: 'settings' e 'organizations' são sempre visíveis (return true antes do lookup)
+
+// ✅ Override: some menu items were gated by the wrong visibility key.
+// Map the menu item id to the correct module-visibility key from the Settings → Módulos tab.
+export const MODULE_VISIBILITY_OVERRIDE: Record<string, string> = {
+  'tv-showcase': 'tvShowcase', // "Ofertas / TV" → moduleTvShowcase
+  'connect-tv': 'tvConnect',   // "Conectar TV" → moduleTvConnect
+  'cardapio_preview': 'cardapioPreview', // "Cardápio Preview" → moduleCardapioPreview
+  'fiados': 'fiado',           // "Fiados" → moduleFiado (corrige caixa ≠ menu)
+};
+
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   setCurrentTab,
@@ -106,30 +135,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'organizations', label: 'Organizações', icon: Building2, module: 'organizations' as const },
   ];
 
-  // ✅ Module visibility: map module name to visibility key
-  const MODULE_VISIBILITY_MAP: Record<string, string> = {
-    pdv: 'modulePdv',
-    inventory: 'moduleInventory',
-    finance: 'moduleFinance',
-    crm: 'moduleCrm',
-    dashboard: 'moduleDashboard',
-    comanda: 'moduleComanda',
-    kds: 'moduleKds',
-    delivery: 'moduleDelivery',
-    cardapioDigital: 'moduleCardapioDigital',
-    tvShowcase: 'moduleTvShowcase',
-    tvConnect: 'moduleTvConnect',
-    cardapioPreview: 'moduleCardapioPreview',
-    settings: 'moduleSettings',
-  };
-
-  // ✅ Override: some menu items were gated by the wrong visibility key.
-  // Map the menu item id to the correct module-visibility key from the Settings → Módulos tab.
-  const MODULE_VISIBILITY_OVERRIDE: Record<string, string> = {
-    'tv-showcase': 'tvShowcase', // "Ofertas / TV" → moduleTvShowcase
-    'connect-tv': 'tvConnect',   // "Conectar TV" → moduleTvConnect
-    'cardapio_preview': 'cardapioPreview', // "Cardápio Preview" → moduleCardapioPreview
-  };
+  // ✅ Module visibility: map module name → visibility key.
+  // Definido no nível do módulo (MODULE_VISIBILITY_MAP / _OVERRIDE, abaixo dos
+  // imports) para poder ser exportado e testado. Deve espelhar EXATAMENTE as
+  // chaves da aba Configurações → Módulos (ModuleVisibilityView.MODULES);
+  // divergência quebra a regra "o que tem no menu tem a caixa marcada / o que
+  // não tem não tem caixa".
 
   // ✅ Check if module is enabled for this branch
   const isModuleEnabled = (module: string): boolean => {
