@@ -56,11 +56,10 @@ begin
 
   -- 4) Cria auth.users CASANDO o id (login volta a funcionar)
   insert into auth.users (
-    id, instance_id, email, encrypted_password, email_confirmed_at,
+    id, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at, aud, role
   ) values (
     v_id,
-    (select instance_id from auth.instances limit 1),
     v_email,
     crypt('Trocar@123', gen_salt('bf')),   -- SENHA TEMPORÁRIA — usuário deve trocar no 1º login
     now(),
