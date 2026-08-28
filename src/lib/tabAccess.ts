@@ -14,6 +14,8 @@
  *    SOMENTE a module_visibility por filial (módulo desligado some para todos).
  *  - Colaborador: allowlist mesclada sobre DEFAULT_COLLABORATOR_PERMISSIONS.
  *    Comportamento idêntico ao anterior — sem regressão.
+ *  - EXCEÇÃO (regra B): 'settings' é SOMENTE admin/manager/superadmin — o
+ *    colaborador NUNCA acessa Configurações, independente de user.permissions.
  *
  * NUNCA duplicar esta lógica em App.tsx / LoginModal. Mantenha aqui.
  */
@@ -69,7 +71,10 @@ export function canAccessTab(
   };
 
   switch (tab) {
-    case 'settings': return !!perms.settings;
+    // Regra B: Configurações SOMENTE admin/manager/superadmin. Este switch só é
+    // alcançado por não-admin (superadmin retorna true em 50, admin/manager em 62),
+    // então o colaborador nunca acessa settings.
+    case 'settings': return false;
     case 'pdv': return !!perms.pdv;
     case 'dashboard': return !!perms.dashboard;
     case 'inventory':

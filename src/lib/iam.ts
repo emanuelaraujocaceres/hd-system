@@ -264,6 +264,10 @@ export const TAB_MODULE_MAP: Record<string, Module> = {
         ? { ...DEFAULT_COLLABORATOR_PERMISSIONS, ...(rawMap as unknown as Record<string, boolean>) }
         : { ...DEFAULT_COLLABORATOR_PERMISSIONS };
 
+    // BUG-034 regra B: Configurações é SOMENTE admin/manager/superadmin.
+    // Colaborador (e qualquer role não-admin) NUNCA acessa, ignorando user.permissions.
+    permsMap.settings = false;
+
     const allowed: Permission[] = [];
     const addModule = (mod: string) => {
       if (allowed.some((p) => p.module === (mod as Module) && p.action === 'view')) return;

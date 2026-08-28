@@ -295,12 +295,13 @@ getEntities(): Entity[] {
 - Admin/Manager têm acesso total na org. A FONTE É O ROLE (`user.role`), **NUNCA** `user.permissions` (que pode ser `null` ou o default de colaborador persistido no login). `PermissionEngine` já ignora `user.permissions` para admin — o guard de página agora também.
 - Module visibility por filial (`module_visibility`) é respeitada por TODOS os não-superadmin, inclusive admin/manager (módulo desligado na filial some para todos — comportamento intencional).
 - NUNCA ler `user.permissions` para decidir acesso de admin/manager no frontend.
-**Local:** `src/lib/tabAccess.ts` (novo), `src/App.tsx` (guard usa `canAccessTab`), `src/lib/tabAccess.test.ts` (regressão: 9 testes). Commit posterior a 5de88fd.
+- **Configurações (`settings`) é exceção explícita (regra B): SOMENTE admin/manager/superadmin.** O colaborador NUNCA acessa Configurações, independente de `user.permissions` (o órfão `adminjuninho` tinha `system_users.permissions.settings=true` e mesmo assim não pode ver). Tanto `tabAccess.canAccessTab` (guard de página, retorna `false` no switch do colaborador) quanto `PermissionEngine` (força `permsMap.settings = false` no branch do colaborador) negam settings para não-admin — manter os dois em acordo.
+**Local:** `src/lib/tabAccess.ts` (novo), `src/App.tsx` (guard usa `canAccessTab`), `src/lib/tabAccess.test.ts` (regressão: 9 testes), `src/lib/iam.ts` (PermissionEngine força settings=false p/ não-admin). Commit posterior a 5de88fd.
 
 ---
 
 ## Regra de acesso (anti-recorrência BUG-034)
-**Regra:** `canAccessTab` (guard de página) e `PermissionEngine.canAccessTab` (Sidebar/atalhos) DEVEM concordar. Se mudar um, mude o outro ou chame a mesma função. Para admin/manager, o critério é SEMPRE o `role`, não `permissions`. Qualquer novo módulo de navegação deve ser adicionado no `TAB_VISIBILITY_KEY` de `tabAccess.ts` e no `TAB_MODULE_MAP` de `iam.ts` (manter 1:1).
+**Regra:** `canAccessTab` (guard de página) e `PermissionEngine.canAccessTab` (Sidebar/atalhos) DEVEM concordar. Se mudar um, mude o outro ou chame a mesma função. Para admin/manager, o critério é SEMPRE o `role`, não `permissions`. Qualquer novo módulo de navegação deve ser adicionado no `TAB_VISIBILITY_KEY` de `tabAccess.ts` e no `TAB_MODULE_MAP` de `iam.ts` (manter 1:1). **Configurações (`settings`) é exceção explícita: SOMENTE admin/manager/superadmin; ambos os lugares negam settings para colaborador (regra B), independente de `user.permissions`.**
 
 
 

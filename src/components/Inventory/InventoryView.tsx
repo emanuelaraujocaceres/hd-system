@@ -42,6 +42,16 @@ import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { uploadProductImage } from '../../lib/supabase';
 import { undoManager } from '../../lib/undoManager';
 
+/** Rótulo derivado (não persiste): para produtos com wholesaleOptions, exibe
+ *  "X caixas de N + Y doses soltas" calculado a partir de currentStock. */
+function wholesaleStockHint(p: Product): string | null {
+  const opt = p.wholesaleOptions?.[0];
+  if (!opt || !opt.boxQuantity || opt.boxQuantity <= 1) return null;
+  const boxes = Math.floor(p.currentStock / opt.boxQuantity);
+  const loose = p.currentStock % opt.boxQuantity;
+  return `${boxes} ${boxes === 1 ? 'caixa' : 'caixas'} de ${opt.boxQuantity} + ${loose} ${p.unit || 'un'} solta(s)`;
+}
+
 interface InventoryViewProps {
   products: Product[];
   categories: Category[];
@@ -916,6 +926,7 @@ minStock: parseInt(formMinStock) || 0,
                   const margin = p.salePrice > 0 ? ((p.salePrice - p.costPrice) / p.salePrice) * 100 : 0;
                   const isLow = p.currentStock <= p.minStock;
                   const isOut = p.currentStock === 0;
+                  const wholesaleHint = wholesaleStockHint(p);
 
                   return (
                     <tr key={p.id} className={`hover:bg-slate-50/80 dark:hover:bg-[#27272a]/30 transition-colors ${
@@ -978,6 +989,11 @@ minStock: parseInt(formMinStock) || 0,
                           {isLow && <AlertTriangle className="w-3 h-3" />}
                           {p.currentStock} {p.unit}
                         </span>
+                        {wholesaleHint && (
+                          <p className="mt-1 text-[10px] font-semibold text-indigo-500 dark:text-indigo-400">
+                            {wholesaleHint}
+                          </p>
+                        )}
                       </td>
                        <td className="py-3 px-4 hidden lg:table-cell">
                          {p.showOnTV ? (
@@ -1078,6 +1094,7 @@ minStock: parseInt(formMinStock) || 0,
           sortedProducts.map((p) => {
             const isLow = p.currentStock <= p.minStock;
             const isOut = p.currentStock === 0;
+            const wholesaleHint = wholesaleStockHint(p);
 
             return (
               <div
@@ -1119,6 +1136,11 @@ minStock: parseInt(formMinStock) || 0,
                     {p.currentStock} {p.unit}
                   </span>
                 </div>
+                {wholesaleHint && (
+                  <p className="text-[10px] font-semibold text-indigo-500 dark:text-indigo-400 -mt-1">
+                    {wholesaleHint}
+                  </p>
+                )}
 
                 {/* Action buttons */}
                 <div className="flex items-center gap-2 pt-1 border-t border-slate-100 dark:border-[#27272a]">

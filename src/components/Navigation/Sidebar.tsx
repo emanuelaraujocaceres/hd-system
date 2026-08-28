@@ -107,16 +107,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (!a.isHeadquarters && b.isHeadquarters) return 1;
     return 0;
   });
-  const perms = user.permissions || {
-    pdv: true,
-    inventory: true,
-    crm: true,
-    finance: true,
-    dashboard: true,
-    settings: true,
-    tvShowcase: true,
-  };
-
   const allMenuItems = [
     { id: 'pdv', label: 'Caixa', icon: ShoppingCart, module: 'pdv' as const, badge: isCaixaOpen ? 'ABERTO' : 'FECHADO', badgeColor: isCaixaOpen ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20' },
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, module: 'dashboard' as const },

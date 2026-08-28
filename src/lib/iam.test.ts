@@ -61,6 +61,14 @@ describe('PermissionEngine — colaborador (comanda/kds por padrão)', () => {
     expect(e.hasPermission('kds', 'view')).toBe(false);
     expect(e.hasPermission('pdv', 'view')).toBe(true);
   });
+
+  it('regra B: colaborador com permissions.settings=true NÃO acessa Configurações', () => {
+    // BUG-034: Configurações é SOMENTE admin/manager/superadmin. O PermissionEngine
+    // (Sidebar/atalhos) deve ignorar user.permissions do colaborador para settings.
+    const e = collab({ pdv: true, settings: true });
+    expect(e.hasPermission('settings', 'view')).toBe(false);
+    expect(e.hasPermission('pdv', 'view')).toBe(true);
+  });
 });
 
 describe('PermissionEngine — admin', () => {

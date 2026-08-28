@@ -91,6 +91,14 @@ describe('canAccessTab — colaborador (sem regressão)', () => {
     const collab = base({ role: 'collaborator', permissions: { pdv: true, finance: true } as any });
     expect(canAccessTab(collab, allVisible, 'finance')).toBe(true);
   });
+
+  it('regra B: colaborador com permissions.settings=true NÃO acessa Configurações', () => {
+    const collab = base({ role: 'collaborator', permissions: { pdv: true, settings: true } as any });
+    // Configurações é SOMENTE admin/manager/superadmin — user.permissions é ignorado
+    expect(canAccessTab(collab, allVisible, 'settings')).toBe(false);
+    // demais módulos concedidos continuam funcionando
+    expect(canAccessTab(collab, allVisible, 'pdv')).toBe(true);
+  });
 });
 
 describe('canAccessTab — usuário nulo', () => {

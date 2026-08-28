@@ -692,6 +692,11 @@ export const PDVView: React.FC<PDVViewProps> = ({
                     <p className={`text-[10px] font-semibold ${isLowStock ? 'text-amber-500 font-bold' : 'text-slate-400 dark:text-[#71717a]'}`}>
                       Estoque: {p.currentStock} {p.unit}
                     </p>
+                    {entry.boxQuantity && entry.boxQuantity > 1 && (
+                      <p className="text-[9px] font-semibold text-indigo-500 dark:text-indigo-400">
+                        ≈ {Math.floor(p.currentStock / entry.boxQuantity)} caixa(s) de {entry.boxQuantity} + {p.currentStock % entry.boxQuantity} solta(s)
+                      </p>
+                    )}
                   </div>
                   <div className="h-7 w-7 rounded-lg bg-indigo-50 dark:bg-[#27272a] text-indigo-600 dark:text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors flex items-center justify-center">
                     <Plus className="w-4 h-4" />
