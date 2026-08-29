@@ -237,6 +237,12 @@ Fornecedores.
 | contact_person | TEXT | YES | | Contato |
 | email | TEXT | YES | | Email |
 | phone | TEXT | YES | | Telefone |
+| address | TEXT | YES | | Logradouro |
+| address_number | TEXT | YES | | Número |
+| district | TEXT | YES | | Bairro |
+| city | TEXT | YES | | Cidade |
+| state | TEXT | YES | | UF |
+| zip | TEXT | YES | | CEP |
 | created_at | TIMESTAMPTZ | YES | | |
 | updated_at | TIMESTAMPTZ | YES | | |
 
@@ -258,6 +264,7 @@ Produtos (estoque e responsabilidade do frontend - AGENTS.md regra 8).
 | unit | TEXT | YES | | Unidade |
 | cost_price | NUMERIC | YES | | Preco de custo |
 | sale_price | NUMERIC | YES | | Preco de venda |
+| margin_percent | NUMERIC | YES | | Margem sugerida (%) p/ venda (default 30) |
 | stock_quantity | INTEGER | YES | | Estoque atual |
 | min_stock_quantity | INTEGER | YES | | Estoque minimo |
 | max_stock_quantity | INTEGER | YES | | Estoque maximo |
@@ -433,6 +440,7 @@ Movimentacoes de estoque (log).
 | new_stock | INTEGER | YES | | Novo estoque |
 | reason | TEXT | YES | | Motivo |
 | operator_name | TEXT | YES | | Operador |
+| purchase_document_id | UUID | YES | FK->nf_records | Documento de entrada vinculado (nova); índice p/ dashboards |
 | created_at | TIMESTAMPTZ | YES | | |
 | updated_at | TIMESTAMPTZ | YES | | |
 
@@ -565,7 +573,7 @@ Documentos de entrada (NF-e / pedido / controle interno) — escaneados via OCR 
 | note | TEXT | YES | | Observacao (legado, mantido) |
 | items | JSONB | YES | | Itens [{productName, quantity, unitPrice, ...}] (legado, mantido) |
 | nf_number | TEXT | YES | | Número da NF (legado, mantido) |
-| source | TEXT | YES | | 'ocr' \| 'xml' \| 'manual' |
+| source | TEXT | YES | | 'ocr' \| 'xml' \| 'manual' \| 'camera' |
 | document_number | TEXT | YES | | Número do doc/pedido (nova) |
 | access_key | TEXT | YES | | Chave de acesso do DANFE (QR) (nova) |
 | template_id | TEXT | YES | | Template de fornecedor usado no OCR (nova) |
@@ -575,6 +583,9 @@ Documentos de entrada (NF-e / pedido / controle interno) — escaneados via OCR 
 | supplier_id | UUID | YES | FK->suppliers | Fornecedor linkado (nova) |
 | supplier_snapshot | JSONB | YES | | Cópia do fornecedor na leitura (nova) |
 | images | JSONB | YES | | Paths do Storage: nf-documents/{org}/{branch}/{doc}/{ts}.jpg (nova) |
+| processed_at | TIMESTAMPTZ | YES | | Processado em (RPC process_purchase_document) (nova) |
+| thumbnail_url | TEXT | YES | | Miniatura do documento (nova) |
+| updated_at | TIMESTAMPTZ | YES | | Atualizado em (trigger automático) (nova) |
 | created_at | TIMESTAMPTZ | YES | | |
 
 RLS: superadmin_all_nf_records[ALL], org_branch_insert_nf_records[INSERT], org_branch_update_nf_records[UPDATE], org_branch_delete_nf_records[DELETE], org_branch_select_nf_records[SELECT], nf_records_select_authenticated[SELECT]
@@ -583,6 +594,17 @@ Realtime: publicada - REPLICA: full
 #### Storage bucket `nf-documents` (privado)
 Fotos do documento A4. Políticas completas (SELECT/INSERT/UPDATE/DELETE) para autenticados da filial + superadmin.
 Path: `nf-documents/{organization_id}/{store_branch_id}/{documento_id}/{timestamp}.jpg`.
+
+### Funções RPC e Views auxiliares (scanner de fornecedor)
+
+`process_purchase_document(p_document_id uuid, p_items jsonb, p_operator_name text DEFAULT 'Sistema', p_apply_margin boolean DEFAULT false)`
+Processa um documento de entrada: atualiza custo e estoque, grava `stock_movements` com `purchase_document_id`, marca o documento como `confirmed`. Tem blindagem anti-duplicação (bloqueia se já `confirmed`). Se `p_apply_margin = true`, atualiza `sale_price` com base em `margin_percent`. SECURITY DEFINER — chamar via `supabase.rpc('process_purchase_document', {...})`.
+
+`v_stock_movements_dashboard` — join de `stock_movements` com `nf_records` e `suppliers`; lista movimentações com dados do fornecedor/documento (usada no Dashboard de entradas/saídas).
+
+`v_documents_list` — join de `nf_records` com `suppliers`; pronta para a tela "Documentos de Entrada".
+
+> Nota: conteúdo desta seção transcrito da descrição do usuário (2026-08-29). Recomenda-se re-pull do catálogo vivo para confirmar assinaturas exatas e grants das RPCs.
 
 ### ai_insights
 Insights de IA gerados (sem IA no app - gerado por backend/Cloudflare).
