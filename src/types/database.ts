@@ -706,6 +706,7 @@ export interface Database {
           date: string;
           operator_name: string;
           created_at: string;
+          sale_id: string | null;
         };
         Insert: {
           id?: string;
@@ -721,6 +722,7 @@ export interface Database {
           date?: string;
           operator_name: string;
           created_at?: string;
+          sale_id?: string | null;
         };
         Update: {
           organization_id?: string;
@@ -734,6 +736,7 @@ export interface Database {
           reason?: string;
           date?: string;
           operator_name?: string;
+          sale_id?: string | null;
         };
       };
       printers: {

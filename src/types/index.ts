@@ -314,6 +314,7 @@ export interface StockMovement {
   operatorName: string;
   storeBranchId?: string;
   organizationId?: string; // multi-tenant
+  sale_id?: string | null; // venda de origem (preenchido pelo RPC process_sale_transaction)
 }
 
 export interface FinancialAccount {

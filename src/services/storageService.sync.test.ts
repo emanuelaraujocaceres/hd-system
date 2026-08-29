@@ -205,4 +205,17 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_product_recipes')?.[1] as any[];
     expect(storedArg).toBeUndefined();
   });
+
+  // ─── REGRESSÃO: vendas NÃO criam movimentação no frontend (RPC é a fonte) ───
+  it('deductStockLocal decrementa estoque local mas NAO cria/sincroniza StockMovement', () => {
+    const spyMov = vi.spyOn(svc as any, 'syncStockMovement');
+    (svc as any).set('hd_system_products', [{ id: 'p-x', name: 'X', currentStock: 10, storeBranchId: 'b1', organizationId: 'o1' }]);
+    (svc as any).deductStockLocal('p-x', -3, 'Venda PDV #1', 'op');
+    const products = (svc as any).get('hd_system_products', []);
+    const p = products.find((x: any) => x.id === 'p-x');
+    expect(p.currentStock).toBe(7); // decrementou localmente
+    expect(spyMov).not.toHaveBeenCalled(); // movimentação é do RPC, não do frontend
+    const movements = (svc as any).get('hd_system_movements', []);
+    expect(movements.find((m: any) => m.productId === 'p-x')).toBeUndefined();
+  });
 });

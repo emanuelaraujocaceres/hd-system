@@ -3329,30 +3329,14 @@ id: StorageService.ensureUuid(settings.id),
     const prod = products.find((p) => p.id === productId);
     if (!prod) return;
 
-    const prevStock = prod.currentStock;
     prod.currentStock = Math.max(0, prod.currentStock + quantityDelta);
     prod.updatedAt = new Date().toISOString();
     this.set(KEYS.PRODUCTS, products);
 
-    // Log stock movement locally
-    const movements = this.getMovements();
-    const newMov: StockMovement = {
-      id: StorageService.newId(),
-      productId,
-      productName: prod.name,
-      type: quantityDelta > 0 ? 'in' : 'out',
-      quantity: Math.abs(quantityDelta),
-      previousStock: prevStock,
-      newStock: prod.currentStock,
-      reason,
-      date: new Date().toISOString(),
-      operatorName,
-      storeBranchId: prod.storeBranchId,
-    };
-    movements.unshift(newMov);
-    this.set(KEYS.MOVEMENTS, movements);
+    // Feedback imediato apenas em localStorage. A movimentação de estoque é
+    // criada pelo RPC process_sale_transaction no servidor (com sale_id) e
+    // propagada aos clientes via Realtime — evitando duplicação no frontend.
     this.syncProduct(prod);
-    this.syncStockMovement(newMov);
   }
 
   /**
@@ -3361,8 +3345,30 @@ id: StorageService.ensureUuid(settings.id),
    * which use process_sale_transaction instead).
    */
   async updateStock(productId: string, quantityDelta: number, reason: string, operatorName: string) {
-    // Local update for instant UI
+    // Local update for instant UI (deductStockLocal não cria mais movimentação)
     this.deductStockLocal(productId, quantityDelta, reason, operatorName);
+
+    // Ajuste manual: registra a movimentação no frontend (não há RPC de venda
+    // aqui; somente process_sale_transaction cobre vendas). Isso mantém o
+    // histórico de movimentações de ajustes manuais.
+    const adjProd = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []).find((p) => p.id === productId);
+    if (adjProd) {
+      const movement: StockMovement = {
+        id: StorageService.newId(),
+        productId,
+        productName: adjProd.name,
+        type: quantityDelta > 0 ? 'in' : 'out',
+        quantity: Math.abs(quantityDelta),
+        previousStock: adjProd.currentStock - quantityDelta,
+        newStock: adjProd.currentStock,
+        reason,
+        date: new Date().toISOString(),
+        operatorName,
+        storeBranchId: adjProd.storeBranchId,
+        organizationId: this.getCurrentOrgId(),
+      };
+      this.saveStockMovement(movement);
+    }
 
     // ─── RPC: ajustar_estoque (server-side atomic) ─────────────
     // Fire-and-forget: localStorage already updated for instant UI.
