@@ -390,18 +390,45 @@ export interface CreditPayment {
   organizationId?: string;
 }
 
-// Nota fiscal importada (sincronizado — tabela nf_records)
+// Nota fiscal / documento de entrada (sincronizado — tabela nf_records)
+// Colunas legadas mantidas + novas colunas do scanner de fornecedor (Fase 1).
+export interface NFRecordItem {
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal?: number;
+  code?: string;
+  adjustment?: number;
+  adjustmentReason?: string;
+}
+
 export interface NFRecord {
   id: string;
+  // legado (mantido p/ UI do NFHistoryView / NFAddModal)
   nfNumber?: string;
   scanDate: string;
   createdAt?: string;
   supplierName: string;
-  items: { productName: string; quantity: number; unitPrice: number }[];
+  items: NFRecordItem[];
   totalValue: number;
   note: string;
   storeBranchId?: string;
   organizationId?: string;
+  // novas colunas (Fase 1 — scanner de fornecedor / NF-e)
+  source?: 'ocr' | 'xml' | 'manual';
+  documentNumber?: string;
+  accessKey?: string;            // QR Code do DANFE (chave de acesso)
+  templateId?: string;          // template de fornecedor usado no OCR
+  ocrConfidence?: number;
+  status?: 'pending' | 'confirmed' | 'adjusted';
+  observation?: string;
+  supplierId?: string;
+  supplierSnapshot?: {
+    name?: string; companyName?: string; cnpj?: string;
+    address?: string; city?: string; state?: string; zip?: string;
+    phone?: string; email?: string;
+  };
+  images?: string[];            // paths do Storage (bucket nf-documents)
 }
 
 export interface SystemSettings {

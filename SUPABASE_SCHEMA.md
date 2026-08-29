@@ -552,22 +552,37 @@ RLS: superadmin_all_boletos[ALL], org_branch_insert_boletos[INSERT], org_branch_
 Realtime: publicada - REPLICA: full
 
 ### nf_records
-Notas fiscais escaneadas.
+Documentos de entrada (NF-e / pedido / controle interno) — escaneados via OCR (Tesseract), upload de XML ou digitação manual. Evoluiu a partir das notas fiscais escaneadas.
 
 | Coluna | Tipo | Null | Key | Descricao |
 |--------|------|------|-----|-----------|
 | id | UUID | NO | PK | PK |
 | organization_id | UUID | YES | FK->organizations | Org |
 | store_branch_id | UUID | YES | FK->store_branches | Filial |
-| supplier_name | TEXT | YES | | Fornecedor |
-| total_amount | NUMERIC | YES | | Valor total |
-| scan_date | TIMESTAMPTZ | YES | | Data do scan |
-| note | TEXT | YES | | Observacao |
-| items | JSONB | YES | | Itens |
+| supplier_name | TEXT | YES | | Fornecedor (legado, mantido) |
+| total_amount | NUMERIC | YES | | Valor total (legado, mantido) |
+| scan_date | TIMESTAMPTZ | YES | | Data do scan (legado, mantido) |
+| note | TEXT | YES | | Observacao (legado, mantido) |
+| items | JSONB | YES | | Itens [{productName, quantity, unitPrice, ...}] (legado, mantido) |
+| nf_number | TEXT | YES | | Número da NF (legado, mantido) |
+| source | TEXT | YES | | 'ocr' \| 'xml' \| 'manual' |
+| document_number | TEXT | YES | | Número do doc/pedido (nova) |
+| access_key | TEXT | YES | | Chave de acesso do DANFE (QR) (nova) |
+| template_id | TEXT | YES | | Template de fornecedor usado no OCR (nova) |
+| ocr_confidence | NUMERIC | YES | | Confiança média do Tesseract (nova) |
+| status | TEXT | YES | CHECK | 'pending' \| 'confirmed' \| 'adjusted' (nova) |
+| observation | TEXT | YES | | Observação geral do documento (nova) |
+| supplier_id | UUID | YES | FK->suppliers | Fornecedor linkado (nova) |
+| supplier_snapshot | JSONB | YES | | Cópia do fornecedor na leitura (nova) |
+| images | JSONB | YES | | Paths do Storage: nf-documents/{org}/{branch}/{doc}/{ts}.jpg (nova) |
 | created_at | TIMESTAMPTZ | YES | | |
 
 RLS: superadmin_all_nf_records[ALL], org_branch_insert_nf_records[INSERT], org_branch_update_nf_records[UPDATE], org_branch_delete_nf_records[DELETE], org_branch_select_nf_records[SELECT], nf_records_select_authenticated[SELECT]
 Realtime: publicada - REPLICA: full
+
+#### Storage bucket `nf-documents` (privado)
+Fotos do documento A4. Políticas completas (SELECT/INSERT/UPDATE/DELETE) para autenticados da filial + superadmin.
+Path: `nf-documents/{organization_id}/{store_branch_id}/{documento_id}/{timestamp}.jpg`.
 
 ### ai_insights
 Insights de IA gerados (sem IA no app - gerado por backend/Cloudflare).

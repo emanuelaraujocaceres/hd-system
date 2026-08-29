@@ -27,7 +27,7 @@ import {
   Printer,
   Send,
 } from 'lucide-react';
-import { Supplier } from '../../types';
+import { Supplier, NFRecord } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 
@@ -153,27 +153,32 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
     setIsCameraOpen(false);
   };
 
-  const handleSaveNF = () => {
+  const handleSaveNF = async () => {
     if (!nfNumber.trim()) {
       alert('Número da NF é obrigatório.');
       return;
     }
 
-    const nfRecord = {
-      id: `nf-${Date.now()}`,
+    const nfId = `nf-${Date.now()}`;
+    const nfRecord: NFRecord = {
+      id: nfId,
       scanDate: issueDate,
       nfNumber,
       supplierName,
-      supplierCNPJ,
       items,
       totalValue,
       note,
+      source: 'manual',
       accessKey,
-      pdfFile,
-      createdAt: new Date().toISOString(),
+      documentNumber: nfNumber,
+      status: 'pending',
+      observation: note,
+      supplierSnapshot: { name: supplierName, cnpj: supplierCNPJ },
+      images: [],
     };
 
-    storageService.saveNFRecord(nfRecord);
+    // Faz upload da foto anexada (se houver) para o Storage; grava o path em images.
+    await storageService.saveNFRecordWithImages(nfRecord, pdfFile ? [pdfFile] : []);
     posAudio.chime();
     onSave();
     resetForm();

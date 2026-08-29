@@ -13,6 +13,7 @@ import {
   ScannedBoleto,
   CreditPayment,
   NFRecord,
+  NFRecordItem,
   FooterMessage,
   MediaDevice,
   Printer,
@@ -2518,15 +2519,7 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
       {
         const local = this.get<NFRecord[]>(KEYS.NF_RECORDS, []);
         const merged = mergeBy(KEYS.NF_RECORDS, local, nfRecords,
-          (r: any) => ({
-            id: r.id, scanDate: r.scan_date || r.created_at || new Date().toISOString(),
-            supplierName: r.supplier_name || '',
-            items: Array.isArray(r.items) ? r.items : [],
-            totalValue: parseFloat(r.total_amount) || 0,
-            note: r.note || '',
-            storeBranchId: r.store_branch_id || undefined,
-            organizationId: r.organization_id || undefined,
-          }),
+          (r: any) => rowToNFRecord(r),
           (nf) => this.syncNFRecord(nf),
         );
         if (merged !== null) this.set(KEYS.NF_RECORDS, merged);
@@ -4505,6 +4498,7 @@ private updateReceivableFromPayments(saleId: string) {
     this.notify();
   }
 
+
   // --- NF RECORDS (notas fiscais importadas) ---
   getNFRecords(): NFRecord[] {
     const all = this.get<NFRecord[]>(KEYS.NF_RECORDS, []);
@@ -4530,18 +4524,47 @@ private updateReceivableFromPayments(saleId: string) {
     syncService.deleteRow('nf_records', id);
   }
 
+  /**
+   * Faz upload de imagens (fotos do documento A4) para o bucket privado
+   * nf-documents, no path nf-documents/{orgId}/{branchId}/{docId}/{timestamp}.jpg.
+   * Retorna os paths (não URLs públicas — o bucket é privado).
+   */
+  async uploadNfImages(orgId: string, branchId: string, docId: string, files: { name?: string; dataUrl: string }[]): Promise<string[]> {
+    const paths: string[] = [];
+    for (const f of files) {
+      try {
+        if (!f.dataUrl.startsWith('data:')) { paths.push(f.dataUrl); continue; }
+        const res = await fetch(f.dataUrl);
+        const blob = await res.blob();
+        const ext = (f.name?.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const ts = Date.now();
+        const path = `nf-documents/${orgId}/${branchId}/${docId}/${ts}.${ext || 'jpg'}`;
+        const { error } = await supabase.storage.from('nf-documents').upload(path, blob, {
+          contentType: blob.type || 'image/jpeg',
+          upsert: true,
+        });
+        if (error) { console.warn('[NF] Falha ao enviar imagem:', error.message); continue; }
+        paths.push(path);
+      } catch (e: any) {
+        console.warn('[NF] Erro ao enviar imagem:', e?.message);
+      }
+    }
+    return paths;
+  }
+
+  /** Salva NF aplicando upload das imagens (dataURLs) para o Storage antes. */
+  async saveNFRecordWithImages(nf: NFRecord, imageDataUrls: string[] = []) {
+    if (imageDataUrls.length) {
+      const orgId = this.getCurrentOrgId();
+      const branchId = this.getSelectedBranchId() || '';
+      nf.images = await this.uploadNfImages(orgId, branchId, nf.id, imageDataUrls.map((d, i) => ({ dataUrl: d, name: `pag${i + 1}.jpg` })));
+    }
+    this.saveNFRecord(nf);
+  }
+
   private syncNFRecord(nf: NFRecord) {
     const orgId = this.orgIdForBranch(nf.storeBranchId, nf.organizationId);
-    syncService.upsertRow('nf_records', {
-      id: nf.id,
-      organization_id: orgId,
-      store_branch_id: nf.storeBranchId || null,
-      supplier_name: nf.supplierName,
-      total_amount: nf.totalValue,
-      scan_date: nf.scanDate,
-      items: nf.items || [],
-      note: nf.note || null,
-    });
+    syncService.upsertRow('nf_records', nfRecordToRow(nf, orgId, nf.storeBranchId));
   }
 
   updateNFRecordFromRemote(row: any) {
@@ -4551,16 +4574,8 @@ private updateReceivableFromPayments(saleId: string) {
       console.log(`[HD-Sync] Ignoring remote NF record from other branch: ${row.store_branch_id}`);
       return;
     }
+    const mapped = rowToNFRecord(row);
     const all = this.get<NFRecord[]>(KEYS.NF_RECORDS, []);
-    const mapped: NFRecord = {
-      id: row.id, scanDate: row.scan_date || row.created_at || new Date().toISOString(),
-      supplierName: row.supplier_name || '',
-      items: Array.isArray(row.items) ? row.items : [],
-      totalValue: parseFloat(row.total_amount) || 0,
-      note: row.note || '',
-      storeBranchId: row.store_branch_id || undefined,
-      organizationId: row.organization_id || undefined,
-    };
     const idx = all.findIndex((x) => x.id === mapped.id);
     if (idx >= 0) all[idx] = mapped;
     else all.unshift(mapped);
@@ -6372,6 +6387,60 @@ saveUserProfile(user: UserProfile) {
 
 export const storageService = new StorageService();
 export { StorageService };
+
+// ─── NF RECORDS: mapeamento canônico (3 caminhos: upsert / remote / hidratação) ───
+// Toda coluna de nf_records DEVE aparecer em nfRecordToRow (upsert), rowToNFRecord
+// (remote + hidratação) e no tipo NFRecord. Isso evita colunas "dropadas" no sync.
+export function rowToNFRecord(r: any): NFRecord {
+  const snapshot = r.supplier_snapshot || {};
+  const items = Array.isArray(r.items) ? (r.items as NFRecordItem[]) : [];
+  return {
+    id: r.id,
+    scanDate: r.scan_date || r.created_at || new Date().toISOString(),
+    createdAt: r.created_at || undefined,
+    nfNumber: r.nf_number || r.document_number || '',
+    supplierName: r.supplier_name || (snapshot.companyName || snapshot.name) || '',
+    items,
+    totalValue: parseFloat(r.total_amount) || 0,
+    note: r.note || r.observation || '',
+    storeBranchId: r.store_branch_id || undefined,
+    organizationId: r.organization_id || undefined,
+    source: r.source || undefined,
+    documentNumber: r.document_number || r.nf_number || undefined,
+    accessKey: r.access_key || undefined,
+    templateId: r.template_id || undefined,
+    ocrConfidence: r.ocr_confidence != null ? Number(r.ocr_confidence) : undefined,
+    status: (r.status as NFRecord['status']) || 'pending',
+    observation: r.observation || r.note || '',
+    supplierId: r.supplier_id || undefined,
+    supplierSnapshot: r.supplier_snapshot || undefined,
+    images: Array.isArray(r.images) ? r.images : (r.images ? [r.images] : []),
+  };
+}
+
+export function nfRecordToRow(nf: NFRecord, orgId: string, branchId?: string) {
+  return {
+    id: nf.id,
+    organization_id: orgId,
+    store_branch_id: branchId || null,
+    supplier_name: nf.supplierName || null,
+    total_amount: nf.totalValue || 0,
+    scan_date: nf.scanDate || new Date().toISOString(),
+    items: nf.items || [],
+    note: nf.note || nf.observation || null,
+    nf_number: nf.nfNumber || nf.documentNumber || null,
+    source: nf.source || null,
+    document_number: nf.documentNumber || nf.nfNumber || null,
+    access_key: nf.accessKey || null,
+    template_id: nf.templateId || null,
+    ocr_confidence: nf.ocrConfidence != null ? nf.ocrConfidence : null,
+    status: nf.status || 'pending',
+    observation: nf.observation || nf.note || null,
+    supplier_id: nf.supplierId || null,
+    supplier_snapshot: nf.supplierSnapshot || null,
+    images: nf.images && nf.images.length ? nf.images : null,
+  };
+}
 
 
 
