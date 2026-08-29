@@ -117,6 +117,10 @@ export interface Product {
   expirationDate?: string; // Data de validade (YYYY-MM-DD) — para alertas no Dashboard
   isComposite?: boolean; // true = produto composto (desconta ingredientes do estoque)
   useLots?: boolean;       // se verdadeiro, usa controle por lote (FEFO)
+  // Produto Fragmentável (rendimento): ex.: garrafa de vódka fechada -> doses abertas
+  is_fragmentable?: boolean;   // true = pode ser vendido em frações (doses)
+  yield_count?: number;        // quantas frações (doses) cabem em 1 unidade fechada
+  fraction_product_id?: string; // produto que representa a fração (ex.: "Dose Vódka")
   productLots?: ProductLot[]; // lotes ativos deste produto (para referência UI)
   activeStockLossLogs?: StockLossLog[]; // perdas registradas recentemente
 }
@@ -151,12 +155,27 @@ export interface ProductRecipe {
   ingredientName?: string; // Nome do ingrediente (denormalizado para exibição)
   quantity: number; // Quantidade do ingrediente por 1 unidade do composto (ex: 0.25 = 1 dose de 1L)
   unit?: string; // un, lit, kg — unidade de medida da receita
+  storeBranchId?: string; // isolamento de filial
+  organizationId?: string; // isolamento de org
 }
 
 // Tipo estendido de Product para incluir campos de compostos
 export interface CompositeProduct extends Product {
   isComposite: boolean; // true = produto composto (desconta ingredientes)
   recipe?: ProductRecipe[]; // Lista de ingredientes da receita
+}
+
+// Contêiner aberto / fracionado (ex.: garrafa de vódka aberta, contendo doses disponíveis)
+export interface OpenContainer {
+  id: string;
+  organizationId?: string;
+  storeBranchId?: string;
+  productId: string; // produto fechado original (ex.: Vódka 1L)
+  remainingQuantity: number; // quantas frações (doses) ainda restam
+  openedAt: string; // ISO timestamp da abertura
+  status: 'open' | 'empty' | 'discarded';
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CartItem {

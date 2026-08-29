@@ -71,7 +71,7 @@ const BRANCH_REQUIRED_TABLES: TableName[] = [
   // Visibilidade de Módulos (2026): tabela escopada por filial
   'module_visibility',
   // Controle de Lote/Validade (2026-08-14): tabelas escopadas por filial
-  'product_lots', 'product_recipes',
+  'product_lots', 'product_recipes', 'open_containers',
   'stock_loss_log',
 ];
 
@@ -119,6 +119,7 @@ export type TableName =
   // Lotes / Receitas (2026)
   | 'product_lots'
   | 'product_recipes'
+  | 'open_containers'
   | 'stock_loss_log'
   // Delivery Worker Earnings (2026)
   | 'delivery_worker_earnings';
@@ -297,6 +298,7 @@ class SupabaseSyncService {
       // Controle de Lote/Validade (2026-08-14)
       'product_lots',
       'product_recipes',
+      'open_containers',
       'stock_loss_log',
     ];
 
@@ -595,7 +597,7 @@ class SupabaseSyncService {
     // Delivery (2026): têm updated_at
     'delivery_settings', 'delivery_neighborhoods', 'delivery_distance_rates', 'delivery_orders',
     // Lotes / Receitas (2026): têm updated_at
-    'product_lots', 'product_recipes',
+  'product_lots', 'product_recipes', 'open_containers',
   ];
 
   /**

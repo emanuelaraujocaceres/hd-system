@@ -55,6 +55,7 @@ type TableName =
   // Product Lots + Recipes + Stock Loss + Delivery Worker (2026)
   | 'product_lots'
   | 'product_recipes'
+  | 'open_containers'
   | 'stock_loss_log'
   | 'delivery_worker_earnings';
 

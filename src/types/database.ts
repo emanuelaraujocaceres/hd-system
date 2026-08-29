@@ -1066,6 +1066,40 @@ export interface Database {
           updated_at?: string;
         };
       };
+      open_containers: {
+        Row: {
+          id: string;
+          organization_id: string | null;
+          store_branch_id: string | null;
+          product_id: string;
+          remaining_quantity: number;
+          opened_at: string | null;
+          status: string | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id?: string | null;
+          store_branch_id?: string | null;
+          product_id: string;
+          remaining_quantity?: number;
+          opened_at?: string | null;
+          status?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          organization_id?: string | null;
+          store_branch_id?: string | null;
+          product_id?: string;
+          remaining_quantity?: number;
+          opened_at?: string | null;
+          status?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+      };
       product_lots: {
         Row: {
           id: string;

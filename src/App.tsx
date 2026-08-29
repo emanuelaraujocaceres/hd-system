@@ -652,6 +652,10 @@ export const App: React.FC = () => {
         case 'product_recipes':
           storageService.updateProductRecipeFromRemote(row);
           break;
+        case 'open_containers':
+          if (event === 'DELETE') storageService.deleteOpenContainerFromRemote(row.id);
+          else storageService.updateOpenContainerFromRemote(row);
+          break;
         case 'module_visibility':
           if (event === 'DELETE') storageService.removeModuleVisibilityFromRemote(row.id);
           else storageService.updateModuleVisibilityFromRemote(row);

@@ -129,4 +129,45 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     const result = (svc as any).mergeSalesForHydration([localOnly], [], [], 'b1');
     expect(result.find((s: any) => s.id === 'local-1')).toBeTruthy();
   });
+
+  // ─── REGRESSÃO: open_containers (garrafas abertas / doses) ───
+  it('updateOpenContainerFromRemote mapeia linha do cloud (produto/quantidade/status/filiais)', () => {
+    (svc as any).isRemoteFromCurrentBranch = () => true;
+    const setSpy = vi.spyOn(svc as any, 'set');
+    const row = {
+      id: 'oc-1',
+      organization_id: 'o1',
+      store_branch_id: 'b1',
+      product_id: 'p1',
+      remaining_quantity: '12',
+      opened_at: '2026-01-01T00:00:00Z',
+      status: 'open',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    (svc as any).updateOpenContainerFromRemote(row);
+    const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_open_containers')?.[1] as any[];
+    const rec = storedArg?.find((a: any) => a.id === 'oc-1');
+    expect(rec).toBeTruthy();
+    expect(rec.productId).toBe('p1');
+    expect(rec.remainingQuantity).toBe(12); // string do cloud -> number
+    expect(rec.status).toBe('open');
+    expect(rec.storeBranchId).toBe('b1');
+    expect(rec.organizationId).toBe('o1');
+  });
+
+  it('updateOpenContainerFromRemote ignora linha de outra filial (isolamento)', () => {
+    (svc as any).isRemoteFromCurrentBranch = () => false;
+    const setSpy = vi.spyOn(svc as any, 'set');
+    const row = {
+      id: 'oc-2',
+      store_branch_id: 'b-other',
+      product_id: 'p1',
+      remaining_quantity: '5',
+      status: 'open',
+    };
+    (svc as any).updateOpenContainerFromRemote(row);
+    const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_open_containers')?.[1] as any[];
+    expect(storedArg).toBeUndefined();
+  });
 });

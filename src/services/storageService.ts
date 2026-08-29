@@ -27,6 +27,7 @@ import {
   DeliveryNeighborhood,
   DeliveryDistanceRate,
   DeliveryOrder,
+  OpenContainer,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -93,6 +94,7 @@ const KEYS = {
   VIEWING_ORG: 'hd_system_viewing_org',
   LAST_VIEWING_ORG: 'hd_system_last_viewing_org',
   PRODUCT_LOTS: 'hd_system_product_lots',
+  OPEN_CONTAINERS: 'hd_system_open_containers',
   STOCK_LOSS_LOG: 'hd_system_stock_loss_log',
 };
 
@@ -611,6 +613,9 @@ class StorageService {
       wholesale_options: p.wholesaleOptions || null,
 expiration_date: p.expirationDate || null,
       is_composite: p.isComposite || false,
+      is_fragmentable: p.is_fragmentable || false,
+      yield_count: p.yield_count || 0,
+      fraction_product_id: p.fraction_product_id || null,
       use_lots: p.useLots || false,
     });
   }
@@ -667,6 +672,63 @@ expiration_date: p.expirationDate || null,
     this.set(KEYS.PRODUCT_LOTS, all.filter(pl => pl.id !== lotId));
     this.notify(KEYS.PRODUCT_LOTS, 'local');
     syncService.deleteRow('product_lots', lotId);
+  }
+
+  // ── OPEN_CONTAINERS (garrafas abertas / doses disponíveis) ──────
+  getOpenContainers(productId?: string): OpenContainer[] {
+    const all = this.get<OpenContainer[]>(KEYS.OPEN_CONTAINERS, []);
+    const filtered = productId ? all.filter((c) => c.productId === productId) : all;
+    return this.filterBySelectedBranch(this.filterByOrg(filtered));
+  }
+
+  saveOpenContainer(oc: OpenContainer): void {
+    this.setChangeSource('local');
+    const branchId = oc.storeBranchId || this.getSelectedBranchId() || '';
+    const ocWithBranch = { ...oc, storeBranchId: branchId };
+    const all = this.get<OpenContainer[]>(KEYS.OPEN_CONTAINERS, []);
+    const idx = all.findIndex((c) => c.id === oc.id);
+    if (idx >= 0) all[idx] = ocWithBranch; else all.push(ocWithBranch);
+    this.set(KEYS.OPEN_CONTAINERS, all);
+    this.notify(KEYS.OPEN_CONTAINERS, 'local');
+    this.syncOpenContainer(ocWithBranch);
+  }
+
+  private syncOpenContainer(oc: OpenContainer) {
+    let branchId = oc.storeBranchId || this.getSelectedBranchId() || '';
+    if (branchId && !StorageService.UUID_RE.test(branchId)) {
+      const resolved = this.resolveBranchId(branchId);
+      if (resolved) branchId = resolved;
+    }
+    if (!branchId) {
+      console.error('❌ syncOpenContainer: Nenhuma filial selecionada!', oc.id);
+      return;
+    }
+    const orgId = this.orgIdForBranch(branchId, oc.organizationId);
+    const syncWithRetry = (attempt = 1) => {
+      syncService.upsertRow('open_containers', {
+        id: oc.id,
+        organization_id: orgId,
+        store_branch_id: branchId,
+        product_id: oc.productId,
+        remaining_quantity: oc.remainingQuantity,
+        opened_at: oc.openedAt,
+        status: oc.status,
+      }).catch((err: any) => {
+        console.error('❌ syncOpenContainer falhou (tentativa ' + attempt + '):', err?.message);
+        if (attempt < 3) setTimeout(() => syncWithRetry(attempt + 1), 1000 * attempt);
+      });
+    };
+    syncWithRetry();
+  }
+
+  deleteOpenContainer(id: string): void {
+    this.setChangeSource('local');
+    const all = this.get<OpenContainer[]>(KEYS.OPEN_CONTAINERS, []);
+    const oc = all.find((c) => c.id === id);
+    if (!oc) return;
+    this.set(KEYS.OPEN_CONTAINERS, all.filter((c) => c.id !== id));
+    this.notify(KEYS.OPEN_CONTAINERS, 'local');
+    syncService.deleteRow('open_containers', id);
   }
 
   /** Soma quantidades dos lotes ativos de um produto */
@@ -1025,6 +1087,9 @@ expiration_date: p.expirationDate || null,
       wholesaleOptions: row.wholesale_options || undefined,
       expirationDate: row.expiration_date || undefined,
       isComposite: row.is_composite || false,
+      is_fragmentable: row.is_fragmentable || false,
+      yield_count: parseInt(row.yield_count) || 0,
+      fraction_product_id: row.fraction_product_id || undefined,
       useLots: row.use_lots || false,
     };
     const idx = products.findIndex((p) => p.id === mapped.id);
@@ -1947,7 +2012,7 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
       // PASSO 3: Buscar todos os dados filtrados pela filial
       // Todas as tabelas agora têm store_branch_id NOT NULL (banco convertido).
       // store_branches: já buscado no PASSO 1 (precisamos de TODAS para o seletor)
-      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders, moduleVisibility, productLots, stockLossLogs] =
+      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders, moduleVisibility, productLots, stockLossLogs, openContainers] =
         await Promise.all([
           syncService.fetchRows('products', resolvedBranchId),
           syncService.fetchRows('categories', resolvedBranchId),
@@ -1982,6 +2047,8 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
           // Controle de Lote/Validade (2026-08-14)
           syncService.fetchRows('product_lots', resolvedBranchId),
           syncService.fetchRows('stock_loss_log', resolvedBranchId),
+          // Contêineres abertos / fracionados (rendimento)
+          syncService.fetchRows('open_containers', resolvedBranchId),
         ]);
 
       // ── HELPER: merge cloud rows into local data by ID ──────────
@@ -2078,6 +2145,9 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
             wholesaleOptions: r.wholesale_options || undefined,
             expirationDate: r.expiration_date || undefined,
             isComposite: r.is_composite || false,
+            is_fragmentable: r.is_fragmentable || false,
+            yield_count: parseInt(r.yield_count) || 0,
+            fraction_product_id: r.fraction_product_id || undefined,
             useLots: r.use_lots || false,
           };
         }, (p) => this.syncProduct(p), (p) => p.id, (localItem, cloudItem) => {
@@ -2141,6 +2211,29 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
           return { ...cloudMapped, updatedAt: new Date().toISOString() };
         });
         if (merged !== null) this.set(KEYS.STOCK_LOSS_LOG, merged);
+      }
+
+      // ── OPEN_CONTAINERS (garrafas abertas / doses) ───────────────────
+      {
+        const local = this.get<OpenContainer[]>(KEYS.OPEN_CONTAINERS, []);
+        const merged = mergeBy(KEYS.OPEN_CONTAINERS, local, openContainers, (r: any) => ({
+          id: r.id,
+          organizationId: r.organization_id || undefined,
+          storeBranchId: r.store_branch_id || undefined,
+          productId: r.product_id || '',
+          remainingQuantity: parseInt(r.remaining_quantity) || 0,
+          openedAt: r.opened_at || new Date().toISOString(),
+          status: r.status || 'open',
+          createdAt: r.created_at || new Date().toISOString(),
+          updatedAt: r.updated_at || new Date().toISOString(),
+        }), (c) => this.syncOpenContainer(c), (item: any) => item.id, (localItem, cloudMapped) => {
+          // Preservar estoque local de doses se a nuvem vier com 0
+          if (localItem.remainingQuantity > 0 && cloudMapped.remainingQuantity <= 0) {
+            cloudMapped.remainingQuantity = localItem.remainingQuantity;
+          }
+          return { ...cloudMapped, updatedAt: new Date().toISOString() };
+        });
+        if (merged !== null) this.set(KEYS.OPEN_CONTAINERS, merged);
       }
 
       // ── CATEGORIES ────────────────────────────────────────────────
@@ -6062,6 +6155,37 @@ saveUserProfile(user: UserProfile) {
     // Recipes are stored within products — just trigger a re-fetch
     // The product data already includes recipes via composite_product_id
     this.notify(KEYS.PRODUCTS, 'remote');
+  }
+
+  // --- OPEN CONTAINERS (Realtime) ---
+  updateOpenContainerFromRemote(row: any) {
+    this.setChangeSource('remote');
+    if (!this.isRemoteFromCurrentBranch(row)) return;
+    const containers = this.get<OpenContainer[]>(KEYS.OPEN_CONTAINERS, []);
+    const idx = containers.findIndex((c) => c.id === row.id);
+    const mapped: OpenContainer = {
+      id: row.id,
+      organizationId: row.organization_id || undefined,
+      storeBranchId: row.store_branch_id || undefined,
+      productId: row.product_id || '',
+      remainingQuantity: parseInt(row.remaining_quantity) || 0,
+      openedAt: row.opened_at || new Date().toISOString(),
+      status: row.status || 'open',
+      createdAt: row.created_at || new Date().toISOString(),
+      updatedAt: row.updated_at || new Date().toISOString(),
+    };
+    if (idx >= 0) containers[idx] = mapped; else containers.unshift(mapped);
+    this.set(KEYS.OPEN_CONTAINERS, containers);
+    this.notify(KEYS.OPEN_CONTAINERS, 'remote');
+  }
+
+  deleteOpenContainerFromRemote(id: string): void {
+    this.setChangeSource('remote');
+    const all = this.get<OpenContainer[]>(KEYS.OPEN_CONTAINERS, []);
+    const oc = all.find((c) => c.id === id);
+    if (!oc) return;
+    this.set(KEYS.OPEN_CONTAINERS, all.filter((c) => c.id !== id));
+    this.notify(KEYS.OPEN_CONTAINERS, 'remote');
   }
 
   // --- DELIVERY WORKER EARNINGS (Realtime) ---
