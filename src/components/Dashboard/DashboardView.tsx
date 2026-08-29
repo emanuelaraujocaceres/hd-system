@@ -21,7 +21,7 @@ import { storageService } from '../../services/storageService';
 import { CollaboratorPerformance } from './CollaboratorPerformance';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { useToast } from '../shared/Toast';
-import { undoManager } from '../../lib/undoManager';
+
 import { posAudio } from '../../services/audioService';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { printSaleReceipt } from '../../services/printService';
@@ -335,14 +335,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }
       setExpandedSaleId(null);
       posAudio.click();
-      const action = undoManager.peek();
-      addToast(
-        'success',
-        `Venda ${sale.code || ''} cancelada — estoque restaurado.`,
-        6000,
-        action ? 'Desfazer' : undefined,
-        action ? () => undoManager.undo() : undefined
-      );
+      addToast('success', `Venda ${sale.code || ''} cancelada — estoque restaurado.`, 6000);
     } catch (err: any) {
       addToast('error', friendlyErrorMessage(err, 'Não foi possível excluir a venda. Tente novamente.'));
       posAudio.error();

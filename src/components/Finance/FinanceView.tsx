@@ -35,7 +35,7 @@ import { useToast } from '../shared/Toast';
 import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
-import { undoManager } from '../../lib/undoManager';
+
 import { ReportModal } from './ReportModal';
 
 interface FinanceViewProps {
@@ -355,14 +355,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         return;
       }
       posAudio.chime();
-      const action = undoManager.peek();
-      addToast(
-        'success',
-        `Venda ${target.code} cancelada — estoque restaurado.`,
-        6000,
-        action ? 'Desfazer' : undefined,
-        action ? () => undoManager.undo() : undefined
-      );
+      addToast('success', `Venda ${target.code} cancelada — estoque restaurado.`, 6000);
     } catch (err: any) {
       addToast('error', friendlyErrorMessage(err, 'Não foi possível excluir a venda. Tente novamente.'));
       posAudio.error();

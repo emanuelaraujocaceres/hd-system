@@ -16,7 +16,7 @@ import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { useToast } from '../shared/Toast';
-import { undoManager } from '../../lib/undoManager';
+
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { usePagination } from '../../hooks/usePagination';
 import { Pagination } from '../shared/Pagination';
@@ -104,14 +104,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
       }
       posAudio.click();
       setExpandedSaleId(null);
-      const action = undoManager.peek();
-      addToast(
-        'success',
-        `Venda ${sale.code} cancelada — estoque restaurado.`,
-        6000,
-        action ? 'Desfazer' : undefined,
-        action ? () => undoManager.undo() : undefined
-      );
+      addToast('success', `Venda ${sale.code} cancelada — estoque restaurado.`, 6000);
     } catch (err: any) {
       addToast('error', friendlyErrorMessage(err, 'Não foi possível excluir a venda. Tente novamente.'));
       posAudio.error();

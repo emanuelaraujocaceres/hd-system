@@ -3301,21 +3301,11 @@ id: StorageService.ensureUuid(settings.id),
     // Also remove from separate localStorage key
     const filtered = existingItems.filter((i: any) => i.sale_id !== id);
     this.set(KEYS.SALE_ITEMS, filtered);
-    if (saleToDelete) {
-      undoManager.push({
-        type: 'delete-sale',
-        description: `Excluir venda ${saleToDelete.code || saleToDelete.id}`,
-        undo: () => {
-          const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
-          if (!sales.some((s) => s.id === saleToDelete.id)) {
-            sales.push(saleToDelete);
-            this.set(KEYS.SALES, sales);
-            syncService.upsertRow('sales', saleToDelete);
-          }
-        },
-        timestamp: Date.now(),
-      });
-    }
+    // Observação: o cancelamento de venda (cancelSaleWithStockRestore) NÃO registra
+    // entrada de "Desfazer". O RPC cancel_sale_atomic já restaura o estoque no
+    // servidor; re-adicionar a venda localmente sem re-deduzir causaria duplicação
+    // de estoque. Por isso deleteSale (usado no fluxo de cancelamento) não empilha
+    // undo — ao contrário de outras exclusões (ex.: produtos em InventoryView).
   }
 
   /**

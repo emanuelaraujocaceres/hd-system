@@ -1139,7 +1139,7 @@ Resumo de DLQ por filial/org.
 - ajustar_estoque(p_product_id, p_quantity, p_type, p_reason, p_operator_name, p_organization_id, p_store_branch_id) -> json. Ajuste de estoque. Grants: authenticated + service_role (NAO anon - regra 9).
 - process_sale_transaction(p_sale_id, ...) -> TABLE(success, message). Cardapio anon. Grants: anon + authenticated + service_role (excecao 0f).
 - process_sale_atomic(p_sale_data, p_items, p_payments, p_session_id) -> jsonb. Server-only. Grants: service_role.
-- cancel_sale_atomic(p_sale_id, p_session_id) -> jsonb. Server-only. Grants: service_role.
+- cancel_sale_atomic(p_sale_id uuid) -> jsonb. Restaura estoque (normal / composto / fração) e marca a venda como cancelled. Chamado diretamente do frontend (cliente autenticado) via cancelSaleWithStockRestore. ⚠️ VERIFICAR NO BANCO (pg_proc / SQL Editor): (1) assinatura real — doc anterior listava `(p_sale_id, p_session_id)`, mas o frontend envia apenas `p_sale_id`; se houver `p_session_id` obrigatório, a chamada falha. (2) Grant: precisa de `GRANT EXECUTE TO authenticated` (com validação de org+branch dentro da RPC), espelhando `process_sale_transaction`. Se estiver apenas com grant `service_role`, a chamada do PDV é NEGADA (permissão insuficiente) — cancelamento não funciona pelo cliente.
 - create_customer_session(...) -> jsonb. Server-only. Grants: service_role.
 - close_cash_session(p_session_id, p_final_balance, p_notes) -> jsonb. Server-only. Grants: service_role.
 - create_filial_backup(...) -> uuid. Grants: authenticated + service_role.
