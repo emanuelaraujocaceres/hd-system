@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { X, Camera, Trash2, Check, Layers } from 'lucide-react';
+import { X, Camera, Trash2, Check, Layers, ScanLine, KeyRound } from 'lucide-react';
 import { useToast } from '../shared/Toast';
 
 // Modelos alinhados com prototypes/ocr-bench/templates.json (Fase 3 reutiliza).
@@ -26,7 +26,7 @@ export type NFTemplateId = (typeof NF_TEMPLATE_OPTIONS)[number]['id'];
 interface NFMultiCaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCaptured: (pages: string[], templateId: string) => void;
+  onCaptured: (pages: string[], templateId: string, accessKey?: string) => void;
   initialTemplate?: string;
 }
 
@@ -42,6 +42,7 @@ export const NFMultiCaptureModal: React.FC<NFMultiCaptureModalProps> = ({
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [accessKey, setAccessKey] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -90,6 +91,7 @@ export const NFMultiCaptureModal: React.FC<NFMultiCaptureModalProps> = ({
     if (isOpen) {
       setPages([]);
       setCameraError(null);
+      setAccessKey(null);
       startCamera();
     }
     return () => stopCamera();
@@ -105,7 +107,13 @@ export const NFMultiCaptureModal: React.FC<NFMultiCaptureModalProps> = ({
     if (!ctx) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-    setPages((prev) => [...prev, dataUrl]);
+    setPages((prev) => {
+      if (prev.includes(dataUrl)) {
+        addToast('warning', 'Página duplicada ignorada.');
+        return prev;
+      }
+      return [...prev, dataUrl];
+    });
   }, []);
 
   const removePage = useCallback((idx: number) => {
@@ -114,11 +122,37 @@ export const NFMultiCaptureModal: React.FC<NFMultiCaptureModalProps> = ({
 
   const clearPages = useCallback(() => setPages([]), []);
 
+  const scanQr = useCallback(async () => {
+    const BarcodeDetectorClass = (window as any).BarcodeDetector;
+    if (!BarcodeDetectorClass || !videoRef.current) {
+      addToast('error', 'Leitor de QR Code indisponível neste navegador.');
+      return;
+    }
+    try {
+      const detector = new BarcodeDetectorClass({ formats: ['qr_code'] });
+      const codes = await detector.detect(videoRef.current);
+      if (!codes.length) {
+        addToast('error', 'Nenhum QR Code encontrado.');
+        return;
+      }
+      const raw = codes[0].rawValue || '';
+      const key = (raw.match(/\d{44}/) || [raw.replace(/\D/g, '').slice(0, 44)])[0];
+      if (!key || key.length !== 44) {
+        addToast('error', 'QR Code não contém chave de acesso válida (44 dígitos).');
+        return;
+      }
+      setAccessKey(key);
+      addToast('success', 'Chave de acesso lida do QR Code.');
+    } catch {
+      addToast('error', 'Falha ao ler QR Code.');
+    }
+  }, [addToast]);
+
   const handleConclude = useCallback(() => {
-    onCaptured(pages, templateId);
+    onCaptured(pages, templateId, accessKey ?? undefined);
     setPages([]);
     onClose();
-  }, [pages, templateId, onCaptured, onClose]);
+  }, [pages, templateId, accessKey, onCaptured, onClose]);
 
   const handleCancel = useCallback(() => {
     setPages([]);
@@ -178,6 +212,23 @@ export const NFMultiCaptureModal: React.FC<NFMultiCaptureModalProps> = ({
               </div>
             )}
           </div>
+
+          {stream && (
+            <button
+              type="button"
+              onClick={scanQr}
+              className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+            >
+              <ScanLine className="w-4 h-4" /> Ler QR Code (DANFE)
+            </button>
+          )}
+
+          {accessKey && (
+            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 font-bold">
+              <KeyRound className="w-4 h-4" />
+              <span>Chave lida: {accessKey.slice(0, 10)}…{accessKey.slice(-4)}</span>
+            </div>
+          )}
 
           {cameraError && (
             <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 font-bold">

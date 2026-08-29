@@ -116,9 +116,10 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
     }
   };
 
-  const handleCaptured = useCallback((pages: string[], templateId: string) => {
+  const handleCaptured = useCallback((pages: string[], templateId: string, accessKey?: string) => {
     setCapturedPages(pages);
     setSelectedTemplate(templateId);
+    if (accessKey) setAccessKey(accessKey);
     setIsCaptureOpen(false);
   }, []);
 
