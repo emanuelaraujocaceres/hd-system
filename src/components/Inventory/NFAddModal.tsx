@@ -30,6 +30,7 @@ import {
 import { Supplier, NFRecord } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { NFMultiCaptureModal } from './NFMultiCaptureModal';
 
 interface NFItem {
   productName: string;
@@ -63,11 +64,10 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
   const [accessKey, setAccessKey] = useState('');
   const [pdfFile, setPdfFile] = useState<string | null>(null);
 
-  // Camera state
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  // Multi-page capture (Fase 2)
+  const [capturedPages, setCapturedPages] = useState<string[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('danfe');
+  const [isCaptureOpen, setIsCaptureOpen] = useState(false);
 
   // WhatsApp state
   const [whatsappNumber, setWhatsappNumber] = useState('');
@@ -116,42 +116,13 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
     }
   };
 
-  const startCamera = useCallback(async () => {
-    setCameraError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-      });
-      setCameraStream(stream);
-      setIsCameraOpen(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-    } catch {
-      setCameraError('Câmera indisponível. Verifique as permissões.');
-    }
+  const handleCaptured = useCallback((pages: string[], templateId: string) => {
+    setCapturedPages(pages);
+    setSelectedTemplate(templateId);
+    setIsCaptureOpen(false);
   }, []);
 
-  const capturePhoto = () => {
-    if (!cameraStream || !videoRef.current) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(videoRef.current, 0, 0);
-    const imageData = canvas.toDataURL('image/jpeg', 0.95);
-    setPdfFile(imageData);
-    stopCamera();
-  };
-
-  const stopCamera = () => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach((track) => track.stop());
-      setCameraStream(null);
-    }
-    setIsCameraOpen(false);
-  };
+  const clearCaptured = useCallback(() => setCapturedPages([]), []);
 
   const handleSaveNF = async () => {
     if (!nfNumber.trim()) {
@@ -160,6 +131,7 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
     }
 
     const nfId = `nf-${Date.now()}`;
+    const allImages = [...capturedPages, ...(pdfFile ? [pdfFile] : [])];
     const nfRecord: NFRecord = {
       id: nfId,
       scanDate: issueDate,
@@ -168,17 +140,18 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
       items,
       totalValue,
       note,
-      source: 'manual',
+      source: capturedPages.length ? 'camera' : 'manual',
       accessKey,
       documentNumber: nfNumber,
       status: 'pending',
       observation: note,
       supplierSnapshot: { name: supplierName, cnpj: supplierCNPJ },
+      templateId: selectedTemplate || undefined,
       images: [],
     };
 
-    // Faz upload da foto anexada (se houver) para o Storage; grava o path em images.
-    await storageService.saveNFRecordWithImages(nfRecord, pdfFile ? [pdfFile] : []);
+    // Faz upload das fotos capturadas + arquivo anexado para o Storage; grava os paths em images.
+    await storageService.saveNFRecordWithImages(nfRecord, allImages);
     posAudio.chime();
     onSave();
     resetForm();
@@ -195,6 +168,9 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
     setNote('');
     setAccessKey('');
     setPdfFile(null);
+    setCapturedPages([]);
+    setSelectedTemplate('danfe');
+    setIsCaptureOpen(false);
   };
 
   const handleWhatsAppShare = (phone: string, nfIds: string[]) => {
@@ -399,11 +375,11 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={startCamera}
+                onClick={() => setIsCaptureOpen(true)}
                 className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors"
               >
                 <Camera className="w-4 h-4" />
-                Tirar Foto
+                Capturar fotos (várias páginas)
               </button>
               <label className="flex-1 py-3 px-4 bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer">
                 <Upload className="w-4 h-4" />
@@ -411,7 +387,7 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*,.pdf"
+                  accept="image/*"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -429,47 +405,41 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
                 </button>
               </div>
             )}
-            {cameraError && (
-              <p className="mt-2 text-xs text-rose-500">{cameraError}</p>
+            {capturedPages.length > 0 && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Fotos capturadas: {capturedPages.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearCaptured}
+                    className="text-[11px] text-rose-500 font-bold hover:underline"
+                  >
+                    Limpar
+                  </button>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {capturedPages.slice(0, 4).map((p, i) => (
+                    <img
+                      key={i}
+                      src={p}
+                      alt={`Página ${i + 1}`}
+                      className="w-full h-16 object-cover rounded-lg border border-slate-200 dark:border-[#27272a]"
+                    />
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
-          {/* Camera Modal */}
-          {isCameraOpen && (
-            <div className="fixed inset-0 z-[10000] bg-black/80 flex items-center justify-center p-4">
-              <div className="bg-white dark:bg-[#18181b] rounded-2xl max-w-md w-full overflow-hidden">
-                <div className="p-4 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Capturar NF</h3>
-                  <button onClick={stopCamera} className="p-1 text-slate-400 hover:text-slate-600">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-4">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    className="w-full rounded-xl bg-black"
-                  />
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      onClick={capturePhoto}
-                      className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2"
-                    >
-                      <Camera className="w-4 h-4" />
-                      Capturar
-                    </button>
-                    <button
-                      onClick={stopCamera}
-                      className="px-4 py-3 bg-slate-100 dark:bg-[#27272a] text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Multi-page capture modal (Fase 2) */}
+          <NFMultiCaptureModal
+            isOpen={isCaptureOpen}
+            onClose={() => setIsCaptureOpen(false)}
+            onCaptured={handleCaptured}
+            initialTemplate={selectedTemplate}
+          />
         </div>
 
         {/* Footer */}

@@ -415,7 +415,7 @@ export interface NFRecord {
   storeBranchId?: string;
   organizationId?: string;
   // novas colunas (Fase 1 — scanner de fornecedor / NF-e)
-  source?: 'ocr' | 'xml' | 'manual';
+  source?: 'ocr' | 'xml' | 'manual' | 'camera';
   documentNumber?: string;
   accessKey?: string;            // QR Code do DANFE (chave de acesso)
   templateId?: string;          // template de fornecedor usado no OCR
