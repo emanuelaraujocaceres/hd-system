@@ -1,0 +1,14 @@
+{
+  "name": "ocr-bench",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "description": "Fase 0 - bancada de testes OCR (Tesseract.js + BarcodeDetector). Sem alteracao de banco.",
+  "scripts": {
+    "test:parser": "node test-parser.mjs",
+    "ocr": "node run-ocr.mjs"
+  },
+  "dependencies": {
+    "tesseract.js": "^5.1.1"
+  }
+}

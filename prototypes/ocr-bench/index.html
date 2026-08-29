@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fase 0 — Bancada OCR (HD-System)</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root { --bg:#0b0f17; --card:#111827; --line:#1f2937; --txt:#e5e7eb; --mut:#9ca3af; --ind:#6366f1; --ok:#10b981; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--txt); padding:16px; }
+    h1 { font-size:18px; } h2 { font-size:14px; color:var(--mut); font-weight:600; }
+    .tabs { display:flex; gap:8px; margin:12px 0; }
+    .tab { background:var(--card); border:1px solid var(--line); color:var(--mut); padding:8px 14px; border-radius:10px; cursor:pointer; font-size:13px; }
+    .tab.active { color:#fff; border-color:var(--ind); background:#1e2433; }
+    .panel { display:none; } .panel.show { display:block; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:14px; }
+    .box { background:#0e1422; border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; }
+    .box-title { font-size:13px; font-weight:700; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+    .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+    label { display:flex; flex-direction:column; font-size:11px; color:var(--mut); gap:4px; }
+    input, select, textarea { background:#0b0f17; border:1px solid var(--line); color:var(--txt); border-radius:8px; padding:7px 9px; font-size:13px; }
+    textarea { min-height:54px; resize:vertical; }
+    .bar { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin:10px 0; font-size:12px; color:var(--mut); }
+    .items { width:100%; border-collapse:collapse; font-size:12px; }
+    .items th, .items td { border:1px solid var(--line); padding:6px; text-align:left; }
+    .items .num { white-space:nowrap; }
+    .pm { background:#1f2937; border:1px solid var(--line); color:var(--txt); border-radius:6px; width:26px; height:26px; cursor:pointer; }
+    .pm.del { color:#f87171; }
+    .mini { background:var(--ind); color:#fff; border:0; border-radius:8px; padding:5px 10px; font-size:11px; font-weight:700; cursor:pointer; }
+    .log { color:var(--ok); font-size:11px; margin-top:6px; }
+    #jsonOut { width:100%; min-height:200px; font-family:monospace; font-size:11px; }
+    .acc { font-family:monospace; font-size:12px; white-space:pre-wrap; }
+    .hint { font-size:11px; color:var(--mut); }
+  </style>
+</head>
+<body>
+  <h1>Fase 0 — Bancada de testes OCR</h1>
+  <p class="hint">Sem IA. Tesseract.js (OCR determinístico) + BarcodeDetector (QR). Três fontes: <b>OCR do papel</b> (principal), <b>Upload XML</b> (NF-e, alternativo), <b>Manual</b> (fallback). Nada é gravado no banco nesta fase.</p>
+
+  <div class="tabs">
+    <button class="tab" data-tab="Ocr">📷 OCR (papel)</button>
+    <button class="tab" data-tab="Xml">📄 Upload XML</button>
+    <button class="tab" data-tab="Manual">✍️ Manual</button>
+  </div>
+
+  <div id="tabOcr" class="panel">
+    <div class="card">
+      <h2>1) Escanear várias folhas (fotos do papel A4)</h2>
+      <input id="fileOcr" type="file" accept="image/*" multiple capture="environment" />
+      <div id="ocrStatus" class="hint" style="margin-top:8px">Selecione uma ou mais fotos. Cada folha é OCRizada; QR (se houver) vira chave de acesso.</div>
+    </div>
+    <div id="docEditor"></div>
+  </div>
+
+  <div id="tabXml" class="panel">
+    <div class="card">
+      <h2>Upload do XML da NF-e (fallback alternativo)</h2>
+      <input id="fileXml" type="file" accept=".xml,application/xml" />
+      <div class="hint" style="margin-top:8px">O parser extrai emitente (fornecedor), itens, totais e chave de acesso diretamente do XML.</div>
+    </div>
+    <div id="docEditor2"></div>
+  </div>
+
+  <div id="tabManual" class="panel">
+    <div class="card"><button class="mini" id="manualAdd">+ Item manual</button></div>
+    <div id="docEditor3"></div>
+  </div>
+
+  <div class="card">
+    <h2>Saída normalizada (PurchaseDocument) — pronta para a tabela futura</h2>
+    <textarea id="jsonOut" readonly></textarea>
+    <button id="copyJson" class="mini" style="margin-top:8px">Copiar JSON</button>
+  </div>
+
+  <div class="card">
+    <h2>Medir acurácia (ground truth)</h2>
+    <div class="bar">
+      <label>Total esperado R$ <input id="expTotal" placeholder="164,00"></label>
+      <label>Nº itens esperado <input id="expItems" type="number" placeholder="3"></label>
+      <button id="accBtn" class="mini">Calcular acurácia</button>
+    </div>
+    <pre id="accOut" class="acc"></pre>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+  <script>
+    // Liga a aba Manual a um editor proprio (reusa a mesma engine via doc global)
+    document.getElementById('manualAdd')?.addEventListener('click', () => {
+      // garante doc vazio e render na area da aba manual
+      window.dispatchEvent(new Event('manual-init'));
+    });
+  </script>
+</body>
+</html>

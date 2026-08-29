@@ -1,0 +1,8 @@
+{
+  "items": [
+    { "qty": 12, "unitPrice": 6.0, "subtotal": 72.0 },
+    { "qty": 24, "unitPrice": 2.5, "subtotal": 60.0 },
+    { "qty": 10, "unitPrice": 3.2, "subtotal": 32.0 }
+  ],
+  "total": 164.0
+}
