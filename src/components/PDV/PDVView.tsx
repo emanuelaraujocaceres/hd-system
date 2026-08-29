@@ -849,6 +849,8 @@ export const PDVView: React.FC<PDVViewProps> = ({
       </div>
 
       {/* Payment Modal */}
+      {/* FASE 3 (preparação): itens compostos/fragmentáveis são passados como estão
+          no carrinho; a expansão/dedução ocorrerá em storageService.addSale() + RPC. */}
       <PaymentModal
         isOpen={isPaymentOpen}
         onClose={() => setIsPaymentOpen(false)}

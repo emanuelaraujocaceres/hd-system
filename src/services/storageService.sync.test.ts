@@ -170,4 +170,39 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_open_containers')?.[1] as any[];
     expect(storedArg).toBeUndefined();
   });
+
+  // ─── REGRESSÃO: product_recipes (receita de compostos) ───
+  it('updateProductRecipeFromRemote mapeia linha do cloud (composite/ingredient/quantidade/filiais)', () => {
+    (svc as any).isRemoteFromCurrentBranch = () => true;
+    const setSpy = vi.spyOn(svc as any, 'set');
+    const row = {
+      id: 'rec-1',
+      composite_product_id: 'p-comp',
+      ingredient_product_id: 'p-ing',
+      ingredient_name: 'Vodka',
+      quantity: '0.25',
+      unit: 'lit',
+      store_branch_id: 'b1',
+      organization_id: 'o1',
+    };
+    (svc as any).updateProductRecipeFromRemote(row);
+    const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_product_recipes')?.[1] as any[];
+    const rec = storedArg?.find((a: any) => a.id === 'rec-1');
+    expect(rec).toBeTruthy();
+    expect(rec.compositeProductId).toBe('p-comp');
+    expect(rec.ingredientProductId).toBe('p-ing');
+    expect(rec.quantity).toBe(0.25); // string -> number
+    expect(rec.unit).toBe('lit');
+    expect(rec.storeBranchId).toBe('b1');
+    expect(rec.organizationId).toBe('o1');
+  });
+
+  it('updateProductRecipeFromRemote ignora linha de outra filial (isolamento)', () => {
+    (svc as any).isRemoteFromCurrentBranch = () => false;
+    const setSpy = vi.spyOn(svc as any, 'set');
+    const row = { id: 'rec-2', composite_product_id: 'c', ingredient_product_id: 'i', store_branch_id: 'b-other' };
+    (svc as any).updateProductRecipeFromRemote(row);
+    const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_product_recipes')?.[1] as any[];
+    expect(storedArg).toBeUndefined();
+  });
 });

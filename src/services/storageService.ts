@@ -22,6 +22,7 @@ import {
   BranchTheme,
   ApiKey,
   ProductLot,
+  ProductRecipe,
   StockLossLog,
   DeliverySettings,
   DeliveryNeighborhood,
@@ -95,6 +96,7 @@ const KEYS = {
   LAST_VIEWING_ORG: 'hd_system_last_viewing_org',
   PRODUCT_LOTS: 'hd_system_product_lots',
   OPEN_CONTAINERS: 'hd_system_open_containers',
+  PRODUCT_RECIPES: 'hd_system_product_recipes',
   STOCK_LOSS_LOG: 'hd_system_stock_loss_log',
 };
 
@@ -729,6 +731,44 @@ expiration_date: p.expirationDate || null,
     this.set(KEYS.OPEN_CONTAINERS, all.filter((c) => c.id !== id));
     this.notify(KEYS.OPEN_CONTAINERS, 'local');
     syncService.deleteRow('open_containers', id);
+  }
+
+  // ── PRODUCT_RECIPES (receita de produtos compostos) ──────
+  getProductRecipes(compositeProductId?: string): ProductRecipe[] {
+    const all = this.get<ProductRecipe[]>(KEYS.PRODUCT_RECIPES, []);
+    const filtered = compositeProductId ? all.filter((r) => r.compositeProductId === compositeProductId) : all;
+    return this.filterBySelectedBranch(this.filterByOrg(filtered));
+  }
+
+  saveProductRecipe(recipe: ProductRecipe): void {
+    this.setChangeSource('local');
+    const branchId = recipe.storeBranchId || this.getSelectedBranchId() || '';
+    const recipeWithBranch = { ...recipe, storeBranchId: branchId };
+    const all = this.get<ProductRecipe[]>(KEYS.PRODUCT_RECIPES, []);
+    const idx = all.findIndex((r) => r.id === recipe.id);
+    if (idx >= 0) all[idx] = recipeWithBranch; else all.push(recipeWithBranch);
+    this.set(KEYS.PRODUCT_RECIPES, all);
+    this.notify(KEYS.PRODUCT_RECIPES, 'local');
+    const orgId = this.orgIdForBranch(branchId, recipe.organizationId);
+    syncService.upsertRow('product_recipes', {
+      id: recipe.id,
+      composite_product_id: recipe.compositeProductId,
+      ingredient_product_id: recipe.ingredientProductId,
+      quantity: recipe.quantity,
+      unit: recipe.unit || null,
+      store_branch_id: branchId,
+      organization_id: orgId,
+    });
+  }
+
+  deleteProductRecipe(id: string): void {
+    this.setChangeSource('local');
+    const all = this.get<ProductRecipe[]>(KEYS.PRODUCT_RECIPES, []);
+    const recipe = all.find((r) => r.id === id);
+    if (!recipe) return;
+    this.set(KEYS.PRODUCT_RECIPES, all.filter((r) => r.id !== id));
+    this.notify(KEYS.PRODUCT_RECIPES, 'local');
+    syncService.deleteRow('product_recipes', id);
   }
 
   /** Soma quantidades dos lotes ativos de um produto */
@@ -2012,7 +2052,7 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
       // PASSO 3: Buscar todos os dados filtrados pela filial
       // Todas as tabelas agora têm store_branch_id NOT NULL (banco convertido).
       // store_branches: já buscado no PASSO 1 (precisamos de TODAS para o seletor)
-      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders, moduleVisibility, productLots, stockLossLogs, openContainers] =
+      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders, moduleVisibility, productLots, stockLossLogs, openContainers, productRecipes] =
         await Promise.all([
           syncService.fetchRows('products', resolvedBranchId),
           syncService.fetchRows('categories', resolvedBranchId),
@@ -2049,6 +2089,8 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
           syncService.fetchRows('stock_loss_log', resolvedBranchId),
           // Contêineres abertos / fracionados (rendimento)
           syncService.fetchRows('open_containers', resolvedBranchId),
+          // Receitas de produtos compostos
+          syncService.fetchRows('product_recipes', resolvedBranchId),
         ]);
 
       // ── HELPER: merge cloud rows into local data by ID ──────────
@@ -2234,6 +2276,24 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
           return { ...cloudMapped, updatedAt: new Date().toISOString() };
         });
         if (merged !== null) this.set(KEYS.OPEN_CONTAINERS, merged);
+      }
+
+      // ── PRODUCT_RECIPES (receitas de compostos) ─────────────────────
+      {
+        const local = this.get<ProductRecipe[]>(KEYS.PRODUCT_RECIPES, []);
+        const merged = mergeBy(KEYS.PRODUCT_RECIPES, local, productRecipes, (r: any) => ({
+          id: r.id,
+          compositeProductId: r.composite_product_id,
+          ingredientProductId: r.ingredient_product_id,
+          ingredientName: r.ingredient_name || undefined,
+          quantity: parseFloat(r.quantity) || 0,
+          unit: r.unit || undefined,
+          storeBranchId: r.store_branch_id || undefined,
+          organizationId: r.organization_id || undefined,
+        }), (rec) => this.saveProductRecipe(rec), (item: any) => item.id, (localItem, cloudMapped) => {
+          return { ...cloudMapped, updatedAt: new Date().toISOString() };
+        });
+        if (merged !== null) this.set(KEYS.PRODUCT_RECIPES, merged);
       }
 
       // ── CATEGORIES ────────────────────────────────────────────────
@@ -3645,6 +3705,14 @@ id: StorageService.ensureUuid(settings.id),
 
     // ─── RPC: process_sale_transaction (server-side atomic) ───
     // Calls the DB function with SELECT ... FOR UPDATE + SERIALIZABLE
+    // FASE 3 (preparação — NÃO implementada): itens compostos e frações.
+    //   - Item composto (isComposite=true): o frontend envia SÓ o item pai; a RPC
+    //     deverá expandir a receita (product_recipes) e deduzir os ingredientes.
+    //   - Item fragmentável (is_fragmentable=true): vender 1 dose consome 1 unidade
+    //     de open_containers (garrafa aberta); ao zerar o contêiner, abater 1
+    //     unidade do produto fechado (fraction_product_id).
+    //   - O payload `saleItemsJson` JÁ inclui todos os itens do carrinho; nenhuma
+    //     mudança de payload é necessária agora.
     try {
       const saleItemsJson = (sale.items || []).map((item) => ({
         product_id: item.productId,
@@ -6152,9 +6220,21 @@ saveUserProfile(user: UserProfile) {
   updateProductRecipeFromRemote(row: any) {
     this.setChangeSource('remote');
     if (!this.isRemoteFromCurrentBranch(row)) return;
-    // Recipes are stored within products — just trigger a re-fetch
-    // The product data already includes recipes via composite_product_id
-    this.notify(KEYS.PRODUCTS, 'remote');
+    const recipes = this.get<ProductRecipe[]>(KEYS.PRODUCT_RECIPES, []);
+    const idx = recipes.findIndex((r) => r.id === row.id);
+    const mapped: ProductRecipe = {
+      id: row.id,
+      compositeProductId: row.composite_product_id,
+      ingredientProductId: row.ingredient_product_id,
+      ingredientName: row.ingredient_name || undefined,
+      quantity: parseFloat(row.quantity) || 0,
+      unit: row.unit || undefined,
+      storeBranchId: row.store_branch_id || undefined,
+      organizationId: row.organization_id || undefined,
+    };
+    if (idx >= 0) recipes[idx] = mapped; else recipes.unshift(mapped);
+    this.set(KEYS.PRODUCT_RECIPES, recipes);
+    this.notify(KEYS.PRODUCT_RECIPES, 'remote');
   }
 
   // --- OPEN CONTAINERS (Realtime) ---

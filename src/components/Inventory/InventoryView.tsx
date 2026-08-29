@@ -131,6 +131,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formExpirationDate, setFormExpirationDate] = useState('');
   const [formIsComposite, setFormIsComposite] = useState(false);
   const [formUseLots, setFormUseLots] = useState(false);
+  // Produto Fragmentável (rendimento) + receita de composto
+  const [formIsFragmentable, setFormIsFragmentable] = useState(false);
+  const [formYieldCount, setFormYieldCount] = useState('');
+  const [formFractionProductId, setFormFractionProductId] = useState('');
+  const [formRecipeIngredients, setFormRecipeIngredients] = useState<{ id: string; ingredientProductId: string; quantity: string; unit: string }[]>([]);
 
   // Estoque Inteligente: Inventário (ajuste com motivo)
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
@@ -384,6 +389,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormExpirationDate('');
     setFormIsComposite(false);
     setFormUseLots(false);
+    setFormIsFragmentable(false);
+    setFormYieldCount('');
+    setFormFractionProductId('');
+    setFormRecipeIngredients([]);
     setImageSuggestions([]);
     setIsSearchingImages(false);
   };
@@ -418,6 +427,17 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormExpirationDate(product.expirationDate || '');
     setFormIsComposite(product.isComposite || false);
     setFormUseLots(product.useLots || false);
+    setFormIsFragmentable(product.is_fragmentable || false);
+    setFormYieldCount(product.yield_count ? String(product.yield_count) : '');
+    setFormFractionProductId(product.fraction_product_id || '');
+    setFormRecipeIngredients(
+      (storageService.getProductRecipes(product.id) || []).map((r) => ({
+        id: r.id,
+        ingredientProductId: r.ingredientProductId,
+        quantity: String(r.quantity),
+        unit: r.unit || 'un',
+      }))
+    );
     setIsProductModalOpen(true);
   };
 
@@ -492,9 +512,34 @@ minStock: parseInt(formMinStock) || 0,
         expirationDate: formExpirationDate || undefined,
         isComposite: formIsComposite || undefined,
         useLots: formUseLots || undefined,
+        is_fragmentable: formIsFragmentable || undefined,
+        yield_count: parseInt(formYieldCount) || 0,
+        fraction_product_id: formFractionProductId || undefined,
       };
 
       storageService.saveProduct(newProd);
+
+      // Salvar receita do produto composto (Fase 2)
+      if (formIsComposite) {
+        const existingRecipes = storageService.getProductRecipes(newProd.id);
+        existingRecipes.forEach((r) => storageService.deleteProductRecipe(r.id));
+        const orgId = storageService.getCurrentOrgId();
+        formRecipeIngredients.forEach((ing) => {
+          if (!ing.ingredientProductId || !(parseFloat(ing.quantity) > 0)) return;
+          const recipe: any = {
+            id: ing.id || `rec-${newProd.id}-${ing.ingredientProductId}-${Date.now()}`,
+            compositeProductId: newProd.id,
+            ingredientProductId: ing.ingredientProductId,
+            ingredientName: products.find((p) => p.id === ing.ingredientProductId)?.name,
+            quantity: parseFloat(ing.quantity),
+            unit: ing.unit || 'un',
+            storeBranchId: newProd.storeBranchId,
+            organizationId: orgId,
+          };
+          storageService.saveProductRecipe(recipe);
+        });
+      }
+
       posAudio.chime();
       setHighlightedProductId(newProd.id);
       setTimeout(() => setHighlightedProductId(null), 2000);
@@ -1369,6 +1414,160 @@ minStock: parseInt(formMinStock) || 0,
                     First Expired, First Out — venda desconta do lote mais antigo
                   </p>
                 </div>
+              </div>
+
+              {/* ─── PRODUTO COMPOSTO (RECEITA) ─── */}
+              <div className="pt-3 border-t border-slate-200 dark:border-[#27272a] space-y-3">
+                <label className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 cursor-pointer hover:bg-amber-500/10 transition-colors">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={formIsComposite}
+                      onChange={(e) => {
+                        setFormIsComposite(e.target.checked);
+                        posAudio.click();
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 rounded-full bg-slate-300 dark:bg-[#27272a] peer-checked:bg-amber-500 transition-colors" />
+                    <div className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-transform peer-checked:translate-x-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">Produto Composto (Receita)</p>
+                    <p className="text-[10px] text-slate-500 dark:text-[#71717a]">
+                      Venda deste item descontará os ingredientes da receita (em breve no PDV)
+                    </p>
+                  </div>
+                </label>
+
+                {formIsComposite && (
+                  <div className="space-y-2 pl-1 animate-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a]">
+                        Ingredientes da Receita
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setFormRecipeIngredients((prev) => [...prev, { id: '', ingredientProductId: '', quantity: '', unit: 'un' }])}
+                        className="px-2 py-1 rounded-lg text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-colors"
+                      >
+                        + Ingrediente
+                      </button>
+                    </div>
+
+                    {formRecipeIngredients.length === 0 && (
+                      <p className="text-[10px] text-slate-400 dark:text-[#52525b]">Adicione ao menos um ingrediente.</p>
+                    )}
+
+                    {formRecipeIngredients.map((ing, i) => (
+                      <div key={i} className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a]">
+                            Ingrediente {i + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setFormRecipeIngredients((prev) => prev.filter((_, x) => x !== i))}
+                            className="p-1 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-colors"
+                            title="Remover ingrediente"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <select
+                            value={ing.ingredientProductId}
+                            onChange={(e) => setFormRecipeIngredients((prev) => prev.map((l, x) => (x === i ? { ...l, ingredientProductId: e.target.value } : l)))}
+                            className="col-span-2 px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+                          >
+                            <option value="">Selecione o ingrediente...</option>
+                            {products.filter((p) => p.id !== (editingProduct?.id)).map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={ing.quantity}
+                            onChange={(e) => setFormRecipeIngredients((prev) => prev.map((l, x) => (x === i ? { ...l, quantity: e.target.value } : l)))}
+                            placeholder="Qtd"
+                            className="px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                          <select
+                            value={ing.unit}
+                            onChange={(e) => setFormRecipeIngredients((prev) => prev.map((l, x) => (x === i ? { ...l, unit: e.target.value } : l)))}
+                            className="col-span-3 px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+                          >
+                            <option value="un">un</option>
+                            <option value="kg">kg</option>
+                            <option value="lit">lit</option>
+                            <option value="ml">ml</option>
+                            <option value="cx">cx</option>
+                          </select>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ─── PRODUTO FRAGMENTÁVEL (RENDIMENTO) ─── */}
+              <div className="pt-3 border-t border-slate-200 dark:border-[#27272a] space-y-3">
+                <label className="flex items-center gap-3 p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 cursor-pointer hover:bg-sky-500/10 transition-colors">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={formIsFragmentable}
+                      onChange={(e) => {
+                        setFormIsFragmentable(e.target.checked);
+                        posAudio.click();
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 rounded-full bg-slate-300 dark:bg-[#27272a] peer-checked:bg-sky-500 transition-colors" />
+                    <div className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-transform peer-checked:translate-x-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">Produto Fragmentável (Rendimento)</p>
+                    <p className="text-[10px] text-slate-500 dark:text-[#71717a]">
+                      Ex.: garrafa de vódka vendida em doses (fracionado)
+                    </p>
+                  </div>
+                </label>
+
+                {formIsFragmentable && (
+                  <div className="grid grid-cols-2 gap-3 pl-1">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                        Rendimento (nº de doses)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={formYieldCount}
+                        onChange={(e) => setFormYieldCount(e.target.value)}
+                        placeholder="Ex: 12"
+                        className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-sky-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                        Produto da fração
+                      </label>
+                      <select
+                        value={formFractionProductId}
+                        onChange={(e) => setFormFractionProductId(e.target.value)}
+                        className="w-full px-3 py-2 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-sky-500"
+                      >
+                        <option value="">Selecione a fração...</option>
+                        {products.filter((p) => p.id !== (editingProduct?.id)).map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Product Photo Management */}
