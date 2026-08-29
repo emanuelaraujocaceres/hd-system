@@ -3319,25 +3319,39 @@ id: StorageService.ensureUuid(settings.id),
   }
 
   /**
-   * Cancela uma venda e restaura o estoque (ingredientes de compostos e
-   * contêineres/garrafas de frações).
+   * Cancela uma venda e restaura o estoque de forma atômica no servidor via RPC
+   * cancel_sale_atomic (produtos normais, ingredientes de compostos e frações/
+   * containers abertos). A RPC também marca a venda como cancelled e registra as
+   * movimentações de entrada (type='in').
    *
-   * TODO(Fase 3 - Cancelamento): ainda NÃO existe RPC de cancelamento no banco.
-   * Quando disponível (ex.: cancel_sale_transaction), este método deve:
-   *   1. Chamar a RPC atômica no servidor (respeitando o isolation multi-tenant);
-   *   2. Reverter ingredientes (product_recipes) e open_containers / garrafa
-   *      fechada (fraction_product_id);
-   *   3. Reverter a movimentação correspondente em stock_movements.
-   * Por ora, apenas remove a venda localmente (deleteSale) e registra o pendente.
+   * Retorna { success, message } para a UI exibir o erro. Em caso de sucesso,
+   * remove a venda localmente (deleteSale). Em falha (RPC ou validação de
+   * negócio), NÃO remove localmente — a venda permanece até o operador resolver.
    */
-  async cancelSaleWithStockRestore(saleId: string) {
-    // TODO(Fase 3 - Cancelamento): substituir por RPC atômica quando o banco
-    // expuser o cancelamento. A restauração de estoque deve ser server-side.
-    console.warn('[HD-Sync] cancelSaleWithStockRestore: RPC de cancelamento ainda não implementado no banco — removendo venda localmente apenas.');
-    this.deleteSale(saleId);
-    // TODO(Fase 3 - Cancelamento): após o RPC, reverter no localStorage + sync:
-    //   para cada sale_item: se isComposite -> repor ingredientes; se fração ->
-    //   repor open_containers / garrafa fechada (fraction_product_id).
+  async cancelSaleWithStockRestore(saleId: string): Promise<{ success: boolean; message?: string }> {
+    try {
+      const { data, error } = await (supabase as any).rpc('cancel_sale_atomic', { p_sale_id: saleId });
+      if (error) {
+        console.warn('[HD-Sync] cancel_sale_atomic RPC failed:', error.message);
+        await this.insertDLQ('DELETE', 'sales', saleId, { saleId }, error.message);
+        return { success: false, message: `Falha ao cancelar venda no servidor: ${error.message}` };
+      }
+      // Validação de negócio retornada pela RPC (ex.: venda já cancelada/fechada).
+      if (data && (data as any).success === false) {
+        const msg = (data as any).message || 'Não foi possível cancelar a venda.';
+        console.warn('[HD-Sync] cancel_sale_atomic RPC rejected:', msg);
+        return { success: false, message: msg };
+      }
+      // Sucesso: remove a venda localmente (deleteSale faz o sync da exclusão).
+      // O estoque já foi restaurado no servidor; o Realtime propaga products /
+      // open_containers para os clientes, então nenhum reload manual é necessário.
+      this.deleteSale(saleId);
+      return { success: true };
+    } catch (e: any) {
+      console.warn('[HD-Sync] cancel_sale_atomic RPC exception:', e?.message);
+      await this.insertDLQ('DELETE', 'sales', saleId, { saleId }, e?.message);
+      return { success: false, message: e?.message || 'Erro inesperado ao cancelar a venda.' };
+    }
   }
 
   /**

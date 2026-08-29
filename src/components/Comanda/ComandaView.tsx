@@ -242,13 +242,18 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     setCloseModalTable(null);
   };
 
-  const handleDeleteSale = (saleId: string) => {
+  const handleDeleteSale = async (saleId: string) => {
     try {
-      storageService.deleteSale(saleId);
+      const res = await storageService.cancelSaleWithStockRestore(saleId);
+      if (!res.success) {
+        addToast('error', res.message || 'Não foi possível cancelar o pedido. Tente novamente.');
+        posAudio.error();
+        return;
+      }
       posAudio.click();
-      addToast('success', 'Pedido removido.');
+      addToast('success', 'Pedido cancelado — estoque restaurado.');
     } catch (err: any) {
-      addToast('error', friendlyErrorMessage(err, 'Não foi possível remover o pedido.'));
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível cancelar o pedido.'));
       posAudio.error();
     }
   };

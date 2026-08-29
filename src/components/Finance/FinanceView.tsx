@@ -343,17 +343,22 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   };
 
   const [confirmDeleteSale, setConfirmDeleteSale] = useState<{ code: string; id: string } | null>(null);
-  const handleConfirmDeleteSale = () => {
+  const handleConfirmDeleteSale = async () => {
     const target = confirmDeleteSale;
     if (!target) return;
     setConfirmDeleteSale(null);
     try {
-      storageService.deleteSale(target.id);
+      const res = await storageService.cancelSaleWithStockRestore(target.id);
+      if (!res.success) {
+        addToast('error', res.message || 'Não foi possível cancelar a venda. Tente novamente.');
+        posAudio.error();
+        return;
+      }
       posAudio.chime();
       const action = undoManager.peek();
       addToast(
         'success',
-        `Venda ${target.code} excluída.`,
+        `Venda ${target.code} cancelada — estoque restaurado.`,
         6000,
         action ? 'Desfazer' : undefined,
         action ? () => undoManager.undo() : undefined

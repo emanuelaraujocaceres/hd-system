@@ -91,18 +91,23 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
   };
 
   const [confirmDeleteSale, setConfirmDeleteSale] = useState<Sale | null>(null);
-  const handleConfirmDeleteSale = () => {
+  const handleConfirmDeleteSale = async () => {
     const sale = confirmDeleteSale;
     if (!sale) return;
     setConfirmDeleteSale(null);
     try {
-      storageService.deleteSale(sale.id);
+      const res = await storageService.cancelSaleWithStockRestore(sale.id);
+      if (!res.success) {
+        addToast('error', res.message || 'Não foi possível cancelar a venda. Tente novamente.');
+        posAudio.error();
+        return;
+      }
       posAudio.click();
       setExpandedSaleId(null);
       const action = undoManager.peek();
       addToast(
         'success',
-        `Venda ${sale.code} excluída.`,
+        `Venda ${sale.code} cancelada — estoque restaurado.`,
         6000,
         action ? 'Desfazer' : undefined,
         action ? () => undoManager.undo() : undefined
