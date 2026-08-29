@@ -3319,6 +3319,28 @@ id: StorageService.ensureUuid(settings.id),
   }
 
   /**
+   * Cancela uma venda e restaura o estoque (ingredientes de compostos e
+   * contêineres/garrafas de frações).
+   *
+   * TODO(Fase 3 - Cancelamento): ainda NÃO existe RPC de cancelamento no banco.
+   * Quando disponível (ex.: cancel_sale_transaction), este método deve:
+   *   1. Chamar a RPC atômica no servidor (respeitando o isolation multi-tenant);
+   *   2. Reverter ingredientes (product_recipes) e open_containers / garrafa
+   *      fechada (fraction_product_id);
+   *   3. Reverter a movimentação correspondente em stock_movements.
+   * Por ora, apenas remove a venda localmente (deleteSale) e registra o pendente.
+   */
+  async cancelSaleWithStockRestore(saleId: string) {
+    // TODO(Fase 3 - Cancelamento): substituir por RPC atômica quando o banco
+    // expuser o cancelamento. A restauração de estoque deve ser server-side.
+    console.warn('[HD-Sync] cancelSaleWithStockRestore: RPC de cancelamento ainda não implementado no banco — removendo venda localmente apenas.');
+    this.deleteSale(saleId);
+    // TODO(Fase 3 - Cancelamento): após o RPC, reverter no localStorage + sync:
+    //   para cada sale_item: se isComposite -> repor ingredientes; se fração ->
+    //   repor open_containers / garrafa fechada (fraction_product_id).
+  }
+
+  /**
    * Deduct stock LOCALLY ONLY (no RPC call).
    * Used by addSale() where process_sale_transaction RPC already handles
    * server-side stock deduction — calling ajustar_estoque here would
@@ -3337,6 +3359,21 @@ id: StorageService.ensureUuid(settings.id),
     // criada pelo RPC process_sale_transaction no servidor (com sale_id) e
     // propagada aos clientes via Realtime — evitando duplicação no frontend.
     this.syncProduct(prod);
+  }
+
+  /**
+   * Verdadeiro se o produto é composto (isComposite) OU é uma fração vendável
+   * (ex.: "Dose de Vodka") — ou seja, existe um produto fragmentável cujo
+   * fraction_product_id aponta para este id. Esses itens NÃO têm estoque próprio
+   * significativo; a dedução real (ingredientes/contêineres) ocorre no servidor
+   * via RPC process_sale_transaction. Usado para NÃO bloquear a venda pelo
+   * stock_quantity zerado do próprio item (PDVView.handleAddToCart).
+   */
+  isCompositeOrFractionProduct(productId: string): boolean {
+    const products = this.get<Product[]>(KEYS.PRODUCTS, []);
+    const target = products.find((p) => p.id === productId);
+    if (target && target.isComposite) return true;
+    return products.some((p) => p.is_fragmentable && p.fraction_product_id === productId);
   }
 
   /**
@@ -3584,7 +3621,7 @@ id: StorageService.ensureUuid(settings.id),
     this.set(KEYS.CREDIT_PAYMENTS, payments);
   }
 
-  async addSale(sale: Sale) {
+  async addSale(sale: Sale): Promise<{ success: boolean; message?: string }> {
     sale.id = StorageService.ensureUuid(sale.id);
     // Preserva o organizationId definido por quem criou a venda (ex.: cardápio
     // digital usa o da filial da mesa). Só cai no getCurrentOrgId() se ausente.
@@ -3651,19 +3688,49 @@ id: StorageService.ensureUuid(settings.id),
     // Venda fiado → criar conta a receber vinculada (id da conta = id da venda)
     this.createReceivableFromSale(sale);
 
-// ─── Deduce stock LOCALLY ONLY (instant UI) ────────────────
-    // Uses deductStockLocal() instead of updateStock() to avoid calling
-    // adjustStock RPC — the process_sale_transaction RPC below
-    // already handles server-side stock deduction atomically.
+    // ─── Dedução LOCAL apenas para feedback imediato (RPC é a autoridade final) ───
+    // Itens compostos (isComposite) e frações (produto cujo id === fraction_product_id
+    // de um fragmentável) NÃO têm estoque próprio significativo — a RPC deduz
+    // ingredientes/contêineres no servidor. Guardamos o estoque anterior para reverter
+    // caso a RPC falhe (ex.: estoque insuficiente de ingrediente ou garrafa).
+    const localStockSnapshot: Record<string, number> = {};
     for (const item of sale.items || []) {
+      if (this.isCompositeOrFractionProduct(item.productId)) continue; // RPC cuida no servidor
+      const prod = this.get<Product[]>(KEYS.PRODUCTS, []).find((p) => p.id === item.productId);
+      if (prod) localStockSnapshot[item.productId] = prod.currentStock;
       this.deductStockLocal(item.productId, -item.quantity, `Venda PDV #${sale.code}`, sale.operatorName);
     }
+
+    // Restaura o estoque local deduzido acima (usado se a RPC falhar).
+    const restoreLocalStock = () => {
+      if (Object.keys(localStockSnapshot).length === 0) return;
+      const products = this.get<Product[]>(KEYS.PRODUCTS, []);
+      let changed = false;
+      for (const [pid, prev] of Object.entries(localStockSnapshot)) {
+        const prod = products.find((p) => p.id === pid);
+        if (prod && prod.currentStock !== prev) {
+          prod.currentStock = prev;
+          changed = true;
+        }
+      }
+      if (changed) {
+        this.set(KEYS.PRODUCTS, products);
+        this.notify();
+        // Re-sincroniza o estoque restaurado: deductStockLocal já tinha subido o
+        // valor decrementado; desta forma o cloud volta ao valor anterior.
+        for (const [pid] of Object.entries(localStockSnapshot)) {
+          const prod = products.find((p) => p.id === pid);
+          if (prod) this.syncProduct(prod);
+        }
+      }
+    };
 
     // ─── FEFO: Deduz do lote com validade mais próxima (First Expired First Out) ────────────────
     // Se o produto tem controle por lote ativo, deduz do lote com validade mais próxima
     // FEFO (First Expired First Out): vende primeiro o que vence primeiro.
     if (sale.items && sale.items.length > 0) {
       for (const item of sale.items) {
+        if (this.isCompositeOrFractionProduct(item.productId)) continue; // RPC cuida no servidor
         const product = this.get<Product[]>(KEYS.PRODUCTS, []).find((p) => p.id === item.productId);
         if (product && product.useLots) {
           // FEFO: lote mais antigo primeiro
@@ -3690,17 +3757,14 @@ id: StorageService.ensureUuid(settings.id),
     }
 
     // ─── RPC: process_sale_transaction (server-side atomic) ───
-    // Calls the DB function with SELECT ... FOR UPDATE + SERIALIZABLE
-    // FASE 3 (preparação — NÃO implementada): itens compostos e frações.
-    //   - Item composto (isComposite=true): o frontend envia SÓ o item pai; a RPC
-    //     deverá expandir a receita (product_recipes) e deduzir os ingredientes.
-    //   - Item fragmentável (is_fragmentable=true): vender 1 dose consome 1 unidade
-    //     de open_containers (garrafa aberta); ao zerar o contêiner, abater 1
-    //     unidade do produto fechado (fraction_product_id).
-    //   - O payload `saleItemsJson` JÁ inclui todos os itens do carrinho; nenhuma
-    //     mudança de payload é necessária agora.
+    // FASE 3: itens compostos e frações são enviados normalmente no payload
+    // `saleItemsJson`; a RPC expande a receita (product_recipes) e deduz
+    // ingredientes, e consome open_containers (frações). O frontend confia na RPC.
+    let saleItemsJson: any[] = [];
+    let rpcError: string | null = null;
+    let rpcMessage: string | null = null;
     try {
-      const saleItemsJson = (sale.items || []).map((item) => ({
+      saleItemsJson = (sale.items || []).map((item) => ({
         product_id: item.productId,
         quantity: item.quantity,
         unit_price: item.unitPrice,
@@ -3742,15 +3806,33 @@ id: StorageService.ensureUuid(settings.id),
         });
 
         if (error) {
-          console.warn('[HD-Sync] process_sale_transaction RPC failed:', error.message);
-          await this.insertDLQ('INSERT', 'sales', sale.id, { sale, saleItemsJson }, error.message);
+          rpcError = error.message;
+        } else if (data && (data as any).success === false) {
+          // Falha de VALIDAÇÃO de negócio (ex.: estoque insuficiente de
+          // ingrediente/garrafa). A RPC é atômica — nada foi deduzido no
+          // servidor. Revertemos o estoque local e exibimos a mensagem.
+          rpcMessage = (data as any).message || 'Estoque insuficiente para concluir a venda.';
         }
       } else {
         console.warn('[HD-Sync] process_sale_transaction RPC skipped — organization_id inválido');
       }
     } catch (e: any) {
-      console.warn('[HD-Sync] process_sale_transaction RPC exception:', e?.message);
-      await this.insertDLQ('INSERT', 'sales', sale.id, { sale }, e?.message);
+      rpcError = e?.message || 'Erro inesperado ao processar a venda no servidor.';
+    }
+
+    // Falha de RPC (transporte ou validação de negócio): reverte o estoque local
+    // deduzido e retorna erro para o chamador exibir ao usuário. A venda já foi
+    // gravada localmente + cloud; o cancelamento/rollback completo dependerá do
+    // RPC de cancelamento (Fase 3 — ver cancelSaleWithStockRestore).
+    if (rpcError || rpcMessage) {
+      restoreLocalStock();
+      if (rpcError) {
+        console.warn('[HD-Sync] process_sale_transaction RPC failed:', rpcError);
+        await this.insertDLQ('INSERT', 'sales', sale.id, { sale, saleItemsJson }, rpcError);
+      } else {
+        console.warn('[HD-Sync] process_sale_transaction RPC rejected:', rpcMessage);
+      }
+      return { success: false, message: rpcMessage || `Falha ao processar venda no servidor: ${rpcError}` };
     }
 
     // Updates active cash register balance
@@ -3776,6 +3858,8 @@ id: StorageService.ensureUuid(settings.id),
         this.saveCustomer(cust);
       }
     }
+
+    return { success: true };
   }
 
 // ─── saveSale: atualiza uma venda existente (usado pela ComandaView/KDS) ──

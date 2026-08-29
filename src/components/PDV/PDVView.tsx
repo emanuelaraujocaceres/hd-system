@@ -191,6 +191,14 @@ export const PDVView: React.FC<PDVViewProps> = ({
     return matchesCategory && matchesSearch && p.active;
   });
 
+  // Um produto é "especial" (composto ou fração) quando NÃO tem estoque próprio
+  // significativo: a dedução real ocorre no servidor via RPC process_sale_transaction.
+  //  - isComposite=true: composto (ex.: Caipirinha) — deduz ingredientes da receita.
+  //  - fração: existe um produto fragmentável cujo fraction_product_id === id (ex.: "Dose Vodka").
+  // Esses itens NÃO devem ser bloqueados pelo stock_quantity zerado do próprio item.
+  const isCompositeOrFraction = (p: Product) =>
+    !!p.isComposite || products.some((fp) => fp.is_fragmentable && fp.fraction_product_id === p.id);
+
   // Total de UNIDADES no carrinho de um produto real (unidades + caixas somam juntas)
   const countUnitsInCart = (realProductId: string) =>
     cart.reduce((sum, item) => {
@@ -213,8 +221,10 @@ export const PDVView: React.FC<PDVViewProps> = ({
     const { product, sourceProductId, boxQuantity } = entry;
     const realProduct = sourceProductId ? products.find((p) => p.id === sourceProductId) : product;
     const realStock = realProduct?.currentStock ?? product.currentStock;
+    // Compostos e frações são validados pela RPC no servidor (não pelo estoque local).
+    const isSpecial = isCompositeOrFraction(product);
 
-    if (realStock <= 0) {
+    if (realStock <= 0 && !isSpecial) {
       posAudio.error();
       addToast('error', `"${product.name}" está com estoque esgotado!`);
       return;
@@ -224,7 +234,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
     const realId = sourceProductId ?? product.id;
     const unitsInCart = countUnitsInCart(realId);
     const unitsNeeded = boxQuantity ?? 1;
-    if (unitsInCart + unitsNeeded > realStock) {
+    if (!isSpecial && unitsInCart + unitsNeeded > realStock) {
       posAudio.error();
       setStockAlert({ product, currentQty: unitsInCart });
       return;
@@ -297,6 +307,8 @@ export const PDVView: React.FC<PDVViewProps> = ({
     if (delta > 0) {
       const item = cart.find((i) => i.product.id === productId);
       if (item) {
+        // Compostos/frações: estoque é validado pela RPC no servidor.
+        if (isCompositeOrFraction(item.product)) return;
         const realId = item.sourceProductId ?? item.product.id;
         const realProduct = item.sourceProductId ? products.find((p) => p.id === item.sourceProductId) : item.product;
         const realStock = realProduct?.currentStock ?? item.product.currentStock;
@@ -747,9 +759,11 @@ export const PDVView: React.FC<PDVViewProps> = ({
               </p>
             </div>
           ) : (
-            cart.map((item) => (
-              <div
-                key={item.product.id}
+            cart.map((item) => {
+              const isSpecialItem = isCompositeOrFraction(item.product);
+              return (
+                <div
+                  key={item.product.id}
                 className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#09090b]/60 border border-slate-200 dark:border-[#27272a] flex items-center justify-between gap-2"
               >
                 <div className="flex-1 min-w-0">
@@ -772,18 +786,18 @@ export const PDVView: React.FC<PDVViewProps> = ({
                   >
                     <Minus className="w-3 h-3" />
                   </button>
-                  <span className={`text-xs font-bold w-6 text-center ${item.quantity * (item.stockQuantity ?? 1) >= item.product.currentStock ? 'text-amber-500 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>
+                  <span className={`text-xs font-bold w-6 text-center ${!isSpecialItem && item.quantity * (item.stockQuantity ?? 1) >= item.product.currentStock ? 'text-amber-500 dark:text-amber-400' : 'text-slate-900 dark:text-white'}`}>
                     {item.quantity}
                   </span>
                   <button
                     onClick={() => handleUpdateQuantity(item.product.id, 1)}
-                    disabled={item.quantity * (item.stockQuantity ?? 1) >= item.product.currentStock}
+                    disabled={!isSpecialItem && item.quantity * (item.stockQuantity ?? 1) >= item.product.currentStock}
                     className={`p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded transition-colors ${
-                      item.quantity * (item.stockQuantity ?? 1) >= item.product.currentStock
+                      !isSpecialItem && item.quantity * (item.stockQuantity ?? 1) >= item.product.currentStock
                         ? 'text-slate-300 dark:text-[#3f3f46] cursor-not-allowed'
                         : 'text-slate-500 dark:text-[#a1a1aa] hover:bg-slate-100 dark:hover:bg-[#27272a]'
                     }`}
-                    title={item.quantity * (item.stockQuantity ?? 1) >= item.product.currentStock ? 'Estoque máximo atingido' : 'Adicionar mais'}
+                    title={!isSpecialItem && item.quantity * (item.stockQuantity ?? 1) >= item.product.currentStock ? 'Estoque máximo atingido' : 'Adicionar mais'}
                   >
                     <Plus className="w-3 h-3" />
                   </button>
@@ -797,8 +811,8 @@ export const PDVView: React.FC<PDVViewProps> = ({
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
-            ))
-          )}
+            );
+            }))}
         </div>
 
         {/* Cart Totals & Discount Footer */}

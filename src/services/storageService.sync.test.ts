@@ -218,4 +218,35 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     const movements = (svc as any).get('hd_system_movements', []);
     expect(movements.find((m: any) => m.productId === 'p-x')).toBeUndefined();
   });
+
+  // ─── FASE 3: compostos/frações não bloqueiam carrinho por estoque zerado ───
+  describe('isCompositeOrFractionProduct (Fase 3)', () => {
+    it('identifica composto e fração; nega produto comum e fragmentável em si', () => {
+      (svc as any).set('hd_system_products', [
+        { id: 'p-comp', name: 'Caipirinha', isComposite: true, currentStock: 0 },
+        { id: 'p-bottle', name: 'Vodka 1L', is_fragmentable: true, fraction_product_id: 'p-dose', currentStock: 5 },
+        { id: 'p-dose', name: 'Dose Vodka', currentStock: 0 },
+        { id: 'p-normal', name: 'Refri', currentStock: 10 },
+      ]);
+      expect(svc.isCompositeOrFractionProduct('p-comp')).toBe(true);   // composto
+      expect(svc.isCompositeOrFractionProduct('p-dose')).toBe(true);   // fração (referenciada)
+      expect(svc.isCompositeOrFractionProduct('p-normal')).toBe(false); // comum
+      expect(svc.isCompositeOrFractionProduct('p-bottle')).toBe(false); // fragmentável não é fração
+    });
+
+    it('não bloqueia adição ao carrinho por estoque zerado de composto/fração', () => {
+      (svc as any).set('hd_system_products', [
+        { id: 'p-comp', name: 'Caipirinha', isComposite: true, currentStock: 0 },
+        { id: 'p-dose', name: 'Dose Vodka', currentStock: 0 },
+        { id: 'p-bottle', name: 'Vodka 1L', is_fragmentable: true, fraction_product_id: 'p-dose', currentStock: 5 },
+        { id: 'p-normal', name: 'Refri', currentStock: 10 },
+      ]);
+      // Mesma guarda usada em PDVView.handleAddToCart:
+      //   blocked = realStock <= 0 && !isCompositeOrFraction
+      const blocked = (realStock: number, isSpecial: boolean) => realStock <= 0 && !isSpecial;
+      expect(blocked(0, svc.isCompositeOrFractionProduct('p-comp'))).toBe(false); // composto não bloqueia
+      expect(blocked(0, svc.isCompositeOrFractionProduct('p-dose'))).toBe(false); // fração não bloqueia
+      expect(blocked(0, svc.isCompositeOrFractionProduct('p-normal'))).toBe(true); // comum bloqueia
+    });
+  });
 });

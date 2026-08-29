@@ -242,7 +242,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       };
 
       // Save to storage (async — calls process_sale_transaction RPC)
-      await storageService.addSale(newSale);
+      const saleResult = await storageService.addSale(newSale);
+      if (!saleResult.success) {
+        // RPC falhou (ex.: estoque insuficiente de ingrediente/garrafa). O estoque
+        // local já foi restaurado em addSale(); exibimos o erro e mantemos o
+        // carrinho e o modal abertos para o operador corrigir.
+        posAudio.error();
+        setPaymentError(saleResult.message || 'Erro ao finalizar venda. Verifique o saldo de estoque e tente novamente.');
+        return;
+      }
       posAudio.chime();
 
       // ✅ Global notification for new sale
