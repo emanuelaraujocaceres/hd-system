@@ -1137,9 +1137,9 @@ Resumo de DLQ por filial/org.
 
 ### RPCs de escrita (SECURITY DEFINER)
 - ajustar_estoque(p_product_id, p_quantity, p_type, p_reason, p_operator_name, p_organization_id, p_store_branch_id) -> json. Ajuste de estoque. Grants: authenticated + service_role (NAO anon - regra 9).
-- process_sale_transaction(p_sale_id, ...) -> TABLE(success, message). Cardapio anon. Grants: anon + authenticated + service_role (excecao 0f).
+- process_sale_transaction(p_sale_id, ...) -> TABLE(success, message). Cardapio anon. Grants: authenticated, anon, service_role.
 - process_sale_atomic(p_sale_data, p_items, p_payments, p_session_id) -> jsonb. Server-only. Grants: service_role.
-- cancel_sale_atomic(p_sale_id uuid) -> jsonb. Restaura estoque (normal / composto / fração) e marca a venda como cancelled. Chamado diretamente do frontend (cliente autenticado) via cancelSaleWithStockRestore. ⚠️ VERIFICAR NO BANCO (pg_proc / SQL Editor): (1) assinatura real — doc anterior listava `(p_sale_id, p_session_id)`, mas o frontend envia apenas `p_sale_id`; se houver `p_session_id` obrigatório, a chamada falha. (2) Grant: precisa de `GRANT EXECUTE TO authenticated` (com validação de org+branch dentro da RPC), espelhando `process_sale_transaction`. Se estiver apenas com grant `service_role`, a chamada do PDV é NEGADA (permissão insuficiente) — cancelamento não funciona pelo cliente.
+- cancel_sale_atomic(p_sale_id uuid) -> jsonb. Restaura estoque (normal / composto / fração) e marca a venda como cancelled. Chamado do frontend (cliente autenticado) via cancelSaleWithStockRestore. Grants: authenticated, service_role.
 - create_customer_session(...) -> jsonb. Server-only. Grants: service_role.
 - close_cash_session(p_session_id, p_final_balance, p_notes) -> jsonb. Server-only. Grants: service_role.
 - create_filial_backup(...) -> uuid. Grants: authenticated + service_role.
@@ -1198,7 +1198,7 @@ Principais migracoes recentes de projeto (por data):
 | 2 | Media | financial_transactions_insert_own sem store_branch_id no WITH CHECK. | BUG-RLS-002 |
 | 3 | Media | admin_insert_org_users sem store_branch_id no WITH CHECK. | BUG-RLS-002 |
 | 4 | Baixa | Triggers fn_prevent_negative_stock + fn_sync_product_name em products. AGENTS.md regra 8 proibe triggers de estoque no banco. | 8 |
-| 5 | - | (Resolvido) 3 RPCs de venda: so process_sale_transaction e anon; process_sale_atomic / cancel_sale_atomic sao server-only. Sem violacao. | 0f |
+| 5 | - | (Resolvido) RPCs de venda: process_sale_transaction tem grant authenticated+anon+service_role; cancel_sale_atomic tem grant authenticated+service_role (chamado do PDV) e process_sale_atomic segue server-only (service_role). Sem violacao de RLS. | 0f |
 | 6 | Doc | cardapio_branch_from_header() existe mas policies anon inlineiam current_setting. | 0f (clareza) |
 | 7 | Alta (processo) | Nenhuma migration de projeto em storage.migrations (so storage-schema). Risco de DR / ambiente limpo. | - |
 
