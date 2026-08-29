@@ -3348,29 +3348,9 @@ id: StorageService.ensureUuid(settings.id),
     // Local update for instant UI (deductStockLocal não cria mais movimentação)
     this.deductStockLocal(productId, quantityDelta, reason, operatorName);
 
-    // Ajuste manual: registra a movimentação no frontend (não há RPC de venda
-    // aqui; somente process_sale_transaction cobre vendas). Isso mantém o
-    // histórico de movimentações de ajustes manuais.
-    const adjProd = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []).find((p) => p.id === productId);
-    if (adjProd) {
-      const movement: StockMovement = {
-        id: StorageService.newId(),
-        productId,
-        productName: adjProd.name,
-        type: quantityDelta > 0 ? 'in' : 'out',
-        quantity: Math.abs(quantityDelta),
-        previousStock: adjProd.currentStock - quantityDelta,
-        newStock: adjProd.currentStock,
-        reason,
-        date: new Date().toISOString(),
-        operatorName,
-        storeBranchId: adjProd.storeBranchId,
-        organizationId: this.getCurrentOrgId(),
-      };
-      this.saveStockMovement(movement);
-    }
-
     // ─── RPC: ajustar_estoque (server-side atomic) ─────────────
+    // O RPC insere a movimentação em stock_movements e o Realtime propaga para
+    // os clientes — o frontend NÃO cria movimentação para evitar duplicação.
     // Fire-and-forget: localStorage already updated for instant UI.
     // If RPC fails, DLQ records it for later retry.
     try {
