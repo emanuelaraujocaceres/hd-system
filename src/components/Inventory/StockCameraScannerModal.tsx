@@ -260,8 +260,8 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   const handleAddStockToExisting = async () => {
     if (!scannedProduct || addQty <= 0) return;
 
-    const reasonText = `Entrada C\u00e2mera: ${addQty}un - Filial ${currentBranch?.name || 'Matriz'}`;
-    await storageService.updateStock(scannedProduct.id, addQty, reasonText, 'C\u00e2mera HD-System');
+    const reasonText = `Entrada Câmera: ${addQty}un - Filial ${currentBranch?.name || 'Matriz'}`;
+    await storageService.updateStock(scannedProduct.id, addQty, reasonText, 'Câmera HD-System');
 
     posAudio.chime();
     if (onProductsImported) onProductsImported();
@@ -381,7 +381,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                 )}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Entrada r\u00e1pida por c\u00f3digo de barras ou documento A4 do fornecedor
+                Entrada rápida por código de barras ou documento A4 do fornecedor
               </p>
             </div>
           </div>
@@ -418,7 +418,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                   Como deseja entrar no estoque?
                 </h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
-                  Escolha o tipo de entrada pela c\u00e2mera.
+                  Escolha o tipo de entrada pela câmera.
                 </p>
               </div>
               {cameraError && (
@@ -432,7 +432,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                   className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-colors flex items-center justify-center gap-2"
                 >
                   <ScanLine className="w-4 h-4" />
-                  <span>Escanear C\u00f3digo de Barras</span>
+                  <span>Escanear Código de Barras</span>
                 </button>
                 <button
                   onClick={() => { setMode('doc'); setIsDocScannerOpen(true); }}
@@ -455,7 +455,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                     <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <div>
                       <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Produto encontrado!</p>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400">C\u00f3digo: {scannedBarcode}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Código: {scannedBarcode}</p>
                     </div>
                   </div>
                   <div className="p-3 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-1.5">
@@ -500,7 +500,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                   <input
                     name="manualBarcode"
                     type="text"
-                    placeholder="Digite o c\u00f3digo manualmente..."
+                    placeholder="Digite o código manualmente..."
                     className="flex-1 px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                   <button
@@ -516,7 +516,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                 onClick={stopScanner}
                 className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-600 dark:text-slate-400 text-xs font-bold transition-colors"
               >
-                Fechar C\u00e2mera
+                Fechar Câmera
               </button>
             </>
           )}
@@ -584,7 +584,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                 }}
               >
                 <span className="text-white text-sm sm:text-base font-bold bg-black/50 px-4 py-1.5 rounded-full backdrop-blur-sm shadow-lg">
-                  Enquadre o c\u00f3digo de barras ou QR Code
+                  Enquadre o código de barras ou QR Code
                 </span>
               </div>
             </div>
@@ -607,7 +607,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                       onClick={handleScanNext}
                       className="flex-1 py-2.5 rounded-xl bg-white text-emerald-700 text-xs font-bold transition-colors hover:bg-emerald-50 active:scale-[0.98]"
                     >
-                      Escanear Pr\u00f3ximo
+                      Escanear Próximo
                     </button>
                     <button
                       onClick={stopScanner}
@@ -685,7 +685,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                 <input
                   name="manualBarcode"
                   type="text"
-                  placeholder="Digite o c\u00f3digo manualmente..."
+                  placeholder="Digite o código manualmente..."
                   className="flex-1 px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <button
