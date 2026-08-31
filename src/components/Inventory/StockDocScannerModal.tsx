@@ -518,9 +518,9 @@ export const StockDocScannerModal: React.FC<StockDocScannerModalProps> = ({
           {/* Canvas oculto de detecção */}
           <canvas ref={canvasRef} className="hidden" />
 
-          {/* Overlay A4 */}
+          {/* Overlay A4 — ocupa quase toda a largura da tela para o documento ficar grande e o OCR ler melhor */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="relative w-[70%] max-w-xs aspect-[1/1.414]">
+            <div className="relative w-[92%] md:w-[55vh] aspect-[1/1.414]">
               {/* Escurecer entorno — clip por bordas */}
               <div className="absolute inset-0 bg-black/40" />
               {/* Moldura clara */}
