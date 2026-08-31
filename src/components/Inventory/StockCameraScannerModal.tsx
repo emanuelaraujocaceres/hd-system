@@ -9,10 +9,13 @@ import {
   Building2,
   Zap,
   ZapOff,
+  ScanLine,
+  FileText,
 } from 'lucide-react';
 import { Product, StoreBranch } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { StockDocScannerModal } from './StockDocScannerModal';
 
 interface StockCameraScannerModalProps {
   isOpen: boolean;
@@ -29,7 +32,9 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   onProductsImported,
   onNavigateToNewProduct,
 }) => {
-  // Scanner state
+  // Choice menu: 'menu' (choose method) | 'barcode' | 'doc'
+  const [mode, setMode] = useState<'menu' | 'barcode' | 'doc'>('menu');
+  const [isDocScannerOpen, setIsDocScannerOpen] = useState(false);
   const [scannerStatus, setScannerStatus] = useState<'idle' | 'scanning' | 'found'>('idle');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scanPaused, setScanPaused] = useState(false);
@@ -199,6 +204,8 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
     setScanFlash(false);
     setScanPaused(false);
     setAddQty(1);
+    setMode('menu');
+    setIsDocScannerOpen(false);
   };
 
   // ✅ FIXED: Handle barcode detection with proper dependencies
@@ -374,7 +381,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                 )}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Escaneie c\u00f3digos de barras para entrada r\u00e1pida de estoque
+                Entrada r\u00e1pida por c\u00f3digo de barras ou documento A4 do fornecedor
               </p>
             </div>
           </div>
@@ -400,18 +407,18 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
             </div>
           )}
 
-          {/* PRODUCT TAB - Camera start screen */}
-          {!isScannerOpen && (
-            <div className="p-8 rounded-2xl border-2 border-dashed border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] flex flex-col items-center justify-center text-center space-y-4">
+          {/* PRODUCT TAB - Camera start screen (choose method) */}
+          {!isScannerOpen && !isDocScannerOpen && (
+            <div className="p-8 rounded-2xl border-2 border-dashed border-slate-300 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b] flex flex-col items-center text-center space-y-4">
               <div className="p-4 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
                 <Camera className="w-8 h-8" />
               </div>
               <div>
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Aponta a c\u00e2mera para o c\u00f3digo de barras
+                  Como deseja entrar no estoque?
                 </h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm">
-                  Escaneie v\u00e1rios produtos em sequ\u00eancia. Produtos cadastrados recebem entrada direto ao estoque. Produtos novos s\u00e3o cadastrados automaticamente.
+                  Escolha o tipo de entrada pela c\u00e2mera.
                 </p>
               </div>
               {cameraError && (
@@ -419,13 +426,22 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
                   {cameraError}
                 </div>
               )}
-              <button
-                onClick={startScanner}
-                className="w-full max-w-xs py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-colors flex items-center justify-center gap-2"
-              >
-                <Camera className="w-4 h-4" />
-                <span>Ligar C\u00e2mera e Escanear</span>
-              </button>
+              <div className="w-full max-w-sm space-y-2.5">
+                <button
+                  onClick={() => { setMode('barcode'); startScanner(); }}
+                  className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-colors flex items-center justify-center gap-2"
+                >
+                  <ScanLine className="w-4 h-4" />
+                  <span>Escanear C\u00f3digo de Barras</span>
+                </button>
+                <button
+                  onClick={() => { setMode('doc'); setIsDocScannerOpen(true); }}
+                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md transition-colors flex items-center justify-center gap-2"
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Escanear Documento A4 (NF do Fornecedor)</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -689,6 +705,19 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
             </button>
           </div>
         </div>
+      )}
+
+      {/* DOCUMENTO A4 scanner overlay */}
+      {isDocScannerOpen && (
+        <StockDocScannerModal
+          isOpen={isDocScannerOpen}
+          onClose={() => {
+            setIsDocScannerOpen(false);
+            setMode('menu');
+          }}
+          currentBranch={currentBranch ? { name: currentBranch.name, city: currentBranch.city || '' } : undefined}
+          onProductsImported={onProductsImported}
+        />
       )}
     </div>
   );
