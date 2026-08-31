@@ -94,6 +94,8 @@ export const StockDocScannerModal: React.FC<StockDocScannerModalProps> = ({
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [detectedDoc, setDetectedDoc] = useState<DetectedDoc | null>(null);
   const [stabilityRef] = useState(() => ({ v: 0 }));
+  const lastDocRef = useRef<DetectedDoc | null>(null); // última posição/tamanho estáveis
+  const warmupStartRef = useRef<number>(0); // tempo de entrada no modo capture (foco)
   const [stabilityCount, setStabilityCount] = useState(0);
   const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
   const [lastCaptureTime, setLastCaptureTime] = useState(0);
@@ -136,6 +138,8 @@ export const StockDocScannerModal: React.FC<StockDocScannerModalProps> = ({
     setCameraError(null);
     setDetectedDoc(null);
     stabilityRef.v = 0;
+    lastDocRef.current = null;
+    warmupStartRef.current = 0;
     setStabilityCount(0);
     setCapturedPage(null);
     setOcrResult(null);
@@ -156,6 +160,8 @@ export const StockDocScannerModal: React.FC<StockDocScannerModalProps> = ({
     setItems([]);
     setDetectedDoc(null);
     stabilityRef.v = 0;
+    lastDocRef.current = null;
+    warmupStartRef.current = Date.now(); // marca início do período de foco
     setStabilityCount(0);
     setPhase('capture');
 
@@ -205,30 +211,67 @@ export const StockDocScannerModal: React.FC<StockDocScannerModalProps> = ({
 
       const doc = detectDocumentEdges(ctx, canvas.width, canvas.height);
 
+      // Período de foco/entrada: dá tempo de enquadrar antes de contar estabilidade
+      const warmupMs = 1500;
+      if (Date.now() - warmupStartRef.current < warmupMs) {
+        setDetectedDoc(doc);
+        stabilityRef.v = 0;
+        setStabilityCount(0);
+        return;
+      }
+
       if (doc) {
-        const prev = stabilityRef.v;
-        const currentHash = Math.round(doc.x / 10) * 1000 + Math.round(doc.y / 10);
-        if (currentHash === prev) {
-          const count = stabilityRef.v === 0 ? 1 : stabilityRef.v;
-          stabilityRef.v = count + 1;
-          setStabilityCount(count + 1);
+        // Tamanho mínimo real do documento (evita capturar região acidental/pequena)
+        const canvasW = canvas.width || 1;
+        const canvasH = canvas.height || 1;
+        const minW = canvasW * 0.45;
+        const minH = canvasH * 0.45;
+        const docBigEnough = doc.width >= minW && doc.height >= minH;
+
+        if (!docBigEnough) {
+          // Detectou algo, mas pequeno demais — não trata como documento estável
+          lastDocRef.current = null;
+          stabilityRef.v = 0;
+          setStabilityCount(0);
+          setDetectedDoc(doc);
+          return;
+        }
+
+        const prev = lastDocRef.current;
+        const tol = 6; // tolerância (px) por eixo/tamanho — precisa estar PARADO de verdade
+        const moved =
+          !prev ||
+          Math.abs(doc.x - prev.x) > tol ||
+          Math.abs(doc.y - prev.y) > tol ||
+          Math.abs(doc.width - prev.width) > tol ||
+          Math.abs(doc.height - prev.height) > tol;
+
+        if (moved) {
+          // mudou de posição/tamanho → reinicia contagem de estabilidade
+          lastDocRef.current = { x: doc.x, y: doc.y, width: doc.width, height: doc.height };
+          stabilityRef.v = 1;
+          setStabilityCount(1);
           setDetectedDoc(doc);
         } else {
-          stabilityRef.v = currentHash;
-          setStabilityCount(0);
+          // mesmo documento, firme e parado → acumula estabilidade
+          stabilityRef.v += 1;
+          setStabilityCount(stabilityRef.v);
           setDetectedDoc(doc);
         }
 
-        if (stabilityRef.v >= 45) {
+        // Frames estáveis consecutivos (~2s a 30fps) antes de capturar
+        if (stabilityRef.v >= 60) {
           const now = Date.now();
           if (now - lastCaptureTime > 2000) {
             doCapture(doc);
             stabilityRef.v = 0;
+            lastDocRef.current = null;
             setStabilityCount(0);
             setLastCaptureTime(now);
           }
         }
       } else {
+        lastDocRef.current = null;
         stabilityRef.v = 0;
         setStabilityCount(0);
         setDetectedDoc(null);
@@ -241,7 +284,7 @@ export const StockDocScannerModal: React.FC<StockDocScannerModalProps> = ({
         detectionIntervalRef.current = null;
       }
     };
-  }, [stream, autoCaptureEnabled, phase, lastCaptureTime, stabilityRef]);
+  }, [stream, autoCaptureEnabled, phase, lastCaptureTime, stabilityRef, lastDocRef, warmupStartRef]);
 
   // ── Captura ─────────────────────────────────────────────────────
   const doCapture = useCallback((doc: DetectedDoc | null) => {
@@ -547,9 +590,11 @@ export const StockDocScannerModal: React.FC<StockDocScannerModalProps> = ({
           <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 text-white text-[10px] font-bold bg-black/50 px-3 py-1 rounded-full backdrop-blur-sm"
             style={{ top: 'max(4rem, calc(env(safe-area-inset-top) + 1rem))' }}>
             <span className={`w-1.5 h-1.5 rounded-full ${detectedDoc ? 'bg-emerald-400 animate-pulse' : 'bg-white/40'}`} />
-            {detectedDoc
-              ? stabilityCount >= 40 ? 'Capturando...' : 'Documento detectado — mantenha firme'
-              : 'Aproxime o documento do fornecedor'}
+            {Date.now() - warmupStartRef.current < 1500
+              ? 'Focando a câmera — enquadre o papel'
+              : detectedDoc
+                ? stabilityCount >= 60 ? 'Capturando...' : 'Documento detectado — mantenha firme'
+                : 'Aproxime o documento do fornecedor'}
           </div>
         </div>
 
