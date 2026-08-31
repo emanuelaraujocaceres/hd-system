@@ -220,7 +220,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const handleStartLiveCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
       });
       setCameraStream(stream);
       setIsCameraModalOpen(true);
@@ -242,8 +242,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+      canvas.width = video.videoWidth || 1920;
+      canvas.height = video.videoHeight || 1080;
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);

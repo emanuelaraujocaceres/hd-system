@@ -26,11 +26,14 @@ import {
   Check,
   Printer,
   Send,
+  PackagePlus,
 } from 'lucide-react';
-import { Supplier, NFRecord } from '../../types';
+import { Supplier, NFRecord, NFRecordItem } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { NFMultiCaptureModal } from './NFMultiCaptureModal';
+import type { OcrResult } from '../../services/ocrService';
+import type { Product } from '../../types';
 
 interface NFItem {
   productName: string;
@@ -63,6 +66,8 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
   const [note, setNote] = useState('');
   const [accessKey, setAccessKey] = useState('');
   const [pdfFile, setPdfFile] = useState<string | null>(null);
+  // Adicionar itens da NF ao estoque automaticamente (match + criação)
+  const [addToInventory, setAddToInventory] = useState(true);
 
   // Multi-page capture (Fase 2)
   const [capturedPages, setCapturedPages] = useState<string[]>([]);
@@ -116,19 +121,87 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
     }
   };
 
-  const handleCaptured = useCallback((pages: string[], templateId: string, accessKey?: string) => {
+  const handleCaptured = useCallback((pages: string[], templateId: string, accessKey?: string, ocrResult?: OcrResult) => {
     setCapturedPages(pages);
     setSelectedTemplate(templateId);
     if (accessKey) setAccessKey(accessKey);
+
+    // Auto-fill form from OCR results
+    if (ocrResult?.parsed) {
+      const parsed = ocrResult.parsed;
+      if (parsed.supplier?.name) setSupplierName(parsed.supplier.name);
+      if (parsed.supplier?.cnpj) setSupplierCNPJ(parsed.supplier.cnpj);
+      if (parsed.documentNumber) setNfNumber(parsed.documentNumber);
+      if (parsed.total) setTotalValue(parsed.total);
+      if (parsed.items.length > 0) {
+        const mappedItems: NFItem[] = parsed.items.map((it: NFRecordItem) => ({
+          productName: it.productName,
+          quantity: it.quantity || 1,
+          unitPrice: it.unitPrice || 0,
+        }));
+        setItems(mappedItems);
+      }
+    }
+
     setIsCaptureOpen(false);
   }, []);
 
   const clearCaptured = useCallback(() => setCapturedPages([]), []);
 
+  /**
+   * Adiciona itens da NF ao estoque:
+   * - Faz match por nome (normalizado) contra produtos existentes
+   * - Produto existente → soma a quantidade (updateStock)
+   * - Produto novo → cria com costPrice = unitPrice do item e salva
+   */
+  const addItemsToInventory = useCallback(async (itemsToAdd: NFItem[]) => {
+    const existing = storageService.getProducts();
+    const norm = (s: string) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const operatorName = 'NF Scanner';
+
+    for (const item of itemsToAdd) {
+      const name = item.productName?.trim();
+      if (!name || item.quantity <= 0) continue;
+
+      // Match por nome normalizado
+      const match = existing.find((p: Product) => norm(p.name) === norm(name));
+      if (match) {
+        await storageService.updateStock(match.id, item.quantity, 'Entrada via NF', operatorName);
+      } else {
+        // Cria produto novo (sem barcode, sem categoria específica)
+        const newProd: Product = {
+          id: `prod-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          barcode: '',
+          name,
+          category: 'Geral',
+          unit: 'un',
+          costPrice: item.unitPrice || 0,
+          salePrice: item.unitPrice || 0,
+          currentStock: item.quantity,
+          minStock: 0,
+          maxStock: 0,
+          imageUrl: '',
+          active: true,
+          updatedAt: new Date().toISOString(),
+        };
+        storageService.saveProduct(newProd);
+      }
+    }
+  }, []);
+
   const handleSaveNF = async () => {
     if (!nfNumber.trim()) {
       alert('Número da NF é obrigatório.');
       return;
+    }
+
+    // Adicionar itens ao estoque antes de salvar o registro da NF
+    if (addToInventory && items.length > 0) {
+      try {
+        await addItemsToInventory(items);
+      } catch (e: any) {
+        console.warn('[NF] Erro ao adicionar itens ao estoque:', e?.message);
+      }
     }
 
     const nfId = `nf-${Date.now()}`;
@@ -441,6 +514,24 @@ export const NFAddModal: React.FC<NFAddModalProps> = ({
             onCaptured={handleCaptured}
             initialTemplate={selectedTemplate}
           />
+
+          {/* Add to inventory toggle */}
+          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="addToInventory"
+              checked={addToInventory}
+              onChange={(e) => setAddToInventory(e.target.checked)}
+              className="w-4 h-4 accent-emerald-600"
+            />
+            <label htmlFor="addToInventory" className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1 cursor-pointer">
+              <PackagePlus className="w-3.5 h-3.5" />
+              Adicionar itens ao estoque
+            </label>
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 ml-auto">
+              cria/atualiza produtos automaticamente
+            </span>
+          </div>
         </div>
 
         {/* Footer */}

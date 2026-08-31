@@ -45,9 +45,6 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedNFs, setSelectedNFs] = useState<string[]>([]);
   const [showBulkWhatsapp, setShowBulkWhatsapp] = useState(false);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [scannedImage, setScannedImage] = useState<string | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
   const [bulkWhatsappNumber, setBulkWhatsappNumber] = useState('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [showWhatsappModal, setShowWhatsappModal] = useState<string | null>(null);
@@ -162,48 +159,8 @@ export const NFHistoryView: React.FC<NFHistoryViewProps> = ({ products, supplier
     setExpandedId(expandedId === id ? null : id);
   };
 
-  // ── Camera & Document Scan ──
-  const startCamera = async () => {
-    setCameraError(null);
-    setScannedImage(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-      });
-      setCameraStream(stream);
-      setIsAddModalOpen(true);
-    } catch (err: any) {
-      setCameraError('Câmera indisponível. Verifique as permissões.');
-    }
-  };
-
-  const captureDocument = () => {
-    if (!cameraStream) return;
-    const video = document.querySelector('#nf-scan-video') as HTMLVideoElement;
-    if (!video) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
-    const imageData = canvas.toDataURL('image/jpeg', 0.95);
-    setScannedImage(imageData);
-    stopCamera();
-  };
-
-  const stopCamera = () => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach((t) => t.stop());
-      setCameraStream(null);
-    }
-  };
-
   const closeAddModal = () => {
-    stopCamera();
     setIsAddModalOpen(false);
-    setScannedImage(null);
-    setCameraError(null);
   };
 
   // ── PDF Generation ──

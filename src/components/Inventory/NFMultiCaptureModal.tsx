@@ -1,18 +1,29 @@
 /**
- * NFMultiCaptureModal - Captura multi-página de documentos do fornecedor (Fase 2).
+ * NFMultiCaptureModal - Scanner de documentos A4 com OCR integrado.
  *
- * - Abre a câmera traseira e permite fotografar várias páginas do mesmo documento.
- * - Seleciona o modelo do documento (DANFE / Ambev / Coca / Lago Azul / Genérico)
- *   para ser usado pelo motor de OCR na Fase 3.
- * - Devolve as páginas (dataURLs) + templateId via onCaptured.
- * - NÃO faz OCR nem grava dados: apenas coleta as imagens (Fase 3 faz o parse).
+ * Funcionalidades:
+ * - Câmera fullscreen com overlay de proporção A4
+ * - Detecção automática de bordas do documento
+ * - Captura automática quando documento estabiliza
+ * - Correção de perspectiva e contraste
+ * - OCR via Tesseract.js com preview editável
+ * - Auto-extração de dados (fornecedor, CNPJ, itens, totais)
+ * - Multi-página com QR Code para chave de acesso
+ *
+ * Mantém compatibilidade com onCaptured(pages, templateId, accessKey?).
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { X, Camera, Trash2, Check, Layers, ScanLine, KeyRound } from 'lucide-react';
+import {
+  X, Camera, Trash2, Check, Layers, ScanLine, KeyRound,
+  FileText, Loader2, AlertTriangle, RotateCcw, Zap,
+} from 'lucide-react';
 import { useToast } from '../shared/Toast';
+import { ocrPages, detectQrAccessKey, type OcrResult } from '../../services/ocrService';
+import type { NFRecordItem } from '../../types';
 
-// Modelos alinhados com prototypes/ocr-bench/templates.json (Fase 3 reutiliza).
+// ── Templates ─────────────────────────────────────────────────────────
+
 export const NF_TEMPLATE_OPTIONS = [
   { id: 'danfe', label: 'DANFE (NF-e)' },
   { id: 'ambev', label: 'Ambev' },
@@ -23,12 +34,173 @@ export const NF_TEMPLATE_OPTIONS = [
 
 export type NFTemplateId = (typeof NF_TEMPLATE_OPTIONS)[number]['id'];
 
+// ── Tipos ─────────────────────────────────────────────────────────────
+
+type Phase = 'camera' | 'ocr' | 'review';
+
+interface DetectedDoc {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// ── Props ─────────────────────────────────────────────────────────────
+
 interface NFMultiCaptureModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCaptured: (pages: string[], templateId: string, accessKey?: string) => void;
+  onCaptured: (
+    pages: string[],
+    templateId: string,
+    accessKey?: string,
+    ocrResult?: OcrResult,
+  ) => void;
   initialTemplate?: string;
 }
+
+// ── Edge detection helpers ─────────────────────────────────────────────
+
+/**
+ * Detecta se há um retângulo claro (documento) no centro do canvas.
+ * Usa sampling de brilho em pontos estratégicos — sem bibliotecas externas.
+ */
+function detectDocumentEdges(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+): DetectedDoc | null {
+  // Região central: 80% da largura, 90% da altura (A4 é mais alto que largo)
+  const marginX = w * 0.1;
+  const marginY = h * 0.05;
+  const regionW = w - marginX * 2;
+  const regionH = h - marginY * 2;
+
+  // Sample brightness in a 6x8 grid across the central region
+  const cols = 6;
+  const rows = 8;
+  const cellW = regionW / cols;
+  const cellH = regionH / rows;
+
+  let brightCount = 0;
+  let totalCells = 0;
+  let minX = w, maxX = 0, minY = h, maxY = 0;
+
+  const sampleSize = 4; // pixels to sample per cell center
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cx = Math.floor(marginX + c * cellW + cellW / 2);
+      const cy = Math.floor(marginY + r * cellH + cellH / 2);
+
+      // Average brightness of a small block
+      let brightness = 0;
+      let count = 0;
+      const half = Math.floor(sampleSize / 2);
+      for (let dy = -half; dy <= half; dy++) {
+        for (let dx = -half; dx <= half; dx++) {
+          const px = Math.min(Math.max(cx + dx, 0), w - 1);
+          const py = Math.min(Math.max(cy + dy, 0), h - 1);
+          const data = ctx.getImageData(px, py, 1, 1).data;
+          brightness += (data[0] + data[1] + data[2]) / 3;
+          count++;
+        }
+      }
+      brightness /= count;
+      totalCells++;
+
+      if (brightness > 160) {
+        brightCount++;
+        const cellX = marginX + c * cellW;
+        const cellY = marginY + r * cellH;
+        if (cellX < minX) minX = cellX;
+        if (cellX + cellW > maxX) maxX = cellX + cellW;
+        if (cellY < minY) minY = cellY;
+        if (cellY + cellH > maxY) maxY = cellY + cellH;
+      }
+    }
+  }
+
+  // Need at least 60% bright cells to consider it a document
+  const brightRatio = brightCount / totalCells;
+  if (brightRatio < 0.5) return null;
+
+  const docW = maxX - minX;
+  const docH = maxY - minY;
+  const docRatio = docH / docW; // A4 ≈ 1.414
+
+  // Document must be at least 30% of the frame and roughly A4 shaped
+  if (docW < w * 0.25 || docH < h * 0.3) return null;
+  if (docRatio < 1.0 || docRatio > 2.0) return null;
+
+  return { x: minX, y: minY, width: docW, height: docH };
+}
+
+/**
+ * Aplica correção de perspectiva simples (crop + contraste) na imagem capturada.
+ * Para uma correção completa de 4 pontos seria necessário WebGL/matrizes —
+ * aqui fazemos crop na área detectada + ajuste de contraste.
+ */
+function enhanceCapturedImage(
+  sourceCanvas: HTMLCanvasElement,
+  doc: DetectedDoc | null,
+): string {
+  const ctx = sourceCanvas.getContext('2d');
+  if (!ctx) return sourceCanvas.toDataURL('image/jpeg', 0.92);
+
+  const w = sourceCanvas.width;
+  const h = sourceCanvas.height;
+
+  // Determine crop area
+  let sx: number, sy: number, sw: number, sh: number;
+  if (doc) {
+    // Add small padding
+    const pad = Math.min(doc.width, doc.height) * 0.02;
+    sx = Math.max(0, Math.floor(doc.x - pad));
+    sy = Math.max(0, Math.floor(doc.y - pad));
+    sw = Math.min(Math.ceil(doc.width + pad * 2), w - sx);
+    sh = Math.min(Math.ceil(doc.height + pad * 2), h - sy);
+  } else {
+    // No detection — use full frame
+    sx = 0; sy = 0; sw = w; sh = h;
+  }
+
+  // Create output canvas at cropped size
+  const out = document.createElement('canvas');
+  out.width = sw;
+  out.height = sh;
+  const outCtx = out.getContext('2d');
+  if (!outCtx) return sourceCanvas.toDataURL('image/jpeg', 0.92);
+
+  // Draw cropped region
+  outCtx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  // Enhance contrast
+  try {
+    const imageData = outCtx.getImageData(0, 0, sw, sh);
+    const data = imageData.data;
+    let min = 255, max = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      if (gray < min) min = gray;
+      if (gray > max) max = gray;
+    }
+    const range = max - min || 1;
+    const factor = 255 / range;
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = Math.min(255, Math.max(0, (data[i] - min) * factor));
+      data[i + 1] = Math.min(255, Math.max(0, (data[i + 1] - min) * factor));
+      data[i + 2] = Math.min(255, Math.max(0, (data[i + 2] - min) * factor));
+    }
+    outCtx.putImageData(imageData, 0, 0);
+  } catch {
+    // Canvas tainted — skip enhancement
+  }
+
+  return out.toDataURL('image/jpeg', 0.92);
+}
+
+// ── Component ─────────────────────────────────────────────────────────
 
 export const NFMultiCaptureModal: React.FC<NFMultiCaptureModalProps> = ({
   isOpen,
@@ -37,14 +209,43 @@ export const NFMultiCaptureModal: React.FC<NFMultiCaptureModalProps> = ({
   initialTemplate = 'danfe',
 }) => {
   const { addToast } = useToast();
+
+  // Core state
+  const [phase, setPhase] = useState<Phase>('camera');
   const [pages, setPages] = useState<string[]>([]);
   const [templateId, setTemplateId] = useState<string>(initialTemplate);
+  const [accessKey, setAccessKey] = useState<string | null>(null);
+
+  // Camera state
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
-  const [accessKey, setAccessKey] = useState<string | null>(null);
+
+  // Edge detection state
+  const [detectedDoc, setDetectedDoc] = useState<DetectedDoc | null>(null);
+  const [stabilityCount, setStabilityCount] = useState(0);
+  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(true);
+  const [lastCaptureTime, setLastCaptureTime] = useState(0);
+
+  // OCR state
+  const [ocrProgress, setOcrProgress] = useState({ status: '', progress: 0 });
+  const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
+
+  // Review state (editable OCR results)
+  const [reviewSupplier, setReviewSupplier] = useState('');
+  const [reviewCNPJ, setReviewCNPJ] = useState('');
+  const [reviewDocNumber, setReviewDocNumber] = useState('');
+  const [reviewTotal, setReviewTotal] = useState('');
+  const [reviewItems, setReviewItems] = useState<NFRecordItem[]>([]);
+
+  // Refs
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stabilityRef = useRef(0);
+
+  // ── Camera lifecycle ──────────────────────────────────────────────
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -52,6 +253,10 @@ export const NFMultiCaptureModal: React.FC<NFMultiCaptureModalProps> = ({
       streamRef.current = null;
     }
     setStream(null);
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
+    }
   }, []);
 
   const startCamera = useCallback(async () => {
@@ -61,24 +266,24 @@ export const NFMultiCaptureModal: React.FC<NFMultiCaptureModalProps> = ({
       const media = navigator.mediaDevices;
       if (!media || !media.getUserMedia) throw new Error('getUserMedia indisponível');
       const s = await media.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        } as MediaTrackConstraints & { focusMode?: string },
       });
       streamRef.current = s;
       setStream(s);
       if (videoRef.current) {
-        try {
-          videoRef.current.srcObject = s;
-          await videoRef.current.play();
-        } catch {
-          /* autoplay pode falhar em alguns contextos; ignora */
-        }
+        videoRef.current.srcObject = s;
+        await videoRef.current.play();
       }
     } catch (err: any) {
       let msg = 'Câmera indisponível.';
       const name = err?.name;
-      if (name === 'NotAllowedError') msg = 'Permissão da câmera negada. Habilite o acesso no navegador.';
-      else if (name === 'NotFoundError') msg = 'Nenhuma câmera encontrada no dispositivo.';
-      else if (name === 'NotReadableError') msg = 'Câmera em uso por outro aplicativo.';
+      if (name === 'NotAllowedError') msg = 'Permissão da câmera negada.';
+      else if (name === 'NotFoundError') msg = 'Nenhuma câmera encontrada.';
+      else if (name === 'NotReadableError') msg = 'Câmera em uso por outro app.';
       setCameraError(msg);
       addToast('error', msg);
     } finally {
@@ -86,35 +291,104 @@ export const NFMultiCaptureModal: React.FC<NFMultiCaptureModalProps> = ({
     }
   }, [addToast]);
 
-  // Liga a câmera ao abrir; limpa ao fechar/desmontar.
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && phase === 'camera') {
       setPages([]);
       setCameraError(null);
       setAccessKey(null);
+      setOcrResult(null);
+      setDetectedDoc(null);
+      stabilityRef.current = 0;
+      setStabilityCount(0);
       startCamera();
     }
     return () => stopCamera();
-  }, [isOpen, startCamera, stopCamera]);
+  }, [isOpen, phase, startCamera, stopCamera]);
 
-  const capturePage = useCallback(() => {
+  // ── Edge detection loop ──────────────────────────────────────────
+
+  useEffect(() => {
+    if (!stream || !autoCaptureEnabled || phase !== 'camera') return;
+
+    detectionIntervalRef.current = setInterval(() => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState < 2) return;
+
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
+
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const doc = detectDocumentEdges(ctx, canvas.width, canvas.height);
+
+      if (doc) {
+        // Check if position is stable (within 5% tolerance)
+        const prev = stabilityRef.current;
+        const currentHash = Math.round(doc.x / 10) * 1000 + Math.round(doc.y / 10);
+        if (currentHash === prev) {
+          const count = stabilityRef.current === 0 ? 1 : stabilityRef.current;
+          stabilityRef.current = count + 1;
+          setStabilityCount(count + 1);
+          setDetectedDoc(doc);
+        } else {
+          stabilityRef.current = currentHash;
+          setStabilityCount(0);
+          setDetectedDoc(doc);
+        }
+
+        // Auto-capture after ~1.5 seconds of stability (~45 frames at 30fps)
+        if (stabilityRef.current >= 45) {
+          const now = Date.now();
+          if (now - lastCaptureTime > 2000) {
+            doCapture(doc);
+            stabilityRef.current = 0;
+            setStabilityCount(0);
+            setLastCaptureTime(now);
+          }
+        }
+      } else {
+        stabilityRef.current = 0;
+        setStabilityCount(0);
+        setDetectedDoc(null);
+      }
+    }, 33); // ~30fps
+
+    return () => {
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+        detectionIntervalRef.current = null;
+      }
+    };
+  }, [stream, autoCaptureEnabled, phase, lastCaptureTime]);
+
+  // ── Capture ──────────────────────────────────────────────────────
+
+  const doCapture = useCallback((doc: DetectedDoc | null) => {
     const video = videoRef.current;
-    if (!video || !streamRef.current) return;
-    const canvas = document.createElement('canvas');
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+
     canvas.width = video.videoWidth || 1280;
     canvas.height = video.videoHeight || 720;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+    const enhanced = enhanceCapturedImage(canvas, doc);
+
     setPages((prev) => {
-      if (prev.includes(dataUrl)) {
-        addToast('warning', 'Página duplicada ignorada.');
-        return prev;
-      }
-      return [...prev, dataUrl];
+      if (prev.length > 0 && prev[prev.length - 1] === enhanced) return prev;
+      return [...prev, enhanced];
     });
-  }, []);
+    addToast('success', 'Página capturada!');
+  }, [addToast]);
+
+  const handleManualCapture = useCallback(() => {
+    doCapture(detectedDoc);
+  }, [doCapture, detectedDoc]);
 
   const removePage = useCallback((idx: number) => {
     setPages((prev) => prev.filter((_, i) => i !== idx));
@@ -122,10 +396,12 @@ export const NFMultiCaptureModal: React.FC<NFMultiCaptureModalProps> = ({
 
   const clearPages = useCallback(() => setPages([]), []);
 
+  // ── QR Code scan ────────────────────────────────────────────────
+
   const scanQr = useCallback(async () => {
     const BarcodeDetectorClass = (window as any).BarcodeDetector;
     if (!BarcodeDetectorClass || !videoRef.current) {
-      addToast('error', 'Leitor de QR Code indisponível neste navegador.');
+      addToast('error', 'Leitor de QR indisponível neste navegador.');
       return;
     }
     try {
@@ -138,168 +414,574 @@ export const NFMultiCaptureModal: React.FC<NFMultiCaptureModalProps> = ({
       const raw = codes[0].rawValue || '';
       const key = (raw.match(/\d{44}/) || [raw.replace(/\D/g, '').slice(0, 44)])[0];
       if (!key || key.length !== 44) {
-        addToast('error', 'QR Code não contém chave de acesso válida (44 dígitos).');
+        addToast('error', 'QR não contém chave de acesso válida (44 dígitos).');
         return;
       }
       setAccessKey(key);
-      addToast('success', 'Chave de acesso lida do QR Code.');
+      addToast('success', 'Chave de acesso lida!');
     } catch {
       addToast('error', 'Falha ao ler QR Code.');
     }
   }, [addToast]);
 
+  // ── OCR processing ──────────────────────────────────────────────
+
+  const startOcr = useCallback(async () => {
+    if (pages.length === 0) {
+      addToast('error', 'Capture ao menos uma página antes.');
+      return;
+    }
+
+    setPhase('ocr');
+    setOcrProgress({ status: 'Iniciando OCR...', progress: 0 });
+
+    try {
+      const result = await ocrPages(pages, templateId, (p) => setOcrProgress(p));
+      setOcrResult(result);
+
+      // Populate review fields
+      setReviewSupplier(result.parsed.supplier?.name || '');
+      setReviewCNPJ(result.parsed.supplier?.cnpj || '');
+      setReviewDocNumber(result.parsed.documentNumber || '');
+      setReviewTotal(result.parsed.total ? String(result.parsed.total) : '');
+      setReviewItems(
+        result.parsed.items.length > 0
+          ? result.parsed.items
+          : [{ productName: '', quantity: 1, unitPrice: 0 }],
+      );
+
+      // Try to read QR from captured images
+      if (!accessKey && pages.length > 0) {
+        const key = await detectQrAccessKey(pages[0]);
+        if (key) setAccessKey(key);
+      }
+
+      setPhase('review');
+      addToast('success', `OCR concluído! Confiança: ${result.confidence}%`);
+    } catch (err: any) {
+      console.error('[OCR] Error:', err);
+      addToast('error', `Falha no OCR: ${err?.message || 'erro desconhecido'}`);
+      setPhase('camera');
+    }
+  }, [pages, templateId, accessKey, addToast]);
+
+  // ── Review item management ──────────────────────────────────────
+
+  const addReviewItem = useCallback(() => {
+    setReviewItems((prev) => [...prev, { productName: '', quantity: 1, unitPrice: 0 }]);
+  }, []);
+
+  const removeReviewItem = useCallback((idx: number) => {
+    setReviewItems((prev) => prev.filter((_, i) => i !== idx));
+  }, []);
+
+  const updateReviewItem = useCallback(
+    (idx: number, field: keyof NFRecordItem, value: string | number) => {
+      setReviewItems((prev) => {
+        const next = [...prev];
+        const item = { ...next[idx] };
+        if (field === 'productName') item.productName = value as string;
+        else if (field === 'quantity') item.quantity = Number(value) || 0;
+        else if (field === 'unitPrice') item.unitPrice = Number(value) || 0;
+        if (field === 'quantity' || field === 'unitPrice') {
+          item.subtotal = item.quantity * item.unitPrice;
+        }
+        next[idx] = item;
+        return next;
+      });
+    },
+    [],
+  );
+
+  const reviewTotalCalc = reviewItems.reduce((s, i) => s + (i.quantity || 0) * (i.unitPrice || 0), 0);
+
+  // ── Conclude ────────────────────────────────────────────────────
+
   const handleConclude = useCallback(() => {
-    onCaptured(pages, templateId, accessKey ?? undefined);
+    const finalOcrResult: OcrResult | undefined = ocrResult
+      ? {
+          ...ocrResult,
+          parsed: {
+            ...ocrResult.parsed,
+            supplier: {
+              ...ocrResult.parsed.supplier,
+              name: reviewSupplier,
+              cnpj: reviewCNPJ,
+            },
+            documentNumber: reviewDocNumber,
+            total: parseFloat(reviewTotal) || reviewTotalCalc,
+            items: reviewItems.filter((i) => i.productName.trim()),
+          },
+        }
+      : undefined;
+
+    onCaptured(pages, templateId, accessKey ?? undefined, finalOcrResult);
     setPages([]);
+    setOcrResult(null);
+    setPhase('camera');
     onClose();
-  }, [pages, templateId, accessKey, onCaptured, onClose]);
+  }, [
+    pages, templateId, accessKey, ocrResult, onCaptured, onClose,
+    reviewSupplier, reviewCNPJ, reviewDocNumber, reviewTotal,
+    reviewItems, reviewTotalCalc,
+  ]);
 
   const handleCancel = useCallback(() => {
     setPages([]);
+    setOcrResult(null);
+    setPhase('camera');
     onClose();
   }, [onClose]);
 
-  if (!isOpen) return null;
+  const handleBackToCamera = useCallback(() => {
+    setPhase('camera');
+    setOcrResult(null);
+    stabilityRef.current = 0;
+    setStabilityCount(0);
+  }, []);
 
-  return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="px-5 py-3 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between bg-slate-50 dark:bg-[#09090b]/50">
+  // ── Render: Camera Phase ────────────────────────────────────────
+
+  const renderCamera = () => (
+    <>
+      {/* Fullscreen camera */}
+      <div className="fixed inset-0 z-[10001] bg-black flex flex-col">
+        {/* Hidden canvas for capture + detection */}
+        <canvas ref={canvasRef} className="hidden" />
+
+        {/* Video — fullscreen */}
+        <div className="flex-1 relative overflow-hidden">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
+          />
+
+          {/* A4 Overlay guide */}
+          <div className="absolute inset-0 pointer-events-none">
+            {/* Darkened edges */}
+            <div className="absolute inset-0 bg-black/40" />
+
+            {/* Clear A4 window (proportional to A4: 1:1.414) */}
+            <div
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+              style={{
+                width: '75vw',
+                maxWidth: '380px',
+                aspectRatio: '1 / 1.414',
+                maxHeight: '78vh',
+              }}
+            >
+              {/* Clear area (punches through the dark overlay) */}
+              <div className="absolute inset-0 bg-transparent" />
+
+              {/* Corner markers */}
+              {/* Top-left */}
+              <div className="absolute -top-1 -left-1 w-8 h-8 border-t-[3px] border-l-[3px] border-white rounded-tl-lg" />
+              {/* Top-right */}
+              <div className="absolute -top-1 -right-1 w-8 h-8 border-t-[3px] border-r-[3px] border-white rounded-tr-lg" />
+              {/* Bottom-left */}
+              <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-[3px] border-l-[3px] border-white rounded-bl-lg" />
+              {/* Bottom-right */}
+              <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-[3px] border-r-[3px] border-white rounded-br-lg" />
+
+              {/* Dashed border */}
+              <div className="absolute inset-0 border-2 border-dashed border-white/50 rounded-lg" />
+
+              {/* Detection indicator */}
+              {detectedDoc && (
+                <div className="absolute inset-0 border-2 border-emerald-400 rounded-lg animate-pulse" />
+              )}
+            </div>
+          </div>
+
+          {/* Status text */}
+          <div className="absolute bottom-24 left-0 right-0 text-center z-10">
+            <div className="inline-block bg-black/70 text-white text-sm font-semibold px-4 py-2 rounded-full">
+              {cameraError
+                ? cameraError
+                : !stream
+                  ? isStarting ? 'Iniciando câmera...' : 'Câmera parada'
+                  : detectedDoc
+                    ? stabilityCount > 30
+                      ? 'Documento detectado! Capturando...'
+                      : 'Mantenha imóvel...'
+                    : 'Enquadre o documento A4 na moldura'}
+            </div>
+          </div>
+
+          {/* Stability progress bar */}
+          {detectedDoc && stabilityCount > 0 && (
+            <div className="absolute bottom-20 left-8 right-8 z-10">
+              <div className="h-1 bg-white/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-400 transition-all duration-100 rounded-full"
+                  style={{ width: `${Math.min((stabilityCount / 45) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Top bar */}
+        <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-4 pt-3 pb-2 bg-gradient-to-b from-black/60 to-transparent">
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
-              <Camera className="w-5 h-5" />
+            <div className="p-2 bg-white/10 rounded-xl">
+              <FileText className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Capturar Documento (várias páginas)
+              <h3 className="text-sm font-bold text-white">
+                Scanner de Documento
               </h3>
-              <p className="text-[11px] text-slate-500">
-                Fotografe todas as páginas do documento do fornecedor
+              <p className="text-[10px] text-white/60">
+                {pages.length > 0 ? `${pages.length} página(s) capturada(s)` : 'Escaneie o documento A4'}
               </p>
             </div>
           </div>
-          <button onClick={handleCancel} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+          <button onClick={handleCancel} className="p-2 bg-white/10 rounded-full text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Template selector */}
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-[#a1a1aa] mb-1 text-xs">
-              <Layers className="w-3.5 h-3.5 inline mr-1" /> Modelo do documento
-            </label>
-            <select
-              value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs font-semibold text-slate-900 dark:text-white"
-            >
-              {NF_TEMPLATE_OPTIONS.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Template selector (floating) */}
+        <div className="absolute top-14 left-4 z-20">
+          <select
+            value={templateId}
+            onChange={(e) => setTemplateId(e.target.value)}
+            className="px-3 py-1.5 bg-black/60 border border-white/20 rounded-xl text-white text-xs font-semibold backdrop-blur-sm"
+          >
+            {NF_TEMPLATE_OPTIONS.map((t) => (
+              <option key={t.id} value={t.id} className="bg-black text-white">
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-          {/* Camera preview */}
-          <div className="relative rounded-xl overflow-hidden bg-black aspect-[4/3] flex items-center justify-center">
-            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-            {!stream && !cameraError && (
-              <div className="absolute inset-0 flex items-center justify-center text-white/70 text-xs">
-                {isStarting ? 'Iniciando câmera...' : 'Câmera parada'}
-              </div>
-            )}
-          </div>
+        {/* Auto-capture toggle (floating) */}
+        <div className="absolute top-14 right-4 z-20">
+          <button
+            onClick={() => setAutoCaptureEnabled((prev) => !prev)}
+            className={`p-2 rounded-xl backdrop-blur-sm border transition-colors ${
+              autoCaptureEnabled
+                ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300'
+                : 'bg-white/10 border-white/20 text-white/60'
+            }`}
+            title={autoCaptureEnabled ? 'Auto-capture ligado' : 'Auto-capture desligado'}
+          >
+            <Zap className="w-4 h-4" />
+          </button>
+        </div>
 
-          {stream && (
-            <button
-              type="button"
-              onClick={scanQr}
-              className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
-            >
-              <ScanLine className="w-4 h-4" /> Ler QR Code (DANFE)
-            </button>
-          )}
-
-          {accessKey && (
-            <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 font-bold">
-              <KeyRound className="w-4 h-4" />
-              <span>Chave lida: {accessKey.slice(0, 10)}…{accessKey.slice(-4)}</span>
-            </div>
-          )}
-
-          {cameraError && (
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 font-bold">
-              {cameraError}
-            </div>
-          )}
-
-          {/* Captured pages */}
+        {/* Bottom controls */}
+        <div className="absolute bottom-0 left-0 right-0 z-20 pb-6 pt-3 px-4 bg-gradient-to-t from-black/60 to-transparent">
+          {/* Page thumbnails */}
           {pages.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Páginas capturadas: {pages.length}
-                </span>
-                <button
-                  onClick={clearPages}
-                  className="text-[11px] text-rose-500 font-bold hover:underline"
-                >
-                  Limpar tudo
-                </button>
-              </div>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {pages.map((p, i) => (
-                  <div
-                    key={i}
-                    className="relative rounded-lg overflow-hidden border border-slate-200 dark:border-[#27272a]"
+            <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+              {pages.map((p, i) => (
+                <div key={i} className="relative flex-shrink-0 w-12 h-16 rounded-lg overflow-hidden border-2 border-white/30">
+                  <img src={p} alt={`P${i + 1}`} className="w-full h-full object-cover" />
+                  <span className="absolute top-0.5 left-0.5 bg-black/70 text-white text-[8px] font-bold px-1 rounded">
+                    {i + 1}
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removePage(i); }}
+                    className="absolute top-0.5 right-0.5 p-0.5 bg-black/70 text-white rounded hover:bg-rose-600"
                   >
-                    <img src={p} alt={`Página ${i + 1}`} className="w-full h-24 object-cover" />
-                    <span className="absolute top-1 left-1 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
-                      {i + 1}
-                    </span>
-                    <button
-                      onClick={() => removePage(i)}
-                      title="Remover página"
-                      className="absolute top-1 right-1 p-1 bg-black/70 text-white rounded hover:bg-rose-600"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                    <Trash2 className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Buttons */}
+          <div className="flex items-center gap-3">
+            {/* QR scan */}
+            <button
+              onClick={scanQr}
+              className="p-3 bg-white/10 rounded-full text-white border border-white/20"
+              title="Ler QR Code"
+            >
+              <ScanLine className="w-5 h-5" />
+            </button>
+
+            {/* Main capture button */}
+            <button
+              onClick={handleManualCapture}
+              disabled={!stream}
+              className="flex-1 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+            >
+              <Camera className="w-5 h-5" />
+              {autoCaptureEnabled ? 'Capturar Manualmente' : 'Capturar'}
+            </button>
+
+            {/* Conclude + OCR */}
+            <button
+              onClick={startOcr}
+              disabled={pages.length === 0}
+              className="py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+              title="Processar OCR e revisar"
+            >
+              <Check className="w-5 h-5" />
+              <span className="hidden sm:inline">OCR</span>
+              {pages.length > 0 && (
+                <span className="bg-white/20 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {pages.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Access key indicator */}
+          {accessKey && (
+            <div className="mt-2 px-3 py-1.5 bg-emerald-500/20 border border-emerald-400/30 rounded-xl flex items-center gap-1.5 text-[10px] text-emerald-300 font-bold">
+              <KeyRound className="w-3 h-3" />
+              Chave: {accessKey.slice(0, 10)}...{accessKey.slice(-4)}
             </div>
           )}
         </div>
+      </div>
+    </>
+  );
 
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-slate-200 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b]/50 flex flex-col gap-2">
-          <div className="flex gap-2">
+  // ── Render: OCR Processing Phase ────────────────────────────────
+
+  const renderOcr = () => (
+    <div className="fixed inset-0 z-[10001] bg-[#09090b] flex flex-col items-center justify-center p-6">
+      <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+        <div className="mb-6">
+          <Loader2 className="w-12 h-12 text-indigo-500 animate-spin mx-auto" />
+        </div>
+        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
+          Processando OCR...
+        </h3>
+        <p className="text-sm text-slate-500 mb-4">
+          {ocrProgress.status || 'Inicializando Tesseract.js...'}
+        </p>
+        <div className="h-2 bg-slate-200 dark:bg-[#27272a] rounded-full overflow-hidden">
+          <div
+            className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+            style={{ width: `${ocrProgress.progress}%` }}
+          />
+        </div>
+        <p className="text-xs text-slate-400 mt-2">{ocrProgress.progress}%</p>
+
+        {ocrResult && (
+          <div className="mt-4 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl text-xs text-emerald-700 dark:text-emerald-300">
+            OCR concluído! Confiança: {ocrResult.confidence}%
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── Render: Review Phase ────────────────────────────────────────
+
+  const renderReview = () => (
+    <div className="fixed inset-0 z-[10001] bg-white dark:bg-[#09090b] flex flex-col">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between bg-slate-50 dark:bg-[#09090b]/50 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleBackToCamera}
+            className="p-2 bg-slate-100 dark:bg-[#27272a] rounded-xl text-slate-600 dark:text-slate-300"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              Revisar Dados Extraídos
+            </h3>
+            <p className="text-[10px] text-slate-500">
+              OCR: {ocrResult?.confidence ?? 0}% de confiança — ajuste se necessário
+            </p>
+          </div>
+        </div>
+        <button onClick={handleCancel} className="p-2 text-slate-400 hover:text-slate-600 rounded-lg">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Warnings */}
+        {ocrResult?.parsed.warnings.map((w, i) => (
+          <div key={i} className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>{w}</span>
+          </div>
+        ))}
+
+        {/* Supplier info */}
+        <div className="bg-slate-50 dark:bg-[#18181b] rounded-xl p-4 border border-slate-200 dark:border-[#27272a]">
+          <h4 className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-3">
+            <FileText className="w-3.5 h-3.5 inline mr-1" /> Fornecedor
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] text-slate-500 font-semibold">Nome</label>
+              <input
+                type="text"
+                value={reviewSupplier}
+                onChange={(e) => setReviewSupplier(e.target.value)}
+                className="w-full mt-0.5 px-2.5 py-1.5 bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-lg text-xs font-semibold text-slate-900 dark:text-white"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-500 font-semibold">CNPJ</label>
+              <input
+                type="text"
+                value={reviewCNPJ}
+                onChange={(e) => setReviewCNPJ(e.target.value)}
+                className="w-full mt-0.5 px-2.5 py-1.5 bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-lg text-xs font-mono text-slate-900 dark:text-white"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Document number + Total */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-slate-50 dark:bg-[#18181b] rounded-xl p-3 border border-slate-200 dark:border-[#27272a]">
+            <label className="text-[10px] text-slate-500 font-semibold">Nº Documento</label>
+            <input
+              type="text"
+              value={reviewDocNumber}
+              onChange={(e) => setReviewDocNumber(e.target.value)}
+              className="w-full mt-0.5 px-2.5 py-1.5 bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-lg text-xs font-semibold text-slate-900 dark:text-white"
+            />
+          </div>
+          <div className="bg-slate-50 dark:bg-[#18181b] rounded-xl p-3 border border-slate-200 dark:border-[#27272a]">
+            <label className="text-[10px] text-slate-500 font-semibold">Total (R$)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={reviewTotal}
+              onChange={(e) => setReviewTotal(e.target.value)}
+              className="w-full mt-0.5 px-2.5 py-1.5 bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-lg text-xs font-semibold text-slate-900 dark:text-white"
+            />
+          </div>
+        </div>
+
+        {/* Items */}
+        <div className="bg-slate-50 dark:bg-[#18181b] rounded-xl p-4 border border-slate-200 dark:border-[#27272a]">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa]">
+              Itens ({reviewItems.length})
+            </h4>
             <button
-              onClick={capturePage}
-              disabled={!stream}
-              className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+              onClick={addReviewItem}
+              className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline"
             >
-              <Camera className="w-4 h-4" /> Capturar página
-            </button>
-            <button
-              onClick={handleConclude}
-              className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors"
-            >
-              <Check className="w-4 h-4" /> Concluir ({pages.length})
+              + Adicionar
             </button>
           </div>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {reviewItems.map((item, i) => (
+              <div key={i} className="flex items-center gap-2 p-2 bg-white dark:bg-[#09090b] rounded-lg border border-slate-100 dark:border-[#27272a]">
+                <input
+                  type="text"
+                  value={item.productName}
+                  onChange={(e) => updateReviewItem(i, 'productName', e.target.value)}
+                  placeholder="Produto"
+                  className="flex-1 px-2 py-1 bg-transparent border-0 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
+                />
+                <input
+                  type="number"
+                  value={item.quantity || ''}
+                  onChange={(e) => updateReviewItem(i, 'quantity', e.target.value)}
+                  placeholder="Qtd"
+                  className="w-14 px-2 py-1 bg-transparent border border-slate-200 dark:border-[#27272a] rounded text-xs text-center text-slate-900 dark:text-white"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  value={item.unitPrice || ''}
+                  onChange={(e) => updateReviewItem(i, 'unitPrice', e.target.value)}
+                  placeholder="Preço"
+                  className="w-20 px-2 py-1 bg-transparent border border-slate-200 dark:border-[#27272a] rounded text-xs text-right text-slate-900 dark:text-white"
+                />
+                <button
+                  onClick={() => removeReviewItem(i)}
+                  className="p-1 text-slate-400 hover:text-rose-500"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 pt-2 border-t border-slate-200 dark:border-[#27272a] flex justify-between text-xs font-bold text-slate-700 dark:text-white">
+            <span>Total calculado:</span>
+            <span>R$ {reviewTotalCalc.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {/* Captured pages thumbnails */}
+        {pages.length > 0 && (
+          <div>
+            <h4 className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-2">
+              Páginas capturadas ({pages.length})
+            </h4>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {pages.map((p, i) => (
+                <div key={i} className="relative flex-shrink-0 w-20 h-28 rounded-lg overflow-hidden border border-slate-200 dark:border-[#27272a]">
+                  <img src={p} alt={`P${i + 1}`} className="w-full h-full object-cover" />
+                  <span className="absolute top-0.5 left-0.5 bg-black/70 text-white text-[8px] font-bold px-1 rounded">
+                    {i + 1}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Raw OCR text (collapsible) */}
+        {ocrResult?.rawText && (
+          <details className="bg-slate-50 dark:bg-[#18181b] rounded-xl border border-slate-200 dark:border-[#27272a]">
+            <summary className="px-4 py-2 text-xs font-bold text-slate-500 cursor-pointer">
+              Texto bruto do OCR
+            </summary>
+            <pre className="px-4 pb-3 text-[10px] text-slate-600 dark:text-slate-400 whitespace-pre-wrap max-h-40 overflow-y-auto font-mono">
+              {ocrResult.rawText}
+            </pre>
+          </details>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-slate-200 dark:border-[#27272a] bg-slate-50 dark:bg-[#09090b]/50 flex-shrink-0">
+        <div className="flex gap-2">
           <button
-            onClick={handleCancel}
-            className="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors"
+            onClick={handleBackToCamera}
+            className="py-3 px-4 rounded-xl bg-slate-200 dark:bg-[#27272a] hover:bg-slate-300 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors"
           >
-            Cancelar
+            <RotateCcw className="w-4 h-4 inline mr-1" />
+            Voltar
+          </button>
+          <button
+            onClick={handleConclude}
+            className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+          >
+            <Check className="w-4 h-4" />
+            Confirmar e Salvar
           </button>
         </div>
       </div>
     </div>
+  );
+
+  // ── Main render ─────────────────────────────────────────────────
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      {phase === 'camera' && renderCamera()}
+      {phase === 'ocr' && renderOcr()}
+      {phase === 'review' && renderReview()}
+    </>
   );
 };
 

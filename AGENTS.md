@@ -5,6 +5,9 @@
 - Restore point de referência (sincronização tempo real + offline/online OK): tag `restore-point-realtime-ok`
 - **Referência do Supabase:** O arquivo `SUPABASE_SCHEMA.md` na raiz do projeto contém a estrutura completa do banco (tabelas, colunas, tipos, RPCs, views). DEVE ser atualizado a cada migration aplicada. Antes de criar/modificar qualquer tabela, consultar este arquivo primeiro.
 - **Sem IA neste aplicativo:** Decisão do usuário (2026-08-22). Não usar LLMs/visão computacional (Gemini, OpenAI, etc.) nem features de reconhecimento de produto por imagem. A função `functions/api/ai/scan-product.ts` (Gemini) foi removida intencionalmente — não reintroduzir. Busca de imagens por termo (Wikimedia Commons) no cadastro de produtos NÃO é IA e pode permanecer.
+- **OCR determinístico (Tesseract.js) é permitido:** O escaneamento de documento/NF (`src/services/ocrService.ts` + `src/lib/ocr/*`) usa Tesseract.js, um motor OCR determinístico local (não é LLM/IA generativa), então NÃO viola a regra acima. Não usar APIs de visão (Gemini/OpenAI) para isso.
+
+- **Scanner de documento A4 (`NFMultiCaptureModal`):** workflow completo — câmera fullscreen com overlay proporcional a A4, detecção de bordas + auto-capture (no `canvasRef`, polling ~30fps), correção de perspectiva/contraste via `enhanceCapturedImage`, OCR via `ocrService.ts`, revisão editável e `onCaptured(pages, templateId, accessKey?, ocrResult?)`. O `NFAddModal` auto-preenche o formulário a partir do `ocrResult`. Padrões relevantes: `detectDocumentEdges()` (sampling de brilho, sem bibliotecas externas), `enhanceCapturedImage()` (crop + contraste).
 
 ## 🛡️ Princípio SRE — "Primeiro, não cause danos" (Site Reliability Engineering)
 

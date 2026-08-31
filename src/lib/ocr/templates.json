@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "note": "Templates de fornecedor para parsing OCR. Estrutura definida; regex DEVEM ser afinadas com OCR real.",
+  "templates": [
+    {
+      "id": "danfe",
+      "label": "DANFE / NF-e impressa",
+      "match": { "keywords": ["danfe", "nota fiscal eletronica", "documento auxiliar", "nfe"] },
+      "supplier": {
+        "name": { "regex": "RAZAO SOCIAL[:\\s]*([^\\n]+)", "group": 1 },
+        "cnpj": { "regex": "CNPJ[:\\s]*([\\d./-]{14,18})", "group": 1 },
+        "address": { "regex": "ENDERECO[:\\s]*([^\\n]+)", "group": 1 },
+        "phone": { "regex": "FONE[:\\s]*([\\d()-]{8,15})", "group": 1 }
+      },
+      "documentNumber": { "regex": "NUMERO[:\\s]*([\\d]{1,12})", "group": 1 },
+      "qrAccessKey": { "regex": "([\\d]{44})", "group": 1 },
+      "itemLine": {
+        "regex": "^\\s*(\\d{1,4})\\s+(.+?)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
+        "map": { "code": 1, "name": 2, "qty": 3, "unitPrice": 4, "subtotal": 5 }
+      },
+      "total": { "regex": "VALOR TOTAL[^\\d]*([\\d.,]+)", "group": 1 }
+    },
+    {
+      "id": "ambev",
+      "label": "Ambev (controle de entrega)",
+      "match": { "keywords": ["ambev", "companha", "distribuidora de bebidas"] },
+      "supplier": {
+        "name": { "regex": "AMBEV[^\\n]*", "group": 0 },
+        "cnpj": { "regex": "CNPJ[:\\s]*([\\d./-]{14,18})", "group": 1 }
+      },
+      "documentNumber": { "regex": "PEDIDO[:\\s]*([\\d]{1,12})", "group": 1 },
+      "itemLine": {
+        "regex": "^\\s*(\\d{3,})\\s+(.+?)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
+        "map": { "code": 1, "name": 2, "qty": 3, "unitPrice": 4, "subtotal": 5 }
+      },
+      "total": { "regex": "TOTAL[:\\s]*([\\d.,]+)", "group": 1 }
+    },
+    {
+      "id": "coca",
+      "label": "Coca-Cola (nota/folha)",
+      "match": { "keywords": ["coca-cola", "coca cola", "santa maria", "embasal"] },
+      "supplier": {
+        "name": { "regex": "COCA[^\\n]*", "group": 0 },
+        "cnpj": { "regex": "CNPJ[:\\s]*([\\d./-]{14,18})", "group": 1 }
+      },
+      "documentNumber": { "regex": "NOTA[:\\s]*([\\d]{1,12})", "group": 1 },
+      "itemLine": {
+        "regex": "^\\s*(\\d{1,4})\\s+(.+?)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
+        "map": { "code": 1, "name": 2, "qty": 3, "unitPrice": 4, "subtotal": 5 }
+      },
+      "total": { "regex": "TOTAL GERAL[^\\d]*([\\d.,]+)", "group": 1 }
+    },
+    {
+      "id": "lagoazul",
+      "label": "Lago Azul (controle interno)",
+      "match": { "keywords": ["lago azul", "lagoazul"] },
+      "supplier": {
+        "name": { "regex": "LAGO AZUL[^\\n]*", "group": 0 },
+        "cnpj": { "regex": "CNPJ[:\\s]*([\\d./-]{14,18})", "group": 1 }
+      },
+      "documentNumber": { "regex": "DOC[:\\s]*([\\d]{1,12})", "group": 1 },
+      "itemLine": {
+        "regex": "^\\s*(.+?)\\s{2,}(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
+        "map": { "code": 1, "name": 1, "qty": 2, "unitPrice": 3, "subtotal": 4 }
+      },
+      "total": { "regex": "TOTAL[:\\s]*([\\d.,]+)", "group": 1 }
+    },
+    {
+      "id": "generic",
+      "label": "Genérico (modo semi-livre)",
+      "match": {},
+      "supplier": {
+        "name": { "regex": "FORNECEDOR[:\\s]*([^\\n]+)", "group": 1 },
+        "cnpj": { "regex": "CNPJ[:\\s]*([\\d./-]{14,18})", "group": 1 }
+      },
+      "documentNumber": { "regex": "(?:PEDIDO|NOTA|DOC|NUMERO)[:\\s]*([\\d]{1,12})", "group": 1 },
+      "itemLine": {
+        "regex": "^\\s*(\\d{1,4})?\\s*(.+?)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
+        "map": { "code": 1, "name": 2, "qty": 3, "unitPrice": 4, "subtotal": 5 }
+      },
+      "total": { "regex": "TOTAL[:\\s]*([\\d.,]+)", "group": 1 }
+    }
+  ]
+}

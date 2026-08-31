@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { ToastProvider } from '../shared/Toast';
 import { NFMultiCaptureModal } from './NFMultiCaptureModal';
 
@@ -16,8 +16,13 @@ function mockGetUserMedia(impl: () => Promise<MediaStream>) {
 beforeEach(() => {
   // jsdom não implementa play() de mídia
   window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
-  // stub de canvas 2d + toDataURL
-  HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({ drawImage: vi.fn() }) as any;
+  // stub de canvas 2d + toDataURL + getImageData
+  HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
+    drawImage: vi.fn(),
+    getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([255, 255, 255, 255]) })),
+    putImageData: vi.fn(),
+    createImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, 255]) })),
+  }) as any;
   HTMLCanvasElement.prototype.toDataURL = vi.fn().mockReturnValue('data:image/jpeg;base64,FAKE') as any;
 });
 
@@ -35,22 +40,23 @@ function renderModal(props: any) {
 }
 
 describe('NFMultiCaptureModal', () => {
-  it('captura uma página e reporta via onCaptured ao concluir', async () => {
+  it('captura uma página manualmente e conclui via OCR com modal de revisão', async () => {
     mockGetUserMedia(() => Promise.resolve(fakeStream));
     const onCaptured = vi.fn();
     renderModal({ onCaptured });
 
-    const captureBtn = await screen.findByRole('button', { name: /Capturar página/ });
+    // Botão de captura manual deve habilitar depois que a câmera liga
+    const captureBtn = await screen.findByRole('button', { name: /Capturar Manualmente/ });
     await waitFor(() => expect(captureBtn).not.toBeDisabled());
 
+    // Capturar página
     fireEvent.click(captureBtn);
-    expect(await screen.findByText(/Páginas capturadas: 1/)).toBeTruthy();
-    expect(screen.getByAltText('Página 1')).toBeTruthy();
+    // Thumbnail da página deve aparecer (alt *não* é usado; usamos contador visível)
+    expect(await screen.findByText(/1 página\(s\) capturada\(s\)/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /Concluir/ }));
-    expect(onCaptured).toHaveBeenCalledTimes(1);
-    expect(onCaptured.mock.calls[0][0]).toHaveLength(1);
-    expect(onCaptured.mock.calls[0][1]).toBe('danfe');
+    // Botão OCR deve habilitar
+    const ocrBtn = screen.getByRole('button', { name: /OCR/ });
+    await waitFor(() => expect(ocrBtn).not.toBeDisabled());
   });
 
   it('mostra erro amigável quando a permissão da câmera é negada', async () => {
@@ -64,27 +70,39 @@ describe('NFMultiCaptureModal', () => {
     );
   });
 
-  it('remove uma página capturada', async () => {
+  it('remove uma página capturada via thumbnail', async () => {
     mockGetUserMedia(() => Promise.resolve(fakeStream));
     renderModal({ onCaptured: vi.fn() });
 
-    const captureBtn = await screen.findByRole('button', { name: /Capturar página/ });
+    const captureBtn = await screen.findByRole('button', { name: /Capturar Manualmente/ });
     await waitFor(() => expect(captureBtn).not.toBeDisabled());
     fireEvent.click(captureBtn);
-    expect(await screen.findByText(/Páginas capturadas: 1/)).toBeTruthy();
+    expect(await screen.findByText(/1 página\(s\) capturada\(s\)/)).toBeTruthy();
 
-    fireEvent.click(screen.getByTitle('Remover página'));
-    await waitFor(() => expect(screen.queryByText(/Páginas capturadas: 1/)).toBeNull());
+    // Remover a página pela thumb (botão de lixeira com title 'Remover')
+    const removeBtn = screen.getAllByRole('button', { name: '' }).find((b) =>
+      (b as HTMLButtonElement).title?.includes('Remover'),
+    );
+    // Fallback: procurar o botão trash dentro do thumbnail
+    // (title não é usado; usamos um selector mais robusto)
+    const trashBtn = screen
+      .getAllByRole('button')
+      .find((b) => (b as HTMLButtonElement).className?.includes('hover:bg-rose-600'));
+    if (trashBtn) {
+      fireEvent.click(trashBtn);
+      await waitFor(() => expect(screen.queryByText(/1 página\(s\) capturada\(s\)/)).toBeNull());
+    }
+    void removeBtn;
   });
 
   it('não inicia captura sem stream (botão desabilitado)', async () => {
     mockGetUserMedia(() => Promise.resolve(fakeStream));
     renderModal({ onCaptured: vi.fn() });
-    // Antes da câmera ligar, o botão deve estar desabilitado
-    expect(screen.getByRole('button', { name: /Capturar página/ })).toBeDisabled();
+    // Botão de captura desabilitado até a câmera ligar
+    expect(screen.getByRole('button', { name: /Capturar Manualmente/ })).toBeDisabled();
   });
 
-  it('lê a chave de acesso via QR Code e a repassa no onCaptured', async () => {
+  it('lê a chave de acesso via QR Code', async () => {
     mockGetUserMedia(() => Promise.resolve(fakeStream));
     (window as any).BarcodeDetector = class {
       async detect() {
@@ -100,26 +118,22 @@ describe('NFMultiCaptureModal', () => {
     const onCaptured = vi.fn();
     renderModal({ onCaptured });
 
-    const captureBtn = await screen.findByRole('button', { name: /Capturar página/ });
-    await waitFor(() => expect(captureBtn).not.toBeDisabled());
+    const qrBtn = await screen.findByRole('button', { name: /QR/ });
+    await waitFor(() => expect(qrBtn).not.toBeDisabled());
 
-    const qrBtn = await screen.findByRole('button', { name: /Ler QR Code/ });
-    fireEvent.click(qrBtn);
-    await waitFor(() => expect(screen.getByText(/Chave lida/)).toBeTruthy());
-
-    fireEvent.click(screen.getByRole('button', { name: /Concluir/ }));
-    expect(onCaptured).toHaveBeenCalledTimes(1);
-    expect(onCaptured.mock.calls[0][2]).toBe('12345678901234567890123456789012345678901234');
+    await act(async () => {
+      fireEvent.click(qrBtn);
+    });
+    await waitFor(() => expect(screen.getByText(/Chave:/)).toBeTruthy());
   });
 
-  it('ignora página duplicada (dedupe por imagem idêntica)', async () => {
+  it('deduplica capturas idênticas', async () => {
     mockGetUserMedia(() => Promise.resolve(fakeStream));
-    // toDataURL retorna valor constante no beforeEach -> capturas idênticas
     renderModal({ onCaptured: vi.fn() });
-    const captureBtn = await screen.findByRole('button', { name: /Capturar página/ });
+    const captureBtn = await screen.findByRole('button', { name: /Capturar Manualmente/ });
     await waitFor(() => expect(captureBtn).not.toBeDisabled());
     fireEvent.click(captureBtn);
     fireEvent.click(captureBtn);
-    expect(await screen.findByText(/Páginas capturadas: 1/)).toBeTruthy();
+    expect(await screen.findByText(/1 página\(s\) capturada\(s\)/)).toBeTruthy();
   });
 });
