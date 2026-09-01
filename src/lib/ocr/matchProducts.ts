@@ -68,3 +68,46 @@ export function matchItemToProducts(
     fuzzy: true,
   };
 }
+
+// ── Planejamento de importação de NF (vários itens de uma vez) ─────────
+
+export interface InventoryImportItem {
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  salePrice?: number;
+}
+
+export interface PlannedInventoryItem {
+  item: InventoryImportItem;
+  /** Produto existente escolhido (exato ou fuzzy), ou null p/ criar novo. */
+  matchedProduct: Product | null;
+  /** Candidatos similares (exclui o escolhido) para revisão. */
+  candidates: Product[];
+  /** true quando o match é fuzzy (nome não-idêntico) — pede confirmação. */
+  fuzzy: boolean;
+}
+
+/**
+ * Planeja a gravação de itens de NF no estoque, fazendo match de cada item
+ * contra o catálogo (exato + fuzzy via matchItemToProducts).
+ *
+ * Itens com nome vazio são descartados (não têm como casar/criar). Itens com
+ * quantidade <= 0 entram com matchedProduct null — o chamador decide pular.
+ * É a mesma lógica usada manualmente pelo StockDocScannerModal, extraída pura
+ * para ser testável e reusada pelo NFAddModal.
+ */
+export function planInventoryImport(
+  items: InventoryImportItem[],
+  products: Product[],
+  threshold = 0.45,
+): PlannedInventoryItem[] {
+  const plan: PlannedInventoryItem[] = [];
+  for (const item of items) {
+    const name = (item.productName || '').trim();
+    if (!name) continue;
+    const { product, candidates, fuzzy } = matchItemToProducts(name, products, threshold);
+    plan.push({ item, matchedProduct: product, candidates, fuzzy });
+  }
+  return plan;
+}

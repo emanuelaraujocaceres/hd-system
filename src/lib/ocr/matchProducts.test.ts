@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nameSimilarity, matchItemToProducts } from './matchProducts';
+import { nameSimilarity, matchItemToProducts, planInventoryImport } from './matchProducts';
 import type { Product } from '../../types';
 
 function p(id: string, name: string, active = true): Product {
@@ -69,5 +69,48 @@ describe('matchProducts — matchItemToProducts (cenário de falha)', () => {
     const activeOnly = [p('a', 'Cerveja Pilsen 600ml'), p('x', 'Suco de Laranja', false)];
     const res = matchItemToProducts('Suco de Laranja', activeOnly);
     expect(res.product).toBeNull();
+  });
+});
+
+describe('matchProducts — planInventoryImport (cenário feliz)', () => {
+  const items = [
+    { productName: '  cerveja  pilsen   600ml ', quantity: 12, unitPrice: 3.5, salePrice: 6 },
+    { productName: 'Água Mineral 500ml', quantity: 24, unitPrice: 1.2 },
+  ];
+
+  it('plans exact match as non-fuzzy with matchedProduct', () => {
+    const plan = planInventoryImport(items, catalog);
+    const first = plan.find((x) => x.item.productName.includes('pilsen'));
+    expect(first?.matchedProduct?.id).toBe('a');
+    expect(first?.fuzzy).toBe(false);
+    expect(first?.candidates).toEqual([]);
+  });
+
+  it('plans fuzzy match with candidates for similar name', () => {
+    const plan = planInventoryImport([{ productName: 'Cerveja 600ml', quantity: 4, unitPrice: 3 }], catalog);
+    expect(plan.length).toBe(1);
+    expect(plan[0].fuzzy).toBe(true);
+    expect(plan[0].matchedProduct).toBeTruthy();
+    expect(plan[0].candidates.length).toBeGreaterThan(0);
+  });
+
+  it('carries salePrice through the plan', () => {
+    const plan = planInventoryImport(items, catalog);
+    const first = plan[0];
+    expect(first.item.salePrice).toBe(6);
+  });
+});
+
+describe('matchProducts — planInventoryImport (cenário de falha)', () => {
+  it('plans unrelated name as new product (matchedProduct null)', () => {
+    const plan = planInventoryImport([{ productName: 'Cadeira de Plástico', quantity: 2, unitPrice: 50 }], catalog);
+    expect(plan.length).toBe(1);
+    expect(plan[0].matchedProduct).toBeNull();
+    expect(plan[0].fuzzy).toBe(false);
+  });
+
+  it('drops items with empty product name', () => {
+    const plan = planInventoryImport([{ productName: '   ', quantity: 1, unitPrice: 1 }], catalog);
+    expect(plan).toEqual([]);
   });
 });

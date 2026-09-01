@@ -416,6 +416,8 @@ export interface NFRecordItem {
   productName: string;
   quantity: number;
   unitPrice: number;
+  /** Preço de venda pré-preenchido ao importar item da NF (produto novo). */
+  salePrice?: number;
   subtotal?: number;
   code?: string;
   adjustment?: number;
