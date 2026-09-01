@@ -992,6 +992,33 @@ Eventos de webhook (ex.: confirmacao de pagamento de gateway).
 RLS: superadmin_all_webhook_events[ALL], org_branch_insert_webhook_events[INSERT], org_branch_update_webhook_events[UPDATE], org_branch_delete_webhook_events[DELETE], org_branch_select_webhook_events[SELECT]
 Realtime: publicada - REPLICA: full
 
+### payment_terminals
+Maquininhas/terminais de pagamento vinculados a usuario + filial + provider (inicio: infinitepay). Sincronizada pelo frontend (syncService/storageService/Realtime). Tabela criada em 2026-09-01 (migration `20260901_add_payment_terminals.sql`).
+
+Regras de negocio:
+- No max **1 terminal "padrao" (is_default=true)** por (user_id, store_branch_id, provider), garantido por indice unico parcial.
+- Isolamento **por filial**: a maquininha de uma filial NUNCA aparece em outra (mesmo admin/superadmin trocando de filial). O filtro por `user_id` (dono) e feito no frontend (PDV filtra o operador logado), NAO no RLS.
+- O `handle` (InfinitePay) vive em `config` (JSONB) e nunca e exposto/cobrado no navegador — a criacao do link de pagamento e via Cloudflare Function server-side.
+- `updated_at` atualizado por trigger `trg_payment_terminals_updated_at` (usa `public.fn_update_updated_at()`).
+
+| Coluna | Tipo | Null | Key | Descricao |
+|--------|------|------|-----|-----------|
+| id | UUID | NO | PK | PK |
+| organization_id | UUID | NO | FK->organizations | Org |
+| store_branch_id | UUID | NO | FK->store_branches | Filial |
+| user_id | UUID | NO | FK->system_users | Dono do terminal |
+| provider | TEXT | NO | | Provider (CHECK in 'infinitepay') |
+| name | TEXT | NO | | Rotulo de exibicao |
+| config | JSONB | NO | | Config (ex.: { handle }) |
+| is_default | BOOLEAN | NO | | Padrao? (max 1 por user+branch+provider) |
+| enabled | BOOLEAN | NO | | Ativo? |
+| created_at | TIMESTAMPTZ | YES | | |
+| updated_at | TIMESTAMPTZ | YES | | |
+
+Indice unico parcial: `(user_id, store_branch_id, provider) WHERE is_default` — garante 1 padrao por user+branch+provider.
+RLS: branch-scoped via create_branch_policy (superadmin_all_payment_terminals[ALL], org_branch_insert/update/delete/select_payment_terminals) - policies payment_terminals_select/insert/update/delete. Anon REVOKED.
+Realtime: publicada - REPLICA: full
+
 ## Tabelas de Sincronizacao / Auditoria
 
 ### sync_queue

@@ -57,7 +57,9 @@ type TableName =
   | 'product_recipes'
   | 'open_containers'
   | 'stock_loss_log'
-  | 'delivery_worker_earnings';
+  | 'delivery_worker_earnings'
+  // Terminais de pagamento / maquininhas (2026-09-01)
+  | 'payment_terminals';
 
 type QueueAction = 'upsert' | 'delete' | 'upsert_batch';
 

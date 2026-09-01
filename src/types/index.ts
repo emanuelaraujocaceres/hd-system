@@ -178,6 +178,26 @@ export interface OpenContainer {
   updatedAt?: string;
 }
 
+/** Provedor de terminal/maquininha de pagamento. Início: infinitepay. */
+export type PaymentTerminalProvider = 'infinitepay';
+
+/** Terminal/maquininha de pagamento vinculado a um usuário + filial + provider.
+ *  Isolado por filial: a maquininha de uma filial NUNCA aparece em outra,
+ *  mesmo para admin/superadmin que trocam de filial. */
+export interface PaymentTerminal {
+  id: string;
+  organizationId?: string;
+  storeBranchId?: string;
+  userId: string;       // dono (system_users.id)
+  provider: PaymentTerminalProvider;
+  name: string;         // rótulo de exibição ("Maquininha A")
+  config: Record<string, string>; // { handle } (InfinitePay); cobrança jamais no navegador
+  isDefault: boolean;   // no máx 1 por (user_id, store_branch_id, provider)
+  enabled: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface CartItem {
   product: Product;
   quantity: number;

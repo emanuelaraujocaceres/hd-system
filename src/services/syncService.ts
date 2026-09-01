@@ -73,6 +73,8 @@ const BRANCH_REQUIRED_TABLES: TableName[] = [
   // Controle de Lote/Validade (2026-08-14): tabelas escopadas por filial
   'product_lots', 'product_recipes', 'open_containers',
   'stock_loss_log',
+  // Terminais de pagamento / maquininhas (2026-09-01): escopadas por filial
+  'payment_terminals',
 ];
 
 /**
@@ -122,7 +124,9 @@ export type TableName =
   | 'open_containers'
   | 'stock_loss_log'
   // Delivery Worker Earnings (2026)
-  | 'delivery_worker_earnings';
+  | 'delivery_worker_earnings'
+  // Terminais de pagamento / maquininhas (2026-09)
+  | 'payment_terminals';
 
 type SyncChangeCallback = (table: TableName, payload: any) => void;
 type ConnectionListener = (online: boolean) => void;
@@ -300,6 +304,8 @@ class SupabaseSyncService {
       'product_recipes',
       'open_containers',
       'stock_loss_log',
+      // Terminais de pagamento / maquininhas (2026-09-01)
+      'payment_terminals',
     ];
 
     this.channel = supabase.channel('hd-system-realtime');
@@ -598,6 +604,8 @@ class SupabaseSyncService {
     'delivery_settings', 'delivery_neighborhoods', 'delivery_distance_rates', 'delivery_orders',
     // Lotes / Receitas (2026): têm updated_at
   'product_lots', 'product_recipes', 'open_containers',
+    // Terminais de pagamento (2026-09-01): têm updated_at
+  'payment_terminals',
   ];
 
   /**

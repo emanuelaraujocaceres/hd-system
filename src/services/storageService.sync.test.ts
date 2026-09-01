@@ -273,4 +273,66 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
       expect(blocked(0, svc.isCompositeOrFractionProduct('p-normal'))).toBe(true); // comum bloqueia
     });
   });
+
+  // ─── REGRESSÃO: payment_terminals (maquininhas de pagamento) ───
+  it('updatePaymentTerminalFromRemote mapeia linha do cloud (user/provider/config/padrão/filiais)', () => {
+    (svc as any).isRemoteFromCurrentBranch = () => true;
+    const setSpy = vi.spyOn(svc as any, 'set');
+    const row = {
+      id: 'pt-1',
+      organization_id: 'o1',
+      store_branch_id: 'b1',
+      user_id: 'u1',
+      provider: 'infinitepay',
+      name: 'Maquininha A',
+      config: { handle: 'dofulano' },
+      is_default: true,
+      enabled: true,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    (svc as any).updatePaymentTerminalFromRemote(row);
+    const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_payment_terminals')?.[1] as any[];
+    const rec = storedArg?.find((a: any) => a.id === 'pt-1');
+    expect(rec).toBeTruthy();
+    expect(rec.userId).toBe('u1');
+    expect(rec.provider).toBe('infinitepay');
+    expect(rec.name).toBe('Maquininha A');
+    expect(rec.config.handle).toBe('dofulano');
+    expect(rec.isDefault).toBe(true);
+    expect(rec.enabled).toBe(true);
+    expect(rec.storeBranchId).toBe('b1');
+    expect(rec.organizationId).toBe('o1');
+  });
+
+  it('updatePaymentTerminalFromRemote ignora linha de outra filial (isolamento)', () => {
+    (svc as any).isRemoteFromCurrentBranch = () => false;
+    const setSpy = vi.spyOn(svc as any, 'set');
+    const row = { id: 'pt-2', user_id: 'u1', provider: 'infinitepay', name: 'X', store_branch_id: 'b-other' };
+    (svc as any).updatePaymentTerminalFromRemote(row);
+    const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_payment_terminals')?.[1] as any[];
+    expect(storedArg).toBeUndefined();
+  });
+
+  it('deletePaymentTerminalFromRemote remove terminal da filial atual (cenário feliz)', () => {
+    (svc as any).getRawBranchId = () => 'b1';
+    localStorage.setItem('hd_system_payment_terminals', JSON.stringify([
+      { id: 'pt-del-1', name: 'A', storeBranchId: 'b1', provider: 'infinitepay' },
+    ]));
+    const setSpy = vi.spyOn(svc as any, 'set');
+    (svc as any).deletePaymentTerminalFromRemote('pt-del-1');
+    const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_payment_terminals')?.[1] as any[];
+    expect(storedArg?.find((a: any) => a.id === 'pt-del-1')).toBeUndefined();
+  });
+
+  it('deletePaymentTerminalFromRemote NÃO remove terminal de outra filial (isolamento)', () => {
+    (svc as any).getRawBranchId = () => 'b1';
+    localStorage.setItem('hd_system_payment_terminals', JSON.stringify([
+      { id: 'pt-del-2', name: 'A', storeBranchId: 'b-other', provider: 'infinitepay' },
+    ]));
+    const setSpy = vi.spyOn(svc as any, 'set');
+    (svc as any).deletePaymentTerminalFromRemote('pt-del-2');
+    const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_payment_terminals')?.[1] as any[];
+    expect(storedArg).toBeUndefined(); // set não deve ser chamado (delete bloqueado)
+  });
 });

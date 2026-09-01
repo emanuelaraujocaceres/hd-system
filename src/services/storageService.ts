@@ -30,6 +30,7 @@ import {
   DeliveryDistanceRate,
   DeliveryOrder,
   OpenContainer,
+  PaymentTerminal,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -99,6 +100,7 @@ const KEYS = {
   OPEN_CONTAINERS: 'hd_system_open_containers',
   PRODUCT_RECIPES: 'hd_system_product_recipes',
   STOCK_LOSS_LOG: 'hd_system_stock_loss_log',
+  PAYMENT_TERMINALS: 'hd_system_payment_terminals',
 };
 
 class StorageService {
@@ -732,6 +734,67 @@ expiration_date: p.expirationDate || null,
     this.set(KEYS.OPEN_CONTAINERS, all.filter((c) => c.id !== id));
     this.notify(KEYS.OPEN_CONTAINERS, 'local');
     syncService.deleteRow('open_containers', id);
+  }
+
+  // ── PAYMENT_TERMINALS (maquininhas de pagamento) ─────────
+  getPaymentTerminals(branchId?: string): PaymentTerminal[] {
+    const all = this.get<PaymentTerminal[]>(KEYS.PAYMENT_TERMINALS, []);
+    const branchFiltered = branchId
+      ? all.filter((t) => t.storeBranchId === branchId)
+      : all;
+    return this.filterBySelectedBranch(this.filterByOrg(branchFiltered));
+  }
+
+  savePaymentTerminal(pt: PaymentTerminal): void {
+    this.setChangeSource('local');
+    const branchId = pt.storeBranchId || this.getSelectedBranchId() || '';
+    const ptWithBranch = { ...pt, storeBranchId: branchId };
+    const all = this.get<PaymentTerminal[]>(KEYS.PAYMENT_TERMINALS, []);
+    const idx = all.findIndex((t) => t.id === pt.id);
+    if (idx >= 0) all[idx] = ptWithBranch; else all.push(ptWithBranch);
+    this.set(KEYS.PAYMENT_TERMINALS, all);
+    this.notify(KEYS.PAYMENT_TERMINALS, 'local');
+    this.syncPaymentTerminal(ptWithBranch);
+  }
+
+  private syncPaymentTerminal(pt: PaymentTerminal) {
+    let branchId = pt.storeBranchId || this.getSelectedBranchId() || '';
+    if (branchId && !StorageService.UUID_RE.test(branchId)) {
+      const resolved = this.resolveBranchId(branchId);
+      if (resolved) branchId = resolved;
+    }
+    if (!branchId) {
+      console.error('❌ syncPaymentTerminal: Nenhuma filial selecionada!', pt.id);
+      return;
+    }
+    const orgId = this.orgIdForBranch(branchId, pt.organizationId);
+    const syncWithRetry = (attempt = 1) => {
+      syncService.upsertRow('payment_terminals', {
+        id: pt.id,
+        organization_id: orgId,
+        store_branch_id: branchId,
+        user_id: pt.userId,
+        provider: pt.provider,
+        name: pt.name,
+        config: pt.config,
+        is_default: pt.isDefault,
+        enabled: pt.enabled,
+      }).catch((err: any) => {
+        console.error('❌ syncPaymentTerminal falhou (tentativa ' + attempt + '):', err?.message);
+        if (attempt < 3) setTimeout(() => syncWithRetry(attempt + 1), 1000 * attempt);
+      });
+    };
+    syncWithRetry();
+  }
+
+  deletePaymentTerminal(id: string): void {
+    this.setChangeSource('local');
+    const all = this.get<PaymentTerminal[]>(KEYS.PAYMENT_TERMINALS, []);
+    const pt = all.find((t) => t.id === id);
+    if (!pt) return;
+    this.set(KEYS.PAYMENT_TERMINALS, all.filter((t) => t.id !== id));
+    this.notify(KEYS.PAYMENT_TERMINALS, 'local');
+    syncService.deleteRow('payment_terminals', id);
   }
 
   // ── PRODUCT_RECIPES (receita de produtos compostos) ──────
@@ -2053,7 +2116,7 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
       // PASSO 3: Buscar todos os dados filtrados pela filial
       // Todas as tabelas agora têm store_branch_id NOT NULL (banco convertido).
       // store_branches: já buscado no PASSO 1 (precisamos de TODAS para o seletor)
-      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders, moduleVisibility, productLots, stockLossLogs, openContainers, productRecipes] =
+      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders, moduleVisibility, productLots, stockLossLogs, openContainers, productRecipes, paymentTerminals] =
         await Promise.all([
           syncService.fetchRows('products', resolvedBranchId),
           syncService.fetchRows('categories', resolvedBranchId),
@@ -2092,6 +2155,8 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
           syncService.fetchRows('open_containers', resolvedBranchId),
           // Receitas de produtos compostos
           syncService.fetchRows('product_recipes', resolvedBranchId),
+          // Terminais de pagamento / maquininhas (2026-09-01)
+          syncService.fetchRows('payment_terminals', resolvedBranchId),
         ]);
 
       // ── HELPER: merge cloud rows into local data by ID ──────────
@@ -2277,6 +2342,25 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
           return { ...cloudMapped, updatedAt: new Date().toISOString() };
         });
         if (merged !== null) this.set(KEYS.OPEN_CONTAINERS, merged);
+      }
+
+      // ── PAYMENT_TERMINALS (maquininhas de pagamento) ──────────────
+      {
+        const local = this.get<PaymentTerminal[]>(KEYS.PAYMENT_TERMINALS, []);
+        const merged = mergeBy(KEYS.PAYMENT_TERMINALS, local, paymentTerminals, (r: any) => ({
+          id: r.id,
+          organizationId: r.organization_id || undefined,
+          storeBranchId: r.store_branch_id || undefined,
+          userId: r.user_id || '',
+          provider: r.provider || 'infinitepay',
+          name: r.name || '',
+          config: r.config || {},
+          isDefault: !!r.is_default,
+          enabled: r.enabled !== false,
+          createdAt: r.created_at || new Date().toISOString(),
+          updatedAt: r.updated_at || new Date().toISOString(),
+        }), (c) => this.syncPaymentTerminal(c), (item: any) => item.id);
+        if (merged !== null) this.set(KEYS.PAYMENT_TERMINALS, merged);
       }
 
       // ── PRODUCT_RECIPES (receitas de compostos) ─────────────────────
@@ -6357,6 +6441,42 @@ saveUserProfile(user: UserProfile) {
     if (!oc) return;
     this.set(KEYS.OPEN_CONTAINERS, all.filter((c) => c.id !== id));
     this.notify(KEYS.OPEN_CONTAINERS, 'remote');
+  }
+
+  // --- PAYMENT TERMINALS (maquininhas de pagamento) (Realtime) ---
+  updatePaymentTerminalFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Isolamento de filial (BUG-024): nunca hidratar terminal de outra filial
+    if (!this.isRemoteFromCurrentBranch(row)) return;
+    const terminals = this.get<PaymentTerminal[]>(KEYS.PAYMENT_TERMINALS, []);
+    const idx = terminals.findIndex((t) => t.id === row.id);
+    const mapped: PaymentTerminal = {
+      id: row.id,
+      organizationId: row.organization_id || undefined,
+      storeBranchId: row.store_branch_id || undefined,
+      userId: row.user_id || '',
+      provider: row.provider || 'infinitepay',
+      name: row.name || '',
+      config: row.config || {},
+      isDefault: !!row.is_default,
+      enabled: row.enabled !== false,
+      createdAt: row.created_at || new Date().toISOString(),
+      updatedAt: row.updated_at || new Date().toISOString(),
+    };
+    if (idx >= 0) terminals[idx] = mapped; else terminals.unshift(mapped);
+    this.set(KEYS.PAYMENT_TERMINALS, terminals);
+    this.notify(KEYS.PAYMENT_TERMINALS, 'remote');
+  }
+
+  deletePaymentTerminalFromRemote(id: string): void {
+    this.setChangeSource('remote');
+    // Isolamento de filial (BUG-025): nunca remover terminal de outra filial
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.PAYMENT_TERMINALS)) return;
+    const all = this.get<PaymentTerminal[]>(KEYS.PAYMENT_TERMINALS, []);
+    const pt = all.find((t) => t.id === id);
+    if (!pt) return;
+    this.set(KEYS.PAYMENT_TERMINALS, all.filter((t) => t.id !== id));
+    this.notify(KEYS.PAYMENT_TERMINALS, 'remote');
   }
 
   // --- DELIVERY WORKER EARNINGS (Realtime) ---
