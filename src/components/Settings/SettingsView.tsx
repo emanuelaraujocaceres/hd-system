@@ -36,7 +36,6 @@ import {
   Download,
   Truck,
   Printer as PrinterLucide,
-  CreditCard,
 } from 'lucide-react';
 import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, PrinterRole, MediaDevice, BranchTheme, Category, Table, DigitalMenuConfig } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -53,7 +52,6 @@ import { useToast } from '../shared/Toast';
 import { ResetDataButton } from '../shared/ResetDataButton';
 import { DeliverySettingsView } from './DeliverySettingsView';
 import { ModuleVisibilityView } from './ModuleVisibilityView';
-import { IntegrationsView } from './IntegrationsView';
 
 interface SettingsViewProps {
   settings: SystemSettings;
@@ -1324,18 +1322,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             <span>📦</span>
             <span className="hidden sm:inline">Módulos</span>
             <span className="sm:hidden">Módulos</span>
-          </button>
-          <button
-            onClick={() => handleSetActiveSubTab('integrations')}
-            className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
-              activeSubTab === 'integrations'
-                ? 'bg-white dark:bg-[#27272a] text-blue-600 dark:text-blue-400 shadow-sm'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <CreditCard className="w-4 h-4" />
-            <span className="hidden sm:inline">Integrações</span>
-            <span className="sm:hidden">Integrações</span>
           </button>
         </div>
       </div>
@@ -3451,20 +3437,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
     {(() => {
       const branch = branches.find(b => b.id === user.storeBranchId) || branches[0];
       return branch ? <ModuleVisibilityView branch={branch} /> : (
-        <div className="p-6 text-center text-sm text-slate-400 dark:text-[#71717a]">
-          Aguardando filial ser carregada...
-        </div>
-      );
-    })()}
-  </div>
-)}
-
-{/* ── INTEGRAÇÕES ── */}
-{activeSubTab === 'integrations' && (
-  <div className="space-y-4">
-    {(() => {
-      const branch = branches.find(b => b.id === user.storeBranchId) || branches[0];
-      return branch ? <IntegrationsView branch={branch} user={user} /> : (
         <div className="p-6 text-center text-sm text-slate-400 dark:text-[#71717a]">
           Aguardando filial ser carregada...
         </div>

@@ -12,6 +12,7 @@ import {
   Split,
   Plus,
   Minus,
+  Settings,
 } from 'lucide-react';
 import {
   CartItem,
@@ -28,6 +29,7 @@ import { posAudio } from '../../services/audioService';
 import { globalNotificationService } from '../../services/globalNotificationService';
 import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
 import { LoadingButton } from '../shared/LoadingButton';
+import { PaymentTerminalsModal } from './PaymentTerminalsModal';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -78,6 +80,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const [loading, setLoading] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [showTerminalsModal, setShowTerminalsModal] = useState(false);
   const firstInputRef = useRef<HTMLSelectElement>(null);
   useEffect(() => {
     if (isOpen && firstInputRef.current) {
@@ -349,18 +352,33 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Forma de Pagamento
               </label>
-              <button
-                type="button"
-                onClick={() => setIsSplit(!isSplit)}
-                className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 min-h-[44px] ${
-                  isSplit
-                    ? 'bg-indigo-600 text-white border-indigo-500'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'
-                }`}
-              >
-                <Split className="w-3.5 h-3.5" />
-                <span>{isSplit ? 'Pagamento Dividido' : 'Dividir Pagamento'}</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowTerminalsModal(true)}
+                  title="Cadastrar/gerenciar maquininhas"
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 min-h-[44px] ${
+                    showTerminalsModal
+                      ? 'bg-indigo-600 text-white border-indigo-500'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>⚙️ Maquininhas</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsSplit(!isSplit)}
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 min-h-[44px] ${
+                    isSplit
+                      ? 'bg-indigo-600 text-white border-indigo-500'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                  }`}
+                >
+                  <Split className="w-3.5 h-3.5" />
+                  <span>{isSplit ? 'Pagamento Dividido' : 'Dividir Pagamento'}</span>
+                </button>
+              </div>
             </div>
 
             {!isSplit ? (
@@ -717,6 +735,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </LoadingButton>
         </div>
       </div>
+
+      <PaymentTerminalsModal
+        isOpen={showTerminalsModal}
+        onClose={() => setShowTerminalsModal(false)}
+        user={user}
+      />
     </div>
   );
 };
