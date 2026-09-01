@@ -84,6 +84,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [quickFilter, setQuickFilter] = useState<'all' | 'cardapio' | 'tv'>('all');
   const [isSearching, setIsSearching] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
+  const [showAllOnTV, setShowAllOnTV] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [sortField, setSortField] = useState<string>('name');
@@ -2183,6 +2184,21 @@ minStock: parseInt(formMinStock) || 0,
           </div>
         </div>
       </BottomSheet>
+
+      {/* Botão "Exibir todos na TV" */}
+      {products.length > 0 && (
+        <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Tv className="w-4 h-4 text-indigo-600" />
+              <span className="text-xs font-semibold text-indigo-600">Exibir todos na TV</span>
+            </div>
+            <div className="text-xs text-indigo-500">
+              {showAllOnTV ? 'Ativado' : 'Desativado'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirm: excluir produto */}
       <ConfirmDialog
