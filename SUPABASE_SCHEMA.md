@@ -270,6 +270,9 @@ Produtos (estoque e responsabilidade do frontend - AGENTS.md regra 8).
 | max_stock_quantity | INTEGER | YES | | Estoque maximo |
 | is_active | BOOLEAN | YES | | Ativo? |
 | is_composite | BOOLEAN | YES | | Produto composto? |
+| is_fragmentable | BOOLEAN | YES | | Produto fragmentável (garrafa fracionável em doses)? Adicionado 2026-08-31 |
+| yield_count | INTEGER | YES | | Rendimento (nº de doses por garrafa) ao abrir um contêiner. Adicionado 2026-08-31 |
+| fraction_product_id | UUID | YES | | FK->products | Produto "dose" filho desta garrafa. A RPC process_single_item usa para detectar fração (`WHERE fraction_product_id = p_product_id AND is_fragmentable = true`). Adicionado 2026-08-31 |
 | use_lots | BOOLEAN | YES | | Controla lotes? |
 | expiration_date | DATE | YES | | Validade |
 | show_on_cardapio | BOOLEAN | YES | | Exibir no cardapio? |
@@ -349,17 +352,21 @@ Realtime: publicada - REPLICA: full
 ### open_containers
 Conteineres abertos / decrementos fracionados (garrafa aberta, dose). Sincronizada pelo frontend (syncService/storageService/Realtime). Tabela criada em 2026-08-31 (migration `20260831_add_open_containers.sql`) — deixa de ser orfa do frontend e elimina o 403 na hidratacao.
 
+> NOTA (2026-08-31, verificado no catálogo vivo): `remaining_quantity` é **INTEGER** (não NUMERIC como constava antes). Status usados na prática: `open` (ativo) e `empty` (esgotado) — definidos pela RPC (`process_single_item`) quando `remaining_quantity - consume = 0`. O status `closed`/`consumed` não é usado pelo fluxo de vendas.
+
 | Coluna | Tipo | Null | Key | Descricao |
 |--------|------|------|-----|-----------|
 | id | UUID | NO | PK | PK |
 | organization_id | UUID | NO | FK->organizations | Org |
 | store_branch_id | UUID | NO | FK->store_branches | Filial |
-| product_id | UUID | NO | FK->products | Produto |
-| remaining_quantity | NUMERIC | NO | | Quantidade restante (fracao) |
+| product_id | UUID | NO | FK->products | Produto (garrafa fragmentável mãe) |
+| remaining_quantity | INTEGER | NO | | Dose(s) restante(s) na garrafa aberta |
 | opened_at | TIMESTAMPTZ | YES | | Abertura |
-| status | TEXT | NO | | open / closed / consumed |
+| status | TEXT | NO | | open / empty (flow de venda); o tipo também aceita closed/consumed (não usados) |
 | created_at | TIMESTAMPTZ | YES | | |
 | updated_at | TIMESTAMPTZ | YES | | |
+
+> Consumo FIFO: a RPC `process_single_item` consome de contêineres `open` com `remaining_quantity > 0` ordenados por `opened_at ASC`; se faltar dose, abre garrafa nova (baixa 1 de `products.stock_quantity`, cria contêiner com `yield_count`, registra movimento "Abertura de garrafa para venda") em loop (WHILE). Tudo com isolamento de org + branch e `FOR UPDATE` (atômico).
 
 RLS: branch-scoped via create_branch_policy (superadmin OU org+branch) - policies open_containers_select/insert/update/delete. Anon REVOKED.
 Realtime: publicada - REPLICA: full
@@ -623,6 +630,19 @@ Processa um documento de entrada: atualiza custo e estoque, grava `stock_movemen
 `v_documents_list` — join de `nf_records` com `suppliers`; pronta para a tela "Documentos de Entrada".
 
 > Nota: conteúdo desta seção transcrito da descrição do usuário (2026-08-29). Recomenda-se re-pull do catálogo vivo para confirmar assinaturas exatas e grants das RPCs.
+
+### Funções RPC de venda / fracionados (versionadas 2026-08-31)
+
+Versionadas em `supabase/migrations/20260831_version_rpc_fracionados.sql` (estado real do banco — antes só existiam no banco, sem arquivo no repo). Ambas SECURITY DEFINER, com filtro de organização + filial e `FOR UPDATE`.
+
+`process_single_item(p_product_id uuid, p_quantity integer, p_org_id uuid, p_branch_id uuid, p_sale_id uuid, p_operator_name text) RETURNS void`
+- Helper de dedução de estoque. Se o produto vendido é **fração** de um fragmentável (`WHERE fraction_product_id = p_product_id AND is_fragmentable = true`): consome doses de `open_containers` abertos (FIFO por `opened_at`); se faltar, **abre garrafa nova** em WHILE (baixa 1 de `products.stock_quantity`, cria contêiner com `yield_count`, registra "Abertura de garrafa para venda"); `RAISE EXCEPTION 'Estoque insuficiente de garrafas...'` se não houver garrafa. Senão (produto normal ou garrafa inteira): deduz `stock_quantity` e registra movimento "Venda". O estoque da dose em si NUNCA é deduzido (o consumo é sempre do contêiner/garrafa mãe).
+- GRANT: PUBLIC + authenticated + service_role (reproduz o estado real; PUBLIC exposto — pendência de endurecimento, não alterado por escopo mínimo).
+
+`process_sale_transaction(p_sale_id uuid, p_product_id text DEFAULT NULL, p_quantity integer DEFAULT 0, p_unit_price numeric DEFAULT 0, p_discount numeric DEFAULT 0, p_total numeric DEFAULT 0, p_reason text DEFAULT 'Venda PDV', p_operator_name text DEFAULT 'Sistema', p_organization_id uuid DEFAULT ..., p_store_branch_id uuid DEFAULT NULL, p_sale_items jsonb DEFAULT '[]') RETURNS TABLE(success boolean, message text)`
+- Orquestra a venda: itera `p_sale_items` (array de `{product_id, quantity, unit_price, total, discount}`); se o produto é `is_composite`, expande a receita (`product_recipes`) e processa cada **ingrediente** via `process_single_item`; senão processa o próprio item. Atômica: em qualquer erro retorna `success=false` com a mensagem (nada é deduzido). Exceção capturada → `RETURN QUERY SELECT FALSE, SQLERRM`.
+- **Não cria `sales`/`sale_items`** — esses são gravados pelo frontend (`syncSale`/`syncSaleItem`); a RPC apenas deduz estoque/consome contêineres.
+- GRANT: authenticated + service_role (RPC do cardápio anon: mantém `EXECUTE` para anon conforme regra 0e do AGENTS.md — NÃO revogar).
 
 ### ai_insights
 Insights de IA gerados (sem IA no app - gerado por backend/Cloudflare).
