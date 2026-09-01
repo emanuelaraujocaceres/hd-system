@@ -269,7 +269,7 @@ describe('scoreAgainstGroundTruth', () => {
     expect(score.numericAccuracyPct).toBe(0);
   });
 
-  it('trata truth sem total (totalMatch = false)', () => {
+it('trata truth sem total (totalMatch = false)', () => {
     const extracted = {
       source: 'xml' as const,
       templateId: 'test',
@@ -292,5 +292,88 @@ describe('scoreAgainstGroundTruth', () => {
     // truth.total is undefined → totalMatch = false per code
     expect(score.totalMatch).toBe(false);
     expect(score.numericAccuracyPct).toBe(100);
+  });
+});
+
+// ── Novos testes: planilha de alterações da Fase A ─────────────────────
+
+describe('parser — Fase A (relaxamento de regex e guards)', () => {
+  const TEMPLATES = templatesData.templates;
+
+  describe('detectTemplate', () => {
+    it('detecta DANFE pelo keyword "danfe"', () => {
+      const tpl = detectTemplate('NOTA FISCAL ELETRONICA - DANFE', TEMPLATES);
+      expect(tpl.id).toBe('danfe');
+    });
+
+    it('detecta Ambev pelo keyword', () => {
+      const tpl = detectTemplate('AMBEV DISTRIBUIDORA', TEMPLATES);
+      expect(tpl.id).toBe('ambev');
+    });
+
+    it('cai no genérico se nenhum keyword casar', () => {
+      const tpl = detectTemplate('algo sem nenhum fornecedor conhecido', TEMPLATES);
+      expect(tpl.id).toBe('generic');
+    });
+
+    it('estrutural: texto com "razao social" cai em danfe', () => {
+      const tpl = detectTemplate('RAZAO SOCIAL: BEBIDAS EXEMPLO LTDA', TEMPLATES);
+      expect(tpl.id).toBe('danfe');
+    });
+
+    it('estrutural: texto com "documento auxiliar" cai em danfe', () => {
+      const tpl = detectTemplate('documento auxiliar da nota fiscal', TEMPLATES);
+      expect(tpl.id).toBe('danfe');
+    });
+  });
+
+  describe('parseOcr — itens de DANFE com código de 6 dígitos', () => {
+    it('extrai nome, qtd, unitPrice e subtotal quando código tem 6 dígitos', () => {
+      const text = `
+        000123 REFRIGERANTE COLA 330ML 10 3,50 35,00
+        002 CERVEJA LATA 350ML 24 2,00 48,00
+      `;
+      const danfeTemplate = TEMPLATES.find((t) => t.id === 'danfe')!;
+      const result = parseOcr(text, danfeTemplate);
+      expect(result.items.length).toBe(2);
+      const first = result.items[0];
+      expect(first.productName).toBe('REFRIGERANTE COLA 330ML');
+      expect(first.quantity).toBeCloseTo(10, 1);
+      expect(first.unitPrice).toBeCloseTo(3.5, 2);
+      expect(first.subtotal).toBeCloseTo(35, 2);
+    });
+  });
+
+  describe('parseOcr — modo genérico (sem código)', () => {
+    it('parseia linhas sem código inicial', () => {
+      const text = `
+        REFRIGERANTE COLA 330ML 10 3,50 35,00
+        CERVEJA LATA 350ML 24 2,00 48,00
+      `;
+      const genericTemplate = TEMPLATES.find((t) => t.id === 'generic')!;
+      const result = parseOcr(text, genericTemplate);
+      expect(result.items.length).toBe(2);
+      expect(result.items[0].productName).toBe('REFRIGERANTE COLA 330ML');
+      expect(result.items[0].quantity).toBeCloseTo(10, 1);
+    });
+  });
+
+  describe('parseOcr — guard contra nome puramente numérico', () => {
+    it('ignora linhas onde o produto é apenas número', () => {
+      const text = '48 2,79 133,92';
+      const danfeTemplate = TEMPLATES.find((t) => t.id === 'danfe')!;
+      const result = parseOcr(text, danfeTemplate);
+      expect(result.items.length).toBe(0);
+      expect(result.warnings.length).toBeGreaterThan(0);
+    });
+
+    it('não ignora produto com nome alfanumérico', () => {
+      const text = 'CERVEJA 51 12 10,00 120,00';
+      const danfeTemplate = TEMPLATES.find((t) => t.id === 'danfe')!;
+      const result = parseOcr(text, danfeTemplate);
+      // "CERVEJA 51" tem letras, não é puramente numérico → deve casar
+      expect(result.items.length).toBe(1);
+      expect(result.items[0].productName).toBe('CERVEJA 51');
+    });
   });
 });

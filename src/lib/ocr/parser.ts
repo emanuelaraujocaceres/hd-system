@@ -84,19 +84,37 @@ function firstMatch(text: string, def?: SupplierField): string {
   return m ? (m[g] || '').trim() : '';
 }
 
-// ── Detecção de template ──────────────────────────────────────────────
+// ── Fallback estrutural para DANFE ──────────────────────────────────────
+/** Detecta template DANFE pelo conteúdo estrutural (labels típicas do DANFE),
+    independente de keywords. Usado quando nenhuma keyword exata casa. */
+function detectTemplateByStructure(text: string): string | null {
+  const t = (text || '').toLowerCase();
+  // labels características do DANFE que costumam sobreviver ao OCR ruidoso
+  if (/(razao social|documento auxiliar)/.test(t)) return 'danfe';
+  return null;
+}
 
+// ── Detecção de template ──────────────────────────────────────────────
 export function detectTemplate(text: string, templates: OcrTemplate[]): OcrTemplate {
   const t = (text || '').toLowerCase();
+  // 1) Keywords exatas (case-insensitive)
   for (const tp of templates) {
     const kw = tp.match?.keywords;
     if (kw && kw.some((k) => t.includes(k.toLowerCase()))) return tp;
   }
+  // 2) Fallback estrutural DANFE: labels que o parser usa nos campos do DANFE
+  const struct = detectTemplateByStructure(text);
+  if (struct) {
+    const found = templates.find((x) => x.id === struct);
+    if (found) return found;
+  }
+  // 3) Quem cai aqui é o generic (fallback geral)
   return templates.find((x) => x.id === 'generic') || templates[0];
 }
 
-// ── Parser OCR ────────────────────────────────────────────────────────
+// ── Parser OCR ──────────────────────────────────────────────────────────
 
+/** Parseia texto OCR em documento estruturado, usando um template definido. */
 export function parseOcr(text: string, template: OcrTemplate): ParsedDocument {
   const result: ParsedDocument = {
     source: 'ocr',
@@ -138,6 +156,13 @@ export function parseOcr(text: string, template: OcrTemplate): ParsedDocument {
       } else if (field === 'subtotal') {
         item.subtotal = parseBRNumber(v);
       }
+    }
+
+    // --- Guarda: rejeita nome de produto puramente numérico (ex.: "48" isolado) ---
+    const isPureNumber = /^\d+$/.test(item.productName);
+    if (isPureNumber) {
+      result.warnings.push('Linha de item ignorada: nome puramente numérico (provavelmente cabeçalho ou ruído OCR).');
+      continue;
     }
 
     const hasQty = item.quantity > 0;

@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "note": "Templates de fornecedor para parsing OCR. Estrutura definida; regex DEVEM ser afinadas com OCR real.",
+  "note": "Templates de fornecedor para parsing OCR. Regex definidas; ajustar com OCR real.",
   "templates": [
     {
       "id": "danfe",
       "label": "DANFE / NF-e impressa",
-      "match": { "keywords": ["danfe", "nota fiscal eletronica", "documento auxiliar", "nfe"] },
+      "match": { "keywords": ["danfe", "nota fiscal eletronica", "documento auxiliar", "nfe", "documento auxiliar da nota"] },
       "supplier": {
         "name": { "regex": "RAZAO SOCIAL[:\\s]*([^\\n]+)", "group": 1 },
         "cnpj": { "regex": "CNPJ[:\\s]*([\\d./-]{14,18})", "group": 1 },
@@ -15,8 +15,8 @@
       "documentNumber": { "regex": "NUMERO[:\\s]*([\\d]{1,12})", "group": 1 },
       "qrAccessKey": { "regex": "([\\d]{44})", "group": 1 },
       "itemLine": {
-        "regex": "^\\s*(\\d{1,4})\\s+(.+?)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
-        "map": { "code": 1, "name": 2, "qty": 3, "unitPrice": 4, "subtotal": 5 }
+        "regex": "^\\s*(?:\\d+\\s+)?(.+?)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
+        "map": { "name": 1, "qty": 2, "unitPrice": 3, "subtotal": 4 }
       },
       "total": { "regex": "VALOR TOTAL[^\\d]*([\\d.,]+)", "group": 1 }
     },
@@ -30,8 +30,8 @@
       },
       "documentNumber": { "regex": "PEDIDO[:\\s]*([\\d]{1,12})", "group": 1 },
       "itemLine": {
-        "regex": "^\\s*(\\d{3,})\\s+(.+?)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
-        "map": { "code": 1, "name": 2, "qty": 3, "unitPrice": 4, "subtotal": 5 }
+        "regex": "^\\s*(?:\\d+\\s+)?(.+?)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
+        "map": { "name": 1, "qty": 2, "unitPrice": 3, "subtotal": 4 }
       },
       "total": { "regex": "TOTAL[:\\s]*([\\d.,]+)", "group": 1 }
     },
@@ -45,8 +45,8 @@
       },
       "documentNumber": { "regex": "NOTA[:\\s]*([\\d]{1,12})", "group": 1 },
       "itemLine": {
-        "regex": "^\\s*(\\d{1,4})\\s+(.+?)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
-        "map": { "code": 1, "name": 2, "qty": 3, "unitPrice": 4, "subtotal": 5 }
+        "regex": "^\\s*(?:\\d+\\s+)?(.+?)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
+        "map": { "name": 1, "qty": 2, "unitPrice": 3, "subtotal": 4 }
       },
       "total": { "regex": "TOTAL GERAL[^\\d]*([\\d.,]+)", "group": 1 }
     },
@@ -61,7 +61,7 @@
       "documentNumber": { "regex": "DOC[:\\s]*([\\d]{1,12})", "group": 1 },
       "itemLine": {
         "regex": "^\\s*(.+?)\\s{2,}(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
-        "map": { "code": 1, "name": 1, "qty": 2, "unitPrice": 3, "subtotal": 4 }
+        "map": { "name": 1, "qty": 2, "unitPrice": 3, "subtotal": 4 }
       },
       "total": { "regex": "TOTAL[:\\s]*([\\d.,]+)", "group": 1 }
     },
@@ -75,8 +75,8 @@
       },
       "documentNumber": { "regex": "(?:PEDIDO|NOTA|DOC|NUMERO)[:\\s]*([\\d]{1,12})", "group": 1 },
       "itemLine": {
-        "regex": "^\\s*(\\d{1,4})?\\s*(.+?)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
-        "map": { "code": 1, "name": 2, "qty": 3, "unitPrice": 4, "subtotal": 5 }
+        "regex": "^\\s*(?:\\d+\\s+)?(.+?)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s+(\\d[\\d.,]*)\\s*$",
+        "map": { "name": 1, "qty": 2, "unitPrice": 3, "subtotal": 4 }
       },
       "total": { "regex": "TOTAL[:\\s]*([\\d.,]+)", "group": 1 }
     }
