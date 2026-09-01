@@ -33,6 +33,7 @@ import { BarcodeLabelModal } from './BarcodeLabelModal';
 import { CategoryManagerModal } from './CategoryManagerModal';
 import { LotManagerModal } from './LotManagerModal';
 import { StockCameraScannerModal } from './StockCameraScannerModal';
+import { OpenContainersModal } from './OpenContainersModal';
 import { Skeleton, TableSkeleton } from '../shared/Skeleton';
 import { BottomSheet } from '../shared/BottomSheet';
 import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
@@ -100,6 +101,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [barcodeTargetProduct, setBarcodeTargetProduct] = useState<Product | null>(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isStockCameraModalOpen, setIsStockCameraModalOpen] = useState(false);
+  const [isOpenContainersModalOpen, setIsOpenContainersModalOpen] = useState(false);
 
   // Camera & Image Search state
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
@@ -712,6 +714,15 @@ minStock: parseInt(formMinStock) || 0,
           >
             <Tag className="w-4 h-4 text-indigo-500" />
             <span>Categorias</span>
+          </button>
+
+          <button
+            onClick={() => setIsOpenContainersModalOpen(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-200 dark:hover:bg-[#27272a] transition-all flex items-center gap-1.5 shadow-sm"
+            title="Garrafas abertas e doses disponíveis"
+          >
+            <Boxes className="w-4 h-4 text-indigo-500" />
+            <span>Contêineres Abertos</span>
           </button>
 
           {canCreateEdit && (
@@ -2194,6 +2205,14 @@ minStock: parseInt(formMinStock) || 0,
         productId={lotManagerProduct?.id || ''}
         productName={lotManagerProduct?.name || ''}
         onClose={() => setLotManagerProduct(null)}
+      />
+
+      <OpenContainersModal
+        isOpen={isOpenContainersModalOpen}
+        products={products}
+        user={user}
+        canCreateEdit={canCreateEdit}
+        onClose={() => setIsOpenContainersModalOpen(false)}
       />
     </div>
   );
