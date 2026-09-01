@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { PermissionEngine } from '../../lib/iam';
 import { useDebounce } from '../../hooks/useDebounce';
+import { useBarcodeKeyboardWedge } from '../../hooks/useBarcodeKeyboardWedge';
 import {
   Package,
   Plus,
@@ -559,6 +560,71 @@ minStock: parseInt(formMinStock) || 0,
 
   const [confirmDeleteProduct, setConfirmDeleteProduct] = useState<Product | null>(null);
   const [lotManagerProduct, setLotManagerProduct] = useState<Product | null>(null);
+
+  // ── LEITOR USB (keyboard wedge) no Estoque ─────────────────────
+  // Replica a lógica do PDV: funciona com o cursor em qualquer lugar da tela,
+  // busca o produto pelo código e, se não existir, abre o cadastro com o código.
+  // Usa ref estável p/ não re-registrar o listener a cada render.
+  const productsRef = useRef(products);
+  useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
+
+  const handleInventoryBarcodeDetected = (barcode: string) => {
+    const clean = (barcode || '').trim();
+    // Padrão do PDV: ignora código vazio ou '0' (códigos não preenchidos)
+    if (!clean || clean === '0') return;
+
+    const found = productsRef.current.find((p) => p.barcode && String(p.barcode).trim() === clean);
+    if (found) {
+      // Garante que o produto fique visível na lista (limpa filtros/busca) e o destaca
+      setSelectedCategory('all');
+      setStockFilter('all');
+      setQuickFilter('all');
+      setSearchTerm('');
+      setHighlightedProductId(found.id);
+      setTimeout(() => setHighlightedProductId(null), 2000);
+      posAudio.chime();
+      addToast('success', `Produto encontrado: ${found.name}`);
+      return;
+    }
+
+    // Não encontrado → abre o cadastro com o código preenchido (se tiver permissão)
+    if (!canCreateEdit) {
+      posAudio.error();
+      addToast('error', 'Produto não cadastrado e você não tem permissão para criar.');
+      return;
+    }
+    resetProductForm(clean);
+    setIsProductModalOpen(true);
+  };
+
+  const handleInventoryBarcodeDetectedRef = useRef(handleInventoryBarcodeDetected);
+  useEffect(() => {
+    handleInventoryBarcodeDetectedRef.current = handleInventoryBarcodeDetected;
+  });
+
+  const onInventoryBarcode = useCallback((barcode: string) => {
+    handleInventoryBarcodeDetectedRef.current(barcode);
+  }, []);
+
+  // Pausa o leitor USB enquanto qualquer modal está aberto (mesmo princípio do
+  // PDV, que pausa a câmera) — evita abrir cadastro/modal por cima de outro.
+  const wedgePaused =
+    isProductModalOpen ||
+    isStockModalOpen ||
+    isStockCameraModalOpen ||
+    isCategoryModalOpen ||
+    isOpenContainersModalOpen ||
+    isCameraModalOpen ||
+    isInventoryModalOpen ||
+    lotManagerProduct !== null ||
+    confirmDeleteProduct !== null;
+
+  useBarcodeKeyboardWedge({
+    onBarcode: onInventoryBarcode,
+    paused: wedgePaused,
+  });
 
   // ── ESTOQUE INTELIGENTE: INVENTÁRIO (ajuste com motivo) ────────
   const openInventoryModal = (product: Product) => {
