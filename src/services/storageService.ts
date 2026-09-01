@@ -243,6 +243,20 @@ class StorageService {
       localStorage.setItem(KEYS.VIEWING_ORG, orgId);
       // Mantém histórico da última org usada para a auto-seleção (Opção 1).
       localStorage.setItem(KEYS.LAST_VIEWING_ORG, orgId);
+      // Problema 1 (reforço): com o override definido, getBranches() já retorna
+      // só as filiais da org em foco (filterByOrg). Se a filial salva não
+      // pertence a ela (ou não há filial salva), persiste a primeira filial da
+      // org — mantém o valor salvo consistente com o fallback de
+      // getSelectedBranchId(). Guard de boot: com getBranches() ainda vazio
+      // (hidratação em andamento) NÃO zera o UUID salvo.
+      const branches = this.getBranches();
+      if (branches.length > 0) {
+        const savedId = localStorage.getItem('hd_system_selected_branch_id');
+        const belongs = !!savedId && branches.some((b) => b.id === savedId || b.code === savedId);
+        if (!belongs) {
+          localStorage.setItem('hd_system_selected_branch_id', branches[0].id);
+        }
+      }
     } else {
       localStorage.removeItem(KEYS.VIEWING_ORG);
       // Intencionalmente NÃO limpamos LAST_VIEWING_ORG: o modo global só existe
@@ -5944,12 +5958,21 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   getSelectedBranchId(): string {
+    const branches = this.getBranches();
     const savedId = localStorage.getItem('hd_system_selected_branch_id');
-    if (!savedId) return '';
+    if (!savedId) {
+      // Problema 1: superadmin com org em foco e sem filial salva -> resolve
+      // para a primeira filial visível da org (alinhado com getSelectedBranch()
+      // e o fallback de addSale). Nunca retorna '' aqui — senão a leitura vira
+      // [] e a escrita lança "Nenhuma filial selecionada" / store_branch_id ''.
+      if (this.isSuperAdmin() && this.getSuperadminViewingOrg() && branches.length > 0) {
+        return branches[0].id;
+      }
+      return '';
+    }
     // Valida contra as filiais visíveis no escopo atual (org em foco).
     // Antes retornava o valor bruto — ao trocar de org (override do
     // superadmin), o filtro usava a filial de outra org e zerava as listas.
-    const branches = this.getBranches();
     const found = branches.find((b) => b.id === savedId || b.code === savedId);
     if (found) return found.id;
     // Janela de boot: getBranches() ainda vazio (hidratação do cloud em
@@ -5957,9 +5980,13 @@ private updateReceivableFromPayments(saleId: string) {
     // store_branch_id vazio ("invalid input syntax for type uuid: ''").
     // Se o valor salvo já é um UUID válido (definido pelo seletor de filial
     // ou pelo login), confia nele até as branches chegarem do cloud.
-    // Não afeta o caso do superadmin trocando de org: aí getBranches() tem
-    // linhas e a validação continua rejeitando UUID de outra organização.
     if (branches.length === 0 && this.isValidUuid(savedId)) return savedId;
+    // Problema 1: filial salva pertence a outra org (ou foi removida) e o
+    // superadmin está com org em foco -> resolve para a primeira filial
+    // visível da org. Não-superadmin e superadmin global seguem retornando ''.
+    if (this.isSuperAdmin() && this.getSuperadminViewingOrg() && branches.length > 0) {
+      return branches[0].id;
+    }
     return '';
   }
 

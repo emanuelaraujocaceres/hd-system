@@ -111,4 +111,101 @@ describe('storageService — contexto de organização do superadmin (Opção 1 
       spy.mockRestore();
     });
   });
+
+  describe('getSelectedBranchId — fallback de filial do superadmin (Problema 1)', () => {
+    const branchA = { id: 'br-org1-a', name: 'Filial A', code: 'A-01', organizationId: 'org-1', city: 'SP', state: 'SP', cnpj: '', phone: '', active: true, isHeadquarters: true };
+    const branchB = { id: 'br-org1-b', name: 'Filial B', code: 'B-01', organizationId: 'org-1', city: 'SP', state: 'SP', cnpj: '', phone: '', active: true, isHeadquarters: false };
+
+    const seedBranches = (branches: typeof branchA[]) => {
+      localStorage.setItem('hd_system_branches', JSON.stringify(branches));
+    };
+
+    const seedProduct = (id: string, storeBranchId: string) => {
+      const existing = JSON.parse(localStorage.getItem('hd_system_products') || '[]');
+      existing.push({
+        id, name: `Produto ${id}`, category: 'Geral', unit: 'un', costPrice: 5, salePrice: 10,
+        currentStock: 1, minStock: 5, maxStock: 100, barcode: '', active: true,
+        updatedAt: new Date().toISOString(), storeBranchId, organizationId: 'org-1',
+      });
+      localStorage.setItem('hd_system_products', JSON.stringify(existing));
+    };
+
+    it('superadmin com org em foco e SEM filial salva → resolve para a primeira filial da org (leitura)', () => {
+      svc.superadminSetViewingOrg('org-1'); // branches ainda não hidratadas -> setter não persiste filial
+      seedBranches([branchA, branchB]);     // hidratação chega depois
+      seedProduct('p-a', 'br-org1-a');
+      seedProduct('p-b', 'br-org1-b');
+      expect(svc.getSelectedBranchId()).toBe('br-org1-a');
+      // Item da segunda filial da MESMA org NÃO vaza (isolamento intra-org)
+      expect(svc.getProducts().map((p) => p.id)).toEqual(['p-a']);
+    });
+
+    it('superadmin com org em foco e filial salva de OUTRA org → primeira filial da org em foco', () => {
+      svc.superadminSetViewingOrg('org-1');
+      seedBranches([branchA, branchB]);
+      localStorage.setItem('hd_system_selected_branch_id', 'br-org2-a'); // valor legado de outra org
+      expect(svc.getSelectedBranchId()).toBe('br-org1-a');
+    });
+
+    it('superadmin GLOBAL (sem org em foco) → comportamento inalterado (vê tudo)', () => {
+      seedBranches([branchA, branchB]);
+      seedProduct('p-a', 'br-org1-a');
+      seedProduct('p-b', 'br-org1-b');
+      expect(svc.getSuperadminViewingOrg()).toBeNull();
+      expect(svc.getSelectedBranchId()).toBe(''); // sem filial salva e sem org em foco
+      expect(svc.getProducts().map((p) => p.id)).toEqual(['p-a', 'p-b']);
+    });
+
+    it('não-superadmin com branch vazia → continua retornando [] (inalterado)', () => {
+      localStorage.setItem(
+        'hd_system_user_profile',
+        JSON.stringify({ superadmin: false, email: 'u@x.com', organizationId: 'org-1' }),
+      );
+      seedBranches([branchA, branchB]);
+      seedProduct('p-a', 'br-org1-a');
+      seedProduct('p-b', 'br-org1-b');
+      expect(svc.getSelectedBranchId()).toBe('');
+      expect(svc.getProducts()).toEqual([]);
+    });
+
+    it('saveProduct de superadmin com org em foco (sem filial) → NÃO lança e grava na primeira filial da org', () => {
+      svc.superadminSetViewingOrg('org-1');
+      seedBranches([branchA, branchB]); // hidratação chega sem persistir filial
+      const spy = vi.spyOn(syncService, 'upsertRow').mockResolvedValue(undefined as any);
+      expect(() =>
+        svc.saveProduct({
+          id: 'p-novo', name: 'Produto Novo', category: 'Geral', unit: 'un',
+          costPrice: 5, salePrice: 10, currentStock: 1, minStock: 5, maxStock: 100,
+          barcode: '', active: true, updatedAt: new Date().toISOString(),
+        } as any),
+      ).not.toThrow();
+      expect(svc.getProducts()[0].storeBranchId).toBe('br-org1-a');
+      spy.mockRestore();
+    });
+
+    it('janela de boot: branches vazias + UUID salvo válido → confia no UUID salvo (inalterado)', () => {
+      const uuid = '11111111-1111-4111-8111-111111111111';
+      localStorage.setItem('hd_system_selected_branch_id', uuid);
+      expect(svc.getSelectedBranchId()).toBe(uuid);
+    });
+
+    it('superadminSetViewingOrg reconcilia a filial salva quando as branches da org estão hidratadas', () => {
+      seedBranches([branchA, branchB]);
+      // filial de outra org -> persiste a primeira filial da org em foco
+      localStorage.setItem('hd_system_selected_branch_id', 'br-org2-a');
+      svc.superadminSetViewingOrg('org-1');
+      expect(localStorage.getItem('hd_system_selected_branch_id')).toBe('br-org1-a');
+      // filial JÁ da org em foco -> não altera
+      localStorage.setItem('hd_system_selected_branch_id', 'br-org1-b');
+      svc.superadminSetViewingOrg('org-1');
+      expect(localStorage.getItem('hd_system_selected_branch_id')).toBe('br-org1-b');
+    });
+
+    it('superadminSetViewingOrg com branches ainda vazias (boot) → NÃO zera a filial salva', () => {
+      const uuid = '11111111-1111-4111-8111-111111111111';
+      localStorage.setItem('hd_system_selected_branch_id', uuid);
+      svc.superadminSetViewingOrg('org-1'); // sem branches hidratadas -> guard preserva o UUID
+      expect(localStorage.getItem('hd_system_selected_branch_id')).toBe(uuid);
+    });
+  });
 });
