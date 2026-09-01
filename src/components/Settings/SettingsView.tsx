@@ -48,6 +48,7 @@ import { canManageUser } from '../../lib/userManagement';
 import { userProfileSchema, tableSchema } from '../../validators/schemas';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { BranchCheck } from '../Admin/BranchCheck';
+import { IntegrationsView } from './IntegrationsView';
 import { useToast } from '../shared/Toast';
 import { ResetDataButton } from '../shared/ResetDataButton';
 import { DeliverySettingsView } from './DeliverySettingsView';
@@ -138,9 +139,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [savingFiscal, setSavingFiscal] = useState(false);
   const [savingBranch, setSavingBranch] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
-  const [savingTv, setSavingTv] = useState(false);
+const [savingTv, setSavingTv] = useState(false);
+  const [pixKey, setPixKey] = useState(settings.pixKey || '');
+  const [pixReceiverName, setPixReceiverName] = useState(settings.pixReceiverName || '');
+  const [savingPix, setSavingPix] = useState(false);
 
-  // TV Showcase Settings State
+  // Loading states
   const [tvSlideSpeed, setTvSlideSpeed] = useState(settings.tvSlideSpeed || 6);
   const [tvDisplayMode, setTvDisplayMode] = useState<'single' | 'grid'>(settings.tvDisplayMode || 'single');
 
@@ -398,6 +402,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       posAudio.error();
     } finally {
       setSavingBranch(false);
+    }
+  };
+
+  const handleSavePix = async () => {
+    if (!pixKey.trim()) {
+      setErrorMessage('Chave Pix é obrigatória.');
+      return;
+    }
+    setSavingPix(true);
+    try {
+      const updated: SystemSettings = {
+        ...settings,
+        pixKey: pixKey.trim(),
+        pixReceiverName: pixReceiverName?.trim() || undefined,
+      };
+      storageService.saveSettings(updated);
+      posAudio.chime();
+      setSuccessMessage('Chave Pix salva com sucesso!');
+      setSavingPix(false);
+    } catch (err: any) {
+      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível salvar a chave Pix.'));
+      posAudio.error();
+      setSavingPix(false);
     }
   };
 
@@ -1323,6 +1350,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
             <span className="hidden sm:inline">Módulos</span>
             <span className="sm:hidden">Módulos</span>
           </button>
+          <button
+            onClick={() => handleSetActiveSubTab('pix')}
+            className={`min-h-[44px] px-2 sm:px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
+              activeSubTab === 'pix'
+                ? 'bg-white dark:bg-[#27272a] text-emerald-600 dark:text-emerald-400 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>
+            <span>💰</span>
+            <span className="hidden sm:inline">Pix</span>
+            <span className="sm:hidden">Pix</span>
+          </button>
         </div>
       </div>
 
@@ -1876,7 +1913,55 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
                             >
                               <FileText className="w-3.5 h-3.5" />
                             </button>
-                            )}
+)}
+  {/* --- TAB 8: PIX --- */}
+  {activeSubTab === 'pix' && (
+    <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-5 shadow-sm">
+      <div className="p-6 rounded-3xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <QrCode className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Configurações Pix</h3>
+            <p className="text-xs text-slate-500 dark:text-[#71717a]">Chave Pix para recebimento de pagamentos</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Chave Pix</label>
+            <input
+              type="text"
+              value={pixKey}
+              onChange={(e) => setPixKey(e.target.value)}
+              placeholder="Ex.: chaves@seunegocio"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
+            />
+          </div>
+          <div>
+            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nome do Recebedor</label>
+            <input
+              type="text"
+              value={pixReceiverName}
+              onChange={(e) => setPixReceiverName(e.target.value)}
+              placeholder="Nome ou Razão Social"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end pt-3 border-t border-slate-200 dark:border-[#27272a]">
+          <button
+            onClick={handleSavePix}
+            disabled={savingPix}
+            className="min-h-[44px] px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold disabled:opacity-60 flex items-center gap-2 text-xs shadow-md transition-colors flex items-center justify-center gap-2">
+            <Save className="w-4 h-4" /> Salvar
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+
+ {/* Reset button — only visible to admins on first tab (fiscal) */}
                             {canManageUser(user, u, currentBranchId) && (
                             <button
                               onClick={() => handleOpenUserModal(u)}

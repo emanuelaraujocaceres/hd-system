@@ -463,6 +463,7 @@ export interface SystemSettings {
   city: string;
   state: string;
   pixKey: string;
+  pixReceiverName?: string;
   printerPaperSize?: '58mm' | '80mm';
   thermalPrinterWidth?: '58mm' | '80mm';
   autoPrintReceipt: boolean;
