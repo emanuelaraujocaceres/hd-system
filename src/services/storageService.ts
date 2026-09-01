@@ -6350,6 +6350,8 @@ saveUserProfile(user: UserProfile) {
 
   deleteOpenContainerFromRemote(id: string): void {
     this.setChangeSource('remote');
+    // BUG-025: isolar por filial antes de remover (tabela branch-scoped)
+    if (!this.isLocalItemInCurrentBranch(id, KEYS.OPEN_CONTAINERS)) return;
     const all = this.get<OpenContainer[]>(KEYS.OPEN_CONTAINERS, []);
     const oc = all.find((c) => c.id === id);
     if (!oc) return;

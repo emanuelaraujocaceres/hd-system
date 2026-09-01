@@ -171,6 +171,30 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     expect(storedArg).toBeUndefined();
   });
 
+  it('deleteOpenContainerFromRemote remove item da filial atual (cenário feliz)', () => {
+    // Branch atual = b1; item local da MESMA filial deve ser removido
+    (svc as any).getRawBranchId = () => 'b1';
+    localStorage.setItem('hd_system_open_containers', JSON.stringify([
+      { id: 'oc-del-1', productId: 'p1', remainingQuantity: 3, storeBranchId: 'b1' },
+    ]));
+    const setSpy = vi.spyOn(svc as any, 'set');
+    (svc as any).deleteOpenContainerFromRemote('oc-del-1');
+    const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_open_containers')?.[1] as any[];
+    expect(storedArg?.find((a: any) => a.id === 'oc-del-1')).toBeUndefined();
+  });
+
+  it('deleteOpenContainerFromRemote NÃO remove item de outra filial (isolamento/BUG-025)', () => {
+    // Branch atual = b1; item local de OUTRA filial não pode ser removido
+    (svc as any).getRawBranchId = () => 'b1';
+    localStorage.setItem('hd_system_open_containers', JSON.stringify([
+      { id: 'oc-del-2', productId: 'p1', remainingQuantity: 3, storeBranchId: 'b-other' },
+    ]));
+    const setSpy = vi.spyOn(svc as any, 'set');
+    (svc as any).deleteOpenContainerFromRemote('oc-del-2');
+    const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_open_containers')?.[1] as any[];
+    expect(storedArg).toBeUndefined(); // set não deve ser chamado (delete bloqueado)
+  });
+
   // ─── REGRESSÃO: product_recipes (receita de compostos) ───
   it('updateProductRecipeFromRemote mapeia linha do cloud (composite/ingredient/quantidade/filiais)', () => {
     (svc as any).isRemoteFromCurrentBranch = () => true;

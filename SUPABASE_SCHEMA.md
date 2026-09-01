@@ -346,6 +346,24 @@ Receitas de produtos compostos.
 RLS: superadmin_all_product_recipes[ALL], user_insert_product_recipes[INSERT], user_select_product_recipes[SELECT], user_update_product_recipes[UPDATE], user_delete_product_recipes[DELETE], product_recipes_select_authenticated[SELECT]
 Realtime: publicada - REPLICA: full
 
+### open_containers
+Conteineres abertos / decrementos fracionados (garrafa aberta, dose). Sincronizada pelo frontend (syncService/storageService/Realtime). Tabela criada em 2026-08-31 (migration `20260831_add_open_containers.sql`) — deixa de ser orfa do frontend e elimina o 403 na hidratacao.
+
+| Coluna | Tipo | Null | Key | Descricao |
+|--------|------|------|-----|-----------|
+| id | UUID | NO | PK | PK |
+| organization_id | UUID | NO | FK->organizations | Org |
+| store_branch_id | UUID | NO | FK->store_branches | Filial |
+| product_id | UUID | NO | FK->products | Produto |
+| remaining_quantity | NUMERIC | NO | | Quantidade restante (fracao) |
+| opened_at | TIMESTAMPTZ | YES | | Abertura |
+| status | TEXT | NO | | open / closed / consumed |
+| created_at | TIMESTAMPTZ | YES | | |
+| updated_at | TIMESTAMPTZ | YES | | |
+
+RLS: branch-scoped via create_branch_policy (superadmin OU org+branch) - policies open_containers_select/insert/update/delete. Anon REVOKED.
+Realtime: publicada - REPLICA: full
+
 ### sales
 Vendas realizadas.
 
@@ -1213,6 +1231,7 @@ Localizacao atual dos .sql de projeto:
 - `supabase/RLS_FIXES.sql`, `supabase/ATOMIC_RPCS.sql` : referencias canonicas de RLS/RPCs (mantidas na raiz de `supabase/`).
 
 Principais migracoes recentes de projeto (por data):
+- 20260831_add_open_containers.sql (tabela open_containers + RLS + Realtime)
 - 20260822_system_users_permissions.sql (permissions em system_users)
 - 20260821_add_module_comanda.sql / 20260821_scope_anon_select_rls.sql
 - 20260816_fix_product_lots_rls.sql
