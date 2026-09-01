@@ -86,6 +86,79 @@ export function detectDocumentEdges(
   if (docW < w * 0.25 || docH < h * 0.3) return null;
   if (docRatio < 1.0 || docRatio > 2.0) return null;
 
+  // ── Guarda de contraste de borda (BUG scanner A4 — NUNCA remover) ──
+  // O auto-capture disparava antes do papel ser posicionado porque QUALQUER
+  // região clara (parede/mesa/claro do enquadramento) em orientação retrato
+  // produzia um "documento" de 80%x90% com ratio 2.00 que passava no gate
+  // acima e, por nunca se mover, acumulava estabilidade até disparar.
+  // Correção: se a região clara ENCOSTA na borda da grade amostrada e a
+  // faixa logo APÓS a grade (entre a grade e a borda do frame) continua
+  // clara, então não há contraste papel/fundo ali — é fundo claro ocupando
+  // o frame todo, ou papel ainda fora do enquadramento. Nesses casos o
+  // detector retorna null até o papel ficar bem posicionado (fundo escuro
+  // visível ao redor do retângulo).
+  const edgeTol = 4; // px — tolerância de quantização da grade
+  const bandOffset = 6; // px — distância da faixa amostrada além da borda da grade
+  const darkLimit = 110; // brilho médio máximo da faixa para considerar fundo escuro
+
+  const touchesLeft = minX <= marginX + edgeTol;
+  const touchesRight = maxX >= w - marginX - edgeTol;
+  const touchesTop = minY <= marginY + edgeTol;
+  const touchesBottom = maxY >= h - marginY - edgeTol;
+
+  // Média de brilho de um bloco 5x5 centrado em (px, py), clampeado ao frame.
+  const sampleBrightness = (px: number, py: number): number => {
+    let sum = 0;
+    let n = 0;
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const sx = Math.min(Math.max(px + dx, 0), w - 1);
+        const sy = Math.min(Math.max(py + dy, 0), h - 1);
+        const d = ctx.getImageData(sx, sy, 1, 1).data;
+        sum += (d[0] + d[1] + d[2]) / 3;
+        n++;
+      }
+    }
+    return sum / n;
+  };
+  const avgBrightness = (pts: Array<[number, number]>): number =>
+    pts.reduce((acc, [px, py]) => acc + sampleBrightness(px, py), 0) / Math.max(1, pts.length);
+
+  const leftOutside = Math.max(0, Math.floor(marginX - bandOffset));
+  const rightOutside = Math.min(w - 1, Math.ceil(w - marginX + bandOffset));
+  const topOutside = Math.max(0, Math.floor(marginY - bandOffset));
+  const bottomOutside = Math.min(h - 1, Math.ceil(h - marginY + bandOffset));
+  const midX = minX + docW / 2;
+  const midY = minY + docH / 2;
+
+  const brightSurround =
+    (touchesLeft &&
+      avgBrightness([
+        [leftOutside, minY],
+        [leftOutside, midY],
+        [leftOutside, maxY],
+      ]) > darkLimit) ||
+    (touchesRight &&
+      avgBrightness([
+        [rightOutside, minY],
+        [rightOutside, midY],
+        [rightOutside, maxY],
+      ]) > darkLimit) ||
+    (touchesTop &&
+      avgBrightness([
+        [minX, topOutside],
+        [midX, topOutside],
+        [maxX, topOutside],
+      ]) > darkLimit) ||
+    (touchesBottom &&
+      avgBrightness([
+        [minX, bottomOutside],
+        [midX, bottomOutside],
+        [maxX, bottomOutside],
+      ]) > darkLimit);
+
+  if (brightSurround) return null;
+
   return { x: minX, y: minY, width: docW, height: docH };
 }
 
