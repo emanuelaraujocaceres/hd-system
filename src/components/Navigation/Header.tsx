@@ -15,7 +15,6 @@ import {
   Cloud,
   CloudOff,
   RefreshCw,
-  QrCode,
   Building2,
 } from 'lucide-react';
 import { Product, CashRegisterSession, UserProfile, StoreBranch } from '../../types';
@@ -192,21 +191,6 @@ export const Header: React.FC<HeaderProps> = ({
             <span>{lowStockCount} Alerta{lowStockCount > 1 ? 's' : ''}</span>
           </button>
         )}
-
-        {/* QR Code Delivery Quick Access */}
-        <button
-          onClick={() => {
-            setCurrentTab('settings');
-            sessionStorage.setItem('settings_active_tab', 'delivery');
-            window.dispatchEvent(new CustomEvent('switch-settings-tab', { detail: 'delivery' }));
-          }}
-          className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-indigo-600 text-white text-[10px] sm:text-xs font-bold rounded-full hover:bg-indigo-500 transition-colors shadow-sm flex items-center gap-1.5 sm:gap-2"
-          title="QR Code do Delivery"
-        >
-          <QrCode className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">QR DELIVERY</span>
-          <span className="sm:hidden">QR</span>
-        </button>
 
         {/* Sound FX Toggle */}
         <button
