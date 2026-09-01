@@ -31,6 +31,15 @@ import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
 import { LoadingButton } from '../shared/LoadingButton';
 import { PaymentTerminalsModal } from './PaymentTerminalsModal';
 
+/**
+ * FEATURE FLAG — Integração de maquininhas/terminais de pagamento PAUSADA.
+ * A interface (botão "⚙️ Maquininhas" no PDV + modal de cadastro) fica OCULTA
+ * até termos credenciais/requisitos dos provedores (Stone, etc.).
+ * Reativar: trocar para `true`. O código, o componente e a estrutura de banco
+ * permanecem intactos (nada é apagado, apenas não renderizado).
+ */
+const ENABLE_TERMINALS_FEATURE = false;
+
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -353,19 +362,21 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 Forma de Pagamento
               </label>
               <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setShowTerminalsModal(true)}
-                  title="Cadastrar/gerenciar maquininhas"
-                  className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 min-h-[44px] ${
-                    showTerminalsModal
-                      ? 'bg-indigo-600 text-white border-indigo-500'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
-                  }`}
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  <span>⚙️ Maquininhas</span>
-                </button>
+                {ENABLE_TERMINALS_FEATURE && (
+                  <button
+                    type="button"
+                    onClick={() => setShowTerminalsModal(true)}
+                    title="Cadastrar/gerenciar maquininhas"
+                    className={`text-xs font-semibold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 min-h-[44px] ${
+                      showTerminalsModal
+                        ? 'bg-indigo-600 text-white border-indigo-500'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <Settings className="w-3.5 h-3.5" />
+                    <span>⚙️ Maquininhas</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsSplit(!isSplit)}
@@ -736,11 +747,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         </div>
       </div>
 
-      <PaymentTerminalsModal
-        isOpen={showTerminalsModal}
-        onClose={() => setShowTerminalsModal(false)}
-        user={user}
-      />
+      {ENABLE_TERMINALS_FEATURE && (
+        <PaymentTerminalsModal
+          isOpen={showTerminalsModal}
+          onClose={() => setShowTerminalsModal(false)}
+          user={user}
+        />
+      )}
     </div>
   );
 };
