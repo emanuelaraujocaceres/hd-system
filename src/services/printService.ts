@@ -14,6 +14,7 @@
  */
 
 import { Sale, SystemSettings, Printer, Table } from '../types';
+import { storageService } from './storageService';
 
 const ESC = 0x1b;
 const GS = 0x1d;
@@ -56,12 +57,11 @@ export function buildEscPos(lines: EscPosLine[]): Uint8Array {
 }
 
 /** Monta o cupom de venda (espelha o layout do ThermalReceiptModal). */
-export function buildReceiptEscPos(sale: Sale, settings: SystemSettings): Uint8Array {
+export function buildReceiptEscPos(sale: Sale, settings: SystemSettings, storeName?: string): Uint8Array {
   const line = (text: string, opts: Partial<EscPosLine> = {}): EscPosLine => ({ text, ...opts });
 
   const lines: EscPosLine[] = [
     line(settings.tradeName || 'HD-SYSTEM', { align: 1, bold: true, size: 19 }),
-    line(settings.companyName || '', { align: 1 }),
     line(`CNPJ: ${settings.cnpj || ''}`, { align: 1 }),
     line(`IE: ${settings.ie || ''}`, { align: 1 }),
     line(`${settings.address || ''} - ${settings.city || ''}/${settings.state || ''}`, { align: 1 }),
@@ -110,8 +110,7 @@ export function buildReceiptEscPos(sale: Sale, settings: SystemSettings): Uint8A
 
   lines.push(line('', { skip: true }));
   lines.push(line('*** COMPROVANTE NAO FISCAL ***', { align: 1, bold: true }));
-  lines.push(line(settings.receiptHeaderMsg || '', { align: 1 }));
-  lines.push(line(settings.receiptFooterMsg || '', { align: 1, bold: true }));
+  lines.push(line(storeName || settings.receiptHeaderMsg || '', { align: 1, bold: true }));
 
   return buildEscPos(lines);
 }
@@ -398,7 +397,6 @@ export function buildOrderReceiptEscPos(
   const paperWidth = 48;
   const lines: EscPosLine[] = [
     { text: settings.tradeName || 'HD-SYSTEM', align: 1, bold: true, size: 19 },
-    { text: settings.companyName || '', align: 1 },
     { text: '', skip: true },
     { text: 'COMPROVANTE DE PEDIDO', align: 1, bold: true },
     { text: table ? `Mesa: ${table.name}` : sale.orderSource === 'delivery' ? 'DELIVERY' : 'PEDIDO', align: 1, bold: true },
@@ -442,9 +440,14 @@ export async function printSaleReceipt(
   opts?: { type?: 'pedido' | 'venda'; table?: Table },
 ): Promise<void> {
   const type = opts?.type || 'venda';
+  // Nome da filial ativa vai no rodapé do comprovante de venda (em vez do
+  // texto genérico "Volte Sempre..."). Com uma filial só (matriz), o nome dela
+  // já representa a organização. Fallback: mensagem customizada das settings.
+  const branch = storageService.getSelectedBranch();
+  const storeName = branch?.name || '';
   const bytes = type === 'pedido'
     ? buildOrderReceiptEscPos(sale, settings, opts?.table)
-    : buildReceiptEscPos(sale, settings);
+    : buildReceiptEscPos(sale, settings, storeName);
 
   const printer = getCaixaPrinter(printers);
   if (printer && (printer.transport === 'webusb' || printer.transport === 'serial')) {
@@ -480,7 +483,6 @@ function printOsReceipt(sale: Sale, settings: SystemSettings, type: 'pedido' | '
     </style></head>
     <body>
       <div class="c b">${escapeHtml(settings.tradeName || 'HD-SYSTEM')}</div>
-      <div class="c">${escapeHtml(settings.companyName || '')}</div>
       <hr/>
       <div class="c b">${title}</div>
       <div class="c">${subtitle}</div>

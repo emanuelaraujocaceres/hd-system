@@ -25,6 +25,10 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
 
   if (!isOpen || !sale) return null;
 
+  // Nome da filial ativa (identifica a loja no rodapé do comprovante).
+  // Com uma filial só (matriz), o nome dela já representa a organização.
+  const storeName = storageService.getSelectedBranch()?.name || '';
+
   const handlePrint = async () => {
     setPrintStatus('printing');
 
@@ -82,7 +86,6 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
             {/* Store Header */}
             <div className="text-center pb-2 border-b border-dashed border-gray-400">
               <p className="font-bold text-xs uppercase">{settings.tradeName}</p>
-              <p>{settings.companyName}</p>
               <p>CNPJ: {settings.cnpj}</p>
               <p>IE: {settings.ie}</p>
               <p>{settings.address} - {settings.city}/{settings.state}</p>
@@ -177,8 +180,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
 
             {/* Footer Msg */}
             <div className="text-center pt-2 text-[10px] space-y-0.5 text-gray-700">
-              <p>{settings.receiptHeaderMsg}</p>
-              <p className="font-bold">{settings.receiptFooterMsg}</p>
+              <p className="font-bold">{storeName || settings.receiptHeaderMsg}</p>
             </div>
           </div>
         </div>

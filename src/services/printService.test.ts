@@ -361,7 +361,21 @@ describe('buildReceiptEscPos', () => {
     expect(decoded).not.toContain('Obs:');
   });
 
-  it('contém receiptHeaderMsg e receiptFooterMsg', () => {
+  it('usa o nome da filial no rodapé (sem LTDA nem rodapé customizado)', () => {
+    const settings = mkSettings({
+      companyName: 'Teste LTDA',
+      receiptHeaderMsg: 'Bem-vindo!',
+      receiptFooterMsg: 'Volte sempre!',
+    });
+    const result = buildReceiptEscPos(mkSale(), settings, 'Filial Centro');
+    const decoded = new TextDecoder().decode(result);
+    expect(decoded).toContain('Filial Centro');
+    expect(decoded).not.toContain('Teste LTDA');
+    expect(decoded).not.toContain('Bem-vindo!');
+    expect(decoded).not.toContain('Volte sempre!');
+  });
+
+  it('sem storeName usa receiptHeaderMsg como fallback e não imprime footerMsg', () => {
     const settings = mkSettings({
       receiptHeaderMsg: 'Bem-vindo!',
       receiptFooterMsg: 'Volte sempre!',
@@ -369,7 +383,7 @@ describe('buildReceiptEscPos', () => {
     const result = buildReceiptEscPos(mkSale(), settings);
     const decoded = new TextDecoder().decode(result);
     expect(decoded).toContain('Bem-vindo!');
-    expect(decoded).toContain('Volte sempre!');
+    expect(decoded).not.toContain('Volte sempre!');
   });
 
   it('usa "HD-SYSTEM" como fallback de tradeName', () => {
@@ -411,6 +425,14 @@ describe('buildOrderReceiptEscPos', () => {
     const result = buildOrderReceiptEscPos(sale, s);
     const decoded = new TextDecoder().decode(result);
     expect(decoded).toContain('Bar do Zé');
+  });
+
+  it('NÃO contém companyName (LTDA) no header', () => {
+    const s = mkSettings({ companyName: 'Teste LTDA' });
+    const sale = mkSale();
+    const result = buildOrderReceiptEscPos(sale, s);
+    const decoded = new TextDecoder().decode(result);
+    expect(decoded).not.toContain('Teste LTDA');
   });
 
   it('mostra "Mesa: ..." quando table é fornecida', () => {
