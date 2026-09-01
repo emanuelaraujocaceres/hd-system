@@ -42,7 +42,14 @@ ALTER TABLE open_containers ENABLE ROW LEVEL SECURITY;
 -- Cria: open_containers_select / _insert / _update / _delete.
 SELECT public.create_branch_policy('open_containers');
 
--- 3. Bloquear acesso anônimo (regra 0b/0f — não é tabela do cardápio anon)
+-- 3. Permissões de nível de tabela (GRANT).
+--    O papel authenticated PRECISA do privilégio de tabela (SELECT/INSERT/UPDATE/DELETE),
+--    caso contrário o PostgREST devolve '403 permission denied for table' mesmo com RLS
+--    correta (RLS filtra linhas; o GRANT dá o acesso à tabela). Mesmo padrão das demais
+--    tabelas sincronizadas (ex.: api_keys, module_visibility).
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.open_containers TO authenticated;
+
+-- Bloquear acesso anônimo (regra 0b/0f — não é tabela do cardápio anon)
 REVOKE ALL ON public.open_containers FROM anon;
 
 -- 4. Publicação Realtime (obrigatória — o canal rejeita se a tabela não estiver
