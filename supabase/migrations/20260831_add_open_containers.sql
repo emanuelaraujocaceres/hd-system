@@ -46,8 +46,24 @@ SELECT public.create_branch_policy('open_containers');
 REVOKE ALL ON public.open_containers FROM anon;
 
 -- 4. Publicação Realtime (obrigatória — o canal rejeita se a tabela não estiver
---    incluída, CHANNEL_ERROR em loop) + REPLICA IDENTITY FULL para payload completo
-ALTER PUBLICATION supabase_realtime ADD TABLE open_containers;
+--    incluída, CHANNEL_ERROR em loop). Idempotente: se a tabela já estiver na
+--    publicação (ex.: re-execução), não falha com 42710.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'open_containers'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE open_containers;
+    RAISE NOTICE 'OK: open_containers adicionada à publicação supabase_realtime';
+  ELSE
+    RAISE NOTICE 'OK: open_containers já está na publicação supabase_realtime';
+  END IF;
+END $$;
+
+-- REPLICA IDENTITY FULL para payload completo de UPDATE/DELETE (idempotente)
 ALTER TABLE open_containers REPLICA IDENTITY FULL;
 
 -- 5. Verificar criação
