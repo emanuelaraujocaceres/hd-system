@@ -3852,14 +3852,14 @@ id: StorageService.ensureUuid(settings.id),
     // Diagnóstico (auge "vendas não aparecem em lugar nenhum"): registra em
     // runtime como a venda foi montada — filial/org vazios são filtrados por
     // getSales() (org não-default) e a venda some de TODAS as telas.
-    if (import.meta.env?.DEV) {
-      console.log('[HD-Sale] addSale criando venda:', {
-        code: sale.code, orgId: sale.organizationId, branchId: sale.storeBranchId,
-        getCurrentOrgId: this.getCurrentOrgId(), getSelectedBranchId: this.getSelectedBranchId(),
-        isDefaultOrg: this.isDefaultOrg(), viewingOrg: this.getSuperadminViewingOrg(),
-        branchesLoaded: this.getBranches().length,
-      });
-    }
+    // SEMPRE ativo (não só em DEV): é a âncora para diagnosticar vendas perdidas.
+    console.log('[HD-Sale] addSale ESTÁ MONTANDO a venda:', {
+      code: sale.code, orgId: sale.organizationId, branchId: sale.storeBranchId,
+      getCurrentOrgId: this.getCurrentOrgId(), getSelectedBranchId: this.getSelectedBranchId(),
+      isDefaultOrg: this.isDefaultOrg(), viewingOrg: this.getSuperadminViewingOrg(),
+      branchesLoaded: this.getBranches().length, hasItems: (sale.items?.length ?? 0) > 0,
+      paymentMethods: sale.payments?.map((p: any) => p.method), status: sale.status,
+    });
     // Save sale_items to separate localStorage key FIRST (with stable IDs)
     // so syncSale can read them and upsert with onConflict: 'id' deduplication.
     if (sale.items && sale.items.length > 0) {
@@ -3885,6 +3885,13 @@ id: StorageService.ensureUuid(settings.id),
     const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
     sales.unshift(sale);
     this.set(KEYS.SALES, sales);
+    // Confirma que a venda FOI gravada localmente (fonte de verdade das telas)
+    // e que getSales() consegue devolvê-la (mesma filial/org). Se a venda foi
+    // gravada mas getSales() a filtra, é 100% um problema de filtro → somem.
+    const storedCount = this.get<Sale[]>(KEYS.SALES, []).length;
+    const visible = this.getSales().some((s: Sale) => s.id === sale.id);
+    console.log(`[HD-Sale] ✅ venda gravada local (total=${storedCount}) | visível em getSales()=${visible} | branch=${sale.storeBranchId || '(vazio)'} org=${sale.organizationId || '(vazio)'}`);
+    if (!visible) console.warn('[HD-Sale] ⚠️ venda gravada mas FILTRADA por getSales() — investigar filtro de filial/org!');
     await this.syncSale(sale);
 
     // 🔥 Sincroniza sale_items ao cloud. O canal realtime de sale_items NÃO tem
