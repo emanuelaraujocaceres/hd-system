@@ -62,6 +62,10 @@ import { asArray, mapRows, safeParseJson } from '../lib/safeSync';
 
 const KEYS = {
   PRODUCTS: 'hd_system_products',
+  // Tombsone de produtos excluídos: evita que a hidratação/merge de um
+  // dispositivo que perdeu o evento de DELETE ressuscite o produto no cloud
+  // (re-upload via mergeBy) e o faça "voltar" para todos. Particionado por org.
+  DELETED_PRODUCTS: 'hd_system_deleted_products',
   CATEGORIES: 'hd_system_categories',
   CUSTOMERS: 'hd_system_customers',
   SUPPLIERS: 'hd_system_suppliers',
@@ -1264,6 +1268,15 @@ expiration_date: p.expirationDate || null,
     if (!this.isLocalItemInCurrentBranch(id, KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : [])) return;
     const products = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []).filter((p) => p.id !== id);
     this.set(KEYS.PRODUCTS, products);
+    // Registra tombstone ao receber o DELETE via Realtime: se este dispositivo
+    // hidratar depois dados locais stale (que ainda continham o produto), o
+    // mergeBy não o ressuscita (p.ex. o produto foi excluído em outro device
+    // enquanto este estava offline/atrasado).
+    const deleted = this.get<string[]>(KEYS.DELETED_PRODUCTS, []);
+    if (!deleted.includes(id)) {
+      deleted.push(id);
+      this.set(KEYS.DELETED_PRODUCTS, deleted);
+    }
     this.notify();
   }
 
@@ -2301,7 +2314,13 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
 
        // ── PRODUCTS ──────────────────────────────────────────────────
        {
-         const local = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
+         const localRaw = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
+         // Produtos excluídos NESTE dispositivo (tombstone) NÃO podem entrar no
+         // merge: senão mergeBy os re-envia ao cloud (syncLocal) e os adiciona
+         // de volta à lista — ressuscitando o produto para todos os dispositivos
+         // quando este device perdeu o evento de DELETE (offline/realtime).
+         const tombstoned = new Set(this.get<string[]>(KEYS.DELETED_PRODUCTS, []));
+         const local = localRaw.filter((p) => !tombstoned.has(p.id));
         const merged = mergeBy(KEYS.PRODUCTS, local, products, (r: any) => {
           const cloudSalePrice = parseFloat(r.sale_price) || 0;
           return {
@@ -3384,6 +3403,12 @@ id: StorageService.ensureUuid(settings.id),
       products.unshift({ ...product, updatedAt: new Date().toISOString() });
     }
     this.set(KEYS.PRODUCTS, products);
+    // Se o produto estava tombstoned (excluído e depois restaurado via "Desfazer"
+    // ou recriado), remove o tombstone — senão a hidratação o apagaria de novo.
+    const deleted = this.get<string[]>(KEYS.DELETED_PRODUCTS, []);
+    if (deleted.includes(product.id)) {
+      this.set(KEYS.DELETED_PRODUCTS, deleted.filter((d) => d !== product.id));
+    }
     this.syncProduct(products[index >= 0 ? index : 0]);
     return product;
   }
@@ -3407,6 +3432,15 @@ id: StorageService.ensureUuid(settings.id),
     }
     const products = allProducts.filter((p) => p.id !== id);
     this.set(KEYS.PRODUCTS, products);
+    // Tombsone: registra o produto como explicitamente excluído NESTE dispositivo.
+    // A hidratação (mergeBy de products) lerá isto e NUNCA re-uploada nem readiciona
+    // um produto aqui listado — impede que um dispositivo que perdeu o DELETE no
+    // Realtime/offline ressuscite o produto no cloud e o faça "voltar" para todos.
+    const deleted = this.get<string[]>(KEYS.DELETED_PRODUCTS, []);
+    if (!deleted.includes(id)) {
+      deleted.push(id);
+      this.set(KEYS.DELETED_PRODUCTS, deleted);
+    }
     syncService.deleteRow('products', id);
     if (product) {
       undoManager.push({

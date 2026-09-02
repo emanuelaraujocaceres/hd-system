@@ -34,6 +34,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StorageService } from './storageService';
+import { syncService } from './syncService';
 import { BRANCH_UUIDS, DEFAULT_ORG_ID, CASH_SESSION_UUIDS } from '../data/mockData';
 
 describe('storageService — isolamento de filial (BUG-024/025)', () => {
@@ -568,5 +569,49 @@ describe('storageService — addSale: filial não-UUID não bloqueia a venda (n�
     expect(res).toEqual({ success: false, message: expect.stringContaining('Nenhuma filial') });
     // Venda não foi gravada — mas agora há feedback claro (não é silencioso)
     expect(findAdded('VEN-W')).toBeFalsy();
+  });
+});
+
+describe('storageService — produto excluído NÃO ressurge (tombstone, BUG produtos voltando)', () => {
+  let svc: StorageService;
+
+  beforeEach(() => {
+    localStorage.clear();
+    svc = new StorageService();
+    // Org default (sem perfil) → chaves particionadas com DEFAULT_ORG_ID e
+    // INITIAL_BRANCHES viáveis; o delete precisa de filial para o guard de
+    // isolamento passar e de syncService.deleteRow mockado.
+    localStorage.setItem('hd_system_selected_branch_id', BRANCH_UUIDS['br-01']);
+    vi.spyOn(syncService, 'deleteRow').mockResolvedValue(true as any);
+    vi.spyOn(syncService, 'upsertRow').mockResolvedValue({} as any);
+    vi.spyOn(svc as any, 'isValidUuid').mockImplementation((v: string) => !!v && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v));
+  });
+
+  const PROD_A = '10000000-0000-0000-0000-0000000000a1';
+  const PROD_B = '10000000-0000-0000-0000-0000000000b2';
+
+  const seedProduct = () => {
+    localStorage.setItem(`hd_system_products_${DEFAULT_ORG_ID}`, JSON.stringify([
+      { id: PROD_A, name: 'Cerveja', currentStock: 10, salePrice: 8, storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID, active: true },
+      { id: PROD_B, name: 'Refri', currentStock: 20, salePrice: 5, storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID, active: true },
+    ]));
+  };
+
+  it('deleteProduct registra o tombstone (impede ressuscitação no merge)', () => {
+    seedProduct();
+    svc.deleteProduct(PROD_A);
+    const tomb = JSON.parse(localStorage.getItem(`hd_system_deleted_products_${DEFAULT_ORG_ID}`) || '[]');
+    expect(tomb).toContain(PROD_A);
+    // Produto sai da lista local
+    expect(svc.getProducts().find((p: any) => p.id === PROD_A)).toBeFalsy();
+  });
+
+  it('saveProduct remove o tombstone ao recriar/restaurar o produto', () => {
+    seedProduct();
+    svc.deleteProduct(PROD_B);
+    const restored: any = { id: PROD_B, name: 'Refri', currentStock: 20, salePrice: 5, storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID, active: true };
+    svc.saveProduct(restored);
+    const tomb = JSON.parse(localStorage.getItem(`hd_system_deleted_products_${DEFAULT_ORG_ID}`) || '[]');
+    expect(tomb).not.toContain(PROD_B);
   });
 });
