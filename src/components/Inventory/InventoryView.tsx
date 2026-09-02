@@ -1,7 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { PermissionEngine } from '../../lib/iam';
 import { useDebounce } from '../../hooks/useDebounce';
-import { useBarcodeKeyboardWedge } from '../../hooks/useBarcodeKeyboardWedge';
 import {
   Package,
   Plus,
@@ -335,6 +334,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       ];
     };
 
+    // Flag p/ só aplicar o fallback se a busca online NÃO retornou resultados.
+    // (o `finally` roda SEMPRE mesmo com `return` no `try` — sem essa flag, o
+    // fallback genérico sobrescrevia os resultados reais da web)
+    let hasRealResults = false;
+
     try {
       const url =
         'https://commons.wikimedia.org/w/api.php' +
@@ -354,6 +358,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         .slice(0, 3);
 
       if (found.length > 0) {
+        hasRealResults = true;
         setImageSuggestions(found);
         setFormImageUrl(found[0]);
         posAudio.chime();
@@ -364,13 +369,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     } catch {
       addToast('warning', 'Sem conexão com a busca de imagens — mostrando opções padrão.');
     } finally {
-      const fallback = fallbackImages();
-      setImageSuggestions(fallback);
-      if (fallback[0]) {
-        setFormImageUrl(fallback[0]);
-        posAudio.chime();
-      }
       setIsSearchingImages(false);
+      // Só mostra as opções padrão quando a busca online falhou ou veio vazia.
+      if (!hasRealResults) {
+        const fallback = fallbackImages();
+        setImageSuggestions(fallback);
+        if (fallback[0]) {
+          setFormImageUrl(fallback[0]);
+          posAudio.chime();
+        }
+      }
     }
   };
 
@@ -564,69 +572,9 @@ minStock: parseInt(formMinStock) || 0,
   const [lotManagerProduct, setLotManagerProduct] = useState<Product | null>(null);
 
   // ── LEITOR USB (keyboard wedge) no Estoque ─────────────────────
-  // Replica a lógica do PDV: funciona com o cursor em qualquer lugar da tela,
-  // busca o produto pelo código e, se não existir, abre o cadastro com o código.
-  // Usa ref estável p/ não re-registrar o listener a cada render.
-  const productsRef = useRef(products);
-  useEffect(() => {
-    productsRef.current = products;
-  }, [products]);
-
-  const handleInventoryBarcodeDetected = (barcode: string) => {
-    const clean = (barcode || '').trim();
-    // Padrão do PDV: ignora código vazio ou '0' (códigos não preenchidos)
-    if (!clean || clean === '0') return;
-
-    const found = productsRef.current.find((p) => p.barcode && String(p.barcode).trim() === clean);
-    if (found) {
-      // Garante que o produto fique visível na lista (limpa filtros/busca) e o destaca
-      setSelectedCategory('all');
-      setStockFilter('all');
-      setQuickFilter('all');
-      setSearchTerm('');
-      setHighlightedProductId(found.id);
-      setTimeout(() => setHighlightedProductId(null), 2000);
-      posAudio.chime();
-      addToast('success', `Produto encontrado: ${found.name}`);
-      return;
-    }
-
-    // Não encontrado → abre o cadastro com o código preenchido (se tiver permissão)
-    if (!canCreateEdit) {
-      posAudio.error();
-      addToast('error', 'Produto não cadastrado e você não tem permissão para criar.');
-      return;
-    }
-    resetProductForm(clean);
-    setIsProductModalOpen(true);
-  };
-
-  const handleInventoryBarcodeDetectedRef = useRef(handleInventoryBarcodeDetected);
-  useEffect(() => {
-    handleInventoryBarcodeDetectedRef.current = handleInventoryBarcodeDetected;
-  });
-
-  const onInventoryBarcode = useCallback((barcode: string) => {
-    handleInventoryBarcodeDetectedRef.current(barcode);
-  }, []);
-
-  // Pausa o leitor USB enquanto qualquer modal está aberto (mesmo princípio do
-  // PDV, que pausa a câmera) — evita abrir cadastro/modal por cima de outro.
-  const wedgePaused =
-    isProductModalOpen ||
-    isStockModalOpen ||
-    isStockCameraModalOpen ||
-    isCategoryModalOpen ||
-    isOpenContainersModalOpen ||
-    isCameraModalOpen ||
-    isInventoryModalOpen ||
-    lotManagerProduct !== null ||
-    confirmDeleteProduct !== null;
-
-  useBarcodeKeyboardWedge({
-    onBarcode: onInventoryBarcode,
-    paused: wedgePaused,
-  });
+  // Movido para o App.tsx: o leitor agora é global (funciona de qualquer aba).
+  // Quando um produto lido não existe, o App navega ao Estoque e abre o cadastro
+  // via `initialBarcode`. O handler local da câmera segue separado.
 
   // ── ESTOQUE INTELIGENTE: INVENTÁRIO (ajuste com motivo) ────────
   const openInventoryModal = (product: Product) => {

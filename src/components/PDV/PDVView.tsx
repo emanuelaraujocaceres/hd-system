@@ -39,7 +39,6 @@ import { PaymentModal } from './PaymentModal';
 import { ThermalReceiptModal } from './ThermalReceiptModal';
 import { QuickProductModal } from './QuickProductModal';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
-import { useBarcodeKeyboardWedge } from '../../hooks/useBarcodeKeyboardWedge';
 
 interface PDVViewProps {
   products: Product[];
@@ -51,6 +50,9 @@ interface PDVViewProps {
   onNavigateToNewProduct: (barcode: string) => void;
   settings: SystemSettings;
   user: UserProfile;
+  /** Código lido pelo leitor global para adicionar ao carrinho (limpo via onClearInitialBarcode) */
+  initialBarcode?: string | null;
+  onClearInitialBarcode?: () => void;
 }
 
 export const PDVView: React.FC<PDVViewProps> = ({
@@ -63,6 +65,8 @@ export const PDVView: React.FC<PDVViewProps> = ({
   onNavigateToNewProduct,
   settings,
   user,
+  initialBarcode = null,
+  onClearInitialBarcode,
 }) => {
   const { addToast } = useToast();
   const isCaixaOpen = caixaSession && caixaSession.status === 'open';
@@ -473,18 +477,19 @@ export const PDVView: React.FC<PDVViewProps> = ({
     }
   };
 
-  // Keyboard-wedge barcode scanner (Bluetooth/USB reader that emulates a keyboard).
-  // Delegates to the same handler as the camera scanner. A ref keeps the
-  // callback stable so the window listener is registered exactly once.
+  // Leitor global movido para o App.tsx: quando `initialBarcode` chega (produto
+  // lido em qualquer aba → PDV), adiciona ao carrinho reutilizando o mesmo handler
+  // do leitor da câmera. O consumidor limpa a prop via onClearInitialBarcode.
   const handleBarcodeDetectedRef = useRef(handleBarcodeDetected);
   handleBarcodeDetectedRef.current = handleBarcodeDetected;
-  const onBarcodeDetected = useCallback((barcode: string) => {
-    handleBarcodeDetectedRef.current(barcode);
-  }, []);
-  useBarcodeKeyboardWedge({
-    onBarcode: onBarcodeDetected,
-    paused: isScannerOpen,
-  });
+  const onClearInitialBarcodeRef = useRef(onClearInitialBarcode);
+  onClearInitialBarcodeRef.current = onClearInitialBarcode;
+
+  useEffect(() => {
+    if (!initialBarcode) return;
+    handleBarcodeDetectedRef.current(initialBarcode);
+    onClearInitialBarcodeRef.current?.();
+  }, [initialBarcode]);
 
   const handleScanManualSubmit = (barcode: string) => {
     if (barcode.trim()) {

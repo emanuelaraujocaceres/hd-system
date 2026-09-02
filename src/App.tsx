@@ -27,6 +27,7 @@ import { syncService, setOrgOnlineAllowed as syncSetOrgOnlineAllowed } from './s
 import { syncQueue } from './services/syncQueueService';
 import { supabase } from './lib/supabase';
 import { posAudio } from './services/audioService';
+import { useBarcodeKeyboardWedge } from './hooks/useBarcodeKeyboardWedge';
 import { Lock, ShieldAlert, ArrowLeft, Loader2, Store, X, AlertTriangle } from 'lucide-react';
 import { GlobalSearch } from './components/shared/GlobalSearch';
 import {
@@ -104,6 +105,7 @@ export const App: React.FC = () => {
   const [isMobileOpen, setIsMobileOpen] = useState<boolean>(false);
   const [navHistory, setNavHistory] = useState<string[]>(['pdv']);
   const [initialBarcodeForNewProduct, setInitialBarcodeForNewProduct] = useState<string | null>(null);
+  const [initialBarcodeForPdv, setInitialBarcodeForPdv] = useState<string | null>(null);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
 
   // Handle mobile back button - navigate to previous page instead of closing app
@@ -148,6 +150,44 @@ export const App: React.FC = () => {
   // App State loaded synchronously from localStorage to survive F5 refresh
   const [products, setProducts] = useState<Product[]>(() => storageService.getProducts());
   const [categories, setCategories] = useState<Category[]>(() => storageService.getCategories());
+
+  // ── Leitor de código de barras global (USB/Bluetooth "keyboard wedge") ──
+  // Ativo de qualquer aba: produto cadastrado → PDV + carrinho; não cadastrado →
+  // Estoque + cadastro de produto novo. Refs mantêm values recentes sem
+  // re-registrar o listener do hook a cada render.
+  const productsRef = useRef(products);
+  productsRef.current = products;
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
+  const handleGlobalBarcode = (barcode: string) => {
+    const clean = barcode.trim();
+    const found = productsRef.current.find(
+      (p) => p.barcode && p.barcode !== '0' && p.barcode.trim() === clean
+    );
+    if (found) {
+      // Produto cadastrado → vai pro PDV e adiciona ao carrinho
+      if (activeTabRef.current !== 'pdv') {
+        handleTabChange('pdv');
+      }
+      setInitialBarcodeForPdv(clean);
+    } else {
+      // Produto não cadastrado → Estoque + cadastro de produto novo
+      handleNavigateToNewProduct(clean);
+    }
+  };
+
+  const handleGlobalBarcodeRef = useRef(handleGlobalBarcode);
+  handleGlobalBarcodeRef.current = handleGlobalBarcode;
+  const onGlobalBarcode = useCallback((barcode: string) => {
+    handleGlobalBarcodeRef.current(barcode);
+  }, []);
+
+  // Pausa o leitor global enquanto um modal do App está aberto (caixa/perfil)
+  useBarcodeKeyboardWedge({
+    onBarcode: onGlobalBarcode,
+    paused: isCaixaModalOpen || isProfileModalOpen,
+  });
   const [customers, setCustomers] = useState<Customer[]>(() => storageService.getCustomers());
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => storageService.getSuppliers());
   const [sales, setSales] = useState<Sale[]>(() => storageService.getSales());
@@ -1306,6 +1346,8 @@ export const App: React.FC = () => {
                   onNavigateToNewProduct={handleNavigateToNewProduct}
                   settings={settings}
                   user={user}
+                  initialBarcode={initialBarcodeForPdv}
+                  onClearInitialBarcode={() => setInitialBarcodeForPdv(null)}
                 />
               )}
 
