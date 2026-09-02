@@ -3832,6 +3832,17 @@ id: StorageService.ensureUuid(settings.id),
         return;
       }
     }
+    // Diagnóstico (auge "vendas não aparecem em lugar nenhum"): registra em
+    // runtime como a venda foi montada — filial/org vazios são filtrados por
+    // getSales() (org não-default) e a venda some de TODAS as telas.
+    if (import.meta.env?.DEV) {
+      console.log('[HD-Sale] addSale criando venda:', {
+        code: sale.code, orgId: sale.organizationId, branchId: sale.storeBranchId,
+        getCurrentOrgId: this.getCurrentOrgId(), getSelectedBranchId: this.getSelectedBranchId(),
+        isDefaultOrg: this.isDefaultOrg(), viewingOrg: this.getSuperadminViewingOrg(),
+        branchesLoaded: this.getBranches().length,
+      });
+    }
     // Save sale_items to separate localStorage key FIRST (with stable IDs)
     // so syncSale can read them and upsert with onConflict: 'id' deduplication.
     if (sale.items && sale.items.length > 0) {
