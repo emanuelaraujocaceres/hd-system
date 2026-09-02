@@ -396,6 +396,7 @@ Vendas realizadas.
 | payment_details | JSONB | YES | | Detalhes do pagamento |
 | order_source | TEXT | YES | | Origem do pedido (pdv, cardapio, etc.) |
 | kitchen_status | TEXT | YES | | Status da cozinha (KDS) |
+| delivery_order_id | UUID | YES | FK->delivery_orders | Vinculo delivery->venda (entrega nativa finalizada) |
 | notes | TEXT | YES | | Observacoes |
 | created_at | TIMESTAMPTZ | YES | | |
 | updated_at | TIMESTAMPTZ | YES | | |
@@ -620,6 +621,9 @@ Realtime: publicada - REPLICA: full
 Fotos do documento A4. Políticas completas (SELECT/INSERT/UPDATE/DELETE) para autenticados da filial + superadmin.
 Path: `nf-documents/{organization_id}/{store_branch_id}/{documento_id}/{timestamp}.jpg`.
 
+#### Storage bucket `branch-logos` (privado) — pendente de criação
+Logos por filial (upload na aba Tema do SettingsView → `storageService.uploadBranchLogo`). Path: `branch-logos/{organization_id}/{store_branch_id}/{logo}.{ext}`.
+
 ### Funções RPC e Views auxiliares (scanner de fornecedor)
 
 `process_purchase_document(p_document_id uuid, p_items jsonb, p_operator_name text DEFAULT 'Sistema', p_apply_margin boolean DEFAULT false)`
@@ -760,6 +764,7 @@ Pedidos de delivery.
 | cancelled_at | TIMESTAMPTZ | YES | | Cancelamento |
 | cancelled_reason | TEXT | YES | | Motivo do cancelamento |
 | estimated_delivery_time | INTEGER | YES | | Tempo estimado |
+| sale_id | UUID | YES | FK->sales | Vinculo venda->delivery (sale gerada ao entregar) |
 | created_at | TIMESTAMPTZ | YES | | |
 | updated_at | TIMESTAMPTZ | YES | | |
 

@@ -13,7 +13,7 @@
  * da mesma sessão — o operador precisa reconectar após recarregar a página.
  */
 
-import { Sale, SystemSettings, Printer, Table } from '../types';
+import { Sale, SystemSettings, Printer, Table, DeliveryOrder } from '../types';
 import { storageService } from './storageService';
 
 const ESC = 0x1b;
@@ -420,6 +420,144 @@ export function buildOrderReceiptEscPos(
   lines.push({ text: 'Obrigado!', align: 1 });
 
   return buildEscPos(lines);
+}
+
+/**
+ * Ticket de DELIVERY/ENTREGA: inclui endereço, telefone e forma de pagamento
+ * para que o entregador/motoboy tenha todos os dados no papel. Aceita um
+ * `DeliveryOrder` (pedido nativo do app) OU um objeto estilo `DeliveryOrder`
+ * convertido a partir de uma Sale (cardápio). Usado para reimpressão no
+ * DeliveryBoardView.
+ */
+export function buildDeliveryTicketEscPos(
+  order: Pick<DeliveryOrder, 'orderNumber' | 'items' | 'orderType' | 'paymentMethod' | 'deliveryAddress' | 'customerName' | 'customerWhatsapp' | 'notes' | 'total' | 'deliveryFee' | 'changeAmount' | 'createdAt' | 'status'>,
+  settings: SystemSettings,
+): Uint8Array {
+  const paperWidth = 48;
+  const lines: EscPosLine[] = [
+    { text: settings.tradeName || 'HD-SYSTEM', align: 1, bold: true, size: 19 },
+    { text: '', skip: true },
+    { text: 'TICKET DE ENTREGA', align: 1, bold: true },
+    { text: `Pedido: #${order.orderNumber ?? ''}`, align: 1 },
+    { text: new Date(order.createdAt || Date.now()).toLocaleString('pt-BR'), align: 1 },
+    { text: `Status: ${order.status || ''}`, align: 1 },
+    { text: '', skip: true },
+  ];
+  if (order.customerName) lines.push({ text: `Cliente: ${order.customerName}`, align: 0 });
+  if (order.orderType === 'delivery') {
+    const addr = order.deliveryAddress;
+    if (addr) {
+      const street = [addr.street, addr.number, addr.complement].filter(Boolean).join(', ');
+      const city = [addr.neighborhood, addr.city, addr.state].filter(Boolean).join(' - ');
+      lines.push({ text: `Endereco: ${street}`, align: 0 });
+      if (city) lines.push({ text: `  ${city}`, align: 0 });
+    }
+  } else {
+    lines.push({ text: 'Retirada no estabelecimento', align: 0 });
+  }
+  if (order.customerWhatsapp) lines.push({ text: `Tel: ${order.customerWhatsapp}`, align: 0 });
+  const labelMap: Record<string, string> = {
+    cash: 'Dinheiro', pix: 'PIX', credit_card: 'Cartao Credito', debit_card: 'Cartao Debito', credit_account: 'Fiado',
+  };
+  if (order.paymentMethod) lines.push({ text: `Pagamento: ${labelMap[order.paymentMethod] || order.paymentMethod}`, align: 0 });
+  if (order.paymentMethod === 'cash' && order.changeAmount && order.changeAmount > 0) {
+    lines.push({ text: `Troco para: R$ ${order.changeAmount.toFixed(2)}`, align: 0, bold: true });
+  }
+  if (order.notes) lines.push({ text: `Obs: ${order.notes}`, align: 0 });
+  lines.push({ text: '', skip: true });
+  lines.push({ text: 'ITENS:', align: 0, bold: true });
+  lines.push({ text: '-'.repeat(paperWidth) });
+  for (const it of order.items || []) {
+    lines.push({ text: `${it.quantity}x ${it.productName}`, align: 0, bold: true });
+    lines.push({ text: `  R$ ${it.unitPrice?.toFixed ? it.unitPrice.toFixed(2) : (it.total / (it.quantity || 1)).toFixed(2)} = R$ ${it.total.toFixed(2)}`, align: 2 });
+  }
+  lines.push({ text: '-'.repeat(paperWidth) });
+  if (order.deliveryFee && order.deliveryFee > 0) {
+    lines.push({ text: `Frete: R$ ${order.deliveryFee.toFixed(2)}`, align: 2 });
+  }
+  lines.push({ text: '', skip: true });
+  lines.push({ text: `TOTAL: R$ ${order.total.toFixed(2)}`, align: 2, bold: true, size: 19 });
+  lines.push({ text: '', skip: true });
+  lines.push({ text: 'Obrigado pela preferencia!', align: 1 });
+
+  return buildEscPos(lines);
+}
+
+/** Imprime/reimprime o ticket de entrega de um DeliveryOrder. */
+export async function printDeliveryOrderTicket(
+  order: Pick<DeliveryOrder, 'orderNumber' | 'items' | 'orderType' | 'paymentMethod' | 'deliveryAddress' | 'customerName' | 'customerWhatsapp' | 'notes' | 'total' | 'deliveryFee' | 'changeAmount' | 'createdAt' | 'status'>,
+  settings: SystemSettings,
+  printers: Printer[],
+): Promise<void> {
+  const bytes = buildDeliveryTicketEscPos(order, settings);
+  const printer = getCaixaPrinter(printers);
+  if (printer && (printer.transport === 'webusb' || printer.transport === 'serial')) {
+    if (printer.transport === 'webusb') return printWebUsb(printer, bytes);
+    return printSerial(printer, bytes);
+  }
+  // Fallback: diálogo de impressão do navegador
+  printOsDeliveryTicket(order, settings);
+}
+
+/** Gera o ticket de entrega em HTML para o diálogo de impressão do navegador. */
+function printOsDeliveryTicket(
+  order: Pick<DeliveryOrder, 'orderNumber' | 'items' | 'orderType' | 'paymentMethod' | 'deliveryAddress' | 'customerName' | 'customerWhatsapp' | 'notes' | 'total' | 'deliveryFee' | 'changeAmount' | 'createdAt' | 'status'>,
+  settings: SystemSettings,
+) {
+  const addr = order.deliveryAddress;
+  const addrLine = addr
+    ? [addr.street, addr.number, addr.complement].filter(Boolean).join(', ')
+      + (addr.neighborhood || addr.city ? ' - ' + [addr.neighborhood, addr.city, addr.state].filter(Boolean).join(' - ') : '')
+    : '';
+  const methodMap: Record<string, string> = {
+    cash: 'Dinheiro', pix: 'PIX', credit_card: 'Cartão Crédito', debit_card: 'Cartão Débito', credit_account: 'Fiado',
+  };
+  const rows = (order.items || []).map(
+    (it) => `<tr><td>${it.quantity}x ${escapeHtml(it.productName)}</td><td style="text-align:right">R$ ${it.total.toFixed(2)}</td></tr>`,
+  ).join('');
+  const html = `
+    <html><head><title>Ticket de Entrega</title>
+    <style>
+      @page { margin: 8mm; }
+      body { font-family: monospace; font-size: 12px; width: 72mm; margin: 0 auto; color: #000; }
+      .c { text-align: center; } .r { text-align: right; } .b { font-weight: bold; }
+      hr { border: none; border-top: 1px dashed #000; margin: 4px 0; }
+      table { width: 100%; border-collapse: collapse; } td { padding: 1px 0; }
+    </style></head>
+    <body>
+      <div class="c b">${escapeHtml(settings.tradeName || 'HD-SYSTEM')}</div>
+      <h2 class="c">TICKET DE ENTREGA</h2>
+      <div class="c">Pedido: #${order.orderNumber ?? ''}</div>
+      <div class="c">${new Date(order.createdAt || Date.now()).toLocaleString('pt-BR')}</div>
+      <hr/>
+      ${order.customerName ? `<div><span class="b">Cliente:</span> ${escapeHtml(order.customerName)}</div>` : ''}
+      ${order.orderType === 'delivery' ? (addrLine ? `<div><span class="b">Endereço:</span> ${escapeHtml(addrLine)}</div>` : '') : '<div><span class="b">Retirada:</span> no estabelecimento</div>'}
+      ${order.customerWhatsapp ? `<div><span class="b">Tel:</span> ${escapeHtml(order.customerWhatsapp)}</div>` : ''}
+      ${order.paymentMethod ? `<div><span class="b">Pagamento:</span> ${methodMap[order.paymentMethod] || escapeHtml(order.paymentMethod)}</div>` : ''}
+      ${order.paymentMethod === 'cash' && order.changeAmount ? `<div><span class="b">Troco para:</span> R$ ${order.changeAmount.toFixed(2)}</div>` : ''}
+      ${order.notes ? `<div><span class="b">Obs:</span> ${escapeHtml(order.notes)}</div>` : ''}
+      <hr/>
+      <table>${rows}</table>
+      <hr/>
+      ${order.deliveryFee ? `<div class="r">Frete: R$ ${order.deliveryFee.toFixed(2)}</div>` : ''}
+      <div class="c b" style="font-size:16px">TOTAL: R$ ${order.total.toFixed(2)}</div>
+      <div class="c">Obrigado pela preferência!</div>
+    </body></html>
+  `;
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  document.body.appendChild(iframe);
+  iframe.contentDocument?.open();
+  iframe.contentDocument?.write(html);
+  iframe.contentDocument?.close();
+  iframe.contentWindow?.focus();
+  iframe.contentWindow?.print();
+  setTimeout(() => document.body.removeChild(iframe), 1000);
 }
 
 /** Devolve a impressora de frente (caixa) ativa, ou a primeira não-OS. */

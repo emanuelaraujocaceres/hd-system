@@ -16,9 +16,10 @@ import {
   buildTestPageEscPos,
   buildReceiptEscPos,
   buildOrderReceiptEscPos,
+  buildDeliveryTicketEscPos,
   getCaixaPrinter,
 } from './printService';
-import type { Printer, Sale, SystemSettings } from '../types';
+import type { Printer, Sale, SystemSettings, DeliveryOrder } from '../types';
 
 // ─── helpers ────────────────────────────────────────────────────
 
@@ -530,5 +531,65 @@ describe('getCaixaPrinter', () => {
     const pWeb = mkPrinter('web', { transport: 'webusb', role: 'bar' });
     // pOsCaixa é OS, então é filtrada → fallback é pWeb (primeira não-OS)
     expect(getCaixaPrinter([pOsCaixa, pWeb])?.id).toBe('web');
+  });
+});
+
+// ─── buildDeliveryTicketEscPos ────────────────────────────────
+
+const mkDeliveryOrder = (overrides?: Partial<DeliveryOrder>): DeliveryOrder => ({
+  id: 'order-1',
+  organizationId: 'org-1',
+  storeBranchId: 'branch-1',
+  orderNumber: 42,
+  orderType: 'delivery',
+  status: 'out_for_delivery',
+  items: [
+    { productId: 'p1', productName: 'Pizza', unitPrice: 30, quantity: 1, total: 30 },
+    { productId: 'p2', productName: 'Refrigerante', unitPrice: 6, quantity: 2, total: 12 },
+  ],
+  subtotal: 42,
+  deliveryFee: 5,
+  discount: 0,
+  total: 47,
+  paymentMethod: 'cash',
+  changeAmount: 50,
+  deliveryAddress: { street: 'Rua das Flores', number: '123', complement: 'Apto 5', neighborhood: 'Centro', city: 'São Paulo', state: 'SP', zip: '01000-000' },
+  customerName: 'Carlos Silva',
+  customerWhatsapp: '(11) 98888-7777',
+  notes: 'Sem cebola',
+  whatsappSent: false,
+  createdAt: '2026-08-01T12:00:00Z',
+  updatedAt: '2026-08-01T12:00:00Z',
+  ...overrides,
+});
+
+describe('buildDeliveryTicketEscPos', () => {
+  it('inclui dados de entrega (endereço, telefone, pagamento, troco) no ticket', () => {
+    const order = mkDeliveryOrder();
+    const result = buildDeliveryTicketEscPos(order, mkSettings());
+    const decoded = new TextDecoder().decode(result);
+    expect(decoded).toContain('TICKET DE ENTREGA');
+    expect(decoded).toContain('Rua das Flores');
+    expect(decoded).toContain('(11) 98888-7777');
+    expect(decoded).toContain('Dinheiro');
+    expect(decoded).toContain('Troco para');
+    expect(decoded).toContain('Pizza');
+    expect(decoded).toContain('TOTAL: R$ 47.00');
+  });
+
+  it('não exibe endereço no modo retirada (pickup)', () => {
+    const order = mkDeliveryOrder({ orderType: 'pickup' });
+    const result = buildDeliveryTicketEscPos(order, mkSettings());
+    const decoded = new TextDecoder().decode(result);
+    expect(decoded).toContain('Retirada no estabelecimento');
+    expect(decoded).not.toContain('Endereco');
+  });
+
+  it('lida com pagamento PIX sem troco', () => {
+    const order = mkDeliveryOrder({ paymentMethod: 'pix', changeAmount: undefined });
+    const result = buildDeliveryTicketEscPos(order, mkSettings());
+    const decoded = new TextDecoder().decode(result);
+    expect(decoded).toContain('PIX');
+    expect(decoded).not.toContain('Troco para');
   });
 });

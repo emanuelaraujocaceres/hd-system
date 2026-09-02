@@ -14,7 +14,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { RefreshCw, Clock, CheckCircle, Truck, Package, MapPin, Phone, DollarSign, CreditCard, Banknote, Loader2, Bell } from 'lucide-react';
 import { DeliveryOrder, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
-import { printSaleReceipt } from '../../services/printService';
+import { printSaleReceipt, printDeliveryOrderTicket } from '../../services/printService';
+import { buildSaleFromDeliveryOrder } from '../../lib/deliverySale';
 import { posAudio } from '../../services/audioService';
 import { globalNotificationService } from '../../services/globalNotificationService';
 import { useDeliveryNotifications } from '../../hooks/useDeliveryNotifications';
@@ -74,6 +75,9 @@ const PAYMENT_LABELS: Record<string, string> = {
   pix: 'PIX',
 };
 
+// Colunas do Kanban (pedidos ativos em pipeline), similar ao Pedidos/KDS.
+const KANBAN_ACTIVE: DeliveryOrder['status'][] = ['pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery'];
+
 export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) => {
   const [orders, setOrders] = useState<(DeliveryOrder & { saleRef?: string })[]>([]);
   const [filter, setFilter] = useState<StatusFilter>('all');
@@ -110,9 +114,11 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
       ? all
       : all.filter(o => o.storeBranchId === user.storeBranchId);
 
-    // Também exibe pedidos de delivery do cardápio (sale com orderSource 'delivery')
+    // Também exibe pedidos de delivery do cardápio (sale com orderSource 'delivery').
+    // Exclui sales que já viraram um pedido nativo finalizado (têm deliveryOrderId),
+    // para não mostrar duas vezes o mesmo pedido no Board.
     const cardapioDelivery = (storageService.getSales() || [])
-      .filter((s) => s.orderSource === 'delivery' && s.status !== 'cancelled' && (user.superadmin || s.storeBranchId === user.storeBranchId))
+      .filter((s) => s.orderSource === 'delivery' && !s.deliveryOrderId && s.status !== 'cancelled' && (user.superadmin || s.storeBranchId === user.storeBranchId))
       .map((s) => mapSaleToDeliveryOrder(s));
 
     const merged = [...filtered, ...cardapioDelivery];
@@ -152,6 +158,13 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
     
     storageService.updateDeliveryOrderStatus(orderId, newStatus, extraData);
     posAudio.chime();
+    // ✅ Finaliza a venda (gera Sale) ao entregar um pedido de delivery nativo,
+    // para que entre no Financeiro/caixa/estoque assim como o cardápio.
+    if (newStatus === 'delivered') {
+      finalizeNativeDeliverySale(order).catch(() => {
+        console.warn('[DeliveryBoard] Falha ao gerar Sale para o pedido entregue', orderId);
+      });
+    }
     // ✅ Global notification for delivery status update
     const statusLabels: Record<string, string> = {
       confirmed: 'Confirmado',
@@ -196,6 +209,20 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
     loadOrders();
   };
 
+  /**
+   * Finaliza um pedido de delivery NATIVO (criado pelo DeliveryClientView)
+   * ao ser marcado como "Entregue": gera uma Sale (com deliveryOrderId) para
+   * o pedido entrar no Financeiro/caixa/estoque, deduzindo estoque via addSale.
+   * Guard: só gera se ainda não tiver venda vinculada (order.saleId).
+   */
+  const finalizeNativeDeliverySale = async (order: DeliveryOrder) => {
+    if (order.saleId) return; // já virou venda (prevenção de duplicidade)
+    const sale = buildSaleFromDeliveryOrder(order, user);
+    await storageService.addSale(sale);
+    storageService.updateDeliveryOrderStatus(order.id, 'delivered', { saleId: sale.id });
+    posAudio.chime();
+  };
+
   const handleCancelOrder = (orderId: string) => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) return;
@@ -211,6 +238,26 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
       });
       posAudio.error();
       loadOrders();
+    }
+  };
+
+  /** Reimprime o ticket do pedido. Para os do cardápio (já são Sale), usa o
+   *  cupom de venda/pedido; para os nativos, imprime o ticket de entrega com
+   *  endereço e telefone (necessário para o motoboy). */
+  const handleReprint = async (order: DeliveryOrder & { saleRef?: string }) => {
+    try {
+      const settings = storageService.getSettings();
+      const printers = storageService.getPrinters();
+      if (order.saleRef) {
+        const sale = storageService.getSales().find((s) => s.id === order.saleRef);
+        if (sale) {
+          await printSaleReceipt(sale, settings, printers, { type: 'pedido' });
+          return;
+        }
+      }
+      await printDeliveryOrderTicket(order as any, settings, printers);
+    } catch {
+      console.warn('[DeliveryBoard] Falha ao reimprimir ticket', order.id);
     }
   };
 
@@ -367,11 +414,23 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
         ))}
       </div>
 
-      {/* Lista de Pedidos */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filteredOrders.map((order) => {
-          const statusConfig = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending;
-          const StatusIcon = statusConfig.icon;
+      {/* Lista de Pedidos (Kanban por status, similar ao Pedidos/KDS) */}
+      <div className="flex gap-3 overflow-x-auto pb-2 items-start">
+        {(filter === 'all' ? KANBAN_ACTIVE : [filter]).map((st) => {
+          const colOrders = orders.filter((o) => o.status === st);
+          const cfg = STATUS_CONFIG[st] || STATUS_CONFIG.pending;
+          const ColIcon = cfg.icon;
+          return (
+            <div key={st} className="flex flex-col gap-2 shrink-0 w-72 sm:w-80">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a]">
+                <ColIcon className={`w-4 h-4 ${cfg.textColor}`} />
+                <span className={`text-[11px] font-bold ${cfg.textColor}`}>{cfg.label}</span>
+                <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-[#27272a] text-slate-500 dark:text-slate-400">{colOrders.length}</span>
+              </div>
+              <div className="space-y-2">
+                {colOrders.map((order) => {
+                  const statusConfig = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending;
+                  const StatusIcon = statusConfig.icon;
           
           return (
             <div
@@ -469,12 +528,23 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
               </div>
 
               {/* Ações */}
-              <div className="pt-2">
+              <div className="pt-2 space-y-2">
+                <button
+                  onClick={() => handleReprint(order)}
+                  className="w-full px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-slate-600 dark:text-slate-300 text-[11px] font-bold flex items-center justify-center gap-1.5"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Reimprimir
+                </button>
                 {getStatusActions(order)}
               </div>
             </div>
           );
         })}
+            </div>
+          </div>
+        );
+      })}
       </div>
 
       {filteredOrders.length === 0 && (
