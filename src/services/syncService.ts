@@ -529,6 +529,28 @@ class SupabaseSyncService {
       const { error } = await supabase.from(table).upsert(payload, { onConflict });
       if (error) {
         console.warn(`[HD-Sync] ❌ Upsert ${table} failed:`, error.message, `(row id: ${row.id})`);
+        // DIAGNÓSTICO/RESILIÊNCIA: PGRST204 = "Could not find the '<col>' column
+        // of '<table>' in the schema cache". Acontece quando o frontend envia uma
+        // coluna adicionada em um commit de feature (ex.: delivery_order_id em
+        // e484952, payment_details em 28d2f75) mas a migration correspondente
+        // NÃO foi aplicada no banco. Sem tratamento, o upsert da linha INTEIRA
+        // falha e a venda fica presa no dispositivo (nunca sincroniza para os
+        // outros). Para nunca perder a escrita, retentamos 1x DROPANDO apenas a
+        // coluna ofensiva — a venda sobe com o resto do payload.
+        const schemaCol = this._parsePGRST204Column(error);
+        if (schemaCol && schemaCol in payload) {
+          console.warn(`[HD-Sync] 🔧 PGRST204 coluna "${schemaCol}" não existe no banco — retentando sem essa coluna (fallback não-bloqueante)`);
+          const fallbackPayload: Record<string, any> = { ...payload };
+          delete fallbackPayload[schemaCol];
+          const { error: retryErr } = await supabase.from(table).upsert(fallbackPayload, { onConflict });
+          if (!retryErr) {
+            console.warn(`[HD-Sync] ✅ Upsert ${table} OK no fallback (coluna "${schemaCol}" removida do payload)`);
+            return { ok: true };
+          }
+          console.warn(`[HD-Sync] ❌ Upsert ${table} falhou também no fallback:`, retryErr.message);
+          error.message = retryErr.message;
+          error.code = retryErr.code;
+        }
         // DIAGNÓSTICO: loga o payload completo para revelar qual coluna UUID vai vazia ("")
         console.warn(`[HD-Sync] 🔍 PAYLOAD ${table}:`, JSON.stringify(row).slice(0, 6000));
         // DIAGNÓSTICO: campos vazios no payload — prova se o "" nasce no cliente ou no banco
@@ -1054,6 +1076,22 @@ class SupabaseSyncService {
    * Para esses, o app re-autentica com as credenciais locais (ensureSession)
    * e tenta a escrita 1x extra.
    */
+  /**
+   * Extrai o nome da coluna ofensiva de um erro PGRST204 do PostgREST.
+   * Formato: "Could not find the '<column>' column of '<table>' in the schema cache".
+   * Retorna null se não for um PGRST204 (ou o nome não puder ser extraído),
+   * para o fallback não-bloqueante só atuar em erros de coluna faltante mesmo.
+   */
+  private _parsePGRST204Column(error: any): string | null {
+    if (!error) return null;
+    const msg = (error.message || '').toLowerCase();
+    if (error.code === 'PGRST204' || msg.includes('in the schema cache') || msg.startsWith('could not find the')) {
+      const m = /could not find the ['"]([a-z0-9_]+)['"] column/.exec(msg);
+      if (m && m[1]) return m[1];
+    }
+    return null;
+  }
+
   private isAuthError(error: any): boolean {
     if (!error) return false;
     const msg = (error.message || '').toLowerCase();
