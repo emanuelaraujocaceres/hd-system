@@ -23,6 +23,8 @@ interface StockCameraScannerModalProps {
   currentBranch?: StoreBranch;
   onProductsImported?: () => void;
   onNavigateToNewProduct?: (barcode: string) => void;
+  // Novo: product ID whose barcode should be updated (overrides auto-match)
+  targetProductId?: string;
 }
 
 export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = ({
@@ -31,6 +33,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   currentBranch,
   onProductsImported,
   onNavigateToNewProduct,
+  targetProductId, // Novo: product ID whose barcode should be updated (overrides auto-match)
 }) => {
   // Choice menu: 'menu' (choose method) | 'barcode' | 'doc'
   const [mode, setMode] = useState<'menu' | 'barcode' | 'doc'>('menu');
@@ -212,6 +215,36 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
   const handleBarcodeDetected = useCallback((barcode: string) => {
     setScannedBarcode(barcode);
 
+    // If targetProductId is provided, update that product's barcode directly
+    if (targetProductId) {
+      const allProds = storageService.getProducts();
+      const prodIndex = allProds.findIndex((p) => p.id === targetProductId);
+      if (prodIndex >= 0) {
+        const updatedProd = { ...allProds[prodIndex], barcode };
+        storageService.saveProduct(updatedProd);
+        posAudio.chime();
+        setScannedProduct(updatedProd);
+        setScannerStatus('found');
+        setAddQty(1);
+        // Pause scanning - wait for user action
+        setScanPaused(true);
+        if (scannerIntervalRef.current) {
+          clearInterval(scannerIntervalRef.current);
+          scannerIntervalRef.current = null;
+        }
+        // Show success and auto-close after brief delay
+        setShowSuccessOverlay(true);
+        setSuccessData({ name: updatedProd.name, quantity: 1 });
+        if (addStockTimeoutRef.current) clearTimeout(addStockTimeoutRef.current);
+        addStockTimeoutRef.current = setTimeout(() => {
+          setShowSuccessOverlay(false);
+          setSuccessData(null);
+          onClose();
+        }, 1500);
+        return;
+      }
+    }
+
     // 🔍 DEBUG: Check what barcode was detected and what products are available
     console.log('🔍 [BarcodeScanner] Barcode detected:', JSON.stringify(barcode));
     const allProds = storageService.getProducts();
@@ -252,7 +285,7 @@ export const StockCameraScannerModal: React.FC<StockCameraScannerModalProps> = (
         onClose();
       }, 150);
     }
-  }, [onNavigateToNewProduct, onClose]);
+  }, [targetProductId, onNavigateToNewProduct, onClose]);
 
   if (!isOpen) return null;
 

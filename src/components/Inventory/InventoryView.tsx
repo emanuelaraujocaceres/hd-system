@@ -103,6 +103,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [barcodeTargetProduct, setBarcodeTargetProduct] = useState<Product | null>(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isStockCameraModalOpen, setIsStockCameraModalOpen] = useState(false);
+  const [scannerTargetProductId, setScannerTargetProductId] = useState<string | null>(null);
   const [isOpenContainersModalOpen, setIsOpenContainersModalOpen] = useState(false);
 
   // Camera & Image Search state
@@ -1174,6 +1175,17 @@ minStock: parseInt(formMinStock) || 0,
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
+                          <button
+                            onClick={() => {
+                              setBarcodeTargetProduct(p);
+                              setScannerTargetProductId(p.id);
+                              setIsStockCameraModalOpen(true);
+                            }}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors min-h-[44px] min-w-[44px]"
+                            title="Atualizar Código de Barras"
+                          >
+                            <Barcode className="w-4 h-4" />
+                          </button>
                           {p.useLots && (
                             <button
                               onClick={() => setLotManagerProduct(p)}
@@ -2144,6 +2156,7 @@ minStock: parseInt(formMinStock) || 0,
       <StockCameraScannerModal
         isOpen={isStockCameraModalOpen}
         onClose={() => setIsStockCameraModalOpen(false)}
+        targetProductId={scannerTargetProductId}
         onProductsImported={() => {
           addToast('success', 'Produtos importados com sucesso!');
         }}
