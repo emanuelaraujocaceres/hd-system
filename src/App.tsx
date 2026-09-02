@@ -413,7 +413,12 @@ export const App: React.FC = () => {
         .eq('id', orgId)
         .maybeSingle();
       if (error) {
-        console.warn('[HD-Sync] Falha ao verificar status da organização:', error.message);
+        // Durante o boot (pré-login) o Supabase ainda não tem sessão e a consulta
+        // de organizations com o DEFAULT_ORG_ID retorna 401 — é esperado. Só loga
+        // para usuário logado, onde uma falha real de status importa.
+        if (storageService.getUserProfile()) {
+          console.warn('[HD-Sync] Falha ao verificar status da organização:', error.message);
+        }
         return true;
       }
       const allowed = data?.active !== false;

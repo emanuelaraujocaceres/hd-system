@@ -785,12 +785,30 @@ class SupabaseSyncService {
    * VULN-05 fix: uses pagination to handle large datasets without
    * exceeding Supabase response limits or browser memory.
    */
+  // Modo bootstrap/offline PRÉ-LOGIN: sem perfil salvo e sem logout explícito.
+  // Nesse estado o Supabase ainda não restaurou a sessão e TODAS as chamadas
+  // /rest/v1 retornam 401 "permission denied" — não faz sentido inundar o
+  // console com esses warnings (a hidratação real, pós-login, é que carrega os
+  // dados). Mantém o comportamento (as requisições ainda são feitas), só cala o
+  // log de boot.
+  private isBootingWithoutUser(): boolean {
+    try {
+      if (localStorage.getItem('hd_system_logged_in_email') === 'LOGGED_OUT') return false;
+      if (localStorage.getItem('hd_system_user_profile')) return false;
+      return true; // sem perfil salvo e não-logado → boot provavelmente pré-login
+    } catch {
+      return false;
+    }
+  }
+
   async fetchRows(table: TableName, branchId?: string): Promise<any[]> {
     try {
       const PAGE_SIZE = 500;
       let allRows: any[] = [];
       let offset = 0;
       let hasMore = true;
+      // Pré-login: suprime o flood de warnings de permissão, mas mantém a chamada
+      const silentBoot = this.isBootingWithoutUser();
 
       while (hasMore) {
         let query = supabase.from(table).select('*');
@@ -810,7 +828,7 @@ class SupabaseSyncService {
 
         const { data, error } = await query;
         if (error) {
-          console.warn(`[HD-Sync] Fetch ${table} failed at offset ${offset}:`, error.message);
+          if (!silentBoot) console.warn(`[HD-Sync] Fetch ${table} failed at offset ${offset}:`, error.message);
           break;
         }
         const rows = data || [];
