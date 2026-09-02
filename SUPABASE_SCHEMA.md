@@ -621,8 +621,8 @@ Realtime: publicada - REPLICA: full
 Fotos do documento A4. Políticas completas (SELECT/INSERT/UPDATE/DELETE) para autenticados da filial + superadmin.
 Path: `nf-documents/{organization_id}/{store_branch_id}/{documento_id}/{timestamp}.jpg`.
 
-#### Storage bucket `branch-logos` (privado) — pendente de criação
-Logos por filial (upload na aba Tema do SettingsView → `storageService.uploadBranchLogo`). Path: `branch-logos/{organization_id}/{store_branch_id}/{logo}.{ext}`.
+#### Storage bucket `branch-logos` (público) — pendente de criação
+Logos por filial (upload na aba Tema do SettingsView → `uploadBranchLogo` em `src/lib/supabase.ts`, bucket `branch-logos`). Path real: `branches/{store_branch_id}-{timestamp}.{ext}`. Precisa de política de **leitura PÚBLICA** (o logo é renderizado no Sidebar / telas de TV). Se o bucket/policy faltar, `uploadBranchLogo` cai no fallback local (dataURL) sem quebrar a UI.
 
 ### Funções RPC e Views auxiliares (scanner de fornecedor)
 
