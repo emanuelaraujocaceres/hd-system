@@ -825,7 +825,7 @@ minStock: parseInt(formMinStock) || 0,
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowFilterSheet(true)}
               className="md:hidden px-3 py-2 rounded-xl bg-slate-100 dark:bg-[#27272a] text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5"
@@ -929,7 +929,9 @@ minStock: parseInt(formMinStock) || 0,
       {/* Products Table — Desktop (md+) */}
       <div className="hidden md:block bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+          {/* min-w garante que, em janelas menores que o conteúdo, o container gera
+              scroll horizontal em vez de comprimir/cortar as colunas de ação. */}
+          <table className="w-full text-left border-collapse text-xs min-w-[1000px]">
             <thead>
               <tr className="bg-slate-50 dark:bg-[#09090b]/80 border-b border-slate-200 dark:border-[#27272a] text-slate-500 dark:text-[#71717a] font-bold uppercase tracking-wider">
                 <th className="py-3.5 px-3 w-10">
