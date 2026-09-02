@@ -550,6 +550,9 @@ class SupabaseSyncService {
             p_error_message: error.message,
             p_source: 'tryUpsert',
             p_browser_id: navigator.userAgent.slice(0, 50),
+            // Obrigatório (movimentacoes_falhas.store_branch_id é NOT NULL):
+            // reusa o store_branch_id do próprio row quando presente.
+            p_store_branch_id: row?.store_branch_id || null,
           });
         } catch {}
         return { ok: false, error };

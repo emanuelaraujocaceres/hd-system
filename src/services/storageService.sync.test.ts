@@ -335,4 +335,81 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     const storedArg = setSpy.mock.calls.find((c: any[]) => c[0] === 'hd_system_payment_terminals')?.[1] as any[];
     expect(storedArg).toBeUndefined(); // set não deve ser chamado (delete bloqueado)
   });
+
+  // ─── DUPLA FONTE DE VERDADE DO CAIXA (auditoria 2026-09-02) ───
+  // O contador do cloud (cash_sessions.total_sales_cash) divergia do recálculo
+  // local (soma dos payments das vendas) — ex.: R$109 no cloud vs R$164 local.
+  // _updateCaixaFromSale agora recalcula e SINCRONIZA ao cloud.
+
+  it('mapSaleFromCloud — payments_json NULL + payment_method NULL → método "unknown" (não cash)', () => {
+    const row = {
+      id: 'sale-unknown', code: 'X', created_at: '2026-01-01T00:00:00Z',
+      store_branch_id: 'b1', status: 'completed',
+      payments_json: null, payment_method: null, total: 100, subtotal: 100, discount: 0,
+    };
+    const mapped = (svc as any).mapSaleFromCloud(row, []);
+    expect(mapped.payments[0].method).toBe('unknown');
+  });
+
+  it('mapSaleFromCloud — payments_json NULL mas payment_method presente → usa o método (não cash cego)', () => {
+    const row = {
+      id: 'sale-pix', code: 'Y', created_at: '2026-01-01T00:00:00Z',
+      store_branch_id: 'b1', status: 'completed',
+      payments_json: null, payment_method: 'pix', total: 100, subtotal: 100, discount: 0,
+    };
+    const mapped = (svc as any).mapSaleFromCloud(row, []);
+    expect(mapped.payments[0].method).toBe('pix');
+  });
+
+  it('_updateCaixaFromSale recalcula e sincroniza totais ao cloud (resolve dualidade)', () => {
+    // Sessão de caixa aberta na filial b1 (br-01 do INITIAL_BRANCHES)
+    const org = (svc as any).getCurrentOrgId?.() || '';
+    const branchId = 'f3265a77-5946-5cd3-b09c-725ac4d26952'; // BRANCH_UUIDS["br-01"]
+    const caixaKey = `hd_system_caixa_session_${org}`;
+    localStorage.setItem(caixaKey, JSON.stringify({
+      id: 'caixa-1', status: 'open', storeBranchId: branchId, organizationId: org,
+      initialCash: 0, totalSalesCash: 0, totalSalesPix: 0, totalSalesCard: 0,
+      totalSalesCreditAccount: 0, suprimentos: 0, sangrias: 0, currentCashBalance: 0,
+      operatorName: 'Op', openedAt: '2026-01-01T00:00:00Z',
+    }));
+    // Duas vendas completed da filial, uma cash e uma pix
+    localStorage.setItem('hd_system_sales', JSON.stringify([
+      { id: 's1', status: 'completed', storeBranchId: branchId, payments: [{ method: 'cash', amount: 100 }] },
+      { id: 's2', status: 'completed', storeBranchId: branchId, payments: [{ method: 'pix', amount: 64 }] },
+    ]));
+    (svc as any).getSelectedBranchId = () => branchId;
+    (svc as any).getRawBranchId = () => branchId;
+    const syncSpy = vi.spyOn(svc as any, 'syncCaixaSession').mockImplementation(() => {});
+
+    (svc as any)._updateCaixaFromSale({ id: 's3', status: 'completed', storeBranchId: branchId, payments: [{ method: 'cash', amount: 0 }] });
+
+    // Recalculateu cash=100 e pix=64 e sincronizou ao cloud
+    expect(syncSpy).toHaveBeenCalled();
+    const synced = syncSpy.mock.calls[0][0] as { totalSalesCash: number; totalSalesPix: number };
+    expect(synced.totalSalesCash).toBe(100);
+    expect(synced.totalSalesPix).toBe(64);
+  });
+
+  it('_updateCaixaFromSale NÃO sincroniza quando não há sessão aberta', () => {
+    const org = (svc as any).getCurrentOrgId?.() || '';
+    const branchId = 'f3265a77-5946-5cd3-b09c-725ac4d26952'; // BRANCH_UUIDS["br-01"]
+    // Sem caixa aberto → sessão fechada fail-closed retorna status 'closed'
+    const caixaKey = `hd_system_caixa_session_${org}`;
+    localStorage.setItem(caixaKey, JSON.stringify({
+      id: 'caixa-fechado', status: 'closed', storeBranchId: branchId, organizationId: org,
+      initialCash: 0, totalSalesCash: 0, totalSalesPix: 0, totalSalesCard: 0,
+      totalSalesCreditAccount: 0, suprimentos: 0, sangrias: 0, currentCashBalance: 0,
+      operatorName: 'Op', openedAt: '2026-01-01T00:00:00Z',
+    }));
+    localStorage.setItem('hd_system_sales', JSON.stringify([
+      { id: 's1', status: 'completed', storeBranchId: branchId, payments: [{ method: 'cash', amount: 100 }] },
+    ]));
+    (svc as any).getSelectedBranchId = () => branchId;
+    (svc as any).getRawBranchId = () => branchId;
+    const syncSpy = vi.spyOn(svc as any, 'syncCaixaSession').mockImplementation(() => {});
+
+    (svc as any)._updateCaixaFromSale({ id: 's2', status: 'completed', storeBranchId: branchId, payments: [{ method: 'cash', amount: 10 }] });
+
+    expect(syncSpy).not.toHaveBeenCalled();
+  });
 });

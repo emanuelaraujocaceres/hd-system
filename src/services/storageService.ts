@@ -574,16 +574,36 @@ class StorageService {
     recordId: string,
     payload: any,
     errorMessage: string,
+    extra?: {
+      branchId?: string;
+      orgId?: string;
+      userEmail?: string;
+      errorCode?: string;
+    },
   ) {
     try {
+      // Resolve store_branch_id (aceita short code → UUID) para o campo
+      // OBRIGATÓRIO de movimentacoes_falhas. Se não resolver, deixa null
+      // (o fallback do banco e o monitor de DLQ tratam).
+      let branchUuid = extra?.branchId || this.getSelectedBranchId() || '';
+      if (branchUuid && !StorageService.UUID_RE.test(branchUuid)) {
+        const branches = this.getBranches();
+        const matched = branches.find((b) => b.id === branchUuid || b.code === branchUuid);
+        if (matched) branchUuid = matched.id;
+      } else if (!branchUuid) {
+        branchUuid = '';
+      }
       const { error } = await supabase.rpc('fn_insserir_dlq', {
         p_operation_type: operationType,
         p_table_name: tableName,
         p_record_id: recordId,
         p_payload: payload,
         p_error_message: errorMessage,
+        p_error_code: extra?.errorCode || null,
         p_source: 'frontend',
         p_browser_id: navigator.userAgent.slice(0, 50),
+        p_user_email: extra?.userEmail || undefined,
+        p_store_branch_id: branchUuid || null,
       });
       if (error) {
         console.warn('[HD-Sync] DLQ insert failed:', error.message);
@@ -1241,6 +1261,9 @@ expiration_date: p.expirationDate || null,
     const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []).filter((s) => s.id !== id);
     this.set(KEYS.SALES, sales);
     this.notify();
+    // Recalculate caixa totals after sale deletion (same source of truth
+    // as _updateCaixaFromSale — keeps cloud cash_sessions in sync).
+    this.recalcAndSyncCaixa();
   }
 
   removeCaixaFromRemote(id: string) {
@@ -1502,7 +1525,7 @@ updateCategoryFromRemote(row: any) {
             cashGiven: p.cashGiven,
             changeDue: p.changeDue,
           }))
-        : (existing?.payments || [{ method: (row.payment_method as any) || 'cash', amount: parseFloat(row.total) || 0 }]),
+        : (existing?.payments || [{ method: (row.payment_method as any) || 'unknown', amount: parseFloat(row.total) || 0 }]),
       orderSource: row.order_source || existing?.orderSource || 'pdv',
       kitchenStatus: row.kitchen_status || existing?.kitchenStatus || 'pending',
       status: row.status || 'completed',
@@ -1539,33 +1562,22 @@ updateCategoryFromRemote(row: any) {
   }
 
   /**
-   * Updates the active caixa session counters when a sale is synced
-   * from another device via Realtime. Recalculates caixa totals
-   * from all completed sales of the current branch to avoid
-   * double-counting or missed updates.
+   * Recalculates caixa totals from ALL completed sales of the current branch
+   * and syncs to cloud if values changed. This is the single source of truth
+   * for reconciling the cloud cash_sessions counters with the actual sales sum.
+   *
+   * Called from:
+   * - _updateCaixaFromSale (Realtime sale INSERT/UPDATE)
+   * - removeSaleFromRemote (Realtime sale DELETE)
+   *
+   * SAFETY: uses absolute totals (not incremental), so writing to cloud is
+   * idempotent and cannot cause double-counting. Cloud is updated via
+   * syncCaixaSession which does upsertRow with onConflict:'id'.
    */
-  private _updateCaixaFromSale(sale: Sale) {
-    // Only update for completed sales
-    if (sale.status !== 'completed') return;
-
-    // Only update if the sale belongs to the current branch
-    const rawBranchId = this.getRawBranchId();
-    if (rawBranchId && sale.storeBranchId && sale.storeBranchId !== rawBranchId) {
-      let resolvedBranchId = rawBranchId;
-      if (!StorageService.UUID_RE.test(resolvedBranchId)) {
-        const branches = this.getBranches();
-        const matched = branches.find((b) => b.id === resolvedBranchId || b.code === resolvedBranchId);
-        if (matched) resolvedBranchId = matched.id;
-      }
-      if (sale.storeBranchId !== resolvedBranchId) return;
-    }
-
-    // Get the active caixa session (if any)
+  private recalcAndSyncCaixa(): void {
     const session = this.getActiveCaixaSession();
+    if (!session || session.status !== 'open') return;
 
-    // Recalculate caixa totals from ALL completed sales of this branch.
-    // This avoids double-counting (if the same sale event arrives twice)
-    // and ensures accuracy even if events arrive out of order.
     const allSales = this.getSales();
     const branchSales = allSales.filter((s) => s.status === 'completed');
 
@@ -1595,8 +1607,15 @@ updateCategoryFromRemote(row: any) {
       }
     }
 
-    if (session && session.status === 'open') {
-      // Update the open session in-place
+    // Only sync to cloud if values actually changed (avoids flooding with
+    // identical upserts when multiple sale events arrive in quick succession).
+    const changed =
+      session.totalSalesCash !== totalCash ||
+      session.totalSalesPix !== totalPix ||
+      session.totalSalesCard !== totalCard ||
+      session.totalSalesCreditAccount !== totalCredit;
+
+    if (changed) {
       session.totalSalesCash = totalCash;
       session.totalSalesPix = totalPix;
       session.totalSalesCard = totalCard;
@@ -1604,14 +1623,38 @@ updateCategoryFromRemote(row: any) {
       session.currentCashBalance =
         session.initialCash + session.totalSalesCash + session.suprimentos - session.sangrias;
       this.set(KEYS.CAIXA, session);
-    } else {
-      // No open session locally — store the recalculated totals
-      // so that when the user opens the caixa, it starts with correct values.
-      // Also update the caixa in Supabase so other devices get the correct totals.
+      // Push recalculated absolute totals to cloud so other devices adopt
+      // the correct counters (fixes the dual-source-of-truth: cloud=109
+      // vs local-recalc=164 discrepancy).
+      this.syncCaixaSession(session);
       console.log(
-        `[HD-Sync] 🔄 Caixa recalculated from ${branchSales.length} sales (no open session locally): cash=R$${totalCash.toFixed(2)} pix=R$${totalPix.toFixed(2)} card=R$${totalCard.toFixed(2)}`,
+        `[HD-Sync] 🔄 Caixa recalculated & synced from ${branchSales.length} sales: cash=R$${totalCash.toFixed(2)} pix=R$${totalPix.toFixed(2)} card=R$${totalCard.toFixed(2)}`,
       );
     }
+  }
+
+  /**
+   * Updates the active caixa session counters when a sale is synced
+   * from another device via Realtime. Delegates to recalcAndSyncCaixa()
+   * which recalculates from all completed sales and syncs to cloud.
+   */
+  private _updateCaixaFromSale(sale: Sale) {
+    // Only update for completed sales
+    if (sale.status !== 'completed') return;
+
+    // Only update if the sale belongs to the current branch
+    const rawBranchId = this.getRawBranchId();
+    if (rawBranchId && sale.storeBranchId && sale.storeBranchId !== rawBranchId) {
+      let resolvedBranchId = rawBranchId;
+      if (!StorageService.UUID_RE.test(resolvedBranchId)) {
+        const branches = this.getBranches();
+        const matched = branches.find((b) => b.id === resolvedBranchId || b.code === resolvedBranchId);
+        if (matched) resolvedBranchId = matched.id;
+      }
+      if (sale.storeBranchId !== resolvedBranchId) return;
+    }
+
+    this.recalcAndSyncCaixa();
   }
 
   updateCustomerFromRemote(row: any) {
@@ -1998,7 +2041,11 @@ updateCategoryFromRemote(row: any) {
             cashGiven: p.cashGiven,
             changeDue: p.changeDue,
           }))
-        : [{ method: r.payment_method || 'cash', amount: fixedTotal }],
+        // FIX: when payments_json is NULL, use payment_method if available.
+        // If payment_method is also NULL, mark as 'unknown' instead of
+        // defaulting to 'cash' — this prevents SQL-inserted sales (without
+        // payments_json) from artificially inflating cash totals in the caixa.
+        : [{ method: r.payment_method || 'unknown', amount: fixedTotal }],
       orderSource: r.order_source || localSale?.orderSource || 'pdv',
       kitchenStatus: r.kitchen_status || localSale?.kitchenStatus || 'pending',
       status: r.status || 'completed',
@@ -3414,7 +3461,7 @@ id: StorageService.ensureUuid(settings.id),
       const { data, error } = await (supabase as any).rpc('cancel_sale_atomic', { p_sale_id: saleId });
       if (error) {
         console.warn('[HD-Sync] cancel_sale_atomic RPC failed:', error.message);
-        await this.insertDLQ('DELETE', 'sales', saleId, { saleId }, error.message);
+        await this.insertDLQ('DELETE', 'sales', saleId, { saleId }, error.message, { branchId: this.getSelectedBranchId(), orgId: this.getCurrentOrgId() });
         return { success: false, message: `Falha ao cancelar venda no servidor: ${error.message}` };
       }
       // Validação de negócio retornada pela RPC (ex.: venda já cancelada/fechada).
@@ -3430,7 +3477,7 @@ id: StorageService.ensureUuid(settings.id),
       return { success: true };
     } catch (e: any) {
       console.warn('[HD-Sync] cancel_sale_atomic RPC exception:', e?.message);
-      await this.insertDLQ('DELETE', 'sales', saleId, { saleId }, e?.message);
+      await this.insertDLQ('DELETE', 'sales', saleId, { saleId }, e?.message, { branchId: this.getSelectedBranchId(), orgId: this.getCurrentOrgId() });
       return { success: false, message: e?.message || 'Erro inesperado ao cancelar a venda.' };
     }
   }
@@ -3485,9 +3532,9 @@ id: StorageService.ensureUuid(settings.id),
     // os clientes — o frontend NÃO cria movimentação para evitar duplicação.
     // Fire-and-forget: localStorage already updated for instant UI.
     // If RPC fails, DLQ records it for later retry.
+    const branchId = this.getSelectedBranchId();
     try {
       const type = quantityDelta > 0 ? 'in' : 'out';
-      const branchId = this.getSelectedBranchId();
       const { data, error } = await supabase.rpc('ajustar_estoque', {
         p_product_id: productId,
         p_quantity: Math.abs(quantityDelta),
@@ -3499,11 +3546,11 @@ id: StorageService.ensureUuid(settings.id),
       });
       if (error) {
         console.warn('[HD-Sync] ajustar_estoque RPC failed:', error.message);
-        await this.insertDLQ('UPDATE', 'products', productId, { quantityDelta, reason }, error.message);
+        await this.insertDLQ('UPDATE', 'products', productId, { quantityDelta, reason }, error.message, { branchId, orgId: this.getCurrentOrgId() });
       }
     } catch (e: any) {
       console.warn('[HD-Sync] ajustar_estoque RPC exception:', e?.message);
-      await this.insertDLQ('UPDATE', 'products', productId, { quantityDelta, reason }, e?.message);
+      await this.insertDLQ('UPDATE', 'products', productId, { quantityDelta, reason }, e?.message, { branchId, orgId: this.getCurrentOrgId() });
     }
   }
 
@@ -3923,7 +3970,7 @@ id: StorageService.ensureUuid(settings.id),
       restoreLocalStock();
       if (rpcError) {
         console.warn('[HD-Sync] process_sale_transaction RPC failed:', rpcError);
-        await this.insertDLQ('INSERT', 'sales', sale.id, { sale, saleItemsJson }, rpcError);
+        await this.insertDLQ('INSERT', 'sales', sale.id, { sale, saleItemsJson }, rpcError, { branchId: sale.storeBranchId || this.getSelectedBranchId(), orgId: sale.organizationId || this.getCurrentOrgId() });
       } else {
         console.warn('[HD-Sync] process_sale_transaction RPC rejected:', rpcMessage);
       }
