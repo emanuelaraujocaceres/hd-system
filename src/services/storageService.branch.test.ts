@@ -499,3 +499,74 @@ describe('storageService — troca de filial e caixa fail-closed (BUG-025)', () 
     });
   });
 });
+
+describe('storageService — addSale: filial não-UUID não bloqueia a venda (não perde venda)', () => {
+  let svc: StorageService;
+
+  beforeEach(() => {
+    localStorage.clear();
+    svc = new StorageService();
+    // Organização default (Adega) com 2 filiais
+    localStorage.setItem('hd_system_branches', JSON.stringify([
+      { id: BRANCH_UUIDS['br-01'], name: 'Matriz', code: 'SP-01', organizationId: DEFAULT_ORG_ID, active: true },
+      { id: BRANCH_UUIDS['br-02'], name: 'Filial 2', code: 'CODE', organizationId: DEFAULT_ORG_ID, active: true },
+    ]));
+    localStorage.setItem('hd_system_selected_branch_id', 'SP-01'); // curto código salvo
+    // Não tocar rede/RPC/estoque nestes testes — focar apenas na decisão de branch
+    vi.spyOn(svc as any, 'syncSale').mockResolvedValue({ success: true });
+    vi.spyOn(svc as any, 'createReceivableFromSale').mockImplementation(() => {});
+    vi.spyOn(svc as any, 'isCompositeOrFractionProduct').mockReturnValue(false);
+    vi.spyOn(svc as any, 'deductStockLocal').mockImplementation(() => {});
+    vi.spyOn(svc as any, 'saveProductLot').mockImplementation(() => {});
+    vi.spyOn(svc as any, 'getLotesForFEFO').mockReturnValue([]);
+  });
+
+  const mkSale = (id: string, branch?: string): any => ({
+    id: `sale-${id}`,
+    code: `VEN-${id}`,
+    date: '2026-09-02T12:00:00Z',
+    operatorId: 'juninho',
+    operatorName: 'juninho',
+    storeBranchId: branch,
+    items: [],
+    subtotal: 10,
+    discount: 0,
+    total: 10,
+    payments: [{ method: 'cash', amount: 10 }],
+    status: 'completed',
+  });
+
+  const findAdded = (code: string): any =>
+    svc.getSales().find((s: any) => s.code === code);
+
+  it('venda com storeBranchId não-UUID que NÃO resolve → cai para a 1ª filial e É salva (não desaparece)', async () => {
+    await (svc as any).addSale(mkSale('X', 'BRANCA-INVALIDA'));
+    const stored = findAdded('VEN-X');
+    expect(stored).toBeTruthy();
+    expect(stored.storeBranchId).toBe(BRANCH_UUIDS['br-01']); // resolveu p/ 1ª filial
+  });
+
+  it('venda com storeBranchId short-code resolvível → resolve para o UUID da filial', async () => {
+    await (svc as any).addSale(mkSale('Y', 'SP-01'));
+    const stored = findAdded('VEN-Y');
+    expect(stored).toBeTruthy();
+    expect(stored.storeBranchId).toBe(BRANCH_UUIDS['br-01']);
+  });
+
+  it('venda com UUID válido da filial selecionada → mantém o UUID (fluxo normal inalterado)', async () => {
+    svc.setSelectedBranchId(BRANCH_UUIDS['br-02']);
+    await (svc as any).addSale(mkSale('Z', BRANCH_UUIDS['br-02']));
+    const stored = findAdded('VEN-Z');
+    expect(stored).toBeTruthy();
+    expect(stored.storeBranchId).toBe(BRANCH_UUIDS['br-02']);
+  });
+
+  it('venda SEM filial e sem branches visíveis → bloqueia com erro explícito (não desaparece em silêncio)', async () => {
+    localStorage.setItem('hd_system_branches', JSON.stringify([]));
+    localStorage.removeItem('hd_system_selected_branch_id');
+    const res = await (svc as any).addSale(mkSale('W', ''));
+    expect(res).toEqual({ success: false, message: expect.stringContaining('Nenhuma filial') });
+    // Venda não foi gravada — mas agora há feedback claro (não é silencioso)
+    expect(findAdded('VEN-W')).toBeFalsy();
+  });
+});

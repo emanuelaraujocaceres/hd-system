@@ -3820,6 +3820,13 @@ id: StorageService.ensureUuid(settings.id),
         if (firstBranch) sale.storeBranchId = firstBranch.id;
       }
     }
+    // GUARD: se ainda não há filial resolvível (nenhum branch carregado/hidratado),
+    // NUNCA gravar venda órfã — ela seria filtrada por getSales()/RLS e "sumiria"
+    // de todas as telas (causa de "vendas não aparecem"). Bloqueia com erro claro.
+    if (!sale.storeBranchId) {
+      console.error(`[Storage] ❌ addSale: sem filial resolvível — venda bloqueada (${sale.code})`);
+      return { success: false, message: 'Nenhuma filial disponível para registrar a venda. Verifique se as filiais foram carregadas.' };
+    }
 
     // Validação UUID: store_branch_id DEVE ser UUID válido (banco convertido)
     if (sale.storeBranchId && !this.isValidUuid(sale.storeBranchId)) {
@@ -3828,8 +3835,18 @@ id: StorageService.ensureUuid(settings.id),
       if (resolved) {
         sale.storeBranchId = resolved;
       } else {
-        console.error(`[Storage] ❌ addSale: store_branch_id inválido "${sale.storeBranchId}" — venda bloqueada`);
-        return;
+        // FALLBACK SEGURO (antes: venda era SILENCIOSAMENTE DESCARTADA → sumia
+        // de todas as telas). Nunca perder uma venda por filial não resolvível:
+        // cai para a primeira filial visível da org atual. Se nem isso houver
+        // (lista ainda vazia em boot), só então bloqueia com erro explícito.
+        console.warn(`[Storage] ⚠️ addSale: store_branch_id "${sale.storeBranchId}" não é UUID e não resolveu — caindo para a primeira filial da org`);
+        const firstBranch = this.getBranches()[0];
+        if (firstBranch) {
+          sale.storeBranchId = firstBranch.id;
+        } else {
+          console.error(`[Storage] ❌ addSale: sem filial resolvível — venda bloqueada (${sale.code})`);
+          return { success: false, message: 'Nenhuma filial disponível para registrar a venda. Verifique se as filiais foram carregadas.' };
+        }
       }
     }
     // Diagnóstico (auge "vendas não aparecem em lugar nenhum"): registra em
