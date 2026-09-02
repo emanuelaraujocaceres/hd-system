@@ -3,6 +3,7 @@ import { Tv, Plug, ArrowRight, CheckCircle2, XCircle, RefreshCw, MonitorPlay, X 
 import { storageService } from '../../services/storageService';
 import { tvPairing } from '../../services/tvPairingService';
 import { posAudio } from '../../services/audioService';
+import { BranchLogo } from '../shared/BranchLogo';
 
 interface ConnectTVViewProps {
   onEnterTV: () => void;
@@ -97,10 +98,9 @@ export const ConnectTVView: React.FC<ConnectTVViewProps> = ({ onEnterTV, onExitT
       <div className="relative z-10 w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
-          <img
-            src="/logo-hd-system/android-chrome-192x192.png"
-            alt="HD-System"
+          <BranchLogo
             className="w-14 h-14 rounded-2xl object-cover shadow-lg shadow-indigo-500/30"
+            alt="HD-System"
           />
           <div>
             <h1 className="text-2xl font-black tracking-tight">HD-System</h1>

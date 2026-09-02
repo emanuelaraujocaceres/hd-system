@@ -18,6 +18,7 @@ import {
 import { Product, StoreBranch, SystemSettings, FooterMessage } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
+import { BranchLogo } from '../shared/BranchLogo';
 import { tvPairing } from '../../services/tvPairingService';
 
 interface TVShowcaseViewProps {
@@ -176,10 +177,9 @@ export const TVShowcaseView: React.FC<TVShowcaseViewProps> = ({
       {/* TOP TV HEADER — Logo HD-System + Relógio */}
       <header className="px-6 md:px-12 py-5 bg-black/60 backdrop-blur-xl border-b border-zinc-800/80 flex items-center justify-between z-10 shrink-0">
         <div className="flex items-center gap-4">
-          <img
-            src="/logo-hd-system/android-chrome-192x192.png"
-            alt="HD-System"
+          <BranchLogo
             className="w-12 h-12 rounded-2xl object-cover shadow-lg shadow-indigo-500/20"
+            alt="HD-System"
           />
           <div>
             <h1 className="text-xl md:text-2xl font-black tracking-tight">

@@ -35,6 +35,7 @@ import {
   FileText,
   Download,
   Truck,
+  Upload,
   Printer as PrinterLucide,
 } from 'lucide-react';
 import { SystemSettings, StoreBranch, UserProfile, Role, UserPermissions, FooterMessage, Printer, PrinterRole, MediaDevice, BranchTheme, Category, Table, DigitalMenuConfig } from '../../types';
@@ -44,6 +45,7 @@ import { posAudio } from '../../services/audioService';
 import { printTestPage } from '../../services/printService';
 import { callServerApi } from '../../lib/serverApi';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
+import { uploadBranchLogo } from '../../lib/supabase';
 import { canManageUser } from '../../lib/userManagement';
 import { userProfileSchema, tableSchema } from '../../validators/schemas';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
@@ -162,6 +164,14 @@ const [savingTv, setSavingTv] = useState(false);
   const [themeSignalGreen, setThemeSignalGreen] = useState(existingTheme?.signalGreen || '#22c55e');
   const [themeSignalYellow, setThemeSignalYellow] = useState(existingTheme?.signalYellow || '#eab308');
   const [savingTheme, setSavingTheme] = useState(false);
+
+  // ── Logo por filial (branch_themes.logoUrl) ──────────────────────────
+  // themeLogoDataUrl guarda o logo PENDENTE (selecionado via upload, ainda
+  // não persistido). Um valor REMOVIDO é representado por '' (vazio) para que
+  // handleSaveTheme possa apagar o logo salvo; null = nada pendente (mantém o salvo).
+  const [themeLogoDataUrl, setThemeLogoDataUrl] = useState<string | null>(null);
+  const [savingThemeLogo, setSavingThemeLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   // Cardápio Digital / Mesas State
   const [tables, setTables] = useState<Table[]>(storageService.getTables());
@@ -764,9 +774,22 @@ const [savingTv, setSavingTv] = useState(false);
   };
 
   // ── Tema / Paleta de cores por filial ───────────────────────────
-  const handleSaveTheme = () => {
+  const handleSaveTheme = async () => {
     setSavingTheme(true);
     try {
+      // Resolve o logo:
+      // - themeLogoDataUrl === ''  → usuário removeu o logo → undefined
+      // - themeLogoDataUrl === null → nada pendente → mantém o salvo
+      // - dataURL / URL → upload para o bucket branch-logos (se dataURL)
+      let nextLogoUrl: string | undefined = existingTheme?.logoUrl || undefined;
+      if (themeLogoDataUrl !== null) {
+        nextLogoUrl = themeLogoDataUrl === ''
+          ? undefined
+          : themeLogoDataUrl.startsWith('data:image/')
+            ? await uploadBranchLogo(themeLogoDataUrl, user.storeBranchId || 'branch')
+            : themeLogoDataUrl;
+      }
+
       const themeData = {
         id: existingTheme?.id || crypto.randomUUID(),
         primaryColor: themePrimary,
@@ -780,24 +803,51 @@ const [savingTv, setSavingTv] = useState(false);
         signalRed: themeSignalRed,
         signalGreen: themeSignalGreen,
         signalYellow: themeSignalYellow,
-        logoUrl: existingTheme?.logoUrl || undefined,
+        logoUrl: nextLogoUrl,
         faviconUrl: existingTheme?.faviconUrl || undefined,
         storeBranchId: user.storeBranchId,
         organizationId: user.organizationId,
         updatedAt: new Date().toISOString(),
       };
       storageService.saveBranchTheme(themeData);
+      // Limpa o logo pendente após persistir (estado já salvo)
+      setThemeLogoDataUrl(null);
       // App.tsx subscribes to storageService.notify() and re-reads theme automatically
       // No need to call setBranchTheme here — it's not in SettingsView's scope
-      
+
       posAudio.chime();
-      setSuccessMessage('Paleta de cores salva e aplicada! Mudanças visíveis imediatamente no modo claro.');
+      setSuccessMessage('Paleta de cores e logo salvas e aplicados! Mudanças visíveis imediatamente no modo claro.');
     } catch (err: any) {
       setErrorMessage(friendlyErrorMessage(err, 'Não foi possível salvar a paleta de cores.'));
       posAudio.error();
     } finally {
       setSavingTheme(false);
     }
+  };
+
+  // ── Logo por filial: seleção de arquivo ─────────────────────────
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Valida tipo de imagem
+    if (!file.type.startsWith('image/')) {
+      setErrorMessage('Por favor, selecione um arquivo de imagem (PNG, JPG, etc.).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setThemeLogoDataUrl(typeof reader.result === 'string' ? reader.result : null);
+      setErrorMessage(null);
+    };
+    reader.onerror = () => {
+      setErrorMessage('Não foi possível ler o arquivo de imagem.');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = () => {
+    // '' = marca remoção pendente (somente aplicada ao salvar)
+    setThemeLogoDataUrl('');
   };
 
   // ── Cardápio Digital: CRUD de mesas ─────────────────────────────
@@ -3122,6 +3172,64 @@ const [savingTv, setSavingTv] = useState(false);
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Logo por filial */}
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-3">
+              <p className="text-xs font-bold text-slate-700 dark:text-[#a1a1aa]">Logo por filial</p>
+              <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+                Envie um logo específico para esta filial. Ele aparece no menu lateral, na TV e no login.
+                Se nenhum logo for enviado, o logo padrão do sistema é usado.
+              </p>
+
+              {(() => {
+                const currentLogo =
+                  themeLogoDataUrl !== null && themeLogoDataUrl !== undefined
+                    ? themeLogoDataUrl
+                    : existingTheme?.logoUrl || '';
+                return (
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-xl bg-white border border-slate-200 dark:border-[#27272a] flex items-center justify-center overflow-hidden">
+                      {currentLogo ? (
+                        <img
+                          src={currentLogo}
+                          alt="Logo da filial"
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-[10px] text-slate-400 text-center px-1">Sem logo</span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleLogoFileChange}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => logoInputRef.current?.click()}
+                        className="min-h-[40px] px-4 py-2 rounded-lg bg-pink-600 hover:bg-pink-500 text-white text-xs font-bold flex items-center gap-2"
+                      >
+                        <Upload className="w-4 h-4" />
+                        {themeLogoDataUrl !== null && themeLogoDataUrl !== '' ? 'Trocar logo' : 'Enviar logo'}
+                      </button>
+                      {currentLogo ? (
+                        <button
+                          type="button"
+                          onClick={handleRemoveLogo}
+                          className="min-h-[40px] px-4 py-2 rounded-lg bg-slate-200 dark:bg-[#27272a] hover:bg-slate-300 dark:hover:bg-[#3f3f46] text-slate-700 dark:text-slate-200 text-xs font-bold"
+                        >
+                          Remover logo
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Preview das cores */}
