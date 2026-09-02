@@ -2815,11 +2815,36 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
             bgColor: r.bg_color || '#09090b',
             logoUrl: r.logo_url || undefined,
             faviconUrl: r.favicon_url || undefined,
+            // Extended colors (2026)
+            buttonBg: r.button_bg || undefined,
+            buttonText: r.button_text || undefined,
+            menuBg: r.menu_bg || undefined,
+            signalRed: r.signal_red || undefined,
+            signalGreen: r.signal_green || undefined,
+            signalYellow: r.signal_yellow || undefined,
             storeBranchId: r.store_branch_id || undefined,
             organizationId: r.organization_id || this.getCurrentOrgId(),
             updatedAt: r.updated_at || new Date().toISOString(),
           }),
           (t) => this.syncBranchTheme(t),
+          (t) => t.id,
+          (local, cloudMapped) => {
+            // Merge de CONFLITO do tema: a versão mais recente vence (evita o tema
+            // "voltar ao original" ao re-hidratar em outro dispositivo) e, quando o
+            // local vence, é propagado de volta ao cloud p/ chegar nos outros devices.
+            const localT = new Date(local.updatedAt || 0).getTime();
+            const cloudT = new Date(cloudMapped.updatedAt || 0).getTime();
+            const cloudHasExtended = !!(cloudMapped.buttonBg || cloudMapped.menuBg || cloudMapped.signalRed);
+            const localHasExtended = !!(local.buttonBg || local.menuBg || local.signalRed);
+            // Sobe o local quando ele é mais recente OU quando só ele carrega as cores
+            // estendidas ainda não persistidas no cloud (dado perdido de outra forma).
+            const shouldPreferLocal = localT > cloudT || (localHasExtended && !cloudHasExtended);
+            if (shouldPreferLocal) {
+              this.syncBranchTheme(local);
+              return local;
+            }
+            return cloudMapped;
+          },
         );
         if (merged !== null) this.set(KEYS.BRANCH_THEMES, merged);
       }
@@ -5077,6 +5102,14 @@ private updateReceivableFromPayments(saleId: string) {
       bg_color: t.bgColor,
       logo_url: t.logoUrl || null,
       favicon_url: t.faviconUrl || null,
+      // Extended colors (2026) — sem essas colunas o tema estendido é dropado
+      // silenciosamente no banco e volta ao padrão em outro dispositivo.
+      button_bg: t.buttonBg || null,
+      button_text: t.buttonText || null,
+      menu_bg: t.menuBg || null,
+      signal_red: t.signalRed || null,
+      signal_green: t.signalGreen || null,
+      signal_yellow: t.signalYellow || null,
     });
   }
 
@@ -5458,6 +5491,13 @@ private updateReceivableFromPayments(saleId: string) {
       bgColor: row.bg_color || '#09090b',
       logoUrl: row.logo_url || undefined,
       faviconUrl: row.favicon_url || undefined,
+      // Extended colors (2026)
+      buttonBg: row.button_bg || undefined,
+      buttonText: row.button_text || undefined,
+      menuBg: row.menu_bg || undefined,
+      signalRed: row.signal_red || undefined,
+      signalGreen: row.signal_green || undefined,
+      signalYellow: row.signal_yellow || undefined,
       storeBranchId: row.store_branch_id || undefined,
       organizationId: row.organization_id || undefined,
       updatedAt: row.updated_at || new Date().toISOString(),

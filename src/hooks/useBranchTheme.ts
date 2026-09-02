@@ -30,38 +30,52 @@ const DEFAULT_THEME: ThemeColors = {
 };
 
 /**
- * Apply a branch theme to the document as CSS variables.
- * ONLY applies in light mode - dark mode uses its own styles.
- * Falls back to defaults when theme is null/empty.
+ * Aplica as cores do tema da filial como CSS variables no documento.
+ * Aplica em AMBOS os modos (claro e escuro): as variáveis do :root são
+ * definidas com os valores configurados na aba Aparência, sobrepondo os
+ * defaults do index.css. Observa a classe `dark` do <html> para reaplicar
+ * quando o usuário alterna o tema (claro/escuro).
+ *
+ * NOTA (2026): hoje nenhum componente lê var(--color-*) via Tailwind fixo
+ * (bg-indigo-600, dark:bg-[...]). A personalização visual de verdade exige
+ * migrar os componentes para as variáveis — fora de escopo. Este hook já
+ * garante que as variáveis estejam sempre corretas para quando isso ocorrer,
+ * e os previews da aba usam essas variáveis.
  */
 export function useBranchTheme(theme: ThemeColors | null) {
   useEffect(() => {
-    // Only apply theme in light mode
-    const isDark = document.documentElement.classList.contains('dark');
-    if (isDark) return;
+    const applyTheme = () => {
+      const t = theme ?? DEFAULT_THEME;
+      const r = document.documentElement.style;
 
-    const t = theme ?? DEFAULT_THEME;
-    const r = document.documentElement.style;
-    
-    // Core colors
-    r.setProperty('--color-primary', t.primaryColor);
-    r.setProperty('--color-secondary', t.secondaryColor);
-    r.setProperty('--color-accent', t.accentColor);
-    r.setProperty('--color-bg', t.bgColor || '#ffffff');
-    
-    // Extended colors
-    r.setProperty('--color-button-bg', t.buttonBg || t.primaryColor);
-    r.setProperty('--color-button-text', t.buttonText || '#ffffff');
-    r.setProperty('--color-menu-bg', t.menuBg || '#1e293b');
-    r.setProperty('--color-signal-red', t.signalRed || '#ef4444');
-    r.setProperty('--color-signal-green', t.signalGreen || '#22c55e');
-    r.setProperty('--color-signal-yellow', t.signalYellow || '#eab308');
+      // Core colors (aplicadas também no modo escuro — sobrepõem os defaults)
+      r.setProperty('--color-primary', t.primaryColor);
+      r.setProperty('--color-secondary', t.secondaryColor);
+      r.setProperty('--color-accent', t.accentColor);
+      r.setProperty('--color-bg', t.bgColor || '#ffffff');
 
-    // Update favicon if provided
-    if (t.faviconUrl) {
-      const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-      if (link) link.href = t.faviconUrl;
-    }
+      // Extended colors
+      r.setProperty('--color-button-bg', t.buttonBg || t.primaryColor);
+      r.setProperty('--color-button-text', t.buttonText || '#ffffff');
+      r.setProperty('--color-menu-bg', t.menuBg || '#1e293b');
+      r.setProperty('--color-signal-red', t.signalRed || '#ef4444');
+      r.setProperty('--color-signal-green', t.signalGreen || '#22c55e');
+      r.setProperty('--color-signal-yellow', t.signalYellow || '#eab308');
+
+      // Update favicon if provided
+      if (t.faviconUrl) {
+        const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+        if (link) link.href = t.faviconUrl;
+      }
+    };
+
+    applyTheme();
+
+    // Reaplica quando a classe dark/light muda no <html> (toggle de tema no app)
+    const docEl = document.documentElement;
+    const observer = new MutationObserver(() => applyTheme());
+    observer.observe(docEl, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
   }, [theme]);
 }
 

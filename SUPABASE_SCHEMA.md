@@ -931,6 +931,12 @@ Temas visuais da filial.
 | bg_color | TEXT | YES | | Cor de fundo |
 | logo_url | TEXT | YES | | Logo |
 | favicon_url | TEXT | YES | | Favicon |
+| button_bg | TEXT | YES | | Cor fundo do botao (2026) |
+| button_text | TEXT | YES | | Cor texto do botao (2026) |
+| menu_bg | TEXT | YES | | Cor fundo do menu (2026) |
+| signal_red | TEXT | YES | | Cor sinalizacao negativa (2026) |
+| signal_green | TEXT | YES | | Cor sinalizacao positiva (2026) |
+| signal_yellow | TEXT | YES | | Cor sinalizacao media (2026) |
 | updated_at | TIMESTAMPTZ | YES | | |
 
 RLS: superadmin_all_branch_themes[ALL], org_branch_insert_branch_themes[INSERT], org_branch_update_branch_themes[UPDATE], org_branch_delete_branch_themes[DELETE], org_branch_select_branch_themes[SELECT], branch_themes_select_authenticated[SELECT]
