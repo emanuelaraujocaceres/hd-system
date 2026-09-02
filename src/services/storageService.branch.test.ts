@@ -315,6 +315,46 @@ describe('storageService — fiado (conta a receber) (BUG-003/005/006)', () => {
     expect(accF.amount).toBe(0);
   });
 
+  // Recebível ÓRFÃO no cloud: conta 'fiado' pending (id = sale.id) SEM venda de
+  // fiado ativa por trás (venda existe mas o credit_account foi removido/pago, ou
+  // a venda foi apagada). O backfill só processava vendas com fiado → o órfão
+  // ficava preso no KPI e voltava após apagar dados locais. Regressão: backfill
+  // deve zerar a conta órfã SEM tocar fiado legítimo (que tem venda com fiado).
+  it('backfillReceivablesFromSales zera recebível órfão sem venda de fiado ativa', () => {
+    // Venda "Cliente Não Identificado" SEM credit_account (fiado removido/pago)
+    const vendaSemFiado = { ...sale('sv-g', [{ method: 'cash', amount: 4 }], 4) };
+    delete (vendaSemFiado as any).customerId;
+    localStorage.setItem('hd_system_sales', JSON.stringify([vendaSemFiado]));
+    // Conta 'fiado' órfã de R$4 pendente — sem venda de fiado que a sustente
+    localStorage.setItem('hd_system_financial_accounts', JSON.stringify([
+      { id: 'sv-g', title: 'Fiado G', type: 'receivable', category: 'fiado', amount: 4, status: 'pending', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+
+    (svc as any).backfillReceivablesFromSales();
+
+    const accounts = JSON.parse(localStorage.getItem(`hd_system_financial_accounts_${DEFAULT_ORG_ID}`) || localStorage.getItem('hd_system_financial_accounts') || '[]');
+    const accG = accounts.find((a: any) => a.id === 'sv-g');
+    expect(accG.status).toBe('paid');
+    expect(accG.amount).toBe(0);
+  });
+
+  // Segurança: recebível com venda de fiado ATIVA NÃO pode ser podado.
+  it('backfillReceivablesFromSales NÃO zera recebível quando há venda de fiado ativa', () => {
+    const vendaComFiado = { ...sale('sv-h', [{ method: 'credit_account', amount: 4 }], 4) };
+    delete (vendaComFiado as any).customerId;
+    localStorage.setItem('hd_system_sales', JSON.stringify([vendaComFiado]));
+    localStorage.setItem('hd_system_financial_accounts', JSON.stringify([
+      { id: 'sv-h', title: 'Fiado H', type: 'receivable', category: 'fiado', amount: 4, status: 'pending', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+
+    (svc as any).backfillReceivablesFromSales();
+
+    const accounts = JSON.parse(localStorage.getItem(`hd_system_financial_accounts_${DEFAULT_ORG_ID}`) || localStorage.getItem('hd_system_financial_accounts') || '[]');
+    const accH = accounts.find((a: any) => a.id === 'sv-h');
+    expect(accH.status).toBe('pending');
+    expect(accH.amount).toBe(4); // fiado legítimo preservado
+  });
+
   it('getCreditPayments retorna pagamentos por saleId camelCase e filtra por org/filial (BUG-006)', () => {
     localStorage.setItem('hd_system_sales', JSON.stringify([
       sale('s1', [{ method: 'credit_account', amount: 50 }], 50, BRANCH_UUIDS['br-01']),

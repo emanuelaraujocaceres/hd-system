@@ -4528,6 +4528,39 @@ private updateReceivableFromPayments(saleId: string) {
         this.createReceivableFromSale(sale);
       }
     }
+    // PODA DE ÓRFÃOS: contas 'fiado' pending sem venda de fiado ativa por trás
+    // (venda apagada, credit_account removido, ou fiado pago com resíduo gravado
+    // no cloud). O fluxo acima só processa vendas com fiado → um recebível órfão
+    // permanecia pendente no KPI e voltava após apagar dados locais (via cloud).
+    // Regra segura: só zera quando NÃO há venda com aquele id e fiado > 0;
+    // fiado legítimo (que tem venda com credit_account ativa) nunca é tocado.
+    try {
+      const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
+      const activeFiadoIds = new Set(
+        sales.filter((s) => this.getFiadoAmount(s) > 0).map((s) => s.id),
+      );
+      let changed = false;
+      for (const acc of accounts) {
+        const isFiadoPending = acc.type === 'receivable' && acc.category === 'fiado' && acc.status === 'pending';
+        if (!isFiadoPending) continue;
+        if (activeFiadoIds.has(acc.id)) continue; // fiado legítimo → preservar
+        acc.status = 'paid';
+        acc.amount = 0;
+        acc.paidDate = acc.paidDate || new Date().toISOString();
+        changed = true;
+        console.log(`[HD-Sync] 🧹 Recebível órfão zerado: ${acc.title} (${acc.id})`);
+      }
+      if (changed) {
+        this.set(KEYS.FINANCIAL, accounts);
+        for (const acc of accounts) {
+          if (acc.status === 'paid' && acc.amount === 0 && acc.category === 'fiado') {
+            this.syncFinancialAccount(acc);
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn('[HD-Sync] backfill poda de órfãos falhou:', e?.message);
+    }
   }
 
   deleteFinancialAccount(id: string) {
