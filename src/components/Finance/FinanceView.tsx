@@ -400,6 +400,17 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     s.status === 'completed' && s.storeBranchId === selectedBranchId
   );
 
+  // Diagnóstico temporário (auge do bug "vendas não aparecem no Financeiro"):
+  // revela no console por que cada venda entrou ou não no DRE, sem alterar nada.
+  if (import.meta.env?.DEV) {
+    console.groupCollapsed('[HD-Finance] filtro de vendas');
+    console.log('sales recebidas:', sales.length, '| branch selecionada:', selectedBranchId);
+    for (const s of sales) {
+      console.log(`#${s.code} status=${s.status} branch=${s.storeBranchId} → DRE incluida=${s.status === 'completed' && s.storeBranchId === selectedBranchId}`);
+    }
+    console.groupEnd();
+  }
+
   // Usuários da filial para cálculo de holerite
   const users = storageService.getUsers().filter((u) => u.storeBranchId === selectedBranchId);
 
