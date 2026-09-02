@@ -1015,6 +1015,16 @@ expiration_date: p.expirationDate || null,
               changeDue: p.changeDue,
             })))
           : JSON.stringify([{ method: 'cash', amount: s.total || 0 }]),
+        // payment_details = espelho de payments_json (compat. com relatórios futuros).
+        // Mesmo conteúdo serializado: array [{method, amount, cashGiven, changeDue}].
+        payment_details: (s.payments && s.payments.length > 0)
+          ? JSON.stringify(s.payments.map((p: any) => ({
+              method: p.method,
+              amount: p.amount,
+              cashGiven: p.cashGiven,
+              changeDue: p.changeDue,
+            })))
+          : JSON.stringify([{ method: 'cash', amount: s.total || 0 }]),
         order_source: s.orderSource || 'pdv',
         kitchen_status: s.kitchenStatus || 'pending',
         status: s.status,
