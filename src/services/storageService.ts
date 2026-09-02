@@ -4390,12 +4390,18 @@ id: StorageService.ensureUuid(settings.id),
   // um pagamento taggeado no saleId vizinho deixava um resíduo de "Pendente" na
   // conta a receber (ex.: R$4) enquanto o FiadosView já mostrava o cliente pago.
   private isCustomerCreditSettled(sale: Sale): boolean {
-    if (!sale.customerId) return false;
-    const customerSales = this.get<Sale[]>(KEYS.SALES, []).filter((s) => s.customerId === sale.customerId);
+    // Venda sem cliente ("Cliente Não Identificado") agrupa sob a chave virtual
+    // '__no_customer__', espelhando o agrupamento do FiadosView (sale.customerId
+    // || '__no_customer__'). Sem isso, vendas sem customerId quitadas no Fiados
+    // deixavam resíduo preso no KPI "Contas a Receber" (BUG residual pós-BUG-035).
+    const key = sale.customerId || '__no_customer__';
+    const customerSales = this.get<Sale[]>(KEYS.SALES, []).filter(
+      (s) => (s.customerId || '__no_customer__') === key,
+    );
     if (customerSales.length === 0) return false;
     const totalFiado = customerSales.reduce((sum, s) => sum + this.getFiadoAmount(s), 0);
     const totalPaid = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, [])
-      .filter((cp) => cp.customerId === sale.customerId)
+      .filter((cp) => (cp.customerId || '__no_customer__') === key)
       .reduce((sum, cp) => sum + (cp.amount || 0), 0);
     return totalPaid >= totalFiado - 0.01;
   }
