@@ -230,6 +230,59 @@ describe('storageService — fiado (conta a receber) (BUG-003/005/006)', () => {
     expect(acc.category).toBe('fiado');
   });
 
+  // ── Resíduo de fiado pago no nível do CLIENTE (BUG finance x fiados) ──
+  // O cliente quitou tudo no FiadosView (nível do cliente, FIFO), mas a conta
+  // a receber ficava presa em R$4 porque o saldo era calculado por SALE
+  // (credit_payments com aquele mesmo saleId), enquanto o FiadosView agrega
+  // por customerId. Regressão: conta deve virar paid quando o cliente está
+  // totalmente quitado, mesmo que o pagamento esteja no saleId vizinho.
+  it('updateReceivableFromPayments zera conta quando cliente quitado a nível de cliente (fiado residual)', () => {
+    // Dois fiados do MESMO cliente: venda A (R$34) e venda B (R$4)
+    const saleA = { ...sale('sv-a', [{ method: 'credit_account', amount: 34 }], 34), customerId: 'cust-1' };
+    const saleB = { ...sale('sv-b', [{ method: 'credit_account', amount: 4 }], 4), customerId: 'cust-1' };
+    localStorage.setItem('hd_system_sales', JSON.stringify([saleA, saleB]));
+    // Contas a receber para as duas vendas
+    localStorage.setItem('hd_system_financial_accounts', JSON.stringify([
+      { id: 'sv-a', title: 'Fiado A', type: 'receivable', category: 'fiado', amount: 0, status: 'paid', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+      { id: 'sv-b', title: 'Fiado B', type: 'receivable', category: 'fiado', amount: 4, status: 'pending', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+    // O cliente pagou R$38 de uma vez, taggeado só na venda A (nível de cliente quitado)
+    localStorage.setItem('hd_system_credit_payments', JSON.stringify([
+      { id: 'cp1', saleId: 'sv-a', customerId: 'cust-1', amount: 38, date: '2026-01-20', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+
+    // Re-processa a venda B (a que ficou com resíduo)
+    (svc as any).updateReceivableFromPayments('sv-b');
+
+    const accounts = JSON.parse(localStorage.getItem(`hd_system_financial_accounts_${DEFAULT_ORG_ID}`) || localStorage.getItem('hd_system_financial_accounts') || '[]');
+    const accB = accounts.find((a: any) => a.id === 'sv-b');
+    expect(accB.status).toBe('paid');
+    expect(accB.amount).toBe(0);
+  });
+
+  // Segurança: cliente PARCIALMENTE quitado NÃO pode ter a conta zerada —
+  // o resíduo real continua pendente (per-sale behavior preservado).
+  it('updateReceivableFromPayments preserva resíduo quando cliente NÃO está totalmente quitado', () => {
+    const saleA = { ...sale('sv-c', [{ method: 'credit_account', amount: 34 }], 34), customerId: 'cust-2' };
+    const saleB = { ...sale('sv-d', [{ method: 'credit_account', amount: 4 }], 4), customerId: 'cust-2' };
+    localStorage.setItem('hd_system_sales', JSON.stringify([saleA, saleB]));
+    localStorage.setItem('hd_system_financial_accounts', JSON.stringify([
+      { id: 'sv-c', title: 'Fiado C', type: 'receivable', category: 'fiado', amount: 34, status: 'pending', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+      { id: 'sv-d', title: 'Fiado D', type: 'receivable', category: 'fiado', amount: 4, status: 'pending', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+    // Cliente pagou R$30 só — ainda deve R$8 no total (34+4=38 fiado, 30 pago)
+    localStorage.setItem('hd_system_credit_payments', JSON.stringify([
+      { id: 'cp2', saleId: 'sv-c', customerId: 'cust-2', amount: 30, date: '2026-01-20', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+
+    (svc as any).updateReceivableFromPayments('sv-d');
+
+    const accounts = JSON.parse(localStorage.getItem(`hd_system_financial_accounts_${DEFAULT_ORG_ID}`) || localStorage.getItem('hd_system_financial_accounts') || '[]');
+    const accD = accounts.find((a: any) => a.id === 'sv-d');
+    expect(accD.status).toBe('pending');
+    expect(accD.amount).toBe(4); // resíduo real mantido
+  });
+
   it('getCreditPayments retorna pagamentos por saleId camelCase e filtra por org/filial (BUG-006)', () => {
     localStorage.setItem('hd_system_sales', JSON.stringify([
       sale('s1', [{ method: 'credit_account', amount: 50 }], 50, BRANCH_UUIDS['br-01']),

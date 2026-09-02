@@ -4384,6 +4384,22 @@ id: StorageService.ensureUuid(settings.id),
       .reduce((sum, cp) => sum + (cp.amount || 0), 0);
   }
 
+  // True quando o CLIENTE da venda está totalmente quitado (nível do cliente),
+  // espelhando a semântica do FiadosView (agrega os credit_payments por
+  // customerId e aloca FIFO entre todas as vendas do cliente). Sem esta checagem,
+  // um pagamento taggeado no saleId vizinho deixava um resíduo de "Pendente" na
+  // conta a receber (ex.: R$4) enquanto o FiadosView já mostrava o cliente pago.
+  private isCustomerCreditSettled(sale: Sale): boolean {
+    if (!sale.customerId) return false;
+    const customerSales = this.get<Sale[]>(KEYS.SALES, []).filter((s) => s.customerId === sale.customerId);
+    if (customerSales.length === 0) return false;
+    const totalFiado = customerSales.reduce((sum, s) => sum + this.getFiadoAmount(s), 0);
+    const totalPaid = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, [])
+      .filter((cp) => cp.customerId === sale.customerId)
+      .reduce((sum, cp) => sum + (cp.amount || 0), 0);
+    return totalPaid >= totalFiado - 0.01;
+  }
+
   // Cria (ou atualiza) a conta a receber vinculada a uma venda fiado.
   // Idempotente: re-syncs só quando o saldo realmente mudou.
   private createReceivableFromSale(sale: Sale) {
@@ -4391,7 +4407,24 @@ id: StorageService.ensureUuid(settings.id),
       const fiadoAmount = this.getFiadoAmount(sale);
       if (fiadoAmount <= 0) return;
       const totalPaid = this.getTotalPaidForSale(sale.id);
-      const remaining = Math.max(0, Math.round((fiadoAmount - totalPaid) * 100) / 100);
+      // Cliente quitado no nível do cliente (FiadosView) → sem resíduo per-sale
+      const customerSettled = this.isCustomerCreditSettled(sale);
+      const remaining = Math.max(0, customerSettled ? 0 : Math.round((fiadoAmount - totalPaid) * 100) / 100);
+
+      // Totalmente quitado (não sobra nada) → não criar conta-Pendente R$0
+      if (remaining <= 0.01) {
+        const settled = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
+        const existingZero = settled.find((a) => a.id === sale.id);
+        // Se já existe uma conta pendente com resíduo, zera e marca paid
+        if (existingZero && existingZero.status === 'pending') {
+          existingZero.status = 'paid';
+          existingZero.amount = 0;
+          existingZero.paidDate = new Date().toISOString();
+          this.set(KEYS.FINANCIAL, settled);
+          this.syncFinancialAccount(existingZero);
+        }
+        return;
+      }
 
       const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
       const existing = accounts.find((a) => a.id === sale.id);
@@ -4452,7 +4485,9 @@ private updateReceivableFromPayments(saleId: string) {
       // Se a venda tem credit_account no payments, usa o valor da venda;
       // senão, tenta calcular a partir dos pagamentos locais salvos
       const fiadoFromSale = sale && sale.payments?.length > 0 ? fiadoAmount : (acc ? acc.amount + totalPaid : totalPaid);
-      const remaining = Math.max(0, Math.round((fiadoFromSale - totalPaid) * 100) / 100);
+      // Cliente quitado no nível do cliente (FiadosView) → zera o resíduo per-sale
+      const customerSettled = !!sale && this.isCustomerCreditSettled(sale);
+      const remaining = Math.max(0, customerSettled ? 0 : Math.round((fiadoFromSale - totalPaid) * 100) / 100);
 
       if (!acc) {
         // Conta não existe localmente — cria a partir da venda
