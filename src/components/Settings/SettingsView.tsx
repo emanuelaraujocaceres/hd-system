@@ -50,7 +50,6 @@ import { canManageUser } from '../../lib/userManagement';
 import { userProfileSchema, tableSchema } from '../../validators/schemas';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { BranchCheck } from '../Admin/BranchCheck';
-import { IntegrationsView } from './IntegrationsView';
 import { useToast } from '../shared/Toast';
 import { ResetDataButton } from '../shared/ResetDataButton';
 import { DeliverySettingsView } from './DeliverySettingsView';
@@ -78,9 +77,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
       addToast('error', 'Não foi possível enviar o sinal (canal offline ou permissão insuficiente).');
     }
   };
-  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance' | 'cardapio' | 'delivery' | 'modules' | 'integrations'>(() => {
+  const [activeSubTab, setActiveSubTab] = useState<'fiscal' | 'branches' | 'collaborators' | 'tv' | 'appearance' | 'cardapio' | 'delivery' | 'modules' | 'pix'>(() => {
     const saved = sessionStorage.getItem('settings_active_tab');
-    return (saved as typeof activeSubTab) || 'fiscal';
+    const validTabs = ['fiscal', 'branches', 'collaborators', 'tv', 'appearance', 'cardapio', 'delivery', 'modules', 'pix'];
+    // Valida o valor salvo: se for uma aba removida/exalada (ex.: 'integrations'), cai no padrão.
+    return (validTabs.includes(saved as string) ? saved : 'fiscal') as typeof activeSubTab;
   });
 
   // Listen for quick navigation events (e.g., from Header QR button)
@@ -1964,54 +1965,8 @@ const [savingTv, setSavingTv] = useState(false);
                               <FileText className="w-3.5 h-3.5" />
                             </button>
 )}
-  {/* --- TAB 8: PIX --- */}
-{activeSubTab === 'pix' && (
-    <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-5 shadow-sm">
-      <div className="p-6 rounded-3xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-            <QrCode className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Configurações Pix</h3>
-            <p className="text-xs text-slate-500 dark:text-[#71717a]">Chave Pix para recebimento de pagamentos</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Chave Pix</label>
-            <input
-              type="text"
-              value={pixKey}
-              onChange={(e) => setPixKey(e.target.value)}
-              placeholder="Ex.: chaves@seunegocio"
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
-            />
-          </div>
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nome do Recebedor</label>
-            <input
-              type="text"
-              value={pixReceiverName}
-              onChange={(e) => setPixReceiverName(e.target.value)}
-              placeholder="Nome ou Razão Social"
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
-            />
-          </div>
-        </div>
-        <div className="flex justify-end pt-3 border-t border-slate-200 dark:border-[#27272a]">
-          <button
-            onClick={handleSavePix}
-            disabled={savingPix}
-            className="min-h-[44px] px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold disabled:opacity-60 flex items-center gap-2 text-xs shadow-md transition-colors flex items-center justify-center gap-2">
-            <Save className="w-4 h-4" /> Salvar
-          </button>
-        </div>
-      </div>
-    </div>
-  )}
 
- {/* Reset button — only visible to admins on first tab (fiscal) */}
+  {/* Reset button — only visible to admins on first tab (fiscal) */}
                             {canManageUser(user, u, currentBranchId) && (
                             <button
                               onClick={() => handleOpenUserModal(u)}
@@ -2047,6 +2002,53 @@ const [savingTv, setSavingTv] = useState(false);
 
       {/* Branch Check — verificar filial de cada usuário (apenas na aba colaboradores) */}
       {activeSubTab === 'collaborators' && <BranchCheck />}
+
+      {/* --- TAB 8: PIX --- */}
+      {activeSubTab === 'pix' && (
+        <div className="p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-5 shadow-sm">
+          <div className="p-6 rounded-3xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <QrCode className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Configurações Pix</h3>
+                <p className="text-xs text-slate-500 dark:text-[#71717a]">Chave Pix para recebimento de pagamentos</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Chave Pix</label>
+                <input
+                  type="text"
+                  value={pixKey}
+                  onChange={(e) => setPixKey(e.target.value)}
+                  placeholder="Ex.: chaves@seunegocio"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nome do Recebedor</label>
+                <input
+                  type="text"
+                  value={pixReceiverName}
+                  onChange={(e) => setPixReceiverName(e.target.value)}
+                  placeholder="Nome ou Razão Social"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl font-semibold text-slate-900 dark:text-white"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end pt-3 border-t border-slate-200 dark:border-[#27272a]">
+              <button
+                onClick={handleSavePix}
+                disabled={savingPix}
+                className="min-h-[44px] px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold disabled:opacity-60 flex items-center gap-2 text-xs shadow-md transition-colors flex items-center justify-center gap-2">
+                <Save className="w-4 h-4" /> Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- MODAL BRANCH (FILIAL) --- */}
       {isBranchModalOpen && (
