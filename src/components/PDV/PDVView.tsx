@@ -73,6 +73,8 @@ export const PDVView: React.FC<PDVViewProps> = ({
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  // Índice do produto destacado na lista filtrada (navegação com setas ↑/↓ + Enter)
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
@@ -302,6 +304,27 @@ export const PDVView: React.FC<PDVViewProps> = ({
       addToast('warning', `Nenhum produto encontrado para "${searchTerm.trim()}".`);
     } else {
       addToast('info', `${filteredProducts.length} produtos encontrados. Selecione um na lista.`);
+    }
+  };
+
+  // Navegação por teclado na busca do PDV: setas ↑/↓ percorrem a lista filtrada
+  // e Enter adiciona o produto destacado ao carrinho (avança para a próxima etapa).
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (filteredProducts.length === 0) return; // sem resultados → deixa o fluxo padrão
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault(); // não mover o cursor do texto
+      setSelectedIndex((prev) => (prev + 1) % filteredProducts.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex((prev) => (prev - 1 + filteredProducts.length) % filteredProducts.length);
+    } else if (e.key === 'Enter') {
+      // Seleciona o produto destacado e avança (mesmo comportamento de clicar no card)
+      const idx = Math.min(selectedIndex, filteredProducts.length - 1);
+      e.preventDefault();
+      handleAddToCart(filteredProducts[idx]);
+      setSearchTerm('');
+      setSelectedIndex(0);
     }
   };
 
@@ -594,7 +617,11 @@ export const PDVView: React.FC<PDVViewProps> = ({
               ref={searchInputRef}
               type="text"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setSelectedIndex(0); // nova busca → destaque volta ao primeiro resultado
+              }}
+              onKeyDown={handleSearchKeyDown}
               placeholder="Digite o nome ou código de barras... (F4)"
               data-search-input="true"
               className="w-full pl-10 pr-10 py-2.5 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl text-xs sm:text-sm text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
@@ -651,14 +678,19 @@ export const PDVView: React.FC<PDVViewProps> = ({
 
         {/* Product Cards Catalog Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5 flex-1 overflow-y-auto pr-1">
-          {filteredProducts.map((entry) => {
+          {filteredProducts.map((entry, index) => {
             const p = entry.product;
             const isLowStock = p.currentStock <= p.minStock;
+            const isHighlighted = index === selectedIndex;
             return (
               <button
                 key={p.id}
                 onClick={() => handleAddToCart(entry)}
-                className="group p-3.5 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-all duration-200 text-left flex flex-col justify-between shadow-sm hover:shadow-md"
+                className={`group p-3.5 bg-white dark:bg-[#18181b] border-2 rounded-2xl transition-all duration-200 text-left flex flex-col justify-between shadow-sm hover:shadow-md ${
+                  isHighlighted
+                    ? 'border-indigo-500 ring-2 ring-indigo-500/30'
+                    : 'border-slate-200 dark:border-[#27272a] hover:border-indigo-500 dark:hover:border-indigo-500'
+                }`}
               >
                 <div>
                   {/* Thumbnail Image */}
