@@ -228,9 +228,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <div>
             <p className="text-xs lg:text-[11px] font-medium text-slate-400 dark:text-[#71717a]">Status do Caixa</p>
-            <p className={`text-sm lg:text-xs font-bold ${isCaixaOpen ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {isCaixaOpen ? `Aberto (R$ ${caixaSession.currentCashBalance.toFixed(2)})` : 'Caixa Fechado'}
-            </p>
+            {isCaixaOpen ? (
+              <>
+                <p className={`text-sm lg:text-xs font-bold ${isCaixaOpen ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  Entradas: R$ {(caixaSession.totalSalesCash + caixaSession.totalSalesPix + caixaSession.totalSalesCard).toFixed(2)}
+                </p>
+                <p className="text-[11px] lg:text-[10px] text-slate-400 dark:text-[#a1a1aa]">
+                  R$ {caixaSession.currentCashBalance.toFixed(2)} em dinheiro
+                </p>
+              </>
+            ) : (
+              <p className="text-sm lg:text-xs font-bold text-rose-400">Caixa Fechado</p>
+            )}
           </div>
         </div>
         <button
