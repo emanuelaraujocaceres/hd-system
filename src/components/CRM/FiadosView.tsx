@@ -22,7 +22,7 @@ import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { globalNotificationService } from '../../services/globalNotificationService';
 import { useToast } from '../shared/Toast';
-import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
+import { MoneyInput, parseBrlToNumber, formatNumberToBrl } from '../shared/MoneyInput';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 
@@ -816,7 +816,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
                     <button
                       key={qa.label}
                       onClick={() => {
-                        setPaymentAmount(qa.value.toFixed(2));
+                        setPaymentAmount(formatNumberToBrl(qa.value));
                         posAudio.click();
                       }}
                       className="flex-1 px-2 py-1.5 rounded-lg bg-slate-100 dark:bg-[#27272a] hover:bg-slate-200 dark:hover:bg-[#3f3f46] text-[10px] font-bold text-slate-600 dark:text-[#a1a1aa] transition-colors"

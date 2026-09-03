@@ -28,7 +28,7 @@ import {
 import { Customer, Supplier, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
 import { useToast } from '../shared/Toast';
-import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
+import { MoneyInput, parseBrlToNumber, formatNumberToBrl } from '../shared/MoneyInput';
 import { customerSchema, supplierSchema } from '../../validators/schemas';
 import { posAudio } from '../../services/audioService';
 
@@ -165,7 +165,7 @@ export const CRMView: React.FC<CRMViewProps> = ({ user }) => {
     setFormCustomerWhatsapp(customer.whatsapp || '');
     setFormCustomerBirthDate(customer.birthDate || '');
     setFormCustomerType(customer.customerType || 'walkin');
-    setFormCustomerCreditLimit(customer.creditLimit ? String(customer.creditLimit) : '');
+    setFormCustomerCreditLimit(customer.creditLimit ? formatNumberToBrl(customer.creditLimit) : '');
     setFormCustomerAddress(customer.addressStreet || '');
     setFormCustomerCity(customer.addressCity || customer.city || '');
     setFormCustomerState(customer.addressState || customer.state || '');

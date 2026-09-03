@@ -34,7 +34,7 @@ import {
 } from '../../types';
 import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
-import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
+import { MoneyInput, parseBrlToNumber, formatNumberToBrl } from '../shared/MoneyInput';
 import { PaymentModal } from './PaymentModal';
 import { ThermalReceiptModal } from './ThermalReceiptModal';
 import { QuickProductModal } from './QuickProductModal';
@@ -861,7 +861,7 @@ export const PDVView: React.FC<PDVViewProps> = ({
               Desconto (R$):
             </span>
               <MoneyInput
-                value={discountAmount ? String(discountAmount).replace('.', ',') : ''}
+                value={discountAmount ? formatNumberToBrl(discountAmount) : ''}
                 onChange={(raw) => setDiscountAmount(parseBrlToNumber(raw))}
                 placeholder="0,00"
                 className="w-24 px-2 py-1 bg-white dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-lg text-xs font-bold text-slate-900 dark:text-white text-right outline-none"
