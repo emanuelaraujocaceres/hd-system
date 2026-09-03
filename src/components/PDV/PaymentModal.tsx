@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import QRCode from 'qrcode';
 import {
   X,
   CreditCard,
@@ -25,6 +26,7 @@ import {
 } from '../../types';
 import { storageService } from '../../services/storageService';
 import { pixConfigService } from '../../services/pixConfigService';
+import { buildPixBrCode } from '../../lib/pixBrCode';
 import { posAudio } from '../../services/audioService';
 import { globalNotificationService } from '../../services/globalNotificationService';
 import { useEscapeKey } from '../../hooks/useKeyboardShortcuts';
@@ -78,6 +80,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   // PIX state (pagamento manual — exibe a chave, sem QR code e sem aguardar confirmação)
   const [pixCopied, setPixCopied] = useState(false);
+  const [pixQrCode, setPixQrCode] = useState<string | null>(null);
 
   // Split payment state
   const [isSplit, setIsSplit] = useState(false);
@@ -103,6 +106,24 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const branchId = storageService.getSelectedBranchId();
   // Chave PIX efetiva (config da filial > global) — apenas exibição para pagamento manual
   const effectivePixKey = pixConfigService.getEffectivePixKey(branchId, settings.pixKey) || '';
+
+  useEffect(() => {
+    let active = true;
+    if (!isOpen || method !== 'pix' || !effectivePixKey || totalAmount <= 0) {
+      setPixQrCode(null);
+      return () => { active = false; };
+    }
+    const payload = buildPixBrCode(
+      effectivePixKey,
+      totalAmount,
+      settings.pixReceiverName || settings.tradeName || settings.companyName,
+      settings.city,
+    );
+    QRCode.toDataURL(payload, { width: 260, margin: 1, errorCorrectionLevel: 'M' })
+      .then((dataUrl) => { if (active) setPixQrCode(dataUrl); })
+      .catch(() => { if (active) setPixQrCode(null); });
+    return () => { active = false; };
+  }, [isOpen, method, effectivePixKey, totalAmount, settings.pixReceiverName, settings.tradeName, settings.companyName, settings.city]);
 
   useEffect(() => {
     setCashGiven(totalAmount);
@@ -594,7 +615,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   </div>
                 )}
 
-                {/* METHOD: PIX (pagamento manual — sem QR code e sem aguardar confirmação) */}
+                {/* METHOD: PIX — BR Code estático com valor; confirmação continua manual */}
                 {method === 'pix' && (() => {
                   const hasPixConfig = !!effectivePixKey;
 
@@ -618,6 +639,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         </div>
                       ) : (
                         <>
+                          {pixQrCode && (
+                            <div className="flex justify-center rounded-xl bg-white p-3">
+                              <img src={pixQrCode} alt={`QR Code Pix de R$ ${totalAmount.toFixed(2)}`} className="w-52 h-52" />
+                            </div>
+                          )}
                           <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-2">
                             <p className="text-[10px] uppercase tracking-widest text-slate-400 font-extrabold">
                               Chave PIX para receber o pagamento
@@ -626,7 +652,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                               {effectivePixKey}
                             </p>
                             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                              Informe a chave no aplicativo do banco do cliente (ou copie ao lado), confira o recebimento no celular e finalize a venda.
+                              Cliente pode ler o QR Code com o valor final ou copiar a chave. Confira o recebimento e finalize a venda manualmente.
                             </p>
                           </div>
 
