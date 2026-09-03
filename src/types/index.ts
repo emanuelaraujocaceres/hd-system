@@ -12,6 +12,7 @@ export interface UserPermissions {
   kds?: boolean;            // Pedidos / Cozinha
   cardapioDigital?: boolean; // Cardápio Digital + Mesas
   delivery?: boolean;       // Delivery
+  statusCaixa?: boolean;    // Ver o quadradinho "Status do Caixa" no menu lateral
 }
 
 export interface UserProfile {

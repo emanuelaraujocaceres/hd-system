@@ -221,6 +221,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Caixa Status Quick Box */}
+      {(isAdmin || user.permissions?.statusCaixa !== false) && (
       <div className="p-3 mx-3 my-3 bg-slate-800/60 dark:bg-[#18181b] rounded-xl border border-slate-700/60 dark:border-[#27272a] flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className={`p-1.5 rounded-lg ${isCaixaOpen ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
@@ -249,6 +250,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {isCaixaOpen ? 'Gerenciar' : 'Abrir'}
         </button>
       </div>
+      )}
 
       {/* Navigation Menu */}
       <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">

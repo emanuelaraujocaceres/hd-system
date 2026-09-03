@@ -268,6 +268,7 @@ const [savingTv, setSavingTv] = useState(false);
     comanda: false,
     kds: false,
     cardapioDigital: false,
+    statusCaixa: true,
   });
   const [userPassword, setUserPassword] = useState('');
   // Senha gerada pelo servidor ao criar um usuário novo (exibida UMA vez)
@@ -474,6 +475,7 @@ const [savingTv, setSavingTv] = useState(false);
         finance: false,
         dashboard: false,
         settings: false,
+        statusCaixa: true,
       });
       setUserPassword(u.password || '');
     } else {
@@ -2458,6 +2460,16 @@ const [savingTv, setSavingTv] = useState(false);
                         className="rounded text-teal-600"
                       />
                       <span className="font-semibold text-slate-900 dark:text-white">Cardápio Digital</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] cursor-pointer col-span-2">
+                      <input
+                        type="checkbox"
+                        checked={userPermissions.statusCaixa !== false}
+                        onChange={() => togglePermission('statusCaixa')}
+                        className="rounded text-emerald-600"
+                      />
+                      <span className="font-semibold text-slate-900 dark:text-white">Status do Caixa (quadradinho no menu)</span>
                     </label>
                   </div>
                 </div>
