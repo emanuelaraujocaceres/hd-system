@@ -25,4 +25,30 @@ describe('calculateFinanceSummary', () => {
     expect(summary.total).toBe(0);
     expect(summary.salesCount).toBe(0);
   });
+
+  it('detalha byProduct com lucro negativo quando custo > preço de venda', () => {
+    // Produto vendido a R$ 10 mas com custo cadastrado de R$ 14 → prejuízo por unidade.
+    const vendaCara = {
+      id: 'v1', date: '2026-09-02T10:00:00', status: 'completed', storeBranchId: branchId, total: 10,
+      payments: [{ method: 'cash', amount: 10 }],
+      items: [{ productId: 'p-caro', productName: 'Produto Caro', unitPrice: 10, quantity: 1, total: 10 }],
+    } as any;
+    const vendaBoa = {
+      id: 'v2', date: '2026-09-02T11:00:00', status: 'completed', storeBranchId: branchId, total: 20,
+      payments: [{ method: 'cash', amount: 20 }],
+      items: [{ productId: 'p-bom', productName: 'Produto Bom', unitPrice: 20, quantity: 1, total: 20 }],
+    } as any;
+    const summary = calculateFinanceSummary(
+      [vendaCara, vendaBoa],
+      [{ id: 'p-caro', costPrice: 14 } as any, { id: 'p-bom', costPrice: 4 } as any],
+      branchId, 'day', new Date('2026-09-02T15:00:00'),
+    );
+    const linhaCara = summary.byProduct.find((l) => l.productId === 'p-caro');
+    const linhaBoa = summary.byProduct.find((l) => l.productId === 'p-bom');
+    expect(linhaCara).toMatchObject({ cost: 14, revenue: 10, profit: -4 });
+    expect(linhaBoa).toMatchObject({ cost: 4, revenue: 20, profit: 16 });
+    // Ordenação: maior prejuízo (mais negativo) primeiro.
+    expect(summary.byProduct[0].productId).toBe('p-caro');
+    expect(summary.productProfit).toBe(12); // (10+20) - (14+4)
+  });
 });

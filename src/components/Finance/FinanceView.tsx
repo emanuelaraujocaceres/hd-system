@@ -572,6 +572,53 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
       </div>
 
+      {/* Lucro por Produto — detalhamento do KPI acima (ajuda a achar produtos com custo > preço de venda) */}
+      <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
+        <div className="p-4 border-b border-slate-200 dark:border-[#27272a]">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-indigo-500" />
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white">Lucro por Produto</h3>
+            <span className="text-[10px] font-semibold text-slate-400 ml-1">
+              período/filial selecionados · faturamento − custo
+            </span>
+          </div>
+          {financeSummary.byProduct.length > 0 && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Produtos com lucro negativo (custo maior que o preço de venda) aparecem em destaque vermelho no topo — são os que diminuem o Lucro dos Produtos.
+            </p>
+          )}
+        </div>
+        {financeSummary.byProduct.length === 0 ? (
+          <div className="text-center py-8 text-slate-400 text-sm">
+            Nenhuma venda concluída no período/filial selecionados.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-[#27272a]/60 max-h-80 overflow-y-auto">
+            {financeSummary.byProduct.map((line) => {
+              const negative = line.profit < 0;
+              return (
+                <div key={line.productId} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {negative
+                      ? <TrendingDown className="w-4 h-4 text-rose-500 shrink-0" />
+                      : <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />}
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{line.productName}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {line.quantity} un · Faturamento R$ {line.revenue.toFixed(2)} · Custo R$ {line.cost.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className={`text-sm font-extrabold shrink-0 ${negative ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                    {negative ? '−' : '+'}R$ {Math.abs(line.profit).toFixed(2)}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* SUB-TAB 1: CONTAS A PAGAR */}
       {activeSubTab === 'contas' && (
         <div className="space-y-4">

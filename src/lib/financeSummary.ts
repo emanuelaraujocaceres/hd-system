@@ -2,6 +2,15 @@ import type { Product, Sale } from '../types';
 
 export type FinancePeriod = 'day' | 'week' | 'month';
 
+export interface ProductProfitLine {
+  productId: string;
+  productName: string;
+  quantity: number;
+  revenue: number;      // faturamento = preço de venda × quantidade
+  cost: number;         // custo = custo do produto × quantidade
+  profit: number;       // lucro/prejuízo da linha = revenue - cost
+}
+
 export interface FinanceSummary {
   salesCount: number;
   total: number;
@@ -11,6 +20,7 @@ export interface FinanceSummary {
   debitCard: number;
   costOfGoodsSold: number;
   productProfit: number;
+  byProduct: ProductProfitLine[]; // detalhamento por produto (ordenado: maior prejuízo primeiro)
 }
 
 const startOfPeriod = (period: FinancePeriod, reference: Date) => {
@@ -34,8 +44,9 @@ export function calculateFinanceSummary(
   const productsById = new Map(products.map((product) => [product.id, product]));
   const result: FinanceSummary = {
     salesCount: 0, total: 0, cash: 0, pix: 0, creditCard: 0, debitCard: 0,
-    costOfGoodsSold: 0, productProfit: 0,
+    costOfGoodsSold: 0, productProfit: 0, byProduct: [],
   };
+  const byProduct = new Map<string, ProductProfitLine>();
 
   for (const sale of sales) {
     const date = new Date(sale.date);
@@ -51,9 +62,30 @@ export function calculateFinanceSummary(
     }
     for (const item of sale.items || []) {
       const product = productsById.get(item.productId);
-      result.costOfGoodsSold += (product ? product.costPrice : item.unitPrice * 0.6) * item.quantity;
+      const unitCost = product ? product.costPrice : item.unitPrice * 0.6;
+      const itemRevenue = (item.unitPrice || 0) * item.quantity;
+      const itemCost = unitCost * item.quantity;
+      result.costOfGoodsSold += itemCost;
+      const line = byProduct.get(item.productId);
+      if (line) {
+        line.quantity += item.quantity;
+        line.revenue += itemRevenue;
+        line.cost += itemCost;
+        line.profit += itemRevenue - itemCost;
+      } else {
+        byProduct.set(item.productId, {
+          productId: item.productId,
+          productName: item.productName || product?.name || item.productId,
+          quantity: item.quantity,
+          revenue: itemRevenue,
+          cost: itemCost,
+          profit: itemRevenue - itemCost,
+        });
+      }
     }
   }
   result.productProfit = result.total - result.costOfGoodsSold;
+  // Ordena do MAIOR prejuízo (lucro mais negativo) para o maior lucro.
+  result.byProduct = Array.from(byProduct.values()).sort((a, b) => a.profit - b.profit);
   return result;
 }
