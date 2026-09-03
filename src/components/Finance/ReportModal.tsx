@@ -214,20 +214,35 @@ export const ReportModal: React.FC<ReportModalProps> = ({ user, onClose }) => {
               </div>
               <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3">
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Por Forma de Pagamento</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  {result.model.byPayment.length > 0 ? (
-                    result.model.byPayment.map((p) => (
-                      <div key={p.method} className="flex items-center justify-between text-[12px]">
-                        <span className="text-slate-600 dark:text-[#a1a1aa]">{p.label}</span>
-                        <span className="font-bold text-slate-900 dark:text-white">
-                          {p.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-[11px] text-slate-500 dark:text-[#71717a]">Sem pagamentos no período.</p>
-                  )}
-                </div>
+                {result.model.byPayment.length > 0 ? (
+                  <div className="space-y-2">
+                    {result.model.byPayment.map((p) => {
+                      const share = kpis.revenue > 0 ? ((p.total / kpis.revenue) * 100).toFixed(1) : '0';
+                      return (
+                        <div key={p.method} className="rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${p.method === 'cash' ? 'bg-amber-500' : p.method === 'pix' ? 'bg-teal-500' : 'bg-indigo-400'}`} />
+                              <span className="font-bold text-slate-800 dark:text-slate-100">{p.label}</span>
+                            </span>
+                            <span className="font-black text-slate-900 dark:text-white">
+                              {p.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] text-slate-400">{p.count} venda{p.count === 1 ? '' : 's'} </span>
+                            <div className="flex-1 h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${p.method === 'cash' ? 'bg-amber-500' : p.method === 'pix' ? 'bg-teal-500' : 'bg-indigo-400'}`} style={{ width: `${Math.max(2, Number(share))}%` }} />
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-500 dark:text-[#a1a1aa]">{share}%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500 dark:text-[#71717a]">Sem pagamentos no período.</p>
+                )}
               </div>
               <p className="text-[11px] text-slate-500 dark:text-[#71717a] flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
