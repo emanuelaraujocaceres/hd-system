@@ -1195,6 +1195,8 @@ Relatorio de itens de venda (join de sales + sale_items + products + customers +
 | unit_price | NUMERIC | Preco unit. |
 | item_total | NUMERIC | Total item |
 | item_discount | NUMERIC | Desconto item |
+| product_cost | NUMERIC | Custo unit. do produto (products.cost_price atual) |
+| payments_json | JSONB | Array de pagamentos da venda (split: [{method, amount, ...}]) — para breakdown por forma de pagamento |
 | sale_total | NUMERIC | Total venda |
 | sale_date | TIMESTAMPTZ | Data |
 | sale_status | TEXT | Status |

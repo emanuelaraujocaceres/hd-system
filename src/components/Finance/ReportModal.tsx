@@ -200,16 +200,33 @@ export const ReportModal: React.FC<ReportModalProps> = ({ user, onClose }) => {
                   <p className="text-base font-black text-slate-900 dark:text-white mt-0.5">{kpis.saleCount}</p>
                 </div>
                 <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Ticket Médio</p>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Custo dos Produtos</p>
                   <p className="text-base font-black text-slate-900 dark:text-white mt-0.5">
-                    {kpis.ticketAverage.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {kpis.costTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </p>
                 </div>
                 <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Comissões</p>
-                  <p className="text-base font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
-                    {kpis.commissionTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Lucro Líquido</p>
+                  <p className={`text-base font-black mt-0.5 ${kpis.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {kpis.netProfit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </p>
+                </div>
+              </div>
+              <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Por Forma de Pagamento</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {result.model.byPayment.length > 0 ? (
+                    result.model.byPayment.map((p) => (
+                      <div key={p.method} className="flex items-center justify-between text-[12px]">
+                        <span className="text-slate-600 dark:text-[#a1a1aa]">{p.label}</span>
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          {p.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-[11px] text-slate-500 dark:text-[#71717a]">Sem pagamentos no período.</p>
+                  )}
                 </div>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-[#71717a] flex items-center gap-1.5">

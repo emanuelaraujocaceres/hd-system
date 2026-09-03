@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { storageService } from './storageService';
+import { PaymentDetails } from '../types';
 
 /**
  * reportService — Relatório Gerencial (Frente 5).
@@ -28,7 +29,8 @@ export interface ReportRow {
   saleId: string;
   saleDate: string; // ISO timestamp
   saleStatus: string;
-  paymentMethod: string;
+  paymentMethod: string; // método legado (1º pagamento) — p/ compatibilidade
+  payments: PaymentDetails[];
   operatorId: string;
   operatorName: string;
   customerId: string | null;
@@ -42,8 +44,8 @@ export interface ReportRow {
   itemTotal: number;
   itemDiscount: number;
   categoryName: string | null;
-  commissionRate: number;
-  commissionValue: number;
+  productCost: number; // custo unitário do produto (atual) — p/ cálculo de lucro
+  itemCost: number; // productCost * quantity
 }
 
 export interface ReportSale {
@@ -68,7 +70,6 @@ export interface OperatorSummary {
   name: string;
   count: number;
   total: number;
-  commission: number;
 }
 
 export interface CategorySummary {
@@ -93,11 +94,10 @@ export interface ReportModel {
   kpis: {
     revenue: number;
     saleCount: number;
-    ticketAverage: number;
     itemsSold: number;
     discountTotal: number;
-    commissionTotal: number;
-    cancelledCount: number;
+    costTotal: number; // custo dos produtos vendidos (productCost * quantity)
+    netProfit: number; // lucro líquido = revenue − costTotal
   };
   byDay: { label: string; total: number }[];
   byPayment: PaymentSummary[];
@@ -132,6 +132,34 @@ const PAYMENT_LABELS: Record<string, string> = {
 
 export function paymentLabel(method: string): string {
   return PAYMENT_LABELS[method] || method || '—';
+}
+
+// Extrai o array de pagamentos da venda a partir do payments_json (coluna da
+// view) ou do payment_method legado. Suporta vendas com pagamento dividido
+// (split) em vários métodos — essencial para o breakdown por forma de pagamento.
+function parsePayments(raw: any): PaymentDetails[] {
+  if (Array.isArray(raw)) return raw.filter((p) => p && p.amount != null);
+  if (typeof raw === 'string') {
+    try {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr.filter((p) => p && p.amount != null);
+    } catch {
+      /* ignora payload inválido */
+    }
+  }
+  return [];
+}
+
+// Soma o total recebido em cada forma de pagamento a partir dos payment details
+// (pagamentos completos da venda). Difere do payment_method legado, que só
+// guarda UM método por venda.
+function paymentMethodTotals(payments: PaymentDetails[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const p of payments) {
+    const method = p.method || 'cash';
+    totals.set(method, (totals.get(method) || 0) + (Number(p.amount) || 0));
+  }
+  return totals;
 }
 
 function toISODate(d: Date): string {
@@ -183,41 +211,44 @@ export async function fetchReport(filters: ReportFilters): Promise<{ model: Repo
 
   const raw = (data || []) as any[];
 
-  // Filtros client-side (pagamento/operador/canceladas) — o volume do período
-  // já veio reduzido pelo WHERE server-side.
+  // Mapeia primeiro (custo e payments são derivados das colunas novas da view),
+  // depois aplica os filtros client-side — incluindo pagamento com suporte a
+  // split (uma venda pode ter dinheiro + débito + crédito juntos).
   let rows: ReportRow[] = raw
-    .filter((r) => {
-      if (!filters.includeCancelled && r.sale_status === 'cancelled') return false;
-      if (r.sale_status === 'pending') return false;
-      if (filters.paymentMethod && r.payment_method !== filters.paymentMethod) return false;
-      if (filters.operatorId && r.operator_id !== filters.operatorId) return false;
-      return true;
+    .map((r) => {
+      const payments = parsePayments(r.payments_json);
+      const quantity = Number(r.quantity) || 0;
+      const productCost = Number(r.product_cost) || 0;
+      return {
+        saleId: r.sale_id,
+        saleDate: r.sale_date,
+        saleStatus: r.sale_status,
+        paymentMethod: r.payment_method || payments[0]?.method || 'cash',
+        payments,
+        operatorId: r.operator_id || '',
+        operatorName: r.operator_name || '—',
+        customerId: r.customer_id || null,
+        customerName: r.customer_name || null,
+        saleTotal: Number(r.sale_total) || 0,
+        itemId: r.item_id,
+        productId: r.product_id || '',
+        productName: r.product_name || '—',
+        quantity,
+        unitPrice: Number(r.unit_price) || 0,
+        itemTotal: Number(r.item_total) || 0,
+        itemDiscount: Number(r.item_discount) || 0,
+        categoryName: r.category_name || null,
+        productCost,
+        itemCost: productCost * quantity,
+      };
     })
-    .map((r) => ({
-      saleId: r.sale_id,
-      saleDate: r.sale_date,
-      saleStatus: r.sale_status,
-      paymentMethod: r.payment_method || 'cash',
-      operatorId: r.operator_id || '',
-      operatorName: r.operator_name || '—',
-      customerId: r.customer_id || null,
-      customerName: r.customer_name || null,
-      saleTotal: Number(r.sale_total) || 0,
-      itemId: r.item_id,
-      productId: r.product_id || '',
-      productName: r.product_name || '—',
-      quantity: Number(r.quantity) || 0,
-      unitPrice: Number(r.unit_price) || 0,
-      itemTotal: Number(r.item_total) || 0,
-      itemDiscount: Number(r.item_discount) || 0,
-      categoryName: r.category_name || null,
-      commissionRate: Number(r.operator_commission_rate) || 0,
-      commissionValue: 0,
-    }));
-
-  rows.forEach((r) => {
-    r.commissionValue = r.itemTotal * (r.commissionRate / 100);
-  });
+    .filter((r) => {
+      if (!filters.includeCancelled && r.saleStatus === 'cancelled') return false;
+      if (r.saleStatus === 'pending') return false;
+      if (filters.paymentMethod && !r.payments.some((p) => p.method === filters.paymentMethod)) return false;
+      if (filters.operatorId && r.operatorId !== filters.operatorId) return false;
+      return true;
+    });
 
   // Vendas únicas (sale_total repete por item).
   const salesById = new Map<string, ReportSale>();
@@ -245,8 +276,14 @@ export async function fetchReport(filters: ReportFilters): Promise<{ model: Repo
   const saleCount = completed.length;
   const itemsSold = rows.reduce((acc, r) => acc + r.quantity, 0);
   const discountTotal = rows.reduce((acc, r) => acc + r.itemDiscount, 0);
-  const commissionTotal = rows.reduce((acc, r) => acc + r.commissionValue, 0);
-  const cancelledCount = sales.filter((s) => s.status === 'cancelled').length;
+  // Custo dos produtos vendidos e lucro líquido (faturamento − custo).
+  const costTotal = rows.reduce((acc, r) => acc + r.itemCost, 0);
+  const netProfit = revenue - costTotal;
+  // Pagamentos por venda (uma venda pode ter várias formas — split).
+  const salePayments = new Map<string, PaymentDetails[]>();
+  for (const r of rows) {
+    if (!salePayments.has(r.saleId)) salePayments.set(r.saleId, r.payments);
+  }
 
   // Vendas por dia (ou por semana quando o período passa de 31 dias).
   const days = Math.max(1, Math.round((new Date(`${filters.endDate}T12:00:00`).getTime() - new Date(`${filters.startDate}T12:00:00`).getTime()) / 86400000) + 1);
@@ -279,27 +316,36 @@ export async function fetchReport(filters: ReportFilters): Promise<{ model: Repo
     }
   }
 
-  // Formas de pagamento.
+  // Formas de pagamento (suporta venda com split em vários métodos).
   const payMap = new Map<string, PaymentSummary>();
   for (const s of completed) {
-    const cur = payMap.get(s.paymentMethod) || { method: s.paymentMethod, label: paymentLabel(s.paymentMethod), count: 0, total: 0 };
-    cur.count += 1;
-    cur.total += s.total;
-    payMap.set(s.paymentMethod, cur);
+    const pays = salePayments.get(s.id) || [];
+    const totals = paymentMethodTotals(pays);
+    if (totals.size === 0) {
+      // Venda sem payments_json → usa o método legado com o total da venda.
+      const m = s.paymentMethod || 'cash';
+      const cur = payMap.get(m) || { method: m, label: paymentLabel(m), count: 0, total: 0 };
+      cur.count += 1;
+      cur.total += s.total;
+      payMap.set(m, cur);
+      continue;
+    }
+    for (const [m, amount] of totals) {
+      const cur = payMap.get(m) || { method: m, label: paymentLabel(m), count: 0, total: 0 };
+      cur.count += 1;
+      cur.total += amount;
+      payMap.set(m, cur);
+    }
   }
   const byPayment = Array.from(payMap.values()).sort((a, b) => b.total - a.total);
 
   // Operadores.
   const opMap = new Map<string, OperatorSummary>();
   for (const s of completed) {
-    const cur = opMap.get(s.operatorName) || { name: s.operatorName, count: 0, total: 0, commission: 0 };
+    const cur = opMap.get(s.operatorName) || { name: s.operatorName, count: 0, total: 0 };
     cur.count += 1;
     cur.total += s.total;
     opMap.set(s.operatorName, cur);
-  }
-  for (const r of rows) {
-    const cur = opMap.get(r.operatorName);
-    if (cur) cur.commission += r.commissionValue;
   }
   const byOperator = Array.from(opMap.values()).sort((a, b) => b.total - a.total);
 
@@ -332,7 +378,7 @@ export async function fetchReport(filters: ReportFilters): Promise<{ model: Repo
     rows,
     sales,
     dayGranularity: days <= 31 ? 'dia' : 'semana',
-    kpis: { revenue, saleCount, ticketAverage: saleCount ? revenue / saleCount : 0, itemsSold, discountTotal, commissionTotal, cancelledCount },
+    kpis: { revenue, saleCount, itemsSold, discountTotal, costTotal, netProfit },
     byDay,
     byPayment,
     byOperator,
@@ -371,7 +417,7 @@ function csvCell(value: string | number | null): string {
 export function downloadCsv(model: ReportModel, meta: ReportMeta): void {
   const header = [
     'Data', 'Hora', 'Status', 'Pagamento', 'Operador', 'Cliente', 'Produto', 'Categoria',
-    'Quantidade', 'Preço Unit.', 'Total Item', 'Desconto', 'Total Venda', 'Comissão %', 'Comissão R$',
+    'Quantidade', 'Preço Venda Unit.', 'Total Item', 'Custo Unit.', 'Custo Item', 'Lucro Item', 'Desconto', 'Total Venda',
   ];
   const lines = [header.join(';')];
   for (const r of model.rows) {
@@ -388,10 +434,11 @@ export function downloadCsv(model: ReportModel, meta: ReportMeta): void {
       r.quantity,
       r.unitPrice,
       r.itemTotal,
+      r.productCost,
+      r.itemCost,
+      r.itemTotal - r.itemCost,
       r.itemDiscount,
       r.saleTotal,
-      r.commissionRate,
-      r.commissionValue,
     ].map(csvCell).join(';'));
   }
 
@@ -453,7 +500,6 @@ function buildHtml(model: ReportModel, meta: ReportMeta): string {
         <td>${esc(o.name)}</td>
         <td class="num">${o.count}</td>
         <td class="num">${brl.format(o.total)}</td>
-        <td class="num">${o.commission > 0 ? brl.format(o.commission) : '—'}</td>
       </tr>`)
     .join('');
 
@@ -572,11 +618,11 @@ function buildHtml(model: ReportModel, meta: ReportMeta): string {
 
     <section class="kpis">
       <div class="kpi"><div class="label">Faturamento</div><div class="value" style="color:#059669">${brl.format(kpis.revenue)}</div><div class="sub">Vendas concluídas</div></div>
-      <div class="kpi"><div class="label">Vendas</div><div class="value">${kpis.saleCount}</div><div class="sub">${kpis.cancelledCount > 0 ? kpis.cancelledCount + ' cancelada(s) no filtro' : 'Ticket médio abaixo'}</div></div>
-      <div class="kpi"><div class="label">Ticket Médio</div><div class="value">${brl.format(kpis.ticketAverage)}</div><div class="sub">Por venda concluída</div></div>
+      <div class="kpi"><div class="label">Vendas</div><div class="value">${kpis.saleCount}</div><div class="sub">No período</div></div>
       <div class="kpi"><div class="label">Itens Vendidos</div><div class="value">${kpis.itemsSold}</div><div class="sub">Unidades no período</div></div>
       <div class="kpi"><div class="label">Descontos</div><div class="value" style="color:#d97706">${brl.format(kpis.discountTotal)}</div><div class="sub">Concedidos no período</div></div>
-      <div class="kpi"><div class="label">Comissões</div><div class="value" style="color:#4f46e5">${brl.format(kpis.commissionTotal)}</div><div class="sub">Estimadas por operador</div></div>
+      <div class="kpi"><div class="label">Custo dos Produtos</div><div class="value" style="color:#b45309">${brl.format(kpis.costTotal)}</div><div class="sub">Custo de compra dos vendidos</div></div>
+      <div class="kpi"><div class="label">Lucro Líquido</div><div class="value" style="color:${kpis.netProfit >= 0 ? '#059669' : '#dc2626'}">${brl.format(kpis.netProfit)}</div><div class="sub">Faturamento − custo dos produtos</div></div>
     </section>
 
     <h2 class="sec">📈 Vendas por ${model.dayGranularity === 'semana' ? 'Semana' : 'Dia'}</h2>
@@ -590,8 +636,8 @@ function buildHtml(model: ReportModel, meta: ReportMeta): string {
 
     <h2 class="sec">👤 Desempenho por Operador</h2>
     <table>
-      <tr><th>Operador</th><th style="text-align:right">Vendas</th><th style="text-align:right">Faturamento</th><th style="text-align:right">Comissão Estimada</th></tr>
-      ${operators || '<tr><td colspan="4" class="muted">Sem vendas no período.</td></tr>'}
+      <tr><th>Operador</th><th style="text-align:right">Vendas</th><th style="text-align:right">Faturamento</th></tr>
+      ${operators || '<tr><td colspan="3" class="muted">Sem vendas no período.</td></tr>'}
     </table>
 
     <h2 class="sec">📦 Vendas por Categoria</h2>
