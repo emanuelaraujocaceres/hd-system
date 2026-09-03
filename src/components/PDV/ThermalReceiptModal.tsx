@@ -27,7 +27,26 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
 
   // Nome da filial ativa (identifica a loja no rodapé do comprovante).
   // Com uma filial só (matriz), o nome dela já representa a organização.
-  const storeName = storageService.getSelectedBranch()?.name || '';
+  const selectedBranch = storageService.getSelectedBranch();
+  const storeName = selectedBranch?.name || '';
+
+  // Cabeçalho do comprovante usa os DADOS DA FILIAL onde a venda aconteceu
+  // (nome, CNPJ, endereço, telefone). Antes usava as configurações globais do
+  // sistema (organização), então filiais com dados próprios mostravam sempre
+  // o cabeçalho da matriz. Fallback para settings quando a filial não tiver
+  // algum campo preenchido.
+  const header = {
+    name: selectedBranch?.name || settings.tradeName,
+    cnpj: selectedBranch?.cnpj || settings.cnpj,
+    ie: settings.ie,
+    address: selectedBranch?.address || settings.address,
+    city: selectedBranch?.city || settings.city,
+    state: selectedBranch?.state || settings.state,
+    phone: selectedBranch?.phone || settings.phone,
+    cityState: selectedBranch
+      ? `${selectedBranch.city || ''}${selectedBranch.city && selectedBranch.state ? '/' : ''}${selectedBranch.state || ''}`
+      : `${settings.city}/${settings.state}`,
+  };
 
   const handlePrint = async () => {
     setPrintStatus('printing');
@@ -83,13 +102,13 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
             id="printable-receipt"
             className="w-[280px] sm:w-[320px] bg-white text-black font-mono text-[11px] p-4 rounded-lg shadow-md border border-slate-200 space-y-2 leading-tight select-text"
           >
-            {/* Store Header */}
+            {/* Store Header — dados da filial da venda (fallback para settings globais) */}
             <div className="text-center pb-2 border-b border-dashed border-gray-400">
-              <p className="font-bold text-xs uppercase">{settings.tradeName}</p>
-              <p>CNPJ: {settings.cnpj}</p>
-              <p>IE: {settings.ie}</p>
-              <p>{settings.address} - {settings.city}/{settings.state}</p>
-              <p>Tel: {settings.phone}</p>
+              <p className="font-bold text-xs uppercase">{header.name}</p>
+              <p>CNPJ: {header.cnpj}</p>
+              <p>IE: {header.ie}</p>
+              <p>{header.address} - {header.cityState}</p>
+              <p>Tel: {header.phone}</p>
             </div>
 
             {/* Document Info */}

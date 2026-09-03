@@ -56,16 +56,34 @@ export function buildEscPos(lines: EscPosLine[]): Uint8Array {
   return new Uint8Array(out);
 }
 
+/** Resolve o cabeçalho da FILIAL para o cupom (fallback p/ settings globais). */
+function resolveBranchHeader(settings: SystemSettings): {
+  name: string; cnpj: string; ie: string; address: string; cityState: string; phone: string;
+} {
+  const branch = storageService.getSelectedBranch();
+  return {
+    name: branch?.name || settings.tradeName || 'HD-SYSTEM',
+    cnpj: branch?.cnpj || settings.cnpj || '',
+    ie: settings.ie || '',
+    address: branch?.address || settings.address || '',
+    cityState: branch
+      ? `${branch.city || ''}${branch.city && branch.state ? '/' : ''}${branch.state || ''}`
+      : `${settings.city || ''}/${settings.state || ''}`,
+    phone: branch?.phone || settings.phone || '',
+  };
+}
+
 /** Monta o cupom de venda (espelha o layout do ThermalReceiptModal). */
 export function buildReceiptEscPos(sale: Sale, settings: SystemSettings, storeName?: string): Uint8Array {
   const line = (text: string, opts: Partial<EscPosLine> = {}): EscPosLine => ({ text, ...opts });
+  const h = resolveBranchHeader(settings);
 
   const lines: EscPosLine[] = [
-    line(settings.tradeName || 'HD-SYSTEM', { align: 1, bold: true, size: 19 }),
-    line(`CNPJ: ${settings.cnpj || ''}`, { align: 1 }),
-    line(`IE: ${settings.ie || ''}`, { align: 1 }),
-    line(`${settings.address || ''} - ${settings.city || ''}/${settings.state || ''}`, { align: 1 }),
-    line(`Tel: ${settings.phone || ''}`, { align: 1 }),
+    line(h.name, { align: 1, bold: true, size: 19 }),
+    line(`CNPJ: ${h.cnpj}`, { align: 1 }),
+    line(`IE: ${h.ie}`, { align: 1 }),
+    line(`${h.address} - ${h.cityState}`, { align: 1 }),
+    line(`Tel: ${h.phone}`, { align: 1 }),
     line('', { skip: true }),
     line('COMPROVANTE DE VENDA', { align: 1, bold: true }),
     line('Documento Nao Fiscal', { align: 1 }),

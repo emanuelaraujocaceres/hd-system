@@ -10,7 +10,7 @@
  *
  * NÃO testa printThermalReceipt / printKitchenOrder / etc. (dependem de DOM/USB/Serial).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   buildEscPos,
   buildTestPageEscPos,
@@ -19,7 +19,8 @@ import {
   buildDeliveryTicketEscPos,
   getCaixaPrinter,
 } from './printService';
-import type { Printer, Sale, SystemSettings, DeliveryOrder } from '../types';
+import { storageService } from './storageService';
+import type { Printer, Sale, SystemSettings, DeliveryOrder, StoreBranch } from '../types';
 
 // ─── helpers ────────────────────────────────────────────────────
 
@@ -207,6 +208,8 @@ describe('buildTestPageEscPos', () => {
 // ─── buildReceiptEscPos ────────────────────────────────────────
 
 describe('buildReceiptEscPos', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
   it('retorna Uint8Array com bytes ESC/POS', () => {
     const sale = mkSale();
     const settings = mkSettings();
@@ -215,19 +218,29 @@ describe('buildReceiptEscPos', () => {
     expect(result[0]).toBe(0x1b); // ESC init
   });
 
-  it('contém tradeName no header', () => {
-    const settings = mkSettings({ tradeName: 'Minha Loja' });
-    const sale = mkSale();
-    const result = buildReceiptEscPos(sale, settings);
+  it('usa o nome e CNPJ da FILIAL no header (prioridade sobre settings)', () => {
+    const branch: StoreBranch = {
+      id: 'b-filial', name: 'Adega - Matriz', code: 'br-01', cnpj: '99999999999999',
+      city: 'Belo Horizonte', state: 'MG', address: 'Rua Filial, 10', phone: '(31) 99999-1111',
+      isHeadquarters: true, active: true,
+    };
+    vi.spyOn(storageService, 'getSelectedBranch').mockReturnValue(branch);
+    const settings = mkSettings({ tradeName: 'Minha Loja', cnpj: '12345678901234' });
+    const result = buildReceiptEscPos(mkSale(), settings);
     const decoded = new TextDecoder().decode(result);
-    expect(decoded).toContain('Minha Loja');
+    // Header usa os dados da filial, NÃO os globais da organização
+    expect(decoded).toContain('Adega - Matriz');
+    expect(decoded).toContain('99999999999999');
+    expect(decoded).not.toContain('Minha Loja');
+    expect(decoded).not.toContain('12345678901234');
   });
 
-  it('contém CNPJ', () => {
-    const settings = mkSettings({ cnpj: '99999999999999' });
-    const sale = mkSale();
-    const result = buildReceiptEscPos(sale, settings);
+  it('sem filial selecionada, usa o nome/CNPJ do settings como fallback', () => {
+    vi.spyOn(storageService, 'getSelectedBranch').mockReturnValue(undefined as any);
+    const settings = mkSettings({ tradeName: 'Minha Loja', cnpj: '99999999999999' });
+    const result = buildReceiptEscPos(mkSale(), settings);
     const decoded = new TextDecoder().decode(result);
+    expect(decoded).toContain('Minha Loja');
     expect(decoded).toContain('99999999999999');
   });
 
@@ -387,7 +400,8 @@ describe('buildReceiptEscPos', () => {
     expect(decoded).not.toContain('Volte sempre!');
   });
 
-  it('usa "HD-SYSTEM" como fallback de tradeName', () => {
+  it('usa "HD-SYSTEM" como fallback de tradeName quando não há filial e settings sem nome', () => {
+    vi.spyOn(storageService, 'getSelectedBranch').mockReturnValue(undefined as any);
     const settings = mkSettings({ tradeName: '' });
     const result = buildReceiptEscPos(mkSale(), settings);
     const decoded = new TextDecoder().decode(result);

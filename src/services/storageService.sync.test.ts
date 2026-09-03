@@ -361,7 +361,7 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     expect(mapped.payments[0].method).toBe('pix');
   });
 
-  it('_updateCaixaFromSale recalcula e sincroniza totais ao cloud (resolve dualidade)', () => {
+  it('_updateCaixaFromSale (reativo a Realtime) recalcula LOCAL e NÃO sobrescreve o cloud (anti ping-pong)', () => {
     // Sessão de caixa aberta na filial b1 (br-01 do INITIAL_BRANCHES)
     const org = (svc as any).getCurrentOrgId?.() || '';
     const branchId = 'f3265a77-5946-5cd3-b09c-725ac4d26952'; // BRANCH_UUIDS["br-01"]
@@ -374,20 +374,22 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     }));
     // Duas vendas completed da filial, uma cash e uma pix
     localStorage.setItem('hd_system_sales', JSON.stringify([
-      { id: 's1', status: 'completed', storeBranchId: branchId, payments: [{ method: 'cash', amount: 100 }] },
-      { id: 's2', status: 'completed', storeBranchId: branchId, payments: [{ method: 'pix', amount: 64 }] },
+      { id: 's1', status: 'completed', storeBranchId: branchId, date: '2026-01-01T10:00:00Z', payments: [{ method: 'cash', amount: 100 }] },
+      { id: 's2', status: 'completed', storeBranchId: branchId, date: '2026-01-01T11:00:00Z', payments: [{ method: 'pix', amount: 64 }] },
     ]));
     (svc as any).getSelectedBranchId = () => branchId;
     (svc as any).getRawBranchId = () => branchId;
     const syncSpy = vi.spyOn(svc as any, 'syncCaixaSession').mockImplementation(() => {});
 
-    (svc as any)._updateCaixaFromSale({ id: 's3', status: 'completed', storeBranchId: branchId, payments: [{ method: 'cash', amount: 0 }] });
+    (svc as any)._updateCaixaFromSale({ id: 's3', status: 'completed', storeBranchId: branchId, date: '2026-01-01T12:00:00Z', payments: [{ method: 'cash', amount: 0 }] });
 
-    // Recalculateu cash=100 e pix=64 e sincronizou ao cloud
-    expect(syncSpy).toHaveBeenCalled();
-    const synced = syncSpy.mock.calls[0][0] as { totalSalesCash: number; totalSalesPix: number };
-    expect(synced.totalSalesCash).toBe(100);
-    expect(synced.totalSalesPix).toBe(64);
+    // Recalcula localmente cash=100 e pix=64, atualizando o display local
+    const local = (svc as any).getActiveCaixaSession();
+    expect(local.totalSalesCash).toBe(100);
+    expect(local.totalSalesPix).toBe(64);
+    // MAS não grava no cloud — dispositivo reativo não deve sobrescrever o
+    // cloud com o total do seu cache local (causa do ping-pong do caixa).
+    expect(syncSpy).not.toHaveBeenCalled();
   });
 
   it('_updateCaixaFromSale NÃO sincroniza quando não há sessão aberta', () => {
@@ -411,5 +413,70 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     (svc as any)._updateCaixaFromSale({ id: 's2', status: 'completed', storeBranchId: branchId, payments: [{ method: 'cash', amount: 10 }] });
 
     expect(syncSpy).not.toHaveBeenCalled();
+  });
+
+  // ─── JANELA DA SESSÃO + ESCRITA ÚNICA (oscilação do caixa, 2026-09-02) ───
+  // Dois dispositivos compartilhavam o mesmo caixa; cada um regravava no cloud
+  // o total absoluto do SEU cache local (conjunto de vendas divergente), fazendo
+  // o valor oscilar (ping-pong). Correção: recalc filtra pela janela da sessão e
+  // caminhos reativos não sobrescrevem o cloud.
+
+  it('recalcAndSyncCaixa soma APENAS vendas DENTRO da janela da sessão (não infla com vendas de dias anteriores)', () => {
+    const org = (svc as any).getCurrentOrgId?.() || '';
+    const branchId = 'f3265a77-5946-5cd3-b09c-725ac4d26952'; // BRANCH_UUIDS["br-01"]
+    const caixaKey = `hd_system_caixa_session_${org}`;
+    // Sessão abre em 02/01 — venda de 01/01 (antes da abertura) NÃO deve contar
+    localStorage.setItem(caixaKey, JSON.stringify({
+      id: 'caixa-1', status: 'open', storeBranchId: branchId, organizationId: org,
+      initialCash: 0, totalSalesCash: 0, totalSalesPix: 0, totalSalesCard: 0,
+      totalSalesCreditAccount: 0, suprimentos: 0, sangrias: 0, currentCashBalance: 0,
+      operatorName: 'Op', openedAt: '2026-01-02T08:00:00Z',
+    }));
+    localStorage.setItem('hd_system_sales', JSON.stringify([
+      { id: 'ontem', status: 'completed', storeBranchId: branchId, date: '2026-01-01T20:00:00Z', payments: [{ method: 'cash', amount: 999 }] }, // FORA da sessão
+      { id: 'hoje1', status: 'completed', storeBranchId: branchId, date: '2026-01-02T09:00:00Z', payments: [{ method: 'cash', amount: 50 }] },
+      { id: 'hoje2', status: 'completed', storeBranchId: branchId, date: '2026-01-02T10:00:00Z', payments: [{ method: 'pix', amount: 20 }] },
+    ]));
+    (svc as any).getSelectedBranchId = () => branchId;
+    (svc as any).getRawBranchId = () => branchId;
+    const syncSpy = vi.spyOn(svc as any, 'syncCaixaSession').mockImplementation(() => {});
+
+    (svc as any)._updateCaixaFromSale({ id: 'novo', status: 'completed', storeBranchId: branchId, date: '2026-01-02T11:00:00Z', payments: [{ method: 'cash', amount: 0 }] });
+
+    const local = (svc as any).getActiveCaixaSession();
+    // Só as duas vendas do dia 02 (cash 50 + pix 20); a de ontem NÃO conta
+    expect(local.totalSalesCash).toBe(50);
+    expect(local.totalSalesPix).toBe(20);
+    expect(syncSpy).not.toHaveBeenCalled(); // reativo → não grava no cloud
+  });
+
+  it('deleteSale local recalcula e grava no cloud (ação original subtrai venda cancelada)', () => {
+    const org = (svc as any).getCurrentOrgId?.() || '';
+    const branchId = 'f3265a77-5946-5cd3-b09c-725ac4d26952'; // BRANCH_UUIDS["br-01"]
+    const caixaKey = `hd_system_caixa_session_${org}`;
+    localStorage.setItem(caixaKey, JSON.stringify({
+      id: 'caixa-1', status: 'open', storeBranchId: branchId, organizationId: org,
+      initialCash: 0, totalSalesCash: 0, totalSalesPix: 0, totalSalesCard: 0,
+      totalSalesCreditAccount: 0, suprimentos: 0, sangrias: 0, currentCashBalance: 0,
+      operatorName: 'Op', openedAt: '2026-01-01T00:00:00Z',
+    }));
+    const saleId = 's1';
+    const sales = [
+      { id: saleId, status: 'completed', storeBranchId: branchId, date: '2026-01-01T10:00:00Z', payments: [{ method: 'cash', amount: 100 }] },
+      { id: 's2', status: 'completed', storeBranchId: branchId, date: '2026-01-01T11:00:00Z', payments: [{ method: 'pix', amount: 64 }] },
+    ];
+    localStorage.setItem('hd_system_sales', JSON.stringify(sales));
+    (svc as any).getSelectedBranchId = () => branchId;
+    (svc as any).getRawBranchId = () => branchId;
+    const syncSpy = vi.spyOn(svc as any, 'syncCaixaSession').mockImplementation(() => {});
+    (svc as any).isSuperAdmin = () => false;
+
+    (svc as any).deleteSale(saleId);
+
+    const local = (svc as any).getActiveCaixaSession();
+    expect(local.totalSalesCash).toBe(0); // venda s1 (cash 100) removida
+    expect(local.totalSalesPix).toBe(64);
+    // Ação LOCAL → grava no cloud (sincroniza a subtração para os demais devices)
+    expect(syncSpy).toHaveBeenCalled();
   });
 });

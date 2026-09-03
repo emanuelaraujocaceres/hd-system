@@ -1599,12 +1599,22 @@ updateCategoryFromRemote(row: any) {
    * idempotent and cannot cause double-counting. Cloud is updated via
    * syncCaixaSession which does upsertRow with onConflict:'id'.
    */
-  private recalcAndSyncCaixa(): void {
+  private recalcAndSyncCaixa(syncToCloud = false): void {
     const session = this.getActiveCaixaSession();
     if (!session || session.status !== 'open') return;
 
-    const allSales = this.getSales();
-    const branchSales = allSales.filter((s) => s.status === 'completed');
+    // Janela temporal da sessão de caixa ABERTA: só as vendas completed que
+    // ocorreram DENTRO de [openedAt, closedAt]. Antes somava TODAS as vendas
+    // completed da filial (inclusive de dias anteriores), o que inflava os
+    // totais do caixa (ex.: caixa de hoje "puxava" vendas de ontem).
+    const sessionStart = session.openedAt ? new Date(session.openedAt).getTime() : 0;
+    const sessionEnd = session.closedAt ? new Date(session.closedAt).getTime() : Infinity;
+    const branchSales = this.getSales().filter((s) => {
+      if (s.status !== 'completed') return false;
+      const t = new Date(s.date).getTime();
+      if (Number.isNaN(t)) return false;
+      return t >= sessionStart && t <= sessionEnd;
+    });
 
     let totalCash = 0;
     let totalPix = 0;
@@ -1648,13 +1658,24 @@ updateCategoryFromRemote(row: any) {
       session.currentCashBalance =
         session.initialCash + session.totalSalesCash + session.suprimentos - session.sangrias;
       this.set(KEYS.CAIXA, session);
-      // Push recalculated absolute totals to cloud so other devices adopt
-      // the correct counters (fixes the dual-source-of-truth: cloud=109
-      // vs local-recalc=164 discrepancy).
-      this.syncCaixaSession(session);
-      console.log(
-        `[HD-Sync] 🔄 Caixa recalculated & synced from ${branchSales.length} sales: cash=R$${totalCash.toFixed(2)} pix=R$${totalPix.toFixed(2)} card=R$${totalCard.toFixed(2)}`,
-      );
+      this.notify();
+      // Grava no cloud APENAS quando é uma AÇÃO LOCAL (syncToCloud=true), ex.:
+      // cancelamento/remoção local de venda. Caminhos REATIVOS a Realtime
+      // (_updateCaixaFromSale, removeSaleFromRemote) atualizam somente o display
+      // local: se cada dispositivo regravar o total absoluto do SEU cache local
+      // no cloud, um sobrescreve o outro num loop (ping-pong do caixa — valores
+      // oscilando entre dispositivos). O cloud é a fonte da verdade e é mantido
+      // pelas ações originais (addSale / deleteSale / abrir-fechar caixa).
+      if (syncToCloud) {
+        this.syncCaixaSession(session);
+        console.log(
+          `[HD-Sync] 🔄 Caixa recalculated & synced from ${branchSales.length} sales (dentro da sessão): cash=R$${totalCash.toFixed(2)} pix=R$${totalPix.toFixed(2)} card=R$${totalCard.toFixed(2)}`,
+        );
+      } else {
+        console.log(
+          `[HD-Sync] 🔄 Caixa recalculado LOCAL (sem sobrescrever cloud): ${branchSales.length} sales da sessão — cash=R$${totalCash.toFixed(2)} pix=R$${totalPix.toFixed(2)} card=R$${totalCard.toFixed(2)}`,
+        );
+      }
     }
   }
 
@@ -3516,6 +3537,9 @@ id: StorageService.ensureUuid(settings.id),
     // servidor; re-adicionar a venda localmente sem re-deduzir causaria duplicação
     // de estoque. Por isso deleteSale (usado no fluxo de cancelamento) não empilha
     // undo — ao contrário de outras exclusões (ex.: produtos em InventoryView).
+    // Recalcula o caixa como AÇÃO LOCAL (grava no cloud): remover/cancelar uma venda
+    // deve subtrair o valor do caixa. Caminhos remotos usam recalc local-only.
+    this.recalcAndSyncCaixa(true);
   }
 
   /**
