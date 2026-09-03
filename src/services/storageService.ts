@@ -1483,6 +1483,21 @@ updateCategoryFromRemote(row: any) {
 
     const sales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
     const existing = sales.find((s) => s.id === row.id);
+
+    // TOMBSTONE (deleted_at, 20260902): venda apagada em outro device via
+    // soft-delete chega por Realtime como UPDATE com deleted_at. Em vez de
+    // atualizar (que faria a venda "voltar"), remove do estado local e recalcula
+    // o caixa, espelhando o que removeSaleFromRemote faz para DELETE físico.
+    if (row.deleted_at) {
+      const filtered = sales.filter((s) => s.id !== row.id);
+      if (filtered.length !== sales.length) {
+        this.set(KEYS.SALES, filtered);
+        this.notify();
+        this.recalcAndSyncCaixa();
+      }
+      return;
+    }
+
     console.log(`[HD-Sync] 🔄 updateSaleFromRemote: id=${row.id}, exists=${!!existing}, row.customer_name=${row.customer_name}, row.notes=${row.notes}`);
 
     // CONSIST-03 fix: capture a snapshot version to detect race conditions.
@@ -2543,7 +2558,15 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
       // ── SALES + SALE_ITEMS ────────────────────────────────────────
       {
         // Regra preventiva: descarta linhas inválidas antes de qualquer uso
-        const safeSales = asArray<any>(sales);
+        const rawSafeSales = asArray<any>(sales);
+        // TOMBSTONE de venda (deleted_at, 20260902): vendas apagadas (soft-delete)
+        // NÃO hidratam nem são re-contadas — nem como canceladas. Guardamos os ids
+        // deletados para também remover as vendas locais correspondentes e evitar
+        // que o merge as reenvie ao cloud (ressurreição multi-dispositivo).
+        const deletedSaleIds = new Set(
+          rawSafeSales.filter((r: any) => r.deleted_at).map((r: any) => r.id),
+        );
+        const safeSales = rawSafeSales.filter((r: any) => !r.deleted_at);
         const safeSaleItems = asArray<any>(saleItems);
         const salesKey = KEYS.SALES;
         const hasLocalSales = localStorage.getItem(salesKey) !== null
@@ -2592,7 +2615,12 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
           this.set(KEYS.SALES, cloudMapped);
         } else {
           // Normal merge: has real local data
-          const localSales = this.get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : []);
+          // Remove localmente as vendas que foram apagadas no cloud (deleted_at:
+          // tombstone), para o merge NÃO as reenviar ao cloud (ressurreição) nem
+          // mantê-las na tela.
+          const localSales = this
+            .get<Sale[]>(KEYS.SALES, this.isDefaultOrg() ? INITIAL_SALES : [])
+            .filter((s) => !deletedSaleIds.has(s.id));
           const localSalesById = new Map(localSales.map((s) => [s.id, s]));
           const cloudSaleIds = new Set(safeSales.map((r: any) => r.id));
 
@@ -3502,7 +3530,19 @@ id: StorageService.ensureUuid(settings.id),
     }
     const sales = allSales.filter((s) => s.id !== id);
     this.set(KEYS.SALES, sales);
-    syncService.deleteRow('sales', id);
+    // TOMBSTONE (deleted_at, 20260902): SOFT-DELETE sincronizado. Em vez de
+    // DELETE físico (syncService.deleteRow), marca deleted_at=now() no cloud.
+    // O Realtime propaga o UPDATE para todos os devices e a hidratação/relatório
+    // ignoram vendas com deleted_at, impedindo a "ressurreição" multi-dispositivo.
+    // Escopo por org+filial (derivados da venda) p/ respeitar a RLS.
+    const saleBranch = saleToDelete?.storeBranchId || this.getSelectedBranchId();
+    const saleOrg = this.orgIdForBranch(saleBranch, saleToDelete?.organizationId || this.getCurrentOrgId());
+    syncService.upsertRow('sales', {
+      id,
+      organization_id: saleOrg,
+      store_branch_id: saleBranch,
+      deleted_at: new Date().toISOString(),
+    });
     // Venda fiado excluída → remover a conta a receber vinculada (mesmo id)
     const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
     const linked = accounts.find((a) => a.id === id && a.type === 'receivable' && (a.title || '').startsWith('Fiado'));

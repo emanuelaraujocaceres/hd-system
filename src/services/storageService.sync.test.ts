@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StorageService } from './storageService';
+import { syncService } from './syncService';
 
 describe('storageService — consistência de mappers de sync (blindagem)', () => {
   let svc: StorageService;
@@ -478,5 +479,64 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     expect(local.totalSalesPix).toBe(64);
     // Ação LOCAL → grava no cloud (sincroniza a subtração para os demais devices)
     expect(syncSpy).toHaveBeenCalled();
+  });
+
+  // ─── TOMBSTONE DE VENDA (deleted_at, 20260902) ────────────────────────
+  // Exclusão sincronizada: venda cancelada marca deleted_at no cloud em vez de
+  // DELETE físico, e nenhum device deve "ressuscitá-la" (re-hidratar/re-enviar).
+
+  it('deleteSale faz SOFT-DELETE (upsert com deleted_at) em vez de DELETE físico', async () => {
+    const branchId = 'f3265a77-5946-5cd3-b09c-725ac4d26952'; // BRANCH_UUIDS["br-01"]
+    const saleId = 's1';
+    localStorage.setItem('hd_system_sales', JSON.stringify([
+      { id: saleId, status: 'completed', storeBranchId: branchId, date: '2026-01-01T10:00:00Z', payments: [{ method: 'cash', amount: 100 }] },
+    ]));
+    (svc as any).getSelectedBranchId = () => branchId;
+    (svc as any).getRawBranchId = () => branchId;
+    (svc as any).isSuperAdmin = () => false;
+    (svc as any).syncCaixaSession = () => {};
+    const syncUpsert = vi.spyOn(syncService, 'upsertRow').mockResolvedValue(true);
+    const syncDelete = vi.spyOn(syncService, 'deleteRow').mockResolvedValue(true);
+
+    (svc as any).deleteSale(saleId);
+    await Promise.resolve();
+
+    // Deve gravar um upsert setando deleted_at (soft-delete), NUNCA um DELETE físico
+    const call = syncUpsert.mock.calls.find((c) => c[0] === 'sales');
+    expect(call).toBeTruthy();
+    expect((call as any)[1].id).toBe(saleId);
+    expect((call as any)[1].deleted_at).toBeTruthy();
+    expect(syncDelete).not.toHaveBeenCalled();
+    syncUpsert.mockRestore();
+    syncDelete.mockRestore();
+  });
+
+  it('updateSaleFromRemote com payload deleted_at REMOVE a venda local (não ressuscita)', () => {
+    const branchId = 'f3265a77-5946-5cd3-b09c-725ac4d26952'; // BRANCH_UUIDS["br-01"]
+    const org = (svc as any).getCurrentOrgId?.() || '';
+    (svc as any).getSelectedBranchId = () => branchId;
+    (svc as any).getRawBranchId = () => branchId;
+    (svc as any).isRemoteFromCurrentBranch = () => true;
+    (svc as any).isSuperAdmin = () => true; // não bloqueia remoção
+    localStorage.setItem('hd_system_sales', JSON.stringify([
+      { id: 's1', status: 'completed', storeBranchId: branchId, date: '2026-01-01T10:00:00Z', payments: [{ method: 'cash', amount: 100 }] },
+      { id: 's2', status: 'completed', storeBranchId: branchId, date: '2026-01-01T11:00:00Z', payments: [{ method: 'pix', amount: 64 }] },
+    ]));
+    localStorage.setItem(`hd_system_caixa_session_${org}`, JSON.stringify({
+      id: 'caixa-1', status: 'open', storeBranchId: branchId, organizationId: org,
+      initialCash: 0, totalSalesCash: 100, totalSalesPix: 64, totalSalesCard: 0,
+      totalSalesCreditAccount: 0, suprimentos: 0, sangrias: 0, currentCashBalance: 100,
+      operatorName: 'Op', openedAt: '2026-01-01T00:00:00Z',
+    }));
+    const recalcSpy = vi.spyOn(svc as any, 'recalcAndSyncCaixa').mockImplementation(() => {});
+    (svc as any).getCustomerSessions = () => [];
+
+    // UPDATE remoto trazendo deleted_at (soft-delete de outro device)
+    (svc as any).updateSaleFromRemote({ id: 's1', store_branch_id: branchId, deleted_at: '2026-01-02T00:00:00Z' });
+
+    const sales = JSON.parse(localStorage.getItem('hd_system_sales') || '[]');
+    expect(sales.find((s: any) => s.id === 's1')).toBeUndefined(); // removida
+    expect(sales.find((s: any) => s.id === 's2')).toBeTruthy();    // preservada
+    recalcSpy.mockRestore();
   });
 });

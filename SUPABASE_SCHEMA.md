@@ -400,6 +400,7 @@ Vendas realizadas.
 | notes | TEXT | YES | | Observacoes |
 | created_at | TIMESTAMPTZ | YES | | |
 | updated_at | TIMESTAMPTZ | YES | | |
+| deleted_at | TIMESTAMPTZ | YES | | Tombstone (soft delete) — venda apagada/cancelada; hidratacao e relatorio ignoram (20260902) |
 
 RLS: superadmin_all_sales[ALL], org_branch_insert_sales[INSERT], org_branch_update_sales[UPDATE], org_branch_delete_sales[DELETE], org_branch_select_sales[SELECT], sales_select_authenticated[SELECT], sales_insert_anon[INSERT] (WITH CHECK true - 0f), sales_select_anon[SELECT] (escopo por x-branch-id - 0f)
 Realtime: publicada - REPLICA: full
@@ -1181,7 +1182,7 @@ Realtime: publicada - REPLICA: full
 ## Views
 
 ### vw_report_sale_items
-Relatorio de itens de venda (join de sales + sale_items + products + customers + operador).
+Relatorio de itens de venda (join de sales + sale_items + products + customers + operador). Filtra `sales.deleted_at IS NULL` (vendas apagadas/canceladas com tombstone nao sao contabilizadas — 20260902).
 
 | Coluna | Tipo | Descricao |
 |--------|------|-----------|
