@@ -335,10 +335,9 @@ export const CaixaModal: React.FC<CaixaModalProps> = ({
                     </p>
                   </div>
 
-                  {/* Breakdown List - ADMIN ONLY */}
-                  {isAdmin && (
+                  {/* Breakdown List */}
+                  {(
                     <div className="space-y-2 text-xs">
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">Visível apenas para administradores</p>
                       <div className="flex justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300">
                         <span>(+) Fundo Inicial (Troco)</span>
                         <span className="font-bold">R$ {caixaSession.initialCash.toFixed(2)}</span>
