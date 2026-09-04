@@ -20,6 +20,7 @@ import { useToast } from '../shared/Toast';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { usePagination } from '../../hooks/usePagination';
 import { Pagination } from '../shared/Pagination';
+import { DateTimeRangeFilter } from '../shared/DateTimeRangeFilter';
 
 interface SalesHistoryViewProps {
   sales: Sale[];
@@ -39,8 +40,10 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
   user,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  // Filtro de Data/Hora: padrão = hoje (00:00 → 23:59 local), como no Dashboard.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [dateFrom, setDateFrom] = useState<string>(`${todayStr}T00:00`);
+  const [dateTo, setDateTo] = useState<string>(`${todayStr}T23:59`);
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
   const { addToast } = useToast();
 
@@ -64,14 +67,15 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
         if (!matchesCode && !matchesCustomer && !matchesDate) return false;
       }
 
-      // Date range filter
+      // Date range filter (data+hora): compara pelo instante exato.
+      const saleTs = new Date(sale.date).getTime();
       if (dateFrom) {
-        const saleDate = new Date(sale.date).toISOString().slice(0, 10);
-        if (saleDate < dateFrom) return false;
+        const fromTs = new Date(dateFrom).getTime();
+        if (!Number.isNaN(fromTs) && saleTs < fromTs) return false;
       }
       if (dateTo) {
-        const saleDate = new Date(sale.date).toISOString().slice(0, 10);
-        if (saleDate > dateTo) return false;
+        const toTs = new Date(dateTo).getTime();
+        if (!Number.isNaN(toTs) && saleTs > toTs) return false;
       }
 
       return true;
@@ -140,20 +144,13 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-slate-400 dark:text-[#71717a]" />
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="px-3 py-2.5 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            title="Data inicial"
-          />
-          <span className="text-xs text-slate-400 dark:text-[#52525b]">até</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="px-3 py-2.5 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] text-xs font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            title="Data final"
+          <DateTimeRangeFilter
+            startDate={dateFrom}
+            endDate={dateTo}
+            onStartChange={setDateFrom}
+            onEndChange={setDateTo}
+            labelStart="De"
+            labelEnd="Até"
           />
         </div>
       </div>
