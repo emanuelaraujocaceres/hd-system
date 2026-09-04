@@ -35,7 +35,9 @@ import { useToast } from '../shared/Toast';
 import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
-import { calculateFinanceSummary, type FinancePeriod } from '../../lib/financeSummary';
+import { DateTimeRangeFilter } from '../shared/DateTimeRangeFilter';
+import { calculateFinanceSummary } from '../../lib/financeSummary';
+import { isSaleInRange } from '../../utils/dateFilters';
 
 import { ReportModal } from './ReportModal';
 
@@ -55,7 +57,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   onNavigateTab,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'contas' | 'dre'>('contas');
-  const [summaryPeriod, setSummaryPeriod] = useState<FinancePeriod>('day');
+  // Filtro de Data/Hora: padrão = hoje (00:00 → 23:59 local), consistente com Dashboard e Vendas Realizadas.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [dateFrom, setDateFrom] = useState<string>(`${todayStr}T00:00`);
+  const [dateTo, setDateTo] = useState<string>(`${todayStr}T23:59`);
   const [filterType, setFilterType] = useState<'all' | 'payable' | 'receivable'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
@@ -396,11 +401,11 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
   // Filial selecionada para filtragem
   const selectedBranchId = storageService.getSelectedBranchId();
-  const financeSummary = calculateFinanceSummary(sales, products, selectedBranchId, summaryPeriod);
+  const financeSummary = calculateFinanceSummary(sales, products, selectedBranchId, undefined, undefined, { from: dateFrom, to: dateTo });
 
-  // Filtrar vendas APENAS da filial selecionada E status completed
+  // Filtrar vendas APENAS da filial selecionada E status completed E período
   const filteredSales = sales.filter((s) => 
-    s.status === 'completed' && s.storeBranchId === selectedBranchId
+    s.status === 'completed' && s.storeBranchId === selectedBranchId && isSaleInRange(s.date, dateFrom, dateTo)
   );
 
   // Diagnóstico temporário (auge do bug "vendas não aparecem no Financeiro"):
@@ -1072,15 +1077,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Resumo de Vendas</h3>
-                <p className="text-xs text-slate-500 dark:text-[#71717a]">Vendas concluídas desta filial, sem estimativas de imposto ou despesas.</p>
+                <p className="text-xs text-slate-500 dark:text-[#71717a]">Vendas concluídas desta filial no período selecionado.</p>
               </div>
-              <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 gap-1">
-                {([{ value: 'day', label: 'Hoje' }, { value: 'week', label: 'Semana' }, { value: 'month', label: 'Mês' }] as const).map((option) => (
-                  <button key={option.value} onClick={() => setSummaryPeriod(option.value)} className={`px-3 py-2 rounded-lg text-xs font-bold min-h-[36px] ${summaryPeriod === option.value ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-sm' : 'text-slate-600 dark:text-slate-400'}`}>
-                    {option.label}
-                  </button>
-                ))}
-              </div>
+              <DateTimeRangeFilter
+                startDate={dateFrom}
+                endDate={dateTo}
+                onStartChange={setDateFrom}
+                onEndChange={setDateTo}
+                labelStart="De"
+                labelEnd="Até"
+              />
             </div>
           </div>
 
