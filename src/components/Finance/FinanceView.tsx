@@ -37,7 +37,7 @@ import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { DateTimeRangeFilter } from '../shared/DateTimeRangeFilter';
 import { calculateFinanceSummary } from '../../lib/financeSummary';
-import { isSaleInRange } from '../../utils/dateFilters';
+import { isSaleInRange, isAccountInDateRange } from '../../utils/dateFilters';
 
 import { ReportModal } from './ReportModal';
 
@@ -477,6 +477,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     if (a.category === 'fiado' || a.category === 'fiado_payment') return false;
     // Agora só mostra contas a pagar
     if (a.type !== 'payable') return false;
+    // Filtro de data/hora — por data de vencimento da conta/parcela/ocorrência
+    if (!isAccountInDateRange(a, dateFrom, dateTo)) return false;
     // Campo de pesquisa
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
@@ -546,6 +548,24 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             <span>Lançar Conta</span>
           </button>
         </div>
+        </div>
+      </div>
+
+      {/* FILTRO NO TOPO — visível em todas as sub-tabs */}
+      <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl p-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Período</h3>
+            <p className="text-xs text-slate-500 dark:text-[#71717a]">Filtra vendas, DRE e contas a pagar por data de vencimento.</p>
+          </div>
+          <DateTimeRangeFilter
+            startDate={dateFrom}
+            endDate={dateTo}
+            onStartChange={setDateFrom}
+            onEndChange={setDateTo}
+            labelStart="De"
+            labelEnd="Até"
+          />
         </div>
       </div>
 
@@ -1074,20 +1094,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       {activeSubTab === 'dre' && (
         <div className="max-w-3xl mx-auto space-y-4">
           <div className="p-4 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Resumo de Vendas</h3>
-                <p className="text-xs text-slate-500 dark:text-[#71717a]">Vendas concluídas desta filial no período selecionado.</p>
-              </div>
-              <DateTimeRangeFilter
-                startDate={dateFrom}
-                endDate={dateTo}
-                onStartChange={setDateFrom}
-                onEndChange={setDateTo}
-                labelStart="De"
-                labelEnd="Até"
-              />
-            </div>
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Resumo de Vendas</h3>
+              <p className="text-xs text-slate-500 dark:text-[#71717a]">Vendas concluídas desta filial no período selecionado.</p>
           </div>
 
           <button onClick={() => onNavigateTab('sales-history')} className="w-full text-left p-5 rounded-2xl bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 transition-colors">
