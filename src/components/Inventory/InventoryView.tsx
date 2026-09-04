@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { PermissionEngine } from '../../lib/iam';
 import { useDebounce } from '../../hooks/useDebounce';
 import {
@@ -23,6 +23,8 @@ import {
   RefreshCw,
   Tv,
   UtensilsCrossed,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react';
 import { Product, Category, Supplier, StockMovement, UserProfile, SystemSettings, WholesaleOption } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -691,14 +693,32 @@ minStock: parseInt(formMinStock) || 0,
   });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
-    let aVal: any = a[sortField as keyof Product];
-    let bVal: any = b[sortField as keyof Product];
+    // 'margin' é um campo calculado, não existe direto no Product
+    let aVal: any = sortField === 'margin'
+      ? (a.salePrice > 0 ? ((a.salePrice - a.costPrice) / a.salePrice) * 100 : -Infinity)
+      : a[sortField as keyof Product];
+    let bVal: any = sortField === 'margin'
+      ? (b.salePrice > 0 ? ((b.salePrice - b.costPrice) / b.salePrice) * 100 : -Infinity)
+      : b[sortField as keyof Product];
     if (typeof aVal === 'string') aVal = aVal.toLowerCase();
     if (typeof bVal === 'string') bVal = bVal.toLowerCase();
     if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
     if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
     return 0;
   });
+
+  // Resumo de margens para os indicadores visuais no topo
+  const marginSummary = useMemo(() => {
+    let healthy = 0;
+    let low = 0;
+    for (const p of products) {
+      if (p.salePrice <= 0) continue;
+      const margin = ((p.salePrice - p.costPrice) / p.salePrice) * 100;
+      if (margin >= 20) healthy++;
+      else if (margin >= 0) low++;
+    }
+    return { healthy, low };
+  }, [products]);
 
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
@@ -809,6 +829,30 @@ minStock: parseInt(formMinStock) || 0,
           </div>
         );
       })()}
+
+      {/* Resumo de Margens */}
+      {(marginSummary.healthy > 0 || marginSummary.low > 0) && (
+        <div className="flex flex-wrap gap-3">
+          <div className="flex-1 min-w-[200px] p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-lg font-black text-emerald-700 dark:text-emerald-400">{marginSummary.healthy}</p>
+              <p className="text-[10px] font-bold text-emerald-600/80 dark:text-emerald-400/70">Margem Saudável (&ge; 20%)</p>
+            </div>
+          </div>
+          <div className="flex-1 min-w-[200px] p-4 rounded-2xl bg-rose-50 dark:bg-rose-500/5 border border-rose-200 dark:border-rose-500/20 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-500/20 flex items-center justify-center">
+              <TrendingDown className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+            </div>
+            <div>
+              <p className="text-lg font-black text-rose-700 dark:text-rose-400">{marginSummary.low}</p>
+              <p className="text-[10px] font-bold text-rose-600/80 dark:text-rose-400/70">Margem Baixa (&lt; 20%)</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filter & Search Bar */}
       <div className="p-4 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm space-y-3">
@@ -978,7 +1022,12 @@ minStock: parseInt(formMinStock) || 0,
                     {sortField === 'salePrice' && <span className="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
                   </div>
                 </th>
-                <th className="py-3.5 px-4 hidden md:table-cell">Margem %</th>
+                <th className="py-3.5 px-4 hidden md:table-cell cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" onClick={() => handleSort('margin')}>
+                  <div className="flex items-center gap-1">
+                    Margem %
+                    {sortField === 'margin' && <span className="text-[9px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+                  </div>
+                </th>
                 <th className="py-3.5 px-4 cursor-pointer select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" onClick={() => handleSort('currentStock')}>
                   <div className="flex items-center gap-1">
                     Estoque
