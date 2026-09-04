@@ -82,6 +82,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
+  const [marginFilter, setMarginFilter] = useState<'all' | 'healthy' | 'low'>('all');
   const [quickFilter, setQuickFilter] = useState<'all' | 'cardapio' | 'tv'>('all');
   const [isSearching, setIsSearching] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
@@ -684,12 +685,20 @@ minStock: parseInt(formMinStock) || 0,
     if (stockFilter === 'low') matchesStock = p.currentStock <= p.minStock && p.currentStock > 0;
     if (stockFilter === 'out') matchesStock = p.currentStock === 0;
 
+    // Filtro por margem (mesma régua dos indicadores no topo)
+    let matchesMargin = true;
+    if (marginFilter !== 'all') {
+      const margin = p.salePrice > 0 ? ((p.salePrice - p.costPrice) / p.salePrice) * 100 : -Infinity;
+      if (marginFilter === 'healthy') matchesMargin = margin >= 20;
+      if (marginFilter === 'low') matchesMargin = margin >= 0 && margin < 20;
+    }
+
     // Quick filter: Cardápio / TV
     let matchesQuick = true;
     if (quickFilter === 'cardapio') matchesQuick = p.showOnCardapio === true;
     if (quickFilter === 'tv') matchesQuick = p.showOnTV === true;
 
-    return matchesCategory && matchesSearch && matchesStock && matchesQuick;
+    return matchesCategory && matchesSearch && matchesStock && matchesMargin && matchesQuick;
   });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
@@ -831,9 +840,14 @@ minStock: parseInt(formMinStock) || 0,
       })()}
 
       {/* Resumo de Margens */}
-      {(marginSummary.healthy > 0 || marginSummary.low > 0) && (
+{(marginSummary.healthy > 0 || marginSummary.low > 0) && (
         <div className="flex flex-wrap gap-3">
-          <div className="flex-1 min-w-[200px] p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 flex items-center gap-3">
+          <div
+            className={`flex-1 min-w-[200px] p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-500/5 border border-emerald-200 dark:border-emerald-500/20 flex items-center gap-3 ${
+              marginFilter === 'healthy' ? 'ring-2 ring-emerald-500/50' : ''
+            }`}
+            onClick={() => setMarginFilter((prev) => prev === 'healthy' ? 'all' : 'healthy')}
+          >
             <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
               <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             </div>
@@ -842,13 +856,18 @@ minStock: parseInt(formMinStock) || 0,
               <p className="text-[10px] font-bold text-emerald-600/80 dark:text-emerald-400/70">Margem Saudável (&ge; 20%)</p>
             </div>
           </div>
-          <div className="flex-1 min-w-[200px] p-4 rounded-2xl bg-rose-50 dark:bg-rose-500/5 border border-rose-200 dark:border-rose-500/20 flex items-center gap-3">
+          <div
+            className={`flex-1 min-w-[200px] p-4 rounded-2xl bg-rose-50 dark:bg-rose-500/5 border border-rose-200 dark:border-rose-500/20 flex items-center gap-3 ${
+              marginFilter === 'low' ? 'ring-2 ring-rose-500/50' : ''
+            }`}
+            onClick={() => setMarginFilter((prev) => prev === 'low' ? 'all' : 'low')}
+          >
             <div className="w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-500/20 flex items-center justify-center">
               <TrendingDown className="w-4 h-4 text-rose-600 dark:text-rose-400" />
             </div>
             <div>
               <p className="text-lg font-black text-rose-700 dark:text-rose-400">{marginSummary.low}</p>
-              <p className="text-[10px] font-bold text-rose-600/80 dark:text-rose-400/70">Margem Baixa (&lt; 20%)</p>
+              <p className="text-[10px] font-bold text-rose-600/80 dark:text-rose-400/70">Margem Baixa (abaixo de 20%)</p>
             </div>
           </div>
         </div>
@@ -960,6 +979,32 @@ minStock: parseInt(formMinStock) || 0,
             className="px-3 py-1.5 rounded-lg bg-slate-500 text-white text-[10px] font-bold"
           >
             Remover do Cardápio
+          </button>
+          <button
+            onClick={async () => {
+              for (const id of selectedProducts) {
+                const product = products.find((p) => p.id === id);
+                if (product) await storageService.saveProduct({ ...product, showOnTV: true });
+              }
+              setSelectedProducts(new Set());
+              addToast('success', `${selectedProducts.size} produto(s) ativado(s) na TV`);
+            }}
+            className="px-3 py-1.5 rounded-lg bg-indigo-500 text-white text-[10px] font-bold"
+          >
+            Exibir na TV
+          </button>
+          <button
+            onClick={async () => {
+              for (const id of selectedProducts) {
+                const product = products.find((p) => p.id === id);
+                if (product) await storageService.saveProduct({ ...product, showOnTV: false });
+              }
+              setSelectedProducts(new Set());
+              addToast('info', `${selectedProducts.size} produto(s) removido(s) da TV`);
+            }}
+            className="px-3 py-1.5 rounded-lg bg-slate-500 text-white text-[10px] font-bold"
+          >
+            Remover da TV
           </button>
           <button
             onClick={() => setSelectedProducts(new Set())}

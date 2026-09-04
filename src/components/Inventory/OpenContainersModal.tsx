@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Wine, X, Clock, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Minus, Trash2, Wine, X, Clock, Package, AlertTriangle } from 'lucide-react';
 import { Product, OpenContainer, UserProfile } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
@@ -14,15 +14,6 @@ interface OpenContainersModalProps {
   onClose: () => void;
 }
 
-/**
- * Contêineres Abertos (garrafas fracionadas / doses disponíveis).
- *
- * Lista as garrafas abertas de produtos fragmentáveis (is_fragmentable) e as
- * doses restantes (open_containers.remaining_quantity). As baixas de doses ao
- * vender uma fração são feitas pela RPC process_single_item (server-side,
- * atômico). Esta UI permite ABRIR uma garrafa manualmente (baixa 1 do estoque
- * da garrafa mãe + cria o contêiner) e DESCARTAR/fechar um contêiner.
- */
 export const OpenContainersModal: React.FC<OpenContainersModalProps> = ({
   isOpen,
   products,
@@ -50,9 +41,33 @@ export const OpenContainersModal: React.FC<OpenContainersModalProps> = ({
     setSelectedGarrafaId((prev) => frags.some((f) => f.id === prev) ? prev : (frags[0]?.id || ''));
   };
 
-  if (!isOpen) return null;
-
   const productName = (id: string) => products.find((p) => p.id === id)?.name || 'Produto removido';
+
+  // Ajusta remainingQuantity de um container aberto e, se chegar a 0,
+  // decrementa o currentStock da garrafa mãe e marca o container como 'empty'.
+  const adjustDoses = async (garrafa: Product, delta: number) => {
+    const open = containers.filter((c) => c.status === 'open' && c.productId === garrafa.id);
+    if (open.length > 0) {
+      const oc = open[0];
+      const nextRemaining = Math.max(0, oc.remainingQuantity + delta);
+      // Atualiza o container no localStorage + sync
+      const updatedOc: OpenContainer = {
+        ...oc,
+        remainingQuantity: nextRemaining,
+        status: nextRemaining <= 0 ? 'empty' : 'open',
+      };
+      storageService.saveOpenContainer(updatedOc);
+      posAudio.chime();
+      // Se chegou a 0, decrementa o stock da garrafa mãe
+      if (nextRemaining === 0) {
+        await storageService.updateStock(garrafa.id, -1, 'Dose finalizada - container fechado', user.name || 'Sistema');
+        success(`Garrafa "${garrafa.name}" fechada (doses acabaram).`);
+      } else {
+        success(`Quantidade de doses atualizada para ${nextRemaining}.`);
+      }
+    }
+    load();
+  };
 
   const handleOpenGarrafa = async () => {
     const garrafa = fragmentables.find((f) => f.id === selectedGarrafaId);
@@ -69,11 +84,10 @@ export const OpenContainersModal: React.FC<OpenContainersModalProps> = ({
       return;
     }
 
-    // 1) Baixa 1 garrafa do estoque (mesmo fluxo do ajuste de estoque: cria
-    //    movimentação server-side via ajustar_estoque + feedback local)
+    // 1) Baixa 1 garrafa do estoque
     await storageService.updateStock(garrafa.id, -1, 'Abertura manual de garrafa', user.name || 'Sistema');
 
-    // 2) Cria o contêiner aberto com o rendimento total da garrafa
+    // 2) Cria o contêiner aberto com o rendimento total
     const container: OpenContainer = {
       id: `oc-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       productId: garrafa.id,
@@ -96,6 +110,12 @@ export const OpenContainersModal: React.FC<OpenContainersModalProps> = ({
     setDiscarding(null);
     load();
   };
+
+  useEffect(() => {
+    if (isOpen) load();
+  }, [isOpen]);
+
+  if (!isOpen) return null;
 
   const open = containers.filter((c) => c.status === 'open');
   const empty = containers.filter((c) => c.status !== 'open');
@@ -162,56 +182,73 @@ export const OpenContainersModal: React.FC<OpenContainersModalProps> = ({
             </div>
           )}
 
-          {/* Lista */}
-          {containers.length === 0 ? (
+          {/* Ajuste de doses por garrafa */}
+          {fragmentables.length > 0 && (
+            <div className="space-y-3">
+              {fragmentables.map((f) => {
+                const openContainer = containers.find((c) => c.productId === f.id && c.status === 'open');
+                const currentRemaining = openContainer ? openContainer.remainingQuantity : 0;
+
+                return (
+                  <div
+                    key={f.id}
+                    className="bg-white dark:bg-slate-900 rounded-xl p-4 shadow-sm border border-slate-200 dark:border-[#27272a]"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-slate-900 dark:text-white">
+                          {f.name} ({f.currentStock} garrafas em estoque)
+                        </p>
+                        <p className="text-[10px] text-slate-400 dark:text-[#52525b]">
+                          Doses restantes: {currentRemaining} de {f.yield_count}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {currentRemaining > 0 && (
+                          <button
+                            onClick={() => adjustDoses(f, -1)}
+                            className="px-2 py-1 rounded-bg bg-amber-50 text-amber-700 text-[10px] font-bold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors shadow-sm"
+                            title="Remover 1 dose"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                        )}
+                        {currentRemaining < f.yield_count && (
+                          <button
+                            onClick={() => adjustDoses(f, 1)}
+                            className="px-2 py-1 rounded-bg bg-emerald-50 text-emerald-600 text-[10px] font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors shadow-sm"
+                            title="Adicionar 1 dose"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        )}
+                        {canCreateEdit && (
+                          <button
+                            onClick={() => setDiscarding(openContainer)}
+                            className="p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-500 transition-all"
+                            title="Descartar contêiner"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Estado vazio */}
+          {containers.length === 0 && (
             <div className="text-center py-8 text-slate-400 dark:text-[#52525b]">
               <Wine className="w-8 h-8 mx-auto mb-2 opacity-40" />
               <p className="text-xs">Nenhum contêiner aberto. Abra uma garrafa para começar.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {containers.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 dark:border-[#27272a] bg-white dark:bg-slate-900"
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                      {productName(c.productId)}
-                    </p>
-                    <p className="text-[10px] text-slate-400 dark:text-[#52525b] flex items-center gap-1 mt-0.5">
-                      <Clock className="w-3 h-3" />
-                      Aberta em {new Date(c.openedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                      {' · '}
-                      {c.status === 'open' ? 'aberta' : c.status === 'empty' ? 'esgotada' : 'descartada'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    {c.status === 'open' ? (
-                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                        {c.remainingQuantity} dose(s)
-                      </span>
-                    ) : (
-                      <AlertTriangle className="w-4 h-4 text-slate-400" />
-                    )}
-                    {canCreateEdit && c.status === 'open' && (
-                      <button
-                        onClick={() => setDiscarding(c)}
-                        className="p-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-950/30 text-slate-400 hover:text-red-500 transition-all"
-                        title="Descartar contêiner"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
             </div>
           )}
         </div>
       </div>
       </div>
-
       <ConfirmDialog
         isOpen={!!discarding}
         title="Descartar contêiner?"
