@@ -2,6 +2,12 @@ import type { Product, Sale } from '../types';
 
 export type FinancePeriod = 'day' | 'week' | 'month';
 
+/** Range de datas opcional (datetime-local). Quando fornecido, sobrepõe `period`. */
+export interface DateRange {
+  from: string; // "YYYY-MM-DDTHH:mm" ou ""
+  to: string;
+}
+
 export interface ProductProfitLine {
   productId: string;
   productName: string;
@@ -35,12 +41,23 @@ export function calculateFinanceSummary(
   sales: Sale[],
   products: Product[],
   branchId: string,
-  period: FinancePeriod,
+  period: FinancePeriod = 'day',
   reference = new Date(),
+  dateRange?: DateRange,
 ): FinanceSummary {
-  const start = startOfPeriod(period, reference);
-  const end = new Date(reference);
-  end.setHours(23, 59, 59, 999);
+  let start: Date;
+  let end: Date;
+  if (dateRange) {
+    // dateRange fornecido: usa os limites diretamente (comparação por instante,
+    // robusta a fuso — datetime-local vs ISO UTC).
+    // Limite vazio = aberto: from vazio → sem piso; to vazio → sem teto.
+    start = dateRange.from ? new Date(dateRange.from) : new Date(0);
+    end = dateRange.to ? new Date(dateRange.to) : new Date('2099-12-31T23:59:59');
+  } else {
+    start = startOfPeriod(period, reference);
+    end = new Date(reference);
+    end.setHours(23, 59, 59, 999);
+  }
   const productsById = new Map(products.map((product) => [product.id, product]));
   const result: FinanceSummary = {
     salesCount: 0, total: 0, cash: 0, pix: 0, creditCard: 0, debitCard: 0,
