@@ -19,6 +19,7 @@ import { storageService } from '../../services/storageService';
 import { CollaboratorPerformance } from './CollaboratorPerformance';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { DateTimeRangeFilter } from '../shared/DateTimeRangeFilter';
+import { isSaleInRange } from '../../utils/dateFilters';
 import { useToast } from '../shared/Toast';
 
 import { posAudio } from '../../services/audioService';
@@ -176,16 +177,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const periodSales = useMemo(() => {
     return sales.filter((s) => {
       if (s.status !== 'completed') return false;
-      const saleTs = new Date(s.date).getTime();
-      if (dateFrom) {
-        const fromTs = new Date(dateFrom).getTime();
-        if (!Number.isNaN(fromTs) && saleTs < fromTs) return false;
-      }
-      if (dateTo) {
-        const toTs = new Date(dateTo).getTime();
-        if (!Number.isNaN(toTs) && saleTs > toTs) return false;
-      }
-      return true;
+      return isSaleInRange(s.date, dateFrom, dateTo);
     });
   }, [sales, dateFrom, dateTo]);
 

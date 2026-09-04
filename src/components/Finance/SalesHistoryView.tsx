@@ -21,6 +21,7 @@ import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { usePagination } from '../../hooks/usePagination';
 import { Pagination } from '../shared/Pagination';
 import { DateTimeRangeFilter } from '../shared/DateTimeRangeFilter';
+import { isSaleInRange } from '../../utils/dateFilters';
 
 interface SalesHistoryViewProps {
   sales: Sale[];
@@ -68,17 +69,7 @@ export const SalesHistoryView: React.FC<SalesHistoryViewProps> = ({
       }
 
       // Date range filter (data+hora): compara pelo instante exato.
-      const saleTs = new Date(sale.date).getTime();
-      if (dateFrom) {
-        const fromTs = new Date(dateFrom).getTime();
-        if (!Number.isNaN(fromTs) && saleTs < fromTs) return false;
-      }
-      if (dateTo) {
-        const toTs = new Date(dateTo).getTime();
-        if (!Number.isNaN(toTs) && saleTs > toTs) return false;
-      }
-
-      return true;
+      return isSaleInRange(sale.date, dateFrom, dateTo);
     });
   }, [sales, searchQuery, dateFrom, dateTo]);
 
