@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Skeleton, TableSkeleton } from '../shared/Skeleton';
 import {
-  ShoppingCart,
   AlertTriangle,
   Package,
   ArrowUpRight,
   Trash2,
   ChevronDown,
   ChevronUp,
-  Users,
   TrendingUp,
   PieChart,
   CreditCard,
@@ -16,10 +14,11 @@ import {
   Clock,
   Flame,
 } from 'lucide-react';
-import { Product, ProductLot, Sale, UserProfile, FinancialAccount, CashRegisterSession, Category } from '../../types';
+import { Product, ProductLot, Sale, UserProfile, FinancialAccount } from '../../types';
 import { storageService } from '../../services/storageService';
 import { CollaboratorPerformance } from './CollaboratorPerformance';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { DateTimeRangeFilter } from '../shared/DateTimeRangeFilter';
 import { useToast } from '../shared/Toast';
 
 import { posAudio } from '../../services/audioService';
@@ -34,65 +33,39 @@ async function reprintSaleReceipt(sale: Sale) {
   } catch { /* silencioso */ }
 }
 
-type PeriodFilter = 'today' | 'week' | 'month';
-
 interface DashboardViewProps {
   sales: Sale[];
   products: Product[];
-  categories: Category[];
   user: UserProfile;
   financialAccounts: FinancialAccount[];
-  caixaSession: CashRegisterSession;
   onNavigateTab: (tab: string) => void;
-  onOpenCaixaModal: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   sales,
   products,
-  categories,
   user,
   financialAccounts,
-  caixaSession,
   onNavigateTab,
-  onOpenCaixaModal,
 }) => {
   const isAdmin = user.role === 'admin' || !!user.superadmin;
   const [expandedSaleId, setExpandedSaleId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [period, setPeriod] = useState<PeriodFilter>('today');
+  const todayStr = new Date().toISOString().slice(0, 10);
+  // Filtro temporal de faturamento: Data/Hora Inicial e Final escolhidas pelo
+  // usuário. Padrão = hoje (00:00 → 23:59 local), como no histórico de vendas.
+  const todayStart = `${todayStr}T00:00`;
+  const todayEnd = `${todayStr}T23:59`;
+  const [dateFrom, setDateFrom] = useState<string>(todayStart);
+  const [dateTo, setDateTo] = useState<string>(todayEnd);
   const [confirmDeleteSale, setConfirmDeleteSale] = useState<Sale | null>(null);
   const { addToast } = useToast();
-
-  // Calculate today vs yesterday sales for Day Summary
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todayStart = new Date(todayStr);
-  const yesterdayStart = new Date(todayStart);
-  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-
-  const todaySales = sales.filter((s) => s.date.slice(0, 10) === todayStr);
 
   const getSaleTotal = (s: Sale) => {
     if (s.total > 0) return s.total;
     const itemsTotal = s.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
     return itemsTotal;
   };
-
-  const todayRevenue = todaySales.reduce((acc, s) => acc + getSaleTotal(s), 0);
-  const totalSalesCount = todaySales.length;
-  const ticketMedio = totalSalesCount > 0 ? todayRevenue / totalSalesCount : 0;
-
-  // Período do caixa aberto: enquanto o caixa está aberto, os cards de
-  // faturamento/transações refletem as vendas desde a abertura (até fechar);
-  // com o caixa fechado, volta a usar o dia de hoje como período.
-  const caixaIsOpen = caixaSession?.status === 'open';
-  const periodStart = caixaIsOpen && caixaSession?.openedAt ? new Date(caixaSession.openedAt) : todayStart;
-  const caixaPeriodSales = caixaIsOpen
-    ? sales.filter((s) => new Date(s.date) >= periodStart)
-    : todaySales;
-  const caixaPeriodRevenue = caixaPeriodSales.reduce((acc, s) => acc + getSaleTotal(s), 0);
-  const caixaPeriodCount = caixaPeriodSales.length;
-  const caixaPeriodTicket = caixaPeriodCount > 0 ? caixaPeriodRevenue / caixaPeriodCount : 0;
 
   const lowStockCount = products.filter((p) => p.currentStock <= p.minStock).length;
 
@@ -198,31 +171,69 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       .slice(0, 3);
   }, [sales]);
 
-  // ── PERÍODO DE FILTRO (dia/semana/mês) ──────────────────────────
-  const periodRange = useMemo(() => {
-    const now = new Date();
-    let start: Date;
-    if (period === 'today') {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    } else if (period === 'week') {
-      start = new Date(now);
-      start.setDate(now.getDate() - 7);
-    } else {
-      start = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-    }
-    return { start, end: now };
-  }, [period]);
-
+  // ── Filtro temporal de faturamento (Data Inicial/Final) ─────────
+  // Considera apenas vendas COMPLETADAS dentro do intervalo escolhido.
   const periodSales = useMemo(() => {
     return sales.filter((s) => {
       if (s.status !== 'completed') return false;
-      const d = new Date(s.date);
-      return d >= periodRange.start && d <= periodRange.end;
+      const saleTs = new Date(s.date).getTime();
+      if (dateFrom) {
+        const fromTs = new Date(dateFrom).getTime();
+        if (!Number.isNaN(fromTs) && saleTs < fromTs) return false;
+      }
+      if (dateTo) {
+        const toTs = new Date(dateTo).getTime();
+        if (!Number.isNaN(toTs) && saleTs > toTs) return false;
+      }
+      return true;
     });
-  }, [sales, periodRange]);
+  }, [sales, dateFrom, dateTo]);
 
   const periodRevenue = periodSales.reduce((acc, s) => acc + getSaleTotal(s), 0);
-  const periodTicket = periodSales.length > 0 ? periodRevenue / periodSales.length : 0;
+
+  // ── LUCRO POR FORMA DE PAGAMENTO ────────────────────────────────
+  // Para cada venda completada no intervalo, o custo dos itens vendidos é
+  // rateado entre as formas de pagamento na mesma proporção dos valores
+  // pagos (suporta split). Lucro por forma = valor pago − custo rateado.
+  const productsById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+  const profitByPayment = useMemo(() => {
+    const methods = [
+      { key: 'cash', label: 'Dinheiro' },
+      { key: 'pix', label: 'PIX' },
+      { key: 'debit_card', label: 'Cartão de Débito' },
+      { key: 'credit_card', label: 'Cartão de Crédito' },
+    ];
+    const totals: Record<string, { revenue: number; cost: number }> = {
+      cash: { revenue: 0, cost: 0 },
+      pix: { revenue: 0, cost: 0 },
+      debit_card: { revenue: 0, cost: 0 },
+      credit_card: { revenue: 0, cost: 0 },
+    };
+    for (const sale of periodSales) {
+      const saleTotal = getSaleTotal(sale);
+      if (saleTotal <= 0) continue;
+      let costOfSale = 0;
+      for (const item of sale.items || []) {
+        const product = productsById.get(item.productId);
+        const unitCost = product ? product.costPrice : (item.unitPrice || 0) * 0.6;
+        costOfSale += (unitCost || 0) * (item.quantity || 0);
+      }
+      const payments = (sale.payments && sale.payments.length > 0)
+        ? sale.payments
+        : [{ method: 'cash', amount: saleTotal }];
+      for (const payment of payments) {
+        const amount = payment.amount || 0;
+        if (!(payment.method in totals)) continue;
+        const ratio = saleTotal > 0 ? amount / saleTotal : 0;
+        totals[payment.method].revenue += amount;
+        totals[payment.method].cost += costOfSale * ratio;
+      }
+    }
+    return methods.map((m) => {
+      const t = totals[m.key];
+      return { ...m, revenue: t.revenue, cost: t.cost, profit: t.revenue - t.cost };
+    });
+  }, [periodSales, productsById]);
 
   // ── VENDAS POR CATEGORIA (receita) ──────────────────────────────
   const revenueByCategory = useMemo(() => {
@@ -342,15 +353,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   };
 
-  // Day Summary calculations
-  const yesterdaySales = sales.filter((s) => {
-    const d = new Date(s.date);
-    return d >= yesterdayStart && d < todayStart;
-  });
-
-  const yesterdayRevenue = yesterdaySales.reduce((acc, s) => acc + getSaleTotal(s), 0);
-  const revenueChange = yesterdayRevenue > 0 ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100 : 0;
-
   // Initial loading simulation
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 600);
@@ -374,44 +376,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Seletor de período BI */}
-          <div className="flex items-center bg-[#27272a] rounded-full border border-[#3f3f46] overflow-hidden">
-            {([['today', 'Hoje'], ['week', 'Semana'], ['month', 'Mês']] as const).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setPeriod(key)}
-                className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                  period === key ? 'bg-white text-black' : 'text-[#a1a1aa] hover:text-white'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          {/* Filtro temporal de faturamento — Data/Hora Inicial / Final */}
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-[#a1a1aa]" />
+            <DateTimeRangeFilter
+              startDate={dateFrom}
+              endDate={dateTo}
+              onStartChange={setDateFrom}
+              onEndChange={setDateTo}
+              labelStart="De"
+              labelEnd="Até"
+              inputClassName="px-3 py-2 rounded-xl bg-[#27272a] border border-[#3f3f46] text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
           </div>
-          <button
-            onClick={() => onNavigateTab('pdv')}
-            className="px-4 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-slate-200 transition-colors shadow-md flex items-center gap-2"
-          >
-            <ShoppingCart className="w-3.5 h-3.5" />
-            <span>ABRIR PDV</span>
-          </button>
-          <button
-            onClick={() => onNavigateTab('inventory')}
-            className="px-4 py-2 bg-[#27272a] text-white hover:bg-[#3f3f46] font-semibold text-xs rounded-full border border-[#3f3f46] transition-colors flex items-center gap-2"
-          >
-            <Package className="w-3.5 h-3.5" />
-            <span>ESTOQUE</span>
-          </button>
         </div>
       </div>
 
       {/* KPI METRIC CARDS GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-        {/* Card 1: Faturamento do período selecionado */}
+        {/* Card 1: Faturamento no período selecionado */}
         <button onClick={() => onNavigateTab('finance')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
           <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold flex items-center gap-1">
             <Calendar className="w-3 h-3" />
-            {period === 'today' ? 'Faturamento Hoje' : period === 'week' ? 'Faturamento Semana' : 'Faturamento Mês'}
+            Faturamento
           </p>
           <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
             R$ {periodRevenue.toFixed(2)}
@@ -419,41 +406,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
             {periodRevenue > 0 ? <span className="text-emerald-500">✓ </span> : <span className="text-slate-400">—</span>}
             <span className="text-slate-400 dark:text-[#71717a]">
-              {periodSales.length} transações no período
+              {periodSales.length} transação{periodSales.length !== 1 ? 's' : ''} no período
             </span>
           </div>
         </button>
 
-        {/* Card 2: Ticket médio do período */}
-        <button onClick={() => onNavigateTab('finance')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
-          <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" />
-            Ticket Médio
-          </p>
-          <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
-            R$ {periodTicket.toFixed(2)}
-          </p>
-          <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
-            <span className="text-slate-400 dark:text-[#71717a]">
-              {period === 'today' ? 'dia' : period === 'week' ? 'última semana' : 'último mês'}
-            </span>
-          </div>
-        </button>
-
-        {/* Card 3: Faturamento do Caixa aberto (se aberto) */}
-        {caixaIsOpen && (
-          <button onClick={() => onNavigateTab('finance')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">Faturamento do Caixa</p>
-            <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
-              R$ {caixaPeriodRevenue.toFixed(2)}
-            </p>
-            <div className="mt-3 sm:mt-4 text-xs text-emerald-500 flex items-center gap-1 font-medium">
-              <span className="text-slate-400 dark:text-[#71717a]">vendas desde a abertura</span>
-            </div>
-          </button>
-        )}
-
-        {/* Card 3: Alerta de Estoque Baixo */}
+        {/* Card 2: Alerta de Estoque Baixo */}
         <button onClick={() => onNavigateTab('inventory')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
           <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold">Itens em Baixa</p>
           <p className="text-2xl sm:text-3xl font-light mt-2 tracking-tighter text-slate-900 dark:text-white">
@@ -465,7 +423,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </button>
 
-        {/* Card 4: Resumo de Lotes (apenas se houver produtos com useLots) */}
+        {/* Card 3: Resumo de Lotes */}
         {useLotsProductIds.length > 0 && (
           <button onClick={() => onNavigateTab('inventory')} className="p-4 sm:p-6 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm transition-all hover:border-slate-300 dark:hover:border-[#3f3f46] cursor-pointer hover:shadow-md hover:scale-[1.01] text-left w-full">
             <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-[#71717a] font-bold flex items-center gap-1">
@@ -493,6 +451,47 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         )}
       </div>
+
+      {/* ── LUCRO POR FORMA DE PAGAMENTO ────────────── */}
+      {periodSales.length > 0 && (
+        <div className="p-4 sm:p-6 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
+          <h3 className="text-xs uppercase tracking-widest font-bold text-slate-500 dark:text-[#71717a] mb-4 flex items-center gap-2">
+            <TrendingUp className="w-3.5 h-3.5" />
+            Lucro por Forma de Pagamento
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {profitByPayment.map((pay) => {
+              const isPix = pay.key === 'pix';
+              const isDebit = pay.key === 'debit_card';
+              const isCredit = pay.key === 'credit_card';
+              const isCash = pay.key === 'cash';
+              const barColor = isPix ? 'bg-emerald-500' : isDebit ? 'bg-amber-500' : isCredit ? 'bg-indigo-500' : 'bg-slate-400';
+              const labelColor = isPix ? 'text-emerald-600' : isDebit ? 'text-amber-600' : isCredit ? 'text-indigo-600' : 'text-slate-600';
+              const maxProfit = Math.max(...profitByPayment.map(p => p.profit), 1);
+              const barWidth = pay.profit > 0 ? Math.max((pay.profit / maxProfit) * 100, 8) : 0;
+              return (
+                <div key={pay.key} className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[10px] uppercase tracking-wider font-bold ${labelColor}`}>
+                      {pay.label}
+                    </span>
+                    <span className={`text-xs font-bold ${pay.profit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      R$ {pay.profit.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-100 dark:bg-[#27272a] rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${barWidth}%` }} />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-slate-400">
+                    <span>Fatur: R$ {pay.revenue.toFixed(2)}</span>
+                    <span>Custo: R$ {pay.cost.toFixed(2)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── ALERTAS DE VALIDADE (produtos + lotes) ────────────── */}
       {(expiredProducts.length > 0 || expiringProducts.length > 0 || expiredLots.length > 0 || expiringLots.length > 0) && (
