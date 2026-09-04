@@ -65,6 +65,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedAccountId, setExpandedAccountId] = useState<string | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [profitSort, setProfitSort] = useState<'profit-desc' | 'profit-asc' | 'margin' | 'name' | 'quantity'>('profit-desc');
 
   // Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -408,6 +409,22 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     s.status === 'completed' && s.storeBranchId === selectedBranchId && isSaleInRange(s.date, dateFrom, dateTo)
   );
 
+  // Lucro por Produto — ordenação selon profitSort
+  const sortedByProduct = [...financeSummary.byProduct].sort((a, b) => {
+    switch (profitSort) {
+      case 'profit-desc': return b.profit - a.profit;
+      case 'profit-asc': return a.profit - b.profit;
+      case 'margin': {
+        const marginA = a.revenue > 0 ? (a.profit / a.revenue) * 100 : 0;
+        const marginB = b.revenue > 0 ? (b.profit / b.revenue) * 100 : 0;
+        return marginB - marginA;
+      }
+      case 'name': return a.productName.localeCompare(b.productName);
+      case 'quantity': return b.quantity - a.quantity;
+      default: return 0;
+    }
+  });
+
   // Diagnóstico temporário (auge do bug "vendas não aparecem no Financeiro"):
   // revela no console por que cada venda entrou ou não no DRE, sem alterar nada.
   if (import.meta.env?.DEV) {
@@ -600,26 +617,41 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       {/* Lucro por Produto — detalhamento do KPI acima (ajuda a achar produtos com custo > preço de venda) */}
       <div className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm">
         <div className="p-4 border-b border-slate-200 dark:border-[#27272a]">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-indigo-500" />
-            <h3 className="font-bold text-sm text-slate-900 dark:text-white">Lucro por Produto</h3>
-            <span className="text-[10px] font-semibold text-slate-400 ml-1">
-              período/filial selecionados · faturamento − custo
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-indigo-500" />
+              <h3 className="font-bold text-sm text-slate-900 dark:text-white">Lucro por Produto</h3>
+              <span className="text-[10px] font-semibold text-slate-400 ml-1">
+                período/filial selecionados · faturamento − custo
+              </span>
+            </div>
+            {sortedByProduct.length > 0 && (
+              <select
+                value={profitSort}
+                onChange={(e) => setProfitSort(e.target.value as typeof profitSort)}
+                className="bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] rounded-xl px-3 py-1.5 text-[11px] font-bold text-slate-700 dark:text-[#a1a1aa] outline-none cursor-pointer"
+              >
+                <option value="profit-desc">Lucro (maior → menor)</option>
+                <option value="profit-asc">Lucro (menor → maior)</option>
+                <option value="margin">Margem (%)</option>
+                <option value="name">Produto (A-Z)</option>
+                <option value="quantity">Quantidade Vendida</option>
+              </select>
+            )}
           </div>
-          {financeSummary.byProduct.length > 0 && (
+          {sortedByProduct.length > 0 && (
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Produtos com lucro negativo (custo maior que o preço de venda) aparecem em destaque vermelho no topo — são os que diminuem o Lucro dos Produtos.
             </p>
           )}
         </div>
-        {financeSummary.byProduct.length === 0 ? (
+        {sortedByProduct.length === 0 ? (
           <div className="text-center py-8 text-slate-400 text-sm">
             Nenhuma venda concluída no período/filial selecionados.
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-[#27272a]/60 max-h-80 overflow-y-auto">
-            {financeSummary.byProduct.map((line) => {
+            {sortedByProduct.map((line) => {
               const negative = line.profit < 0;
               return (
                 <div key={line.productId} className="flex items-center justify-between gap-3 px-4 py-3">
