@@ -23,9 +23,13 @@ const firstOfMonthISO = () => {
   return `${d.getFullYear()}-${m}-01`;
 };
 
+// Padrões do filtro com datetime local: começo do mês às 00:00 até hoje às 23:59.
+const startDateDefault = () => `${firstOfMonthISO()}T00:00`;
+const endDateDefault = () => `${todayISO()}T23:59`;
+
 export const ReportModal: React.FC<ReportModalProps> = ({ user, onClose }) => {
-  const [startDate, setStartDate] = useState(firstOfMonthISO());
-  const [endDate, setEndDate] = useState(todayISO());
+  const [startDate, setStartDate] = useState(startDateDefault());
+  const [endDate, setEndDate] = useState(endDateDefault());
   const [paymentMethod, setPaymentMethod] = useState('');
   const [operatorId, setOperatorId] = useState('');
   const [includeCancelled, setIncludeCancelled] = useState(false);
@@ -108,10 +112,10 @@ export const ReportModal: React.FC<ReportModalProps> = ({ user, onClose }) => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <div>
             <label className="block text-[10px] font-bold text-slate-500 dark:text-[#a1a1aa] uppercase tracking-wide mb-1">
-              Data Inicial
+              Data/Hora Inicial
             </label>
             <input
-              type="date"
+              type="datetime-local"
               value={startDate}
               max={endDate}
               onChange={(e) => setStartDate(e.target.value)}
@@ -120,10 +124,10 @@ export const ReportModal: React.FC<ReportModalProps> = ({ user, onClose }) => {
           </div>
           <div>
             <label className="block text-[10px] font-bold text-slate-500 dark:text-[#a1a1aa] uppercase tracking-wide mb-1">
-              Data Final
+              Data/Hora Final
             </label>
             <input
-              type="date"
+              type="datetime-local"
               value={endDate}
               min={startDate}
               onChange={(e) => setEndDate(e.target.value)}

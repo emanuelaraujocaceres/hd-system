@@ -18,8 +18,14 @@ import { PaymentDetails } from '../types';
  */
 
 export interface ReportFilters {
-  startDate: string; // YYYY-MM-DD
-  endDate: string; // YYYY-MM-DD (inclusivo)
+  /**
+   * Limite inicial do filtro. Aceita "YYYY-MM-DD" (apenas data, inclusive) ou
+   * "YYYY-MM-DDTHH:mm" (datetime local, do input datetime-local) — com hora, o
+   * relatório passa a filtrar por instante exato (ex.: de 14h até 18h).
+   */
+  startDate: string;
+  /** Limite final — mesmo formato de startDate (com hora, usa o instante da hora). */
+  endDate: string;
   paymentMethod: string; // '' = todas
   operatorId: string; // '' = todos
   includeCancelled: boolean;
@@ -179,12 +185,44 @@ function nextDay(iso: string): string {
 }
 
 function fmtDate(iso: string): string {
-  const d = new Date(`${iso}T12:00:00`);
-  return d.toLocaleDateString('pt-BR');
+  const d = iso.length === 10 ? new Date(`${iso}T12:00:00`) : new Date(iso);
+  return isNaN(d.getTime()) ? iso : d.toLocaleDateString('pt-BR');
 }
 
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
+  return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+// True quando o valor carrega hora (datetime local "YYYY-MM-DDTHH:mm"), não só data.
+export function hasTime(value: string): boolean {
+  return value.includes('T') || value.includes(' ');
+}
+
+// Converte "YYYY-MM-DD" (apenas data) ou "YYYY-MM-DDTHH:mm[:ss]" (datetime local)
+// em um Date — para datetime, o navegador interpreta como hora LOCAL.
+export function parseISODate(value: string): Date | null {
+  const d = new Date(value.length === 10 ? `${value}T12:00:00` : value);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Converte um limite (data pura ou datetime local) em timestamp UTC comparável
+// com sale_date (timestamptz guardado em UTC). Data pura é tratada como começo
+// (00:00:00) ou fim (23:59:59.999) do dia local.
+export function toUtcBoundary(value: string, isEnd: boolean): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const d = new Date(isEnd ? `${value}T23:59:59.999` : `${value}T00:00:00`);
+    return d.toISOString();
+  }
+  const d = new Date(value);
+  return d.toISOString();
+}
+
+// Exibição do limite: "dd/mm/aaaa" (só data) ou "dd/mm/aaaa hh:mm" (com hora).
+export function fmtBoundary(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return fmtDate(value);
+  const d = parseISODate(value);
+  if (!d) return value;
   return `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
@@ -198,14 +236,27 @@ export async function fetchReport(filters: ReportFilters): Promise<{ model: Repo
   const settings = storageService.getSettings();
   const branch = storageService.getSelectedBranch();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('vw_report_sale_items')
     .select('*')
     .eq('organization_id', orgId)
-    .eq('store_branch_id', branchId)
-    .gte('sale_date', filters.startDate)
-    .lt('sale_date', nextDay(filters.endDate))
-    .order('sale_date', { ascending: true });
+    .eq('store_branch_id', branchId);
+
+  // Sem hora informada → mantém o comportamento anterior (apenas datas, com
+  // próximo dia exclusivo). Com hora em qualquer dos limites → usa o instante
+  // exato (datetime local→UTC), permitindo filtrar por faixa horária.
+  if (!hasTime(filters.startDate) && !hasTime(filters.endDate)) {
+    query = query
+      .gte('sale_date', filters.startDate)
+      .lt('sale_date', nextDay(filters.endDate));
+  } else {
+    query = query
+      .gte('sale_date', toUtcBoundary(filters.startDate, false))
+      .lte('sale_date', toUtcBoundary(filters.endDate, true));
+  }
+  query = query.order('sale_date', { ascending: true });
+
+  const { data, error } = await query;
 
   if (error) throw new Error(`Falha ao buscar dados do relatório: ${error.message}`);
 
@@ -286,7 +337,9 @@ export async function fetchReport(filters: ReportFilters): Promise<{ model: Repo
   }
 
   // Vendas por dia (ou por semana quando o período passa de 31 dias).
-  const days = Math.max(1, Math.round((new Date(`${filters.endDate}T12:00:00`).getTime() - new Date(`${filters.startDate}T12:00:00`).getTime()) / 86400000) + 1);
+  const startCal = parseISODate(filters.startDate);
+  const endCal = parseISODate(filters.endDate);
+  const days = Math.max(1, Math.round(((endCal ? endCal.getTime() : Date.now()) - (startCal ? startCal.getTime() : Date.now())) / 86400000) + 1);
   const byDay: { label: string; total: number }[] = [];
   if (days <= 31) {
     const dayMap = new Map<string, number>();
@@ -391,8 +444,8 @@ export async function fetchReport(filters: ReportFilters): Promise<{ model: Repo
     branchName: branch.name,
     branchCity: branch.city,
     branchState: branch.state,
-    startDate: fmtDate(filters.startDate),
-    endDate: fmtDate(filters.endDate),
+    startDate: fmtBoundary(filters.startDate),
+    endDate: fmtBoundary(filters.endDate),
     generatedAt: fmtDateTime(new Date().toISOString()),
     generatedBy: storageService.getUserProfile()?.email || '',
     filters: {
@@ -447,7 +500,9 @@ export function downloadCsv(model: ReportModel, meta: ReportMeta): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `relatorio-gerencial-${meta.startDate.replace(/\//g, '-')}-a-${meta.endDate.replace(/\//g, '-')}.csv`;
+  // Sanitiza o nome (garante validade no Windows, onde ':' e espaços são inválidos).
+  const safeName = (s: string) => s.replace(/[/:\s]/g, '-');
+  a.download = `relatorio-gerencial-${safeName(meta.startDate)}-a-${safeName(meta.endDate)}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
