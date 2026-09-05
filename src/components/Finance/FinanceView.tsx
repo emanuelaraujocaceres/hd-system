@@ -856,7 +856,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]">
-                  {sales.map((sale) => {
+                  {filteredSales.map((sale) => {
                     const isExpanded = selectedSaleId === sale.id;
                     return (
                       <React.Fragment key={sale.id}>
@@ -978,7 +978,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                       </React.Fragment>
                     );
                   })}
-                  {sales.length === 0 && (
+                  {filteredSales.length === 0 && (
                     <tr>
                       <td colSpan={user.role === 'admin' ? 6 : 5} className="py-8 text-center text-slate-400 dark:text-[#52525b] text-xs">
                         Nenhuma venda registrada
@@ -992,7 +992,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
             {/* Mobile sales cards */}
             <div className="block md:hidden space-y-3">
-              {sales.map((sale) => {
+              {filteredSales.map((sale) => {
                 const isExpanded = selectedSaleId === sale.id;
                 return (
                   <div key={sale.id} className="bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm overflow-hidden">
@@ -1112,7 +1112,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   </div>
                 );
               })}
-              {sales.length === 0 && (
+              {filteredSales.length === 0 && (
                 <div className="py-8 text-center text-slate-400 dark:text-[#52525b] text-xs">
                   Nenhuma venda registrada
                 </div>
