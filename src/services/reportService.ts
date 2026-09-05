@@ -208,13 +208,20 @@ export function parseISODate(value: string): Date | null {
 
 // Converte um limite (data pura ou datetime local) em timestamp UTC comparável
 // com sale_date (timestamptz guardado em UTC). Data pura é tratada como começo
-// (00:00:00) ou fim (23:59:59.999) do dia local.
+// (00:00:00) ou fim (23:59:59.999) do dia local. Datetime local SEM segundos
+// ("YYYY-MM-DDTHH:mm") no limite FINAL inclui o minuto inteiro (ex.: "até 23:59"
+// deve alcançar vendas às 23:59:30) — senão venda no último minuto com segundos
+// > 0 escapava do período.
 export function toUtcBoundary(value: string, isEnd: boolean): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const d = new Date(isEnd ? `${value}T23:59:59.999` : `${value}T00:00:00`);
     return d.toISOString();
   }
-  const d = new Date(value);
+  let v = value;
+  if (isEnd && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) {
+    v = `${value}:59.999`;
+  }
+  const d = new Date(v);
   return d.toISOString();
 }
 

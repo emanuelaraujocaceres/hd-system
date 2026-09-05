@@ -82,6 +82,34 @@ describe('toUtcBoundary (limite com hora → UTC)', () => {
     const iso = toUtcBoundary('2026-09-01T14:30', false);
     expect(new Date(iso).toISOString()).toBe(iso); // formato UTC válido
   });
+
+  it('limite final com hora (sem segundos) inclui o minuto inteiro — venda às 23:59:30 fica DENTRO de "até 23:59"', () => {
+    const endUtc = toUtcBoundary('2026-09-05T23:59', true);
+    // Sale no mesmo instante local (23:59:30), representado como o JS enxerga:
+    const saleAt235930 = new Date('2026-09-05T23:59:30').getTime();
+    expect(saleAt235930 <= new Date(endUtc).getTime()).toBe(true);
+  });
+
+  it('limite final com segundos já explícitos NÃO é alterado', () => {
+    const endUtc = toUtcBoundary('2026-09-05T23:59:30', true);
+    const d = new Date(endUtc);
+    expect(d.getSeconds()).toBe(30);
+  });
+
+  it('limite inicial com hora não corta os primeiros segundos do minuto — venda às 00:00:30 fica DENTRO de "de 00:00"', () => {
+    const startUtc = toUtcBoundary('2026-09-05T00:00', false);
+    const saleAt000030 = new Date('2026-09-05T00:00:30').getTime();
+    expect(saleAt000030 >= new Date(startUtc).getTime()).toBe(true);
+  });
+
+  it('limite final de data pura continua incluindo o dia inteiro (23:59:59.999)', () => {
+    const endUtc = toUtcBoundary('2026-09-05', true);
+    const d = new Date(endUtc);
+    expect(d.getHours()).toBe(23);
+    expect(d.getMinutes()).toBe(59);
+    expect(d.getSeconds()).toBe(59);
+    expect(d.getMilliseconds()).toBe(999);
+  });
 });
 
 describe('fmtBoundary (exibição do período)', () => {
