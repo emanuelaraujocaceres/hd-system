@@ -4593,9 +4593,19 @@ id: StorageService.ensureUuid(settings.id),
       const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
       const existing = accounts.find((a) => a.id === sale.id);
       if (existing) {
-        // Nunca reabrir uma conta já quitada/cancelada
-        if (existing.status === 'paid' || existing.status === 'cancelled') return;
-        const changed = Math.abs((existing.amount || 0) - remaining) > 0.01;
+        // Cancelada manualmente → nunca reabrir
+        if (existing.status === 'cancelled') return;
+        // Conta 'paid' com saldo pendente REAL (ex.: fiado parcial zerado por
+        // bug antigo do updateReceivableFromPayments) → reabrir como pending
+        // com o restante correto, senão o KPI do Financeiro fica menor que o
+        // FiadosView e o backfill nunca corrige. Conta realmente quitada
+        // (remaining <= 0) já retornou no bloco acima e permanece 'paid'.
+        const wasReopened = existing.status === 'paid' && remaining > 0.01;
+        if (wasReopened) {
+          existing.status = 'pending';
+          existing.paidDate = undefined;
+        }
+        const changed = wasReopened || Math.abs((existing.amount || 0) - remaining) > 0.01;
         existing.amount = remaining;
         if (!existing.title) existing.title = `Fiado ${sale.code || ''} — ${sale.customerName || 'Cliente'}`;
         if (!existing.recipientOrPayer) existing.recipientOrPayer = sale.customerName || '';

@@ -356,6 +356,74 @@ describe('storageService — fiado (conta a receber) (BUG-003/005/006)', () => {
     expect(accH.amount).toBe(4); // fiado legítimo preservado
   });
 
+  // Conta marcada 'paid'/R$0 por bug antigo (baseline errado no
+  // updateReceivableFromPayments pré-BUG-003, ex.: fiado R$5 com R$1 pago)
+  // MAS com saldo pendente REAL. O guard "não reabrir conta quitada" impedia
+  // a correção automática no backfill → KPI do Financeiro ficava R$4 menor
+  // que o FiadosView. Regressão: createReceivableFromSale deve REABRIR a conta
+  // como pending com o restante correto (e sincronizar com o cloud).
+  it('createReceivableFromSale reabre conta paid com saldo pendente real', () => {
+    const vendaFiado = { ...sale('sv-reopen', [{ method: 'credit_account', amount: 5 }], 5), customerId: 'cust-3' };
+    localStorage.setItem('hd_system_sales', JSON.stringify([vendaFiado]));
+    localStorage.setItem('hd_system_financial_accounts', JSON.stringify([
+      { id: 'sv-reopen', title: 'Fiado', type: 'receivable', category: 'fiado', amount: 0, status: 'paid', paidDate: '2026-08-13T02:44:00.000Z', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+    // Só R$1 dos R$5 foi pago → restante real R$4
+    localStorage.setItem('hd_system_credit_payments', JSON.stringify([
+      { id: 'cp4', saleId: 'sv-reopen', customerId: 'cust-3', amount: 1, date: '2026-08-13', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+    vi.mocked((svc as any).syncFinancialAccount).mockClear();
+
+    (svc as any).createReceivableFromSale(vendaFiado);
+
+    const accounts = JSON.parse(localStorage.getItem(`hd_system_financial_accounts_${DEFAULT_ORG_ID}`) || localStorage.getItem('hd_system_financial_accounts') || '[]');
+    const acc = accounts.find((a: any) => a.id === 'sv-reopen');
+    expect(acc.status).toBe('pending');
+    expect(acc.amount).toBe(4); // 5 original − 1 pago
+    expect(acc.paidDate).toBeUndefined();
+    expect((svc as any).syncFinancialAccount).toHaveBeenCalled(); // propagado ao cloud
+  });
+
+  // Segurança: conta 'paid' GERADÍSSIMA (saldo zerado de verdade) NÃO pode ser
+  // ressuscitada pelo backfill — o guard continua bloqueando reabertura.
+  it('createReceivableFromSale NÃO reabre conta paid realmente quitada', () => {
+    const vendaQuitada = { ...sale('sv-quit', [{ method: 'credit_account', amount: 5 }], 5), customerId: 'cust-4' };
+    localStorage.setItem('hd_system_sales', JSON.stringify([vendaQuitada]));
+    localStorage.setItem('hd_system_financial_accounts', JSON.stringify([
+      { id: 'sv-quit', type: 'receivable', category: 'fiado', amount: 0, status: 'paid', paidDate: '2026-08-13T02:44:00.000Z', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+    // Pagamento TOTAL (5 = 5) → resta 0
+    localStorage.setItem('hd_system_credit_payments', JSON.stringify([
+      { id: 'cp5', saleId: 'sv-quit', customerId: 'cust-4', amount: 5, date: '2026-08-13', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+    vi.mocked((svc as any).syncFinancialAccount).mockClear();
+
+    (svc as any).createReceivableFromSale(vendaQuitada);
+
+    const accounts = JSON.parse(localStorage.getItem(`hd_system_financial_accounts_${DEFAULT_ORG_ID}`) || localStorage.getItem('hd_system_financial_accounts') || '[]');
+    const acc = accounts.find((a: any) => a.id === 'sv-quit');
+    expect(acc.status).toBe('paid');
+    expect(acc.amount).toBe(0);
+    expect((svc as any).syncFinancialAccount).not.toHaveBeenCalled();
+  });
+
+  it('createReceivableFromSale NÃO reabre conta cancelled', () => {
+    const vendaFiado = { ...sale('sv-canc', [{ method: 'credit_account', amount: 5 }], 5), customerId: 'cust-5' };
+    localStorage.setItem('hd_system_sales', JSON.stringify([vendaFiado]));
+    localStorage.setItem('hd_system_financial_accounts', JSON.stringify([
+      { id: 'sv-canc', type: 'receivable', category: 'fiado', amount: 5, status: 'cancelled', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+    vi.mocked((svc as any).syncFinancialAccount).mockClear();
+
+    (svc as any).createReceivableFromSale(vendaFiado);
+
+    const accounts = JSON.parse(localStorage.getItem(`hd_system_financial_accounts_${DEFAULT_ORG_ID}`) || localStorage.getItem('hd_system_financial_accounts') || '[]');
+    const acc = accounts.find((a: any) => a.id === 'sv-canc');
+    expect(acc.status).toBe('cancelled');
+    expect(acc.amount).toBe(5);
+    expect((svc as any).syncFinancialAccount).not.toHaveBeenCalled();
+  });
+
   it('getCreditPayments retorna pagamentos por saleId camelCase e filtra por org/filial (BUG-006)', () => {
     localStorage.setItem('hd_system_sales', JSON.stringify([
       sale('s1', [{ method: 'credit_account', amount: 50 }], 50, BRANCH_UUIDS['br-01']),
