@@ -2,8 +2,23 @@ import React, { useState } from 'react';
 import { X, Printer, ClipboardList } from 'lucide-react';
 import { Product, SystemSettings } from '../../types';
 
-// Simple EAN-13 barcode renderer as SVG paths
-function generateEan13Svg(code: string, width: number = 200, height: number = 60): string {
+// ─── ETIQUETA PADRÃO ÚNICA (A4 = TÉRMICA) ───────────────────────────────────
+// O tamanho da etiqueta é SEMPRE o mesmo (58mm x 40mm), independente da
+// configuração de impressora: na térmica sai 1 por talão (uma em uma), e na
+// folha A4 entram 12 (3 colunas x 4 linhas) por folha, quantas folhas forem
+// necessárias. A única diferença entre os modos é QUANTAS etiquetas saem por
+// folha — o tamanho de cada etiqueta é idêntico.
+const LABEL_W_MM = 58;
+const LABEL_H_MM = 40;
+const A4_COLS = 3;
+const A4_ROWS = 4;
+const LABELS_PER_SHEET = A4_COLS * A4_ROWS; // 12
+
+// EAN-13 como SVG RESPONSIVO (width="100%"): o tamanho físico do código é o
+// do container (em mm), então o mesmo SVG escaneia igual na térmica (203dpi)
+// e no A4 (laser/jato de tinta). Antes usava pixels fixos (320px ≈ 84mm) que
+// extrapolavam a etiqueta — código cortado/clipado na impressão.
+function generateEan13Svg(code: string, vbWidth: number = 200, vbHeight: number = 55): string {
   // EAN-13 encoding patterns
   const L_PATTERNS = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
   const G_PATTERNS = ['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
@@ -12,7 +27,7 @@ function generateEan13Svg(code: string, width: number = 200, height: number = 60
 
   // Pad or truncate to 12 digits (EAN-13 with check digit)
   let digits = code.replace(/\D/g, '').slice(0, 12).padEnd(12, '0');
-  
+
   // Calculate check digit
   let sum = 0;
   for (let i = 0; i < 12; i++) {
@@ -20,97 +35,130 @@ function generateEan13Svg(code: string, width: number = 200, height: number = 60
   }
   const checkDigit = (10 - (sum % 10)) % 10;
   const fullCode = digits + checkDigit;
-  
+
   const firstDigit = parseInt(fullCode[0]);
   const pattern = FIRST_DIGIT_PATTERNS[firstDigit];
-  
+
   let bars = '';
   let x = 0;
-  const barWidth = width / 95;
-  
+  const barWidth = vbWidth / 95;
+
   // Start guard
-  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="black"/>`; x += barWidth;
-  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="white"/>`; x += barWidth;
-  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="black"/>`; x += barWidth;
-  
+  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="black"/>`; x += barWidth;
+  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="white"/>`; x += barWidth;
+  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="black"/>`; x += barWidth;
+
   // Left side (6 digits)
   for (let i = 0; i < 6; i++) {
     const digit = parseInt(fullCode[i + 1]);
     const p = pattern[i] === 'L' ? L_PATTERNS[digit] : G_PATTERNS[digit];
     for (let j = 0; j < 7; j++) {
       const color = p[j] === '1' ? 'black' : 'white';
-      bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="${color}"/>`;
+      bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="${color}"/>`;
       x += barWidth;
     }
   }
-  
+
   // Center guard
-  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="white"/>`; x += barWidth;
-  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="black"/>`; x += barWidth;
-  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="white"/>`; x += barWidth;
-  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="black"/>`; x += barWidth;
-  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="white"/>`; x += barWidth;
-  
+  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="white"/>`; x += barWidth;
+  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="black"/>`; x += barWidth;
+  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="white"/>`; x += barWidth;
+  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="black"/>`; x += barWidth;
+  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="white"/>`; x += barWidth;
+
   // Right side (6 digits)
   for (let i = 0; i < 6; i++) {
     const digit = parseInt(fullCode[i + 7]);
     const p = R_PATTERNS[digit];
     for (let j = 0; j < 7; j++) {
       const color = p[j] === '1' ? 'black' : 'white';
-      bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="${color}"/>`;
+      bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="${color}"/>`;
       x += barWidth;
     }
   }
-  
+
   // End guard
-  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="black"/>`; x += barWidth;
-  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="white"/>`; x += barWidth;
-  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${height}" fill="black"/>`; x += barWidth;
-  
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height + 14}" width="${width}" height="${height + 14}">${bars}<text x="${width/2}" y="${height + 12}" text-anchor="middle" font-family="monospace" font-size="11" fill="black">${fullCode}</text></svg>`;
+  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="black"/>`; x += barWidth;
+  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="white"/>`; x += barWidth;
+  bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="black"/>`; x += barWidth;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vbWidth} ${vbHeight + 14}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet">${bars}<text x="${vbWidth/2}" y="${vbHeight + 12}" text-anchor="middle" font-family="monospace" font-size="11" fill="black">${fullCode}</text></svg>`;
 }
 
 interface BarcodeLabelModalProps {
   isOpen: boolean;
   onClose: () => void;
-  product: Product | null;
+  products: Product[];
   settings: SystemSettings;
 }
+
+// Corpo da etiqueta 58x40mm: nome, preço, código de barras (responsivo) e dígitos.
+const LabelBody: React.FC<{ product: Product }> = ({ product }) => (
+  <>
+    <p className="font-bold text-center leading-tight truncate w-full text-slate-900" style={{ fontSize: '10px' }}>
+      {product.name}
+    </p>
+    <p className="font-bold text-emerald-600" style={{ fontSize: '13px' }}>
+      R$ {product.salePrice.toFixed(2)}
+    </p>
+    <div className="w-full px-1" dangerouslySetInnerHTML={{ __html: generateEan13Svg(product.barcode, 200, 55) }} />
+    <p className="font-mono tracking-tight text-slate-700" style={{ fontSize: '8px' }}>{product.barcode}</p>
+  </>
+);
+
+const BarcodeLabel: React.FC<{ product: Product }> = ({ product }) => (
+  <div
+    className="flex flex-col items-center justify-between bg-white text-black border border-gray-300 p-1"
+    style={{ width: `${LABEL_W_MM}mm`, height: `${LABEL_H_MM}mm` }}
+  >
+    <LabelBody product={product} />
+  </div>
+);
 
 export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
   isOpen,
   onClose,
-  product,
+  products,
   settings,
 }) => {
   const [printMode, setPrintMode] = useState<'a4' | 'thermal'>('a4');
   const [thermalQuantity, setThermalQuantity] = useState(1);
 
-  if (!isOpen || !product) return null;
+  if (!isOpen || products.length === 0) return null;
 
   const handlePrint = () => {
     window.print();
   };
 
-  const thermalBarSvg = generateEan13Svg(product.barcode, 320, 60);
+  // Paginação A4: 12 produtos distintos por folha, quantas folhas forem precisas.
+  const pages: Product[][] = [];
+  for (let i = 0; i < products.length; i += LABELS_PER_SHEET) {
+    pages.push(products.slice(i, i + LABELS_PER_SHEET));
+  }
+
+  // Lista de impressão térmica: 1 etiqueta por produto (x cópias), uma a uma.
+  const thermalLabels: Product[] = [];
+  for (const p of products) {
+    for (let c = 0; c < thermalQuantity; c++) thermalLabels.push(p);
+  }
+
+  // @page varia conforme o modo ativo (A4 portrait vs talão térmico 58x40mm).
+  const pageRule =
+    printMode === 'a4'
+      ? '@page { size: A4 portrait; margin: 0; }'
+      : `@page { size: ${LABEL_W_MM}mm ${LABEL_H_MM}mm; margin: 0; }`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
       <style>{`
         @media print {
           body * { visibility: hidden !important; }
-          #printable-barcode-sheet, #printable-barcode-sheet * { visibility: visible !important; }
-          #printable-barcode-sheet {
-            position: fixed; left: 0; top: 0; margin: 10mm;
-            width: 190mm; height: 277mm;
-          }
+          #printable-barcode-sheet, #printable-barcode-sheet *,
           #printable-thermal-label-print, #printable-thermal-label-print * { visibility: visible !important; }
-          #printable-thermal-label-print {
-            position: fixed; left: 0; top: 0; margin: 2mm;
-            width: 50mm; height: auto;
-          }
-          #printable-barcode-sheet { @page { size: A4 portrait; margin: 10mm; } }
-          #printable-thermal-label-print { @page { size: 50mm auto; margin: 0mm; } }
+          #printable-barcode-sheet { position: absolute; left: 0; top: 0; width: 210mm; }
+          #printable-thermal-label-print { position: absolute; left: 0; top: 0; width: ${LABEL_W_MM}mm; }
+          .label-break { page-break-after: always; }
+          ${pageRule}
         }
       `}</style>
 
@@ -120,6 +168,9 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
           <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-white">
             <span className="text-indigo-600">|||</span>
             <span>Gerador de Etiquetas de Código de Barras</span>
+            <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+              ({products.length} produto{products.length > 1 ? 's' : ''})
+            </span>
           </div>
           <button
             onClick={onClose}
@@ -141,7 +192,7 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
               }`}
             >
               <ClipboardList className="w-4 h-4 inline mr-1.5 -mt-0.5" />
-              Folha A4 (15 etiquetas)
+              Folha A4 (12 etiquetas)
             </button>
             <button
               onClick={() => setPrintMode('thermal')}
@@ -157,55 +208,44 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
           </div>
         </div>
 
-        {/* A4 Mode - Printable Labels Grid Area */}
+        {/* A4 Mode — Preview */}
         {printMode === 'a4' && (
-          <div className="p-6 overflow-y-auto bg-slate-100 dark:bg-slate-950 flex flex-col items-center print:hidden">
+          <div className="p-6 overflow-auto bg-slate-100 dark:bg-slate-950 flex flex-col items-center print:hidden">
             <p className="text-xs text-slate-500 mb-4 text-center">
-              Folha de impressão modelo Padrão 3x5 (15 etiquetas por folha A4):
+              Etiqueta padrão {LABEL_W_MM}×{LABEL_H_MM}mm — {LABELS_PER_SHEET} por folha A4
+              {pages.length > 1 ? ` em ${pages.length} folhas` : ''}
             </p>
-
-            <div
-              id="printable-barcode-sheet"
-              className="grid grid-cols-3 gap-2 bg-white text-black p-4 rounded-xl border border-slate-300 shadow-md font-sans text-[10px]"
-            >
-              {Array.from({ length: 15 }).map((_, idx) => (
-                <div
-                  key={idx}
-                  className="p-1.5 border border-gray-300 rounded flex flex-col items-center text-center justify-between bg-white"
-                  style={{ width: '63.5mm', height: '38mm' }}
-                >
-                  {product.imageUrl && (
-                    <img src={product.imageUrl} alt="" className="w-8 h-8 object-cover rounded" />
-                  )}
-                  <p className="font-bold text-[8px] truncate w-full leading-tight">{product.name}</p>
-                  <div className="my-0.5" dangerouslySetInnerHTML={{ __html: generateEan13Svg(product.barcode, 150, 40) }} />
-                  <p className="font-mono text-[7px] tracking-tight">{product.barcode}</p>
-                  <p className="font-bold text-[9px] text-emerald-700">R$ {product.salePrice.toFixed(2)}</p>
+            {pages.map((chunk, ci) => (
+              <div
+                key={ci}
+                className="bg-white p-3 rounded-xl border border-slate-300 shadow-md mb-4"
+                style={{ width: '200mm' }}
+              >
+                <p className="text-[9px] text-slate-400 mb-1 font-bold">
+                  Folha {ci + 1} de {pages.length}
+                </p>
+                <div className="grid grid-cols-3 gap-[3mm]">
+                  {chunk.map((p) => (
+                    <BarcodeLabel key={p.id} product={p} />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Thermal Mode - Single Label Preview */}
+        {/* Thermal Mode — Preview */}
         {printMode === 'thermal' && (
           <div className="p-6 overflow-y-auto bg-slate-100 dark:bg-slate-950 flex flex-col items-center print:hidden">
             <p className="text-xs text-slate-500 mb-4 text-center">
-              Impressão térmica — etiqueta individual (50mm × 30mm):
+              Impressão térmica — etiqueta padrão {LABEL_W_MM}×{LABEL_H_MM}mm, uma por etiqueta
+              {products.length > 1 ? ` (${products.length} produtos, em sequência)` : ''}
             </p>
 
-            <div
-              className="bg-white text-black rounded-lg border-2 border-dashed border-slate-300 shadow-md font-sans flex flex-col items-center justify-between p-3"
-              style={{ width: '190px', height: '115px' }}
+            <div className="bg-white rounded-lg border-2 border-dashed border-slate-300 shadow-md p-1"
+              style={{ width: `${LABEL_W_MM}mm`, height: `${LABEL_H_MM}mm` }}
             >
-              <p className="font-bold text-sm text-center leading-tight truncate w-full text-slate-900">
-                {product.name}
-              </p>
-              <p className="font-bold text-lg text-emerald-600">
-                R$ {product.salePrice.toFixed(2)}
-              </p>
-              <div className="w-full" dangerouslySetInnerHTML={{ __html: thermalBarSvg }} />
-              <p className="font-mono text-[10px] tracking-tight text-slate-600">{product.barcode}</p>
+              <LabelBody product={products[0]} />
             </div>
 
             {/* Quantity Selector */}
@@ -239,29 +279,42 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
                 </button>
               </div>
               <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                {thermalQuantity === 1 ? '1 cópia' : `${thermalQuantity} cópias`}
+                {thermalQuantity === 1
+                  ? `${products.length} etiqueta${products.length > 1 ? 's' : ''}`
+                  : `${products.length * thermalQuantity} etiquetas`}
               </span>
-            </div>
-
-            {/* Printable area for thermal — hidden on screen, shown on print */}
-            <div className="hidden print:block">
-              <div
-                id="printable-thermal-label-print"
-                className="bg-white text-black font-sans flex flex-col items-center justify-between p-1"
-                style={{ width: '50mm', height: '30mm' }}
-              >
-                {Array.from({ length: thermalQuantity }).map((_, idx) => (
-                  <div key={idx} className={`flex flex-col items-center justify-between ${idx > 0 ? 'mt-1' : ''}`} style={{ width: '46mm', height: '28mm' }}>
-                    <p className="font-bold text-center leading-tight" style={{ fontSize: '14px' }}>{product.name}</p>
-                    <p className="font-bold" style={{ fontSize: '16px', color: '#16a34a' }}>R$ {product.salePrice.toFixed(2)}</p>
-                    <div dangerouslySetInnerHTML={{ __html: generateEan13Svg(product.barcode, 280, 50) }} />
-                    <p className="font-mono" style={{ fontSize: '9px' }}>{product.barcode}</p>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         )}
+
+        {/* Printable area — A4 (12 por folha, paginado) */}
+        <div className="hidden print:block">
+          <div id="printable-barcode-sheet">
+            {pages.map((chunk, ci) => (
+              <div key={ci} className={`label-wrap ${ci < pages.length - 1 ? 'label-break' : ''}`}>
+                <div
+                  className="grid grid-cols-3 gap-[3mm]"
+                  style={{ width: '202mm', margin: '4mm auto' }}
+                >
+                  {chunk.map((p) => (
+                    <BarcodeLabel key={p.id} product={p} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Printable area — Thermal (1 etiqueta por página/talão) */}
+        <div className="hidden print:block">
+          <div id="printable-thermal-label-print">
+            {thermalLabels.map((p, idx) => (
+              <div key={idx} className={idx < thermalLabels.length - 1 ? 'label-break' : ''}>
+                <BarcodeLabel product={p} />
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Footer */}
         <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2 print:hidden">

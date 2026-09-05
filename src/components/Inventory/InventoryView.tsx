@@ -102,7 +102,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [stockReason, setStockReason] = useState<string>('Entrada de Nota de Fornecedor');
   const [stockBarcodeSearch, setStockBarcodeSearch] = useState('');
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
-  const [barcodeTargetProduct, setBarcodeTargetProduct] = useState<Product | null>(null);
+  const [barcodeProducts, setBarcodeProducts] = useState<Product[]>([]);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isStockCameraModalOpen, setIsStockCameraModalOpen] = useState(false);
   const [scannerTargetProductId, setScannerTargetProductId] = useState<string | null>(null);
@@ -1012,6 +1012,22 @@ minStock: parseInt(formMinStock) || 0,
           >
             Limpar seleção
           </button>
+          <button
+            onClick={() => {
+              const sel = [...selectedProducts]
+                .map((id) => products.find((p) => p.id === id))
+                .filter((p): p is Product => !!p);
+              if (sel.length > 0) {
+                setBarcodeProducts(sel);
+                setIsBarcodeModalOpen(true);
+              }
+            }}
+            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[10px] font-bold"
+            title="Gerar folha de etiquetas dos produtos selecionados"
+          >
+            <Barcode className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
+            Gerar Etiquetas
+          </button>
         </div>
       )}
 
@@ -1204,7 +1220,7 @@ minStock: parseInt(formMinStock) || 0,
                           </button>
                           <button
                             onClick={() => {
-                              setBarcodeTargetProduct(p);
+                              setBarcodeProducts([p]);
                               setIsBarcodeModalOpen(true);
                             }}
                             className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors min-h-[44px] min-w-[44px]"
@@ -1221,7 +1237,6 @@ minStock: parseInt(formMinStock) || 0,
                           </button>
                           <button
                             onClick={() => {
-                              setBarcodeTargetProduct(p);
                               setScannerTargetProductId(p.id);
                               setIsStockCameraModalOpen(true);
                             }}
@@ -1336,7 +1351,7 @@ minStock: parseInt(formMinStock) || 0,
                   </button>
                   <button
                     onClick={() => {
-                      setBarcodeTargetProduct(p);
+                      setBarcodeProducts([p]);
                       setIsBarcodeModalOpen(true);
                     }}
                     className="flex-1 py-2 rounded-xl text-[11px] font-bold text-slate-600 dark:text-[#a1a1aa] bg-slate-100 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] hover:bg-slate-200 dark:hover:bg-[#27272a] transition-colors flex items-center justify-center gap-1.5"
@@ -2129,7 +2144,7 @@ minStock: parseInt(formMinStock) || 0,
       <BarcodeLabelModal
         isOpen={isBarcodeModalOpen}
         onClose={() => setIsBarcodeModalOpen(false)}
-        product={barcodeTargetProduct}
+        products={barcodeProducts}
         settings={settings}
       />
 
