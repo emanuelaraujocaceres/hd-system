@@ -12,6 +12,11 @@ import { CustomerSession, Product, Sale, PaymentDetails } from '../types';
  *   • O ESTOQUE já é baixado atomicamente ao ADICIONAR o item (RPC
  *     `process_sale_transaction` dentro de `storageService.addSale`), tanto no
  *     cardápio anon quanto pelo operador. Portanto:
+ *   • orderSource='comanda' (OPERADOR): a venda NÃO aparece no KDS/Pedidos (que
+ *     filtra 'cardapio_digital'/'delivery') nem no celular do cliente. Pedido via
+ *     QR do cardápio continua 'cardapio_digital' → vai pro KDS. A ComandaView
+ *     agrupa por tableId e o checkout fecha por customer_session_id (ambos os
+ *     fluxos da mesma mesa são finalizados pelo fechar_comanda).
  *       - adicionarItem → cria venda `pending` via addSale (baixa atômica já
  *         acontece aqui). NÃO re-baixar no checkout.
  *       - removerItem  → cancelSaleWithStockRestore (restaura estoque já
@@ -110,7 +115,10 @@ export async function adicionarItem(input: AddItemInput): Promise<{ success: boo
     organizationId: input.session.organizationId,
     tableId: input.session.tableId || undefined,
     customerSessionId: input.session.id,
-    orderSource: 'cardapio_digital',
+    // 'comanda' (operador) ≠ 'cardapio_digital' (QR do cliente): o KDS/Pedidos e o
+    // celular do cliente só mostram as vendas via cardápio — item do operador é
+    // interno à ComandaView e segue para o checkout normalmente (por sessão).
+    orderSource: 'comanda',
     kitchenStatus: 'pending',
     items: [
       {

@@ -265,7 +265,9 @@ export interface Supplier {
   organizationId?: string; // multi-tenant
 }
 
-export type OrderSource = 'pdv' | 'cardapio_digital' | 'fiado' | 'delivery';
+// 'comanda' = item adicionado pelo OPERADOR na ComandaView (não vai pro KDS/Pedidos
+// nem pro celular do cliente — KDS e PublicMenuView filtram 'cardapio_digital'/'delivery').
+export type OrderSource = 'pdv' | 'cardapio_digital' | 'fiado' | 'delivery' | 'comanda';
 export type KitchenStatus = 'pending' | 'preparing' | 'ready' | 'delivered' | 'cancelled' | 'closing_request';
 
 export interface Sale {
