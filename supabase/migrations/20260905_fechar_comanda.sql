@@ -24,8 +24,9 @@
 --   • Idempotente: sessão já `completed` retorna o estado atual sem re-fazer.
 --   • Concorrência: `FOR UPDATE` na sessão e nas vendas pendentes (sem duplo
 --     fechamento / dupla marcação).
---   • Isolamento multi-tenant: SECURITY DEFINER com validação de org no corpo
---     (regra 9 do AGENTS.md); superadmin bypass.
+--   • Isolamento multi-tenant: SECURITY DEFINER com validação de ORG + FILIAL
+--     no corpo (regra 9 do AGENTS.md: get_user_org_id() + get_user_branch_id());
+--     superadmin (is_superadmin()) bypass.
 --   • Uso: chama-se APÓS o frontend ter baixado estoque via `addSale`
 --     (híbrido: adota vendas pending já baixadas + novas vendas do operador).
 --
@@ -65,13 +66,17 @@ BEGIN
   END IF;
 
   -- 2) Isolamento multi-tenant (SECURITY DEFINER roda como owner; RLS não basta).
-  --    Superadmin (access global) bypass; senão exige que a sessão seja da MESMA org
-  --    do usuário logado. Regra 9 do AGENTS.md.
+  --    Regra 9 do AGENTS.md: validação de ORG + FILIAL no corpo, com guard de
+  --    superadmin. O frontend seta a filial ativa via set_current_branch a cada
+  --    troca, então get_user_branch_id() reflete a filial que o operador está
+  --    usando (collaborator = store_branch_id fixo; admin = branch da sessão).
   IF NOT public.is_superadmin() THEN
-    IF v_session.organization_id IS DISTINCT FROM public.get_user_org_id() THEN
+    IF v_session.organization_id IS DISTINCT FROM public.get_user_org_id()
+       OR v_session.store_branch_id IS DISTINCT FROM public.get_user_branch_id()
+    THEN
       RETURN jsonb_build_object(
         'success', false,
-        'message', 'Permissão negada: comanda de outra organização.'
+        'message', 'Permissão negada: comanda de outra organização ou filial.'
       );
     END IF;
   END IF;
@@ -95,19 +100,22 @@ BEGIN
   END;
 
   -- 4) Finaliza TODAS as vendas 'pending' da sessão (já baixaram estoque via
-  --    addSale no frontend). Trava cada uma p/ evitar corrida.
+  --    addSale no frontend). Trava cada uma p/ evitar corrida. Escopo por
+  --    org+branch da sessão (defesa extra contra dado corrompido).
   FOR v_sale IN
     SELECT id, total
     FROM sales
     WHERE customer_session_id = p_session_id
       AND status = 'pending'
       AND deleted_at IS NULL
+      AND organization_id = v_session.organization_id
+      AND store_branch_id = v_session.store_branch_id
     FOR UPDATE
   LOOP
     UPDATE sales SET
       status = 'completed',
       payments_json = p_payments,
-      payment_method = COALESCE(v_first_method, payment_method, 'money'),
+      payment_method = COALESCE(v_first_method, payment_method, 'cash'),
       operator_name = COALESCE(p_operator_name, operator_name),
       updated_at = now()
     WHERE id = v_sale.id;
