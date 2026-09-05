@@ -42,7 +42,7 @@ import {
   StoreBranch,
   UserProfile,
 } from './types';
-import { ToastProvider } from './components/shared/Toast';
+import { ToastProvider, notifyToast } from './components/shared/Toast';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 // ─── Opção 1: auto-seleção de organização para superadmin ───────────────
@@ -375,6 +375,9 @@ export const App: React.FC = () => {
   const hydrationDoneRef = useRef<boolean>(false);
   // FIX-028: Guard para evitar resubscribe em loop (org/branch já subscrito)
   const lastSubscribedRef = useRef<{ orgId?: string; branchId?: string } | null>(null);
+  // CORREÇÃO C (BUG-037): throttle do aviso de sessão expirada (5 min —
+  // o health check roda a cada 30s e não pode spammar o toast).
+  const sessionWarnedAtRef = useRef<number>(0);
 
   // Keep refs in sync
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
@@ -847,7 +850,16 @@ export const App: React.FC = () => {
       // silencioso com credenciais locais quando o login foi offline e não
       // deixou JWT) — sem isso, após F5 com sessão morta, o testConnection
       // falha com PGRST301 e a fila pendente nunca drena.
-      await syncService.ensureSession();
+      const hasSupabaseSession = await syncService.ensureSession();
+      // CORREÇÃO C (BUG-037): sessão inválida COM rede ok e usuário logado →
+      // avisa no app em vez de seguir mudo gravando como anon (42501 RLS).
+      if (!hasSupabaseSession && navigator.onLine && user) {
+        const now = Date.now();
+        if (now - sessionWarnedAtRef.current > 5 * 60 * 1000) {
+          sessionWarnedAtRef.current = now;
+          notifyToast('error', 'Sessão expirada — faça login novamente para sincronizar os dados.');
+        }
+      }
       const healthy = await syncService.testConnection();
       const nowConnected = healthy || syncService.connected;
       setIsSyncConnected(nowConnected);

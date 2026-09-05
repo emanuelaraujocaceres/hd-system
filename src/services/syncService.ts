@@ -514,6 +514,13 @@ class SupabaseSyncService {
    */
   private async tryUpsert(table: TableName, row: Record<string, any>): Promise<{ ok: boolean; error?: any }> {
     try {
+      // CORREÇÃO B (BUG-037): sem sessão Supabase válida, NÃO gravar como anon —
+      // só replantaria 42501 RLS na DLQ. O caller enfileira a pendência (a fila
+      // é drenada após o re-login). Cardápio anon (sem perfil local) passa.
+      if (!(await this.guardSessionForWrite(table))) {
+        console.warn(`[HD-Sync] 🚫 Upsert ${table} bloqueado — sem sessão Supabase válida (não grava como anon)`);
+        return { ok: false, error: SupabaseSyncService.UNAUTH_ERROR };
+      }
       // module_visibility tem UNIQUE(store_branch_id) — uma linha por filial.
       // O app gera um `id` aleatório por dispositivo, então fazer upsert no PK
       // `id` faz o SEGUNDO dispositivo da mesma filial tentar INSERT com o mesmo
@@ -560,6 +567,27 @@ class SupabaseSyncService {
         console.warn(`[HD-Sync] 🔍 EMPTY FIELDS ${table}:`, emptyFields.length ? emptyFields.join(', ') : '(nenhum — payload 100% limpo)');
         // DIAGNÓSTICO: details/hint do Postgres apontam a coluna exata do 22P02
         console.warn(`[HD-Sync] 📋 DB DETAILS:`, error.details ?? '(sem details)', `| hint:`, error.hint ?? '(sem hint)', `| code:`, error.code ?? '(sem code)');
+        // CORREÇÃO D (BUG-037): dedup da DLQ. Se o MESMO erro (mesma tabela +
+        // mesmo record_id + mesma mensagem) já está PENDENTE na DLQ, NÃO
+        // replantar — antes, cada "acordar" do app re-inseria o registro e a
+        // DLQ crescia sem limite (744 em 4 dias, todos idênticos).
+        try {
+          const firstLine = (error.message || '').split('\n')[0].slice(0, 300);
+          let dupQuery = supabase
+            .from('movimentacoes_falhas')
+            .select('id')
+            .eq('table_name', table)
+            .eq('record_id', row.id || 'unknown')
+            .eq('status', 'pending')
+            .ilike('error_message', `${firstLine}%`);
+          if (row?.organization_id) dupQuery = dupQuery.eq('organization_id', row.organization_id);
+          if (row?.store_branch_id) dupQuery = dupQuery.eq('store_branch_id', row.store_branch_id);
+          const { data: dup } = await dupQuery.limit(1);
+          if (dup && dup.length > 0) {
+            console.warn(`[HD-Sync] 🗂 DLQ: erro já pendente para ${table}/${row.id || 'unknown'} — NÃO replantando`);
+            return { ok: false, error };
+          }
+        } catch { /* falha no dedup não bloqueia o registro — segue o fluxo normal */ }
         // Log to DLQ — p_payload é JSONB no banco: enviar OBJETO (não string),
         // senão o Postgres armazena um JSON *string* (double-encode) e as
         // queries de diagnóstico sobre o payload ficam inúteis.
@@ -588,6 +616,11 @@ class SupabaseSyncService {
 
   private async tryDelete(table: TableName, id: string): Promise<{ ok: boolean; error?: any }> {
     try {
+      // CORREÇÃO B (BUG-037): guard de sessão — não deletar como anon.
+      if (!(await this.guardSessionForWrite(table))) {
+        console.warn(`[HD-Sync] 🚫 Delete ${table} bloqueado — sem sessão Supabase válida`);
+        return { ok: false, error: SupabaseSyncService.UNAUTH_ERROR };
+      }
       const { error } = await supabase.from(table).delete().eq('id', id);
       if (error) {
         console.warn(`[HD-Sync] ❌ Delete ${table} failed:`, error.message, `(id: ${id})`);
@@ -603,6 +636,11 @@ class SupabaseSyncService {
   private async tryUpsertBatch(table: TableName, rows: Record<string, any>[]): Promise<{ ok: boolean; error?: any }> {
     if (rows.length === 0) return { ok: true };
     try {
+      // CORREÇÃO B (BUG-037): guard de sessão — não gravar lote como anon.
+      if (!(await this.guardSessionForWrite(table))) {
+        console.warn(`[HD-Sync] 🚫 Batch upsert ${table} bloqueado — sem sessão Supabase válida`);
+        return { ok: false, error: SupabaseSyncService.UNAUTH_ERROR };
+      }
       const { error } = await supabase.from(table).upsert(rows, { onConflict: 'id' });
       if (error) {
         console.warn(`[HD-Sync] ❌ Batch upsert ${table} failed:`, error.message);
@@ -694,11 +732,12 @@ class SupabaseSyncService {
       }
     }
     if (!result.ok) {
-      // Enfileira erros de CONEXÃO OU auth transitório (clock skew "JWT issued
-      // at future"). Erros permanentes (RLS/permissão, org inválida) nunca
-      // passariam com retry — enfileirar só faria a fila crescer sem limite.
-      if (this.isConnectionError(result.error) || this.isTransientAuthError(result.error)) {
-        console.log(`[HD-Sync] 📝 Queuing ${table} upsert (${this.isTransientAuthError(result.error) ? 'transient auth skew' : 'network error'} — will retry)`);
+      // Enfileira CONEXÃO OU auth transitório (skew) OU sessão inválida
+      // (UNAUTH — vai para a rede assim que o re-login voltar). Erros
+      // permanentes (RLS/permissão, org inválida) nunca passariam com retry —
+      // enfileirar só faria a fila crescer sem limite.
+      if (this.isConnectionError(result.error) || this.isTransientAuthError(result.error) || this.isUnauthError(result.error)) {
+        console.log(`[HD-Sync] 📝 Queuing ${table} upsert (${this.isUnauthError(result.error) ? 'sessão inválida' : this.isTransientAuthError(result.error) ? 'transient auth skew' : 'network error'} — will retry)`);
         syncQueue.enqueue(table, 'upsert', { data: rowWithTimestamp });
         this._pendingCount = syncQueue.getPendingCount();
       }
@@ -730,9 +769,9 @@ class SupabaseSyncService {
       }
     }
     if (!result.ok) {
-      // Enfileira CONEXÃO OU auth transitório (skew). Erros permanentes não.
-      if (this.isConnectionError(result.error) || this.isTransientAuthError(result.error)) {
-        console.log(`[HD-Sync] 📝 Queuing ${table} delete (${this.isTransientAuthError(result.error) ? 'transient auth skew' : 'network error'} — will retry)`);
+      // Enfileira CONEXÃO OU auth transitório (skew) OU sessão inválida (UNAUTH).
+      if (this.isConnectionError(result.error) || this.isTransientAuthError(result.error) || this.isUnauthError(result.error)) {
+        console.log(`[HD-Sync] 📝 Queuing ${table} delete (${this.isUnauthError(result.error) ? 'sessão inválida' : this.isTransientAuthError(result.error) ? 'transient auth skew' : 'network error'} — will retry)`);
         syncQueue.enqueue(table, 'delete', { rowId: id });
         this._pendingCount = syncQueue.getPendingCount();
       }
@@ -792,9 +831,9 @@ class SupabaseSyncService {
       }
     }
     if (!result.ok) {
-      // Enfileira CONEXÃO OU auth transitório (skew). Erros permanentes não.
-      if (this.isConnectionError(result.error) || this.isTransientAuthError(result.error)) {
-        console.log(`[HD-Sync] 📝 Queuing ${table} batch upsert (${this.isTransientAuthError(result.error) ? 'transient auth skew' : 'network error'} — will retry)`);
+      // Enfileira CONEXÃO OU auth transitório (skew) OU sessão inválida (UNAUTH).
+      if (this.isConnectionError(result.error) || this.isTransientAuthError(result.error) || this.isUnauthError(result.error)) {
+        console.log(`[HD-Sync] 📝 Queuing ${table} batch upsert (${this.isUnauthError(result.error) ? 'sessão inválida' : this.isTransientAuthError(result.error) ? 'transient auth skew' : 'network error'} — will retry)`);
         syncQueue.enqueue(table, 'upsert_batch', { dataArray: rowsWithTimestamp });
         this._pendingCount = syncQueue.getPendingCount();
       }
@@ -908,7 +947,15 @@ class SupabaseSyncService {
     // Login OFFLINE não cria sessão Supabase — sem sessão o testConnection
     // falha com PGRST301 e a fila nunca drena. Re-autentica primeiro
     // (silencioso, usando as credenciais locais do aparelho).
-    await this.ensureSession();
+    const hasSession = await this.ensureSession();
+    // CORREÇÃO B (BUG-037, nível fila): sem sessão válida o processQueue
+    // executaria as escritas como anon (42501 RLS → retries esgotados → drops
+    // silenciosos). Mantém a fila local até o re-login. O cardápio anon não
+    // tem fila local (escritas diretas), então não é afetado por este hold.
+    if (!hasSession && !this.isMenuAnonMode()) {
+      console.warn(`[HD-Sync] 🚫 ${count} operações pendentes MANTIDAS — sem sessão Supabase válida (não grava como anon)`);
+      return { processed: 0, failed: 0 };
+    }
 
     // First check if Supabase is actually reachable
     const connected = await this.testConnection();
@@ -968,9 +1015,13 @@ class SupabaseSyncService {
 
   /**
    * Garante uma sessão Supabase VÁLIDA para sincronizar.
-   * - Sessão armazenada: valida com 1 consulta leve (o supabase-js renova o
-   *   access token sozinho nessa chamada). Se o refresh token estiver morto,
-   *   o erro PGRST301 limpa a sessão e o fluxo abaixo tenta re-login.
+   * - Sessão armazenada: valida com a RPC get_my_profile (SECURITY DEFINER,
+   *   retorna NULL sem erro para anon). NÃO usar SELECT em products: o policy
+   *   products_select_anon é escopado pelo header x-branch-id (cardápio) —
+   *   sem o header o SELECT volta 0 linhas SEM erro, uma "falsa positiva" que
+   *   fazia o app gravar como anon e derrubar em 42501 RLS (BUG-037). Se o
+   *   refresh token estiver morto, o erro PGRST301 limpa a sessão e o fluxo
+   *   abaixo tenta re-login.
    * - Sem sessão (login OFFLINE não cria JWT): re-login SILENCIOSO com as
    *   credenciais locais capturadas no último login online deste aparelho
    *   (email + senha em hd_system_user_profile). É isso que permite a fila
@@ -986,15 +1037,20 @@ class SupabaseSyncService {
     // Logout EXPLÍCITO: não re-autenticar em hipótese alguma — senão a sessão
     // voltaria a existir e o app reabriria logado como o último usuário,
     // anulando o logout.
-    if (localStorage.getItem('hd_system_logged_in_email') === 'LOGGED_OUT') return false;
+    try {
+      if (localStorage.getItem('hd_system_logged_in_email') === 'LOGGED_OUT') return false;
+    } catch { /* ambiente sem localStorage (testes/node, webview restrito) */ }
 
     if (!forceReauth) {
       try {
         const { data } = await supabase.auth.getSession();
         if (data?.session) {
-          const { error } = await supabase.from('products').select('id').limit(1);
-          if (!error) return true;
-          console.warn('[HD-Sync] Sessão armazenada inválida — tentando re-login local:', error.message);
+          // Valida por get_my_profile (e NÃO por SELECT em products — anon
+          // escopado por header x-branch-id volta 0 linhas SEM erro = falsa
+          // positiva; era isso que permitia gravar como anon → 42501 RLS).
+          const { data: profile, error: profileError } = await supabase.rpc('get_my_profile');
+          if (!profileError && profile?.id) return true;
+          console.warn('[HD-Sync] Sessão armazenada inválida — tentando re-login local:', profileError?.message || 'perfil vazio (anon?)');
         }
       } catch (e) {
         console.warn('[HD-Sync] getSession falhou:', e);
@@ -1140,6 +1196,63 @@ class SupabaseSyncService {
     if (!error) return false;
     const msg = (error.message || '').toLowerCase();
     return msg.includes('jwt') && (msg.includes('future') || msg.includes('not yet valid'));
+  }
+
+  // ─── CORREÇÃO DE SESSÃO A–D (BUG-037, 2026-09-05) ────────────────
+  // 3 aparelhos com JWT morto/sessão anon gravavam como anon (42501 RLS) e a
+  // DLQ explodiu (744 registros em 4 dias). Agora: sessão validada por
+  // get_my_profile (A), escrita NÃO vai à rede sem sessão válida (B), aviso no
+  // app em vez de seguir mudo (C — no App.tsx) e DLQ com dedup (D).
+
+  /** Erro sintético interno: sessão inválida — a escrita NÃO vai à rede. */
+  private static UNAUTH_ERROR = Object.freeze({ code: 'UNAUTH', message: 'Sem sessão Supabase válida' });
+
+  private isUnauthError(error: any): boolean {
+    return !!error && error?.code === 'UNAUTH';
+  }
+
+  /** TTL do cache de validade de sessão (evita 1 RPC get_my_profile por escrita). */
+  private static SESSION_VALID_TTL_MS = 30_000;
+
+  private _sessionValid = false;
+  private _sessionCheckedAt = 0;
+
+  /**
+   * Sessão Supabase VÁLIDA para escrita, com cache curto (30s).
+   * False → o caminho de escrita NÃO deve ir à rede (gravar como anon só
+   * replanta erros RLS na DLQ). O caller decide enfileirar ou recusar.
+   */
+  private async hasValidSession(): Promise<boolean> {
+    const now = Date.now();
+    if (now - this._sessionCheckedAt < SupabaseSyncService.SESSION_VALID_TTL_MS) {
+      return this._sessionValid;
+    }
+    this._sessionCheckedAt = now;
+    this._sessionValid = await this.ensureSession();
+    return this._sessionValid;
+  }
+
+  /**
+   * Modo anon LEGÍTIMO = cardápio digital/delivery (aparelho SEM perfil local
+   * salvo). As policies sales_*_anon / stock_movements_*_anon autorizam essas
+   * escritas — o guard de sessão NUNCA bloqueia esse fluxo (exceção 0f).
+   */
+  private isMenuAnonMode(): boolean {
+    try {
+      if (localStorage.getItem('hd_system_logged_in_email') === 'LOGGED_OUT') return false;
+      return !localStorage.getItem('hd_system_user_profile');
+    } catch {
+      return false; // sem localStorage, assume modo app (não anon)
+    }
+  }
+
+  /**
+   * Guard de escrita: cardápio anon segue SEM bloqueio; o app (com perfil
+   * local) precisa de sessão Supabase válida validada por get_my_profile.
+   */
+  private async guardSessionForWrite(table: TableName): Promise<boolean> {
+    if (this.isMenuAnonMode()) return true;
+    return this.hasValidSession();
   }
 }
 

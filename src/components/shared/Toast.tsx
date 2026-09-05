@@ -8,7 +8,7 @@
  *   success('mensagem') / error('mensagem') / warning('mensagem') / info('mensagem')
  */
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { CheckCircle, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
@@ -19,6 +19,16 @@ interface ToastMessage {
   message: string;
   duration?: number;
 }
+
+/**
+ * Ponte para disparar toast FORA de componentes (ex.: efeito de health check
+ * no App, que é PAI do ToastProvider — useToast() lança fora do provider).
+ * O ToastProvider escuta o evento 'hd:toast' e empilha normalmente.
+ */
+export const notifyToast = (type: ToastType, message: string, duration?: number) => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('hd:toast', { detail: { type, message, duration } }));
+};
 
 interface ToastContextType {
   success: (message: string, duration?: number) => void;
@@ -54,6 +64,17 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setToasts(prev => prev.filter(t => t.id !== id));
     }, duration);
   }, []);
+
+  // Ponte notifyToast: toasts disparados fora de componentes (ex.: health
+  // check do App, que é pai do provider) chegam aqui via evento hd:toast.
+  useEffect(() => {
+    const onGlobalToast = (e: Event) => {
+      const d = (e as CustomEvent).detail;
+      if (d?.type && d?.message) addToastFn(d.type, d.message, d.duration);
+    };
+    window.addEventListener('hd:toast', onGlobalToast);
+    return () => window.removeEventListener('hd:toast', onGlobalToast);
+  }, [addToastFn]);
 
   const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
