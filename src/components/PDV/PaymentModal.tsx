@@ -55,6 +55,17 @@ interface PaymentModalProps {
   settings: SystemSettings;
   user: UserProfile;
   onSaleSuccess: (sale: Sale) => void;
+  /**
+   * Modo COMANDA (opcional). Quando presente, o modal finaliza uma comanda em
+   * vez de criar uma venda PDV via addSale. O fluxo de PAGAMENTO é idêntico
+   * (dinheiro/troco, PIX, cartão, dividido); apenas a persistência desvia:
+   * em vez de `storageService.addSale`, chama `onConfirmComanda(payments, total)`.
+   * A lógica original do PDV (sem esta prop) permanece intacta — zero regressão.
+   */
+  comandaMode?: {
+    title?: string;
+    onConfirmComanda: (payments: PaymentDetails[], total: number) => Promise<{ success: boolean; message?: string } | void>;
+  };
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
@@ -70,6 +81,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   settings,
   user,
   onSaleSuccess,
+  comandaMode,
 }) => {
   const totalAmount = Math.max(0, subtotal - discount);
 
@@ -248,6 +260,23 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           });
         }
 
+      // ─── MODO COMANDA: desvia a persistência para o callback da comanda ───
+      // O estoque já foi baixado atomicamente ao adicionar os itens (addSale →
+      // process_sale_transaction). Aqui só finalizamos a comanda.
+      if (comandaMode) {
+        const comandaResult = await comandaMode.onConfirmComanda(payments, totalAmount);
+        if (comandaResult && comandaResult.success === false) {
+          posAudio.error();
+          setPaymentError(comandaResult.message || 'Erro ao fechar a comanda. Tente novamente.');
+          return;
+        }
+        posAudio.chime();
+        const primaryMethod = payments[0]?.method || 'cash';
+        globalNotificationService.notifySale(totalAmount, primaryMethod);
+        onClose();
+        return;
+      }
+
       const saleCode = `VEN-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
       const newSale: Sale = {
         id: `sale-${Date.now()}`,
@@ -322,7 +351,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                Finalizar Venda - Pagamento
+                {comandaMode ? (comandaMode.title || 'Finalizar Comanda - Pagamento') : 'Finalizar Venda - Pagamento'}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Selecione a forma de pagamento e confirme a transação
@@ -768,7 +797,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             className="flex-1 py-3 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 min-h-[44px]"
           >
             <CheckCircle2 className="w-5 h-5" />
-            <span>Confirmar e Concluir Venda (F8)</span>
+            <span>{comandaMode ? 'Confirmar e Concluir Comanda (F8)' : 'Confirmar e Concluir Venda (F8)'}</span>
           </LoadingButton>
         </div>
       </div>

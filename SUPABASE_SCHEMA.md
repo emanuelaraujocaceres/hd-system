@@ -1256,6 +1256,7 @@ Resumo de DLQ por filial/org.
 - process_sale_transaction(p_sale_id, ...) -> TABLE(success, message). Cardapio anon. Grants: authenticated, anon, service_role.
 - process_sale_atomic(p_sale_data, p_items, p_payments, p_session_id) -> jsonb. Server-only. Grants: service_role.
 - cancel_sale_atomic(p_sale_id uuid) -> jsonb. Restaura estoque (normal / composto / fração) e marca a venda como cancelled. Chamado do frontend (cliente autenticado) via cancelSaleWithStockRestore. Grants: authenticated, service_role.
+- fechar_comanda(p_session_id uuid, p_payments jsonb, p_operator_name text) -> jsonb. FINALIZADOR idempotente de comanda (20260905): trava sessao FOR UPDATE, valida org (is_superadmin/get_user_org_id), marca todas as sales 'pending' da sessao como completed (+ payments_json/payment_method/operator_name) e fecha a sessao (status='completed', closed_at). NAO re-baixa estoque nem mexe em tables.status/stock_movements (a baixa ja ocorreu no addSale via process_sale_transaction; re-baixar duplicaria). Grants: authenticated + service_role (NAO anon - regra 9).
 - create_customer_session(...) -> jsonb. Server-only. Grants: service_role.
 - close_cash_session(p_session_id, p_final_balance, p_notes) -> jsonb. Server-only. Grants: service_role.
 - create_filial_backup(...) -> uuid. Grants: authenticated + service_role.
@@ -1292,6 +1293,7 @@ Localizacao atual dos .sql de projeto:
 - `supabase/RLS_FIXES.sql`, `supabase/ATOMIC_RPCS.sql` : referencias canonicas de RLS/RPCs (mantidas na raiz de `supabase/`).
 
 Principais migracoes recentes de projeto (por data):
+- 20260905_fechar_comanda.sql (RPC fechar_comanda - finalizador de comanda/sessao)
 - 20260831_add_open_containers.sql (tabela open_containers + RLS + Realtime)
 - 20260822_system_users_permissions.sql (permissions em system_users)
 - 20260821_add_module_comanda.sql / 20260821_scope_anon_select_rls.sql
