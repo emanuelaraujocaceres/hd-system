@@ -114,9 +114,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [isSearchingImages, setIsSearchingImages] = useState(false);
   const [imageSuggestions, setImageSuggestions] = useState<string[]>([]);
-  // Origem das sugestões exibidas: 'web' (Wikimedia), 'fallback' (padrão) ou
-  // 'idle' (nenhuma) — alimenta o rótulo da grade de sugestões.
-  const [imageSource, setImageSource] = useState<'web' | 'fallback' | 'idle'>('idle');
+  // Origem das sugestões exibidas: 'web' (Wikimedia Commons real), 'failed'
+  // (busca sem resultados/erro — NUNCA mostrar imagens genéricas, só ações
+  // úteis) ou 'idle' (nenhuma busca ainda).
+  const [imageSource, setImageSource] = useState<'web' | 'failed' | 'idle'>('idle');
   const [showManualUrlInput, setShowManualUrlInput] = useState(false);
 
   // Product Form state
@@ -304,58 +305,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     }
     setIsSearchingImages(true);
 
-    // Presets como fallback caso a busca online falhe ou não retorne nada
-    const presetMap: Record<string, string[]> = {
-      coca: [
-        'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=400&q=80',
-        'https://images.unsplash.com/photo-1554866585-cd94860890b7?w=400&q=80',
-        'https://images.unsplash.com/photo-1629203851122-3726ecdf080e?w=400&q=80',
-      ],
-      cerveja: [
-        'https://images.unsplash.com/photo-1608270586620-248524c67de9?w=400&q=80',
-        'https://images.unsplash.com/photo-1535958636474-b021ee887b13?w=400&q=80',
-        'https://images.unsplash.com/photo-1571613316887-6f8d5cbf7ef7?w=400&q=80',
-      ],
-      cafe: [
-        'https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=400&q=80',
-        'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=400&q=80',
-      ],
-      bebida: [
-        'https://images.unsplash.com/photo-1527661591475-527312dd65f5?w=400&q=80',
-        'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=400&q=80',
-      ],
-      chocolate: [
-        'https://images.unsplash.com/photo-1541781774459-bb2af2f05b55?w=400&q=80',
-        'https://images.unsplash.com/photo-1511381939415-e44015466834?w=400&q=80',
-      ],
-      snack: [
-        'https://images.unsplash.com/photo-1566478989037-eec170784d0b?w=400&q=80',
-        'https://images.unsplash.com/photo-1599490659213-e2b9527bd087?w=400&q=80',
-      ],
-    };
-
-    const fallbackImages = (): string[] => {
-      const lower = term.toLowerCase();
-      for (const [key, imgs] of Object.entries(presetMap)) {
-        if (lower.includes(key)) {
-          return imgs;
-        }
-      }
-      return [
-        'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=400&q=80',
-        'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&q=80',
-        'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400&q=80',
-        'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&q=80',
-      ];
-    };
-
-    // Flag p/ só aplicar o fallback se a busca online NÃO retornou resultados.
-    // (o `finally` roda SEMPRE mesmo com `return` no `try` — sem essa flag, o
-    // fallback genérico sobrescrevia os resultados reais da web)
-    let hasRealResults = false;
-
-    // Timeout de 8s: rede lenta não deve deixar o usuário esperando para
-    // sempre. AbortController derruba o fetch — o AbortError cai no catch.
+    // HISTÓRICO (decisão do usuário, NUNCA reintroduzir): existia um fallback
+    // com presets genéricos (Unsplash) exibido quando a busca online falhava
+    // ou vinha vazia. O usuário rejeitou: "nunca imagens genéricas". Agora,
+    // falha/vazio exibem um painel de AÇÕES (editar termo, foto manual, URL)
+    // e NUNCA placeholders aleatórios.
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 8000);
 
@@ -367,7 +321,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       const found = wikimediaSearchToUrls(data, 3);
 
       if (found.length > 0) {
-        hasRealResults = true;
         setImageSource('web');
         setImageSuggestions(found);
         setFormImageUrl(found[0]);
@@ -375,26 +328,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         return;
       }
 
-      addToast('warning', `Nenhuma imagem encontrada para "${term}" — mostrando opções padrão.`);
+      addToast('warning', `Nenhuma imagem encontrada para "${term}" na Wikimedia Commons.`);
+      setImageSource('failed');
+      setImageSuggestions([]);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        addToast('warning', 'A busca de imagens demorou demais — mostrando opções padrão.');
+        addToast('warning', 'A busca de imagens demorou demais. Tente novamente ou envie uma foto manualmente.');
       } else {
-        addToast('warning', 'Sem conexão com a busca de imagens — mostrando opções padrão.');
+        addToast('warning', 'Sem conexão com a busca de imagens. Envie uma foto manualmente.');
       }
+      setImageSource('failed');
+      setImageSuggestions([]);
     } finally {
       window.clearTimeout(timeoutId);
       setIsSearchingImages(false);
-      // Só mostra as opções padrão quando a busca online falhou ou veio vazia.
-      if (!hasRealResults) {
-        setImageSource('fallback');
-        const fallback = fallbackImages();
-        setImageSuggestions(fallback);
-        if (fallback[0]) {
-          setFormImageUrl(fallback[0]);
-          posAudio.chime();
-        }
-      }
     }
   };
 
@@ -1802,13 +1749,11 @@ minStock: parseInt(formMinStock) || 0,
                   </div>
                 </div>
 
-                {imageSuggestions.length > 0 && (
+                {imageSource === 'web' && imageSuggestions.length > 0 && (
                   <div className="space-y-1.5 pt-1 border-t border-slate-200 dark:border-[#27272a]">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
                       <Sparkles className="w-3 h-3 text-amber-500" />
-                      {imageSource === 'web'
-                        ? 'Imagens encontradas na web (Wikimedia Commons):'
-                        : 'Opções padrão (busca online sem resultados):'}
+                      Imagens encontradas na web (Wikimedia Commons):
                     </span>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {imageSuggestions.map((img, idx) => (
@@ -1832,12 +1777,50 @@ minStock: parseInt(formMinStock) || 0,
                   </div>
                 )}
 
+                {imageSource === 'failed' && (
+                  <div className="space-y-2.5 pt-2 border-t border-slate-200 dark:border-[#27272a]">
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                      Não encontramos imagens para esse termo. Você pode ajustar o texto
+                      da busca, enviar uma foto do produto ou colar o endereço (URL) de
+                      uma imagem — sem imagens genéricas.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImageSource('idle');
+                          setImageSuggestions([]);
+                          firstInputRef.current?.focus();
+                          firstInputRef.current?.select();
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 font-bold text-[11px] hover:bg-indigo-500/20 transition-colors"
+                      >
+                        Editar termo e buscar de novo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] text-slate-700 dark:text-slate-300 font-bold text-[11px] hover:bg-slate-300 dark:hover:bg-[#27272a] transition-colors"
+                      >
+                        Enviar foto do produto
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowManualUrlInput(true)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] text-slate-700 dark:text-slate-300 font-bold text-[11px] hover:bg-slate-300 dark:hover:bg-[#27272a] transition-colors"
+                      >
+                        Inserir URL manualmente
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {showManualUrlInput && (
                   <input
                     type="url"
                     value={formImageUrl}
                     onChange={(e) => setFormImageUrl(e.target.value)}
-                    placeholder="https://images.unsplash.com/..."
+                    placeholder="https://exemplo.com/imagem.jpg"
                     className="w-full px-3 py-1.5 bg-white dark:bg-[#18181b] border border-slate-300 dark:border-[#27272a] rounded-xl text-xs text-slate-900 dark:text-white outline-none"
                   />
                 )}
