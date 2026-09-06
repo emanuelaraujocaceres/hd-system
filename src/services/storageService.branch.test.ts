@@ -674,6 +674,42 @@ describe('storageService — produto excluído NÃO ressurge (tombstone, BUG pro
     expect(svc.getProducts().find((p: any) => p.id === PROD_A)).toBeFalsy();
   });
 
+  it('deleteProduct faz SOFT-DELETE (upsert com deleted_at) — nunca DELETE físico', () => {
+    seedProduct();
+    const upsertSpy = vi.spyOn(syncService, 'upsertRow').mockResolvedValue({} as any);
+    svc.deleteProduct(PROD_A);
+    // Produto com histórico (FK sale_items/stock_movements) NÃO pode ser DELETE
+    // físico no cloud (409). A exclusão agora é um upsert marcando deleted_at.
+    expect(upsertSpy).toHaveBeenCalledWith('products', expect.objectContaining({
+      id: PROD_A,
+      deleted_at: expect.any(String),
+    }));
+  });
+
+  it('updateProductFromRemote com deleted_at REMOVE o produto local (não ressuscita)', () => {
+    seedProduct();
+    // Soft-delete feito em outro device chega via Realtime como UPDATE c/ deleted_at
+    svc.updateProductFromRemote({
+      id: PROD_A,
+      store_branch_id: BRANCH_UUIDS['br-01'],
+      name: 'Cerveja',
+      deleted_at: '2026-09-06T12:00:00.000Z',
+    });
+    expect(svc.getProducts().find((p: any) => p.id === PROD_A)).toBeFalsy();
+  });
+
+  it('updateProductFromRemote com deleted_at de OUTRA filial NÃO remove produto da filial atual', () => {
+    seedProduct();
+    // Isolamento de filial (BUG-024): soft-delete de br-02 não pode apagar produto de br-01
+    svc.updateProductFromRemote({
+      id: PROD_A,
+      store_branch_id: BRANCH_UUIDS['br-02'],
+      name: 'Cerveja',
+      deleted_at: '2026-09-06T12:00:00.000Z',
+    });
+    expect(svc.getProducts().find((p: any) => p.id === PROD_A)).toBeTruthy();
+  });
+
   it('saveProduct remove o tombstone ao recriar/restaurar o produto', () => {
     seedProduct();
     svc.deleteProduct(PROD_B);

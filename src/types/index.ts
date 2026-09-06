@@ -124,6 +124,7 @@ export interface Product {
   fraction_product_id?: string; // produto que representa a fração (ex.: "Dose Vódka")
   productLots?: ProductLot[]; // lotes ativos deste produto (para referência UI)
   activeStockLossLogs?: StockLossLog[]; // perdas registradas recentemente
+  deletedAt?: string; // tombstone de soft-delete (20260906): produto excluído em outro device
 }
 
 export interface Category {

@@ -660,6 +660,10 @@ expiration_date: p.expirationDate || null,
       yield_count: p.yield_count || 0,
       fraction_product_id: p.fraction_product_id || null,
       use_lots: p.useLots || false,
+      // Soft-delete (20260906): undefined/null limpa o tombstone no cloud —
+      // necessário p/ Desfazer (undo de deleteProduct chama saveProduct) e
+      // reedições não re-soft-deletarem o produto.
+      deleted_at: p.deletedAt || null,
     });
   }
 
@@ -1213,6 +1217,15 @@ expiration_date: p.expirationDate || null,
     // Branch isolation: reject remote products from other branches
     if (!this.isRemoteFromCurrentBranch(row)) {
       console.log(`[HD-Sync] Ignoring remote product from other branch: ${row.store_branch_id}`);
+      return;
+    }
+
+    // TOMBSTONE (deleted_at, 20260906): produto soft-deletado em outro device
+    // chega por Realtime como UPDATE com deleted_at. Em vez de atualizar (que
+    // faria o produto "voltar"), remove do estado local + registra tombstone,
+    // espelhando o que removeProductFromRemote faz para DELETE físico.
+    if (row.deleted_at) {
+      this.removeProductFromRemote(row.id);
       return;
     }
 
@@ -2350,14 +2363,26 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
 
        // ── PRODUCTS ──────────────────────────────────────────────────
        {
+         const rawProducts = asArray<any>(products);
+         // TOMBSTONE de produto (deleted_at, 20260906): produtos soft-deletados
+         // (upsert com deleted_at) NÃO hidratam nem são re-contados. Guardamos
+         // os ids deletados para também remover os produtos locais correspondentes
+         // e evitar que o merge os reenvie ao cloud (ressurreição multi-dispositivo).
+         const deletedProductIds = new Set(
+           rawProducts.filter((r: any) => r.deleted_at).map((r: any) => r.id),
+         );
+         const safeProducts = rawProducts.filter((r: any) => !r.deleted_at);
          const localRaw = this.get<Product[]>(KEYS.PRODUCTS, this.isDefaultOrg() ? INITIAL_PRODUCTS : []);
          // Produtos excluídos NESTE dispositivo (tombstone) NÃO podem entrar no
          // merge: senão mergeBy os re-envia ao cloud (syncLocal) e os adiciona
          // de volta à lista — ressuscitando o produto para todos os dispositivos
          // quando este device perdeu o evento de DELETE (offline/realtime).
          const tombstoned = new Set(this.get<string[]>(KEYS.DELETED_PRODUCTS, []));
-         const local = localRaw.filter((p) => !tombstoned.has(p.id));
-        const merged = mergeBy(KEYS.PRODUCTS, local, products, (r: any) => {
+         // Remove localmente os produtos que foram soft-deletados no cloud
+         // (deleted_at: tombstone), para o merge NÃO os reenviar ao cloud nem
+         // mantê-los na tela.
+         const local = localRaw.filter((p) => !tombstoned.has(p.id) && !deletedProductIds.has(p.id));
+        const merged = mergeBy(KEYS.PRODUCTS, local, safeProducts, (r: any) => {
           const cloudSalePrice = parseFloat(r.sale_price) || 0;
           return {
             id: r.id,
@@ -2386,6 +2411,7 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
             yield_count: parseInt(r.yield_count) || 0,
             fraction_product_id: r.fraction_product_id || undefined,
             useLots: r.use_lots || false,
+            deletedAt: r.deleted_at || undefined,
           };
         }, (p) => this.syncProduct(p), (p) => p.id, (localItem, cloudItem) => {
           // Preserve local salePrice if cloud sent 0
@@ -3424,7 +3450,8 @@ id: StorageService.ensureUuid(settings.id),
   getProducts(): Product[] {
     const fallback = this.isDefaultOrg() ? INITIAL_PRODUCTS : [];
     const all = this.get<Product[]>(KEYS.PRODUCTS, fallback);
-    return this.filterBySelectedBranch<Product>(this.filterByOrg<Product>(all));
+    return this.filterBySelectedBranch<Product>(this.filterByOrg<Product>(all))
+      .filter((p) => !p.deletedAt); // soft-delete (20260906): nunca expor produto excluído
   }
 
   saveProduct(product: Product): Product {
@@ -3490,7 +3517,21 @@ id: StorageService.ensureUuid(settings.id),
       deleted.push(id);
       this.set(KEYS.DELETED_PRODUCTS, deleted);
     }
-    syncService.deleteRow('products', id);
+    // TOMBSTONE (deleted_at, 20260906): SOFT-DELETE sincronizado — espelha o
+    // padrão de sales (20260902). Em vez de DELETE físico (syncService.deleteRow,
+    // que falha com 409 quando o produto tem histórico: FKs fk_sale_items_product
+    // / fk_stock_movements_product), marca deleted_at=now() no cloud via upsert
+    // (UPDATE apenas das colunas enviadas). O Realtime propaga o UPDATE para todos
+    // os devices e a hidratação ignora produtos com deleted_at, impedindo a
+    // "ressurreição" multi-dispositivo. Escopo por org+filial p/ respeitar a RLS.
+    const productBranch = product?.storeBranchId || this.getSelectedBranchId();
+    const productOrg = this.orgIdForBranch(productBranch, product?.organizationId || this.getCurrentOrgId());
+    syncService.upsertRow('products', {
+      id,
+      organization_id: productOrg,
+      store_branch_id: productBranch,
+      deleted_at: new Date().toISOString(),
+    });
     if (product) {
       undoManager.push({
         type: 'delete-product',

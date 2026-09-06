@@ -286,6 +286,7 @@ Produtos (estoque e responsabilidade do frontend - AGENTS.md regra 8).
 | tv_highlight_tag | TEXT | YES | | Etiqueta destaque TV |
 | created_at | TIMESTAMPTZ | YES | | |
 | updated_at | TIMESTAMPTZ | YES | | |
+| deleted_at | TIMESTAMPTZ | YES | | Soft-delete (tombstone, 2026-09-06): produto excluído via upsert com deleted_at=now() — espelha sales. Produtos com FK de histórico (sale_items/stock_movements) não são DELETE físico (409). Realtime propaga o UPDATE; hidratação ignora deleted_at <> NULL. Migration: 20260906_add_products_deleted_at.sql |
 
 RLS: superadmin_all_products[ALL], org_branch_insert_products[INSERT], org_branch_update_products[UPDATE], org_branch_delete_products[DELETE], products_select_authenticated[SELECT], products_select_anon[SELECT] (escopo por x-branch-id header - 0f)
 Realtime: publicada - REPLICA: full
