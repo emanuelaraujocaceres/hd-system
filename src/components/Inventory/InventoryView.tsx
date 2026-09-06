@@ -82,7 +82,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   // ============================================================
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out' | 'expiring'>('all');
   const [marginFilter, setMarginFilter] = useState<'all' | 'healthy' | 'low'>('all');
   const [quickFilter, setQuickFilter] = useState<'all' | 'cardapio' | 'tv'>('all');
   const [isSearching, setIsSearching] = useState(false);
@@ -332,6 +332,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setImageSource('failed');
       setImageSuggestions([]);
     } catch (err) {
+      // Log de diagnóstico: o motivo real da falha aparece no console para
+      // suporte remoto (o painel "failed" também é exibido ao usuário).
+      console.error('[Busca de imagem] Falha ao buscar o termo:', JSON.stringify(term), err);
       if (err instanceof Error && err.name === 'AbortError') {
         addToast('warning', 'A busca de imagens demorou demais. Tente novamente ou envie uma foto manualmente.');
       } else {
@@ -650,6 +653,43 @@ minStock: parseInt(formMinStock) || 0,
     }
   };
 
+  // ── ALERTAS DE ESTOQUE (cards de filtro) ──────────────────────
+  // Régua de "próximo ao vencimento" = mesma do Dashboard (janela de 30 dias):
+  // - sem lote controlado (useLots=false): usa expirationDate do produto
+  // - com lote (useLots=true): tem pelo menos 1 lote ATIVO com quantity > 0
+  //   cuja expirationDate cai na janela. A contagem é POR PRODUTO (1x), para
+  //   bater exatamente com o que a lista filtrada vai exibir.
+  const alertToday = new Date();
+  const alertThirtyDays = new Date(alertToday);
+  alertThirtyDays.setDate(alertThirtyDays.getDate() + 30);
+
+  const alertActiveLots = useMemo(
+    () => storageService.getProductLots().filter((l) => l.status === 'active'),
+    []
+  );
+
+  const isExpiringProduct = (p: Product): boolean => {
+    if (!p.active) return false;
+    if (p.useLots) {
+      return alertActiveLots.some((l) => {
+        if (l.productId !== p.id || !l.expirationDate || l.quantity <= 0) return false;
+        const d = new Date(l.expirationDate + 'T23:59:59');
+        return d >= alertToday && d <= alertThirtyDays;
+      });
+    }
+    if (!p.expirationDate) return false;
+    const expDate = new Date(p.expirationDate + 'T23:59:59');
+    return expDate >= alertToday && expDate <= alertThirtyDays;
+  };
+
+  const alertCounts = useMemo(() => {
+    const low = products.filter((p) => p.currentStock <= p.minStock && p.currentStock > 0).length;
+    const out = products.filter((p) => p.currentStock === 0).length;
+    const expiring = products.filter(isExpiringProduct).length;
+    return { low, out, expiring };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, alertActiveLots]);
+
   // Filtered list
   const filteredProducts = products.filter((p) => {
     const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
@@ -662,6 +702,7 @@ minStock: parseInt(formMinStock) || 0,
     let matchesStock = true;
     if (stockFilter === 'low') matchesStock = p.currentStock <= p.minStock && p.currentStock > 0;
     if (stockFilter === 'out') matchesStock = p.currentStock === 0;
+    if (stockFilter === 'expiring') matchesStock = isExpiringProduct(p);
 
     // Filtro por margem (mesma régua dos indicadores no topo)
     let matchesMargin = true;
@@ -767,55 +808,53 @@ minStock: parseInt(formMinStock) || 0,
         </div>
       </div>
 
-      {/* Estoque Inteligente: Painel de Alertas */}
-      {(() => {
-        const lowStockProducts = products.filter((p) => p.currentStock <= p.minStock && p.currentStock > 0);
-        const outOfStockProducts = products.filter((p) => p.currentStock === 0);
-        if (lowStockProducts.length === 0 && outOfStockProducts.length === 0) return null;
-        return (
-          <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 space-y-3">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <h3 className="text-xs font-bold text-amber-800 dark:text-amber-400">
-                Alertas de Estoque ({lowStockProducts.length + outOfStockProducts.length})
-              </h3>
+      {/* Estoque Inteligente: Cards de Alerta (atalhos de filtro) — clicar aplica
+          o filtro correspondente na lista; clicar de novo desativa (toggle).
+          Primeira contagem = quantos produtos a lista filtrada vai mostrar.
+          Funciona igual no desktop e no celular (grid responsivo). */}
+      {alertCounts.low + alertCounts.out + alertCounts.expiring > 0 && (
+        <div className="flex flex-wrap gap-3">
+          <div
+            className={`flex-1 min-w-[200px] p-4 rounded-2xl bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 flex items-center gap-3 cursor-pointer transition-all ${
+              stockFilter === 'low' ? 'ring-2 ring-amber-500/60' : 'hover:border-amber-300 dark:hover:border-amber-500/40'
+            }`}
+            onClick={() => setStockFilter((prev) => (prev === 'low' ? 'all' : 'low'))}
+            title="Filtrar apenas produtos com estoque baixo"
+          >
+            <div className="w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center text-base leading-none">🟡</div>
+            <div>
+              <p className="text-lg font-black text-amber-700 dark:text-amber-400 leading-none">{alertCounts.low}</p>
+              <p className="text-[10px] font-bold text-amber-600/80 dark:text-amber-400/70 mt-1">Estoque Baixo</p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {outOfStockProducts.slice(0, 3).map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => openInventoryModal(p)}
-                  className="flex items-center gap-2 p-2 rounded-lg bg-rose-100 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-left hover:bg-rose-200 dark:hover:bg-rose-500/20 transition-colors"
-                >
-                  <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-bold text-rose-800 dark:text-rose-400 truncate">{p.name}</p>
-                    <p className="text-[9px] text-rose-600 dark:text-rose-500">ESGOTADO — Toque para ajustar</p>
-                  </div>
-                </button>
-              ))}
-              {lowStockProducts.slice(0, 3).map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => openInventoryModal(p)}
-                  className="flex items-center gap-2 p-2 rounded-lg bg-amber-100 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-left hover:bg-amber-200 dark:hover:bg-amber-500/20 transition-colors"
-                >
-                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-bold text-amber-800 dark:text-amber-400 truncate">{p.name}</p>
-                    <p className="text-[9px] text-amber-600 dark:text-amber-500">{p.currentStock}/{p.minStock} {p.unit} — Toque para ajustar</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-            {(lowStockProducts.length + outOfStockProducts.length) > 3 && (
-              <p className="text-[10px] text-amber-600 dark:text-amber-500">
-                +{(lowStockProducts.length + outOfStockProducts.length) - 3} produto(s) em alerta. Use o filtro "Estoque Baixo" para ver todos.
-              </p>
-            )}
           </div>
-        );
-      })()}
+          <div
+            className={`flex-1 min-w-[200px] p-4 rounded-2xl bg-rose-50 dark:bg-rose-500/5 border border-rose-200 dark:border-rose-500/20 flex items-center gap-3 cursor-pointer transition-all ${
+              stockFilter === 'out' ? 'ring-2 ring-rose-500/60' : 'hover:border-rose-300 dark:hover:border-rose-500/40'
+            }`}
+            onClick={() => setStockFilter((prev) => (prev === 'out' ? 'all' : 'out'))}
+            title="Filtrar apenas produtos esgotados (estoque zero)"
+          >
+            <div className="w-9 h-9 rounded-full bg-rose-100 dark:bg-rose-500/20 flex items-center justify-center text-base leading-none">🔴</div>
+            <div>
+              <p className="text-lg font-black text-rose-700 dark:text-rose-400 leading-none">{alertCounts.out}</p>
+              <p className="text-[10px] font-bold text-rose-600/80 dark:text-rose-400/70 mt-1">Estoque Zerado</p>
+            </div>
+          </div>
+          <div
+            className={`flex-1 min-w-[200px] p-4 rounded-2xl bg-orange-50 dark:bg-orange-500/5 border border-orange-200 dark:border-orange-500/20 flex items-center gap-3 cursor-pointer transition-all ${
+              stockFilter === 'expiring' ? 'ring-2 ring-orange-500/60' : 'hover:border-orange-300 dark:hover:border-orange-500/40'
+            } ${alertCounts.expiring === 0 ? 'opacity-60' : ''}`}
+            onClick={() => setStockFilter((prev) => (prev === 'expiring' ? 'all' : 'expiring'))}
+            title="Filtrar produtos próximos ao vencimento (30 dias)"
+          >
+            <div className="w-9 h-9 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-base leading-none">🟠</div>
+            <div>
+              <p className="text-lg font-black text-orange-700 dark:text-orange-400 leading-none">{alertCounts.expiring}</p>
+              <p className="text-[10px] font-bold text-orange-600/80 dark:text-orange-400/70 mt-1">Próximo ao Vencimento</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Resumo de Margens */}
 {(marginSummary.healthy > 0 || marginSummary.low > 0) && (
@@ -897,6 +936,7 @@ minStock: parseInt(formMinStock) || 0,
               <option value="all">Todos os Níveis de Estoque</option>
               <option value="low">Apenas Estoque Baixo</option>
               <option value="out">Esgotados (Zero)</option>
+              <option value="expiring">Próximos ao Vencimento</option>
             </select>
 
             {/* Quick filters: Cardápio / TV */}
@@ -2297,6 +2337,7 @@ minStock: parseInt(formMinStock) || 0,
               <option value="all">Todos</option>
               <option value="low">Estoque Baixo</option>
               <option value="out">Esgotados</option>
+              <option value="expiring">Próximos ao Vencimento</option>
             </select>
           </div>
         </div>
