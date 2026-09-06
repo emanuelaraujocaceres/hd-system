@@ -4222,7 +4222,7 @@ id: StorageService.ensureUuid(settings.id),
   // após criação (addSale). Apenas atualiza header: kitchenStatus, status, payments, etc.
   // Recriar itens a cada mudança de status causava duplicação exponencial
   // (BUG: quantity multiplicava a cada transição pending→preparing→ready→delivered).
-  saveSale(sale: Sale) {
+  saveSale(sale: Sale, opts?: { skipSync?: boolean }) {
     sale.id = StorageService.ensureUuid(sale.id);
     sale.organizationId = sale.organizationId || this.getCurrentOrgId();
     sale.storeBranchId = sale.storeBranchId || this.getSelectedBranchId() || undefined;
@@ -4247,7 +4247,12 @@ id: StorageService.ensureUuid(settings.id),
     this.set(KEYS.SALES, sales);
 
     // Sync com o cloud (envia header atualizado; sale_items NÃO são reenviados)
-    this.syncSale(sales[idx] || sale);
+    // P0-3: skipSync p/ o pedido de fechamento do cardápio anon — o cloud NÃO
+    // recebe upsert aqui (não há UPDATE anon em sales; 42501 na DLQ). A gravação
+    // remota do closing_request é feita pela RPC solicitar_fechamento_comanda.
+    if (!opts?.skipSync) {
+      this.syncSale(sales[idx] || sale);
+    }
   }
 
   // --- CAIXA (CASH REGISTER) ---

@@ -1258,6 +1258,7 @@ Resumo de DLQ por filial/org.
 - process_sale_atomic(p_sale_data, p_items, p_payments, p_session_id) -> jsonb. Server-only. Grants: service_role.
 - cancel_sale_atomic(p_sale_id uuid) -> jsonb. Restaura estoque (normal / composto / fração) e marca a venda como cancelled. Chamado do frontend (cliente autenticado) via cancelSaleWithStockRestore. Grants: authenticated, service_role.
 - fechar_comanda(p_session_id uuid, p_payments jsonb, p_operator_name text) -> jsonb. FINALIZADOR idempotente de comanda (20260905): trava sessao FOR UPDATE, valida org+filial (is_superadmin/get_user_org_id/get_user_branch_id), marca todas as sales 'pending' da sessao como completed (+ payments_json/payment_method/operator_name) e fecha a sessao (status='completed', closed_at). NAO re-baixa estoque nem mexe em tables.status/stock_movements (a baixa ja ocorreu no addSale via process_sale_transaction; re-baixar duplicaria). Grants: authenticated + service_role (NAO anon - regra 9).
+- solicitar_fechamento_comanda(p_sale_ids uuid[], p_session_token text, p_payment_method text) -> jsonb. SINALIZADOR de "pedir a conta" do cardapio anon (20260906, P0-3): SECURITY DEFINER valida posse (todas as vendas vinculadas a customer_sessions ATIVA com o session_token; org+filial consistentes; p_payment_method whitelist cash/pix/credit_card/debit_card) e marca status='pending', kitchen_status='closing_request', payments_json/payment_method com total REAL (s.total). NAO toca estoque/caixa/sessao (finalizacao e do operador via fechar_comanda). Grants: anon + authenticated + service_role (EXCECAO ANON documentada no cabecalho da migration, idem process_sale_transaction/fn_insserir_dlq - nunca revogar). NUNCA criar policy UPDATE permissiva em sales (regra 0b).
 - create_customer_session(...) -> jsonb. Server-only. Grants: service_role.
 - close_cash_session(p_session_id, p_final_balance, p_notes) -> jsonb. Server-only. Grants: service_role.
 - create_filial_backup(...) -> uuid. Grants: authenticated + service_role.
@@ -1294,6 +1295,7 @@ Localizacao atual dos .sql de projeto:
 - `supabase/RLS_FIXES.sql`, `supabase/ATOMIC_RPCS.sql` : referencias canonicas de RLS/RPCs (mantidas na raiz de `supabase/`).
 
 Principais migracoes recentes de projeto (por data):
+- 20260906_solicitar_fechamento_comanda.sql (RPC solicitar_fechamento_comanda - pedir a conta anon, P0-3)
 - 20260905_fechar_comanda.sql (RPC fechar_comanda - finalizador de comanda/sessao)
 - 20260831_add_open_containers.sql (tabela open_containers + RLS + Realtime)
 - 20260822_system_users_permissions.sql (permissions em system_users)
@@ -1321,6 +1323,7 @@ Principais migracoes recentes de projeto (por data):
 | 5 | - | (Resolvido) RPCs de venda: process_sale_transaction tem grant authenticated+anon+service_role; cancel_sale_atomic tem grant authenticated+service_role (chamado do PDV) e process_sale_atomic segue server-only (service_role). Sem violacao de RLS. | 0f |
 | 6 | Doc | cardapio_branch_from_header() existe mas policies anon inlineiam current_setting. | 0f (clareza) |
 | 7 | Alta (processo) | Nenhuma migration de projeto em storage.migrations (so storage-schema). Risco de DR / ambiente limpo. | - |
+| 8 | - | (Resolvido P0-3) "Pedir a conta" do cardapio anon caia na DLQ com 42501: upsert fazia INSERT..ON CONFLICT DO UPDATE e NAO existe sales_update_anon. Resolvido via RPC solicitar_fechamento_comanda (SECURITY DEFINER, EXECUTE anon, validacao por session_token + org/filial + whitelist de metodo; migration 20260906). NUNCA criar sales_update_anon permissiva (0b). | 0b/0f/9 |
 
 Notas de integracao (fora deescopo de correcao nesta audite): IntegrationsView so coleta chaves em localStorage; webhook em server.ts e dev-only; sales.payment_id nunca setado; PIX e exibicao manual. Ver relatorio de auditoria de pagamentos (Fase 1/2) para arquitetura multi-filial proposta (payment_integrations -> payment_terminals -> payment_transactions -> webhook_events, via Cloudflare Functions).
 ## System Schemas (Supabase-managed)

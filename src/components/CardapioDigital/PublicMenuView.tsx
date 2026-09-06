@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Product, Table, DigitalMenuConfig, CustomerSession, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
+import { supabase } from '../../lib/supabase';
 import { printRoutedItems } from '../../services/printService';
 import { routeItemsToPrinters } from '../../services/printerRouting';
 
@@ -551,6 +552,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       // Cliente SOLICITA o fechamento informando a FORMA DE PAGAMENTO desejada.
       // Operador fecha e cobra na página de Comandas. kitchenStatus='closing_request'
       // sinaliza o Pedidos (KDS) e payments[0].method exibe a forma escolhida.
+      const saleIds: string[] = [];
       for (const sale of myOrders) {
         const saleTotal = sale.total > 0 ? sale.total : (sale.items?.reduce((a, i) => a + (i.total || 0), 0) || 0);
         const updatedSale: Sale = {
@@ -560,7 +562,28 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           payments: [{ method: paymentMethod, amount: saleTotal }] as any, // forma de pagamento solicitada
           updatedAt: new Date().toISOString(),
         };
-        storageService.saveSale(updatedSale);
+        // P0-3: gravação LOCAL apenas (skipSync) — o cloud recebe o
+        // closing_request via RPC dedicada abaixo, NÃO via upsert (não existe
+        // UPDATE anon em sales → 42501 na DLQ). A RPC valida posse por
+        // session_token e re-deriva o amount do total REAL da venda.
+        storageService.saveSale(updatedSale, { skipSync: true });
+        saleIds.push(sale.id);
+      }
+
+      // P0-3: RPC SECURITY DEFINER com EXECUTE anon (exceção documentada 0f/0e,
+      // idem process_sale_transaction) — única via de escrita do pedido de
+      // fechamento; evita policy de UPDATE permissiva em sales (regra 0b).
+      try {
+        await supabase.rpc('solicitar_fechamento_comanda', {
+          p_sale_ids: saleIds,
+          p_session_token: sessionId,
+          p_payment_method: paymentMethod,
+        });
+      } catch (rpcErr) {
+        // Falha de rede/RPC: o pedido não chega ao operador, mas o pedido em si
+        // (itens) já está no cloud via process_sale_transaction — o operador
+        // ainda consegue fechar manualmente na ComandaView.
+        console.warn('[Cardapio] Falha ao enviar pedido de fechamento:', rpcErr);
       }
 
       // NÃO fecha a sessão — operador faz isso ao finalizar
