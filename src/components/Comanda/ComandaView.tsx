@@ -132,11 +132,13 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
       const session = customerSessions.find(
         (s) => s.tableId === tableId && s.status === 'active'
       ) || null;
-      const total = tableSales.reduce((acc, s) => {
+      // Filtra sales canceladas/removidas — só conta itens realmente na lista de sales
+      const activeSales = tableSales.filter((s) => s.status !== 'cancelled');
+      const total = activeSales.reduce((acc, s) => {
         const saleTotal = s.total > 0 ? s.total : (s.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0);
         return acc + saleTotal;
       }, 0);
-      const itemCount = tableSales.reduce((acc, s) => acc + (s.items?.length || 0), 0);
+      const itemCount = activeSales.reduce((acc, s) => acc + (s.items?.length || 0), 0);
       groups.push({
         table: displayTable,
         session,

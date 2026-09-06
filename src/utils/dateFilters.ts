@@ -8,8 +8,12 @@
  */
 
 /**
- * Verifica se a venda (`saleDate`, timestamp ISO) está dentro do intervalo
- * [from, to] — ambos no formato "YYYY-MM-DD" ou "YYYY-MM-DDTHH:mm" (datetime-local).
+ * Verifica se a venda (`saleDate`, timestamp no formato brasileiro "DD/MM/YYYY, HH:mm:ss")
+ * ou ISO está dentro do intervalo [from, to].
+ *
+ * O `saleDate` pode vir nos dois formatos:
+ *   - Brasileiro: "DD/MM/YYYY, HH:mm:ss" (padrão do sistema)
+ *   - ISO: "YYYY-MM-DDTHH:mm:ss" ou "YYYY-MM-DD"
  *
  * Regras:
  *  - `from` vazio === sem limite inferior (aberto).
@@ -19,8 +23,27 @@
  */
 export function isSaleInRange(saleDate: string, from: string, to: string): boolean {
   if (!saleDate) return false;
-  const saleTime = new Date(saleDate).getTime();
-  if (Number.isNaN(saleTime)) return false;
+
+  // --- Parse do saleDate (aceita brasileiro ou ISO) ---
+  let saleTime: number;
+  if (/^\d{2}\/\d{2}\/\d{4},/.test(saleDate)) {
+    // Formato brasileiro "DD/MM/YYYY, HH:mm:ss"
+    // Converte para ISO para comparação segura
+    const brazilianMatch = saleDate.match(/^(\d{2})\/(\d{2})\/(\d{4}),\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*$/);
+    if (brazilianMatch) {
+      // Zera horas/minutos/segundos do day original, depois seta os novos
+      const base = new Date(+brazilianMatch[3], +brazilianMatch[2] - 1, +brazilianMatch[1]); // month 0-indexed
+      base.setHours(+brazilianMatch[4], +brazilianMatch[5], brazilianMatch[6] ? +brazilianMatch[6] : 0);
+      saleTime = base.getTime();
+    } else {
+      saleTime = new Date(saleDate).getTime();
+      if (Number.isNaN(saleTime)) return false;
+    }
+  } else {
+    // Formato ISO (padrão)
+    saleTime = new Date(saleDate).getTime();
+    if (Number.isNaN(saleTime)) return false;
+  }
 
   if (from) {
     const fromTime = new Date(from).getTime();

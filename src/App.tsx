@@ -652,8 +652,13 @@ export const App: React.FC = () => {
           else storageService.updatePrinterFromRemote(row);
           break;
         case 'tables':
-          if (event === 'DELETE') storageService.removeTableFromRemote(row.id);
-          else storageService.updateTableFromRemote(row);
+          if (event === 'DELETE') {
+            // Para DELETE, o dado da linha está em payload.old
+            storageService.removeTableFromRemote(payload.old?.id);
+          } else {
+            // Para INSERT/UPDATE, usa o row padrão (payload.new || payload.old)
+            storageService.updateTableFromRemote(row);
+          }
           break;
         case 'customer_sessions':
           if (event === 'DELETE') storageService.removeCustomerSessionFromRemote(row.id);

@@ -709,6 +709,12 @@ class SupabaseSyncService {
         console.warn(`[HD-Sync] ⚠️ Skipping ${table} upsert — store_branch_id ausente ou inválido ("${raw}", id: ${row.id})`);
         return false;
       }
+      // DEFESA ADICIONAL (2026-09-06): Tabela deve ter campo 'name' — sales não têm
+      // esse campo e seriam incorretamente aceitos se a branch validation passasse.
+      if (table === 'tables' && !('name' in row)) {
+        console.warn(`[HD-Sync] ⚠️ Skipping ${table} upsert — payload não tem campo 'name' (provavelmente sale disfarçado). id: ${row.id}`);
+        return false;
+      }
     }
 
     const rowWithTimestamp = SupabaseSyncService.TABLES_WITH_UPDATED_AT.includes(table)
