@@ -77,13 +77,19 @@ function resolveBranchHeader(settings: SystemSettings): {
 export function buildReceiptEscPos(sale: Sale, settings: SystemSettings, storeName?: string): Uint8Array {
   const line = (text: string, opts: Partial<EscPosLine> = {}): EscPosLine => ({ text, ...opts });
   const h = resolveBranchHeader(settings);
+  const headerAddress = [h.address, h.cityState].filter(Boolean).join(' - ');
 
+  // Linhas do cabeçalho são OMITIDAS quando o campo está vazio (sem labels
+  // órfãos tipo "CNPJ: " sozinhos) — mesmo comportamento do modal e do
+  // comprovante de WhatsApp.
   const lines: EscPosLine[] = [
     line(h.name, { align: 1, bold: true, size: 19 }),
-    line(`CNPJ: ${h.cnpj}`, { align: 1 }),
-    line(`IE: ${h.ie}`, { align: 1 }),
-    line(`${h.address} - ${h.cityState}`, { align: 1 }),
-    line(`Tel: ${h.phone}`, { align: 1 }),
+  ];
+  if (h.cnpj) lines.push(line(`CNPJ: ${h.cnpj}`, { align: 1 }));
+  if (h.ie) lines.push(line(`IE: ${h.ie}`, { align: 1 }));
+  if (headerAddress) lines.push(line(headerAddress, { align: 1 }));
+  if (h.phone) lines.push(line(`Tel: ${h.phone}`, { align: 1 }));
+  lines.push(
     line('', { skip: true }),
     line('COMPROVANTE DE VENDA', { align: 1, bold: true }),
     line('Documento Nao Fiscal', { align: 1 }),
@@ -95,7 +101,7 @@ export function buildReceiptEscPos(sale: Sale, settings: SystemSettings, storeNa
     ...(sale.notes ? [line(`Obs: ${sale.notes}`)] : []),
     line('', { skip: true }),
     line('ITEM                QTD   TOTAL', { bold: true }),
-  ];
+  );
 
   sale.items.forEach((it, idx) => {
     lines.push(line(`${idx + 1}. ${it.productName}`, { bold: true }));
@@ -131,6 +137,80 @@ export function buildReceiptEscPos(sale: Sale, settings: SystemSettings, storeNa
   lines.push(line(storeName || settings.receiptHeaderMsg || '', { align: 1, bold: true }));
 
   return buildEscPos(lines);
+}
+
+/** Trunca texto com reticências (para linhas de largura fixa no WhatsApp). */
+export function truncateLabel(text: string, maxLen: number): string {
+  if (!text) return '';
+  if (text.length <= maxLen) return text;
+  return `${text.slice(0, Math.max(0, maxLen - 1))}…`;
+}
+
+/**
+ * Normaliza número de WhatsApp BR para wa.me: remove não-dígitos; adiciona DDI
+ * 55 quando só tem DDD + número (10/11 dígitos); devolve '' se inválido.
+ */
+export function normalizeWhatsAppNumber(phone: string | undefined): string {
+  const digits = (phone || '').replace(/\D/g, '');
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`; // DDD + número, sem DDI
+  if (digits.length >= 12) return digits; // já com DDI
+  return '';
+}
+
+/**
+ * Monta o comprovante completo em TEXTO PLAIN para envio via WhatsApp.
+ * Espelha o layout do cupom ESC/POS / modal (cabeçalho fiscal → venda → itens →
+ * totais → pagamento → "não fiscal" → rodapé). Campos vazios são omitidos
+ * (sem labels órfãos) e nomes longos são truncados para caber no chat.
+ */
+export function buildWhatsAppReceipt(sale: Sale, settings: SystemSettings, storeName?: string): string {
+  const fmt = (n: number) => n.toFixed(2);
+  const h = resolveBranchHeader(settings);
+  const headerAddress = [h.address, h.cityState].filter(Boolean).join(' - ');
+  const L: string[] = [];
+
+  L.push(`*${h.name}*`);
+  if (h.cnpj) L.push(`CNPJ: ${h.cnpj}`);
+  if (h.ie) L.push(`IE: ${h.ie}`);
+  if (headerAddress) L.push(headerAddress);
+  if (h.phone) L.push(`Tel: ${h.phone}`);
+
+  L.push('', 'COMPROVANTE DE VENDA', 'Documento Nao Fiscal', '');
+  L.push(`Venda: #${sale.code}`);
+  L.push(`Data: ${new Date(sale.date).toLocaleString('pt-BR')}`);
+  L.push(`Operador: ${sale.operatorName || ''}`);
+  L.push(`Cliente: ${sale.customerName || 'Consumidor Nao Identificado'}`);
+  if (sale.notes) L.push(`Obs: ${sale.notes}`);
+
+  L.push('');
+  sale.items.forEach((it, idx) => {
+    L.push(`${idx + 1}. ${truncateLabel(it.productName, 36)}`);
+    L.push(`   ${it.quantity}x R$ ${fmt(it.unitPrice)} = R$ ${fmt(it.total)}`);
+  });
+
+  L.push('');
+  L.push(`Subtotal: R$ ${fmt(sale.subtotal)}`);
+  if (sale.discount > 0) L.push(`Desconto: -R$ ${fmt(sale.discount)}`);
+  L.push(`TOTAL: R$ ${fmt(sale.total)}`);
+
+  L.push('', 'FORMA DE PAGAMENTO:');
+  const labelMap: Record<string, string> = {
+    cash: 'Dinheiro',
+    pix: 'PIX',
+    credit_card: 'Cartao de Credito',
+    debit_card: 'Cartao de Debito',
+    credit_account: 'Fiado / Credito Cliente',
+  };
+  sale.payments.forEach((p) => {
+    L.push(`${labelMap[p.method] || p.method}: R$ ${fmt(p.amount)}`);
+  });
+  const change = sale.payments.find((p) => p.changeDue && p.changeDue > 0)?.changeDue;
+  if (change) L.push(`Troco: R$ ${fmt(change)}`);
+
+  L.push('', '*** COMPROVANTE NAO FISCAL ***');
+  L.push(storeName || settings.receiptHeaderMsg || '');
+
+  return L.join('\n');
 }
 
 /** Página de teste para validar a impressora durante a configuração. */

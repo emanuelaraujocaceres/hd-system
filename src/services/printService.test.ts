@@ -10,7 +10,7 @@
  *
  * NÃO testa printThermalReceipt / printKitchenOrder / etc. (dependem de DOM/USB/Serial).
  */
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   buildEscPos,
   buildTestPageEscPos,
@@ -18,6 +18,9 @@ import {
   buildOrderReceiptEscPos,
   buildDeliveryTicketEscPos,
   getCaixaPrinter,
+  buildWhatsAppReceipt,
+  normalizeWhatsAppNumber,
+  truncateLabel,
 } from './printService';
 import { storageService } from './storageService';
 import type { Printer, Sale, SystemSettings, DeliveryOrder, StoreBranch } from '../types';
@@ -605,5 +608,83 @@ describe('buildDeliveryTicketEscPos', () => {
     const decoded = new TextDecoder().decode(result);
     expect(decoded).toContain('PIX');
     expect(decoded).not.toContain('Troco para');
+  });
+});
+
+// ─── buildWhatsAppReceipt ───────────────────────────────────────
+
+describe('buildWhatsAppReceipt / text helpers', () => {
+  // Ambiente determinístico: sem filial selecionada → resolveBranchHeader usa
+  // o fallback de SystemSettings (mesmo setup dos testes de branch do ESC/POS).
+  beforeEach(() => {
+    vi.spyOn(storageService, 'getSelectedBranch').mockReturnValue(undefined as any);
+  });
+
+  it('trunca nomes longos preservando começo', () => {
+    expect(truncateLabel('Curto', 10)).toBe('Curto');
+    expect(truncateLabel('Água com Gás 500ml Extra Gelada', 12)).toBe('Água com Gá…');
+  });
+
+  it('normaliza telefone BR para wa.me (adiciona DDI 55)', () => {
+    expect(normalizeWhatsAppNumber('(11) 99999-0000')).toBe('5511999990000');
+    expect(normalizeWhatsAppNumber('11999990000')).toBe('5511999990000');
+  });
+
+  it('normaliza WhatsApp com DDI já presente e devolve vazio para inválido', () => {
+    expect(normalizeWhatsAppNumber('+55 11 99999-0000')).toBe('5511999990000');
+    expect(normalizeWhatsAppNumber('12345')).toBe('');
+    expect(normalizeWhatsAppNumber(undefined)).toBe('');
+  });
+
+  it('monta comprovante completo com itens, totais e pagamentos', () => {
+    const sale = mkSale({
+      items: [
+        { productId: 'p1', productName: 'Hambúrguer', unitPrice: 25.0, quantity: 2, total: 50.0 },
+        { productId: 'p2', productName: 'Refrigerante', unitPrice: 6.5, quantity: 3, total: 19.5 },
+      ],
+      subtotal: 69.5,
+      discount: 5.0,
+      total: 64.5,
+      payments: [{ method: 'cash', amount: 70.0, cashGiven: 70.0, changeDue: 5.5 }],
+    });
+    const text = buildWhatsAppReceipt(sale, mkSettings());
+
+    expect(text).toContain('*Loja Teste*');
+    expect(text).toContain('CNPJ: 12345678901234');
+    expect(text).toContain('Rua Teste, 123 - São Paulo/SP');
+    expect(text).toContain('1. Hambúrguer');
+    expect(text).toContain('   2x R$ 25.00 = R$ 50.00');
+    expect(text).toContain('Subtotal: R$ 69.50');
+    expect(text).toContain('Desconto: -R$ 5.00');
+    expect(text).toContain('TOTAL: R$ 64.50');
+    expect(text).toContain('Dinheiro: R$ 70.00');
+    expect(text).toContain('Troco: R$ 5.50');
+    expect(text).toContain('*** COMPROVANTE NAO FISCAL ***');
+  });
+
+  it('OMITE campos vazios no cabeçalho (sem labels órfãos)', () => {
+    const settings = mkSettings({ cnpj: '', ie: '', address: '', city: '', state: '', phone: '' });
+    const text = buildWhatsAppReceipt(mkSale(), settings);
+    expect(text).not.toContain('CNPJ:');
+    expect(text).not.toContain('IE:');
+    expect(text).not.toContain('Tel:');
+    expect(text).not.toContain(' - ');
+  });
+
+  it('não exibe desconto quando zero', () => {
+    const text = buildWhatsAppReceipt(mkSale(), mkSettings());
+    expect(text).not.toContain('Desconto:');
+  });
+
+  it('aplica truncamento de 36 chars no nome do produto', () => {
+    const longName = 'Hambúrguer Artesanal com Bacon, Queijo e Cebola Caramelizada';
+    const sale = mkSale({
+      items: [{ productId: 'p1', productName: longName, unitPrice: 30.0, quantity: 1, total: 30.0 }],
+    });
+    const text = buildWhatsAppReceipt(sale, mkSettings());
+    const linha = text.split('\n').find((l) => l.startsWith('1. ')) || '';
+    expect(linha).toContain('1. ');
+    expect(linha.endsWith('…')).toBe(true);
+    expect(linha.length).toBeLessThanOrEqual(3 + 36); // prefixo "1. " (3 chars) + nome (36 max)
   });
 });

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, Printer, Share2, CheckCircle2, ArrowRight, Loader2 } from 'lucide-react';
 import { Sale, SystemSettings, Customer } from '../../types';
 import { storageService } from '../../services/storageService';
-import { printThermalReceipt } from '../../services/printService';
+import { printThermalReceipt, buildWhatsAppReceipt, normalizeWhatsAppNumber } from '../../services/printService';
 
 interface ThermalReceiptModalProps {
   isOpen: boolean;
@@ -45,8 +45,10 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
     phone: selectedBranch?.phone || settings.phone,
     cityState: selectedBranch
       ? `${selectedBranch.city || ''}${selectedBranch.city && selectedBranch.state ? '/' : ''}${selectedBranch.state || ''}`
-      : `${settings.city}/${settings.state}`,
+      : [settings.city, settings.state].filter(Boolean).join('/'),
   };
+  // Endereço + Cidade/UF em uma linha só; vazio → a linha inteira some.
+  const headerAddress = [header.address, header.cityState].filter(Boolean).join(' - ');
 
   const handlePrint = async () => {
     setPrintStatus('printing');
@@ -73,9 +75,40 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
     setPrintStatus('ok');
   };
 
+  // autoPrintReceipt: quando ativo, dispara a impressão (térmica direta se
+  // pareada, senão window.print) assim que o modal abre — sem interação dupla.
+  const autoPrintedRef = useRef(false);
+  const handlePrintRef = useRef<() => void>(() => {});
+  handlePrintRef.current = handlePrint;
+
+  useEffect(() => {
+    if (!isOpen || !sale) {
+      autoPrintedRef.current = false;
+      return;
+    }
+    if (!settings.autoPrintReceipt || autoPrintedRef.current) return;
+    autoPrintedRef.current = true;
+    // Pequeno atraso para o layout do recibo assentar antes do print.
+    const t = setTimeout(() => handlePrintRef.current(), 150);
+    return () => clearTimeout(t);
+  }, [isOpen, sale, settings.autoPrintReceipt]);
+
   const handleWhatsAppShare = () => {
-    const text = `Olá! Aqui está o comprovante da sua compra na ${settings.tradeName}.\nCódigo: ${sale.code}\nTotal: R$ ${sale.total.toFixed(2)}`;
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    // Comprovante completo em texto (espelha o cupom ESC/POS), pré-preenchido
+    // no wa.me do cliente quando ele tem WhatsApp cadastrado.
+    const text = buildWhatsAppReceipt(sale, settings, storeName);
+    let url: string;
+    if (sale.customerId) {
+      const customer = customers.find((c) => c.id === sale.customerId);
+      const phone = normalizeWhatsAppNumber(customer?.phone || customer?.whatsapp);
+      if (phone) {
+        url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+      } else {
+        url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+      }
+    } else {
+      url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    }
     window.open(url, '_blank');
   };
 
@@ -105,10 +138,10 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
             {/* Store Header — dados da filial da venda (fallback para settings globais) */}
             <div className="text-center pb-2 border-b border-dashed border-gray-400">
               <p className="font-bold text-xs uppercase">{header.name}</p>
-              <p>CNPJ: {header.cnpj}</p>
-              <p>IE: {header.ie}</p>
-              <p>{header.address} - {header.cityState}</p>
-              <p>Tel: {header.phone}</p>
+              {header.cnpj && <p>CNPJ: {header.cnpj}</p>}
+              {header.ie && <p>IE: {header.ie}</p>}
+              {headerAddress && <p>{headerAddress}</p>}
+              {header.phone && <p>Tel: {header.phone}</p>}
             </div>
 
             {/* Document Info */}
@@ -123,6 +156,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
               <p><span className="font-bold">Data:</span> {new Date(sale.date).toLocaleString('pt-BR')}</p>
               <p><span className="font-bold">Operador:</span> {sale.operatorName}</p>
               <p><span className="font-bold">Cliente:</span> {sale.customerName || 'Consumidor Não Identificado'}</p>
+              {sale.notes && <p><span className="font-bold">Obs:</span> {sale.notes}</p>}
             </div>
 
             {/* Items Table */}
@@ -131,14 +165,14 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
                 <span className="col-span-1">#</span>
                 <span className="col-span-5">PRODUTO</span>
                 <span className="col-span-2 text-right">QTD</span>
-                <span className="col-span-2 text-right">UN</span>
+                <span className="col-span-2 text-right">UNIT</span>
                 <span className="col-span-2 text-right">TOTAL</span>
               </div>
               {sale.items.map((it, idx) => (
                 <div key={idx} className="mb-0.5 text-[9px] leading-tight">
                   <div className="flex justify-between">
                     <span className="col-span-1">{idx + 1}.</span>
-                    <span className="col-span-5 truncate">{it.productName}</span>
+                    <span className="col-span-5 break-words line-clamp-2 min-w-0">{it.productName}</span>
                     <span className="col-span-2 text-right">{it.quantity}</span>
                     <span className="col-span-2 text-right">R$ {it.unitPrice.toFixed(2)}</span>
                     <span className="col-span-2 text-right font-bold">R$ {it.total.toFixed(2)}</span>
@@ -200,6 +234,7 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
             {/* Footer Msg */}
             <div className="text-center pt-2 text-[10px] space-y-0.5 text-gray-700">
               <p className="font-bold">{storeName || settings.receiptHeaderMsg}</p>
+              {settings.receiptFooterMsg && <p>{settings.receiptFooterMsg}</p>}
             </div>
           </div>
         </div>
