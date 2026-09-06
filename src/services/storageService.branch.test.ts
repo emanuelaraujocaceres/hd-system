@@ -35,6 +35,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StorageService } from './storageService';
 import { syncService } from './syncService';
+import { supabase } from '../lib/supabase';
 import { BRANCH_UUIDS, DEFAULT_ORG_ID, CASH_SESSION_UUIDS } from '../data/mockData';
 
 describe('storageService — isolamento de filial (BUG-024/025)', () => {
@@ -773,5 +774,98 @@ describe('storageService — produto excluído NÃO ressurge (tombstone, BUG pro
     svc.saveProduct(restored);
     const tomb = JSON.parse(localStorage.getItem(`hd_system_deleted_products_${DEFAULT_ORG_ID}`) || '[]');
     expect(tomb).not.toContain(PROD_B);
+  });
+
+  // ─── Guard de exclusão de mesa/comanda (auditoria 2026-09-06, seção C) ───
+  const TABLE_T = 'c0a80102-0000-4000-8000-000000000001'; // mesa "teste"
+  const SESSION_T = 'c0a80102-0000-4000-8000-000000000002'; // sessão ativa
+
+  it('deleteTable BLOQUEIA mesa com sessão ativa (MESA_OCUPADA)', async () => {
+    localStorage.setItem('hd_system_tables', JSON.stringify([
+      { id: TABLE_T, name: 'Mesa 1', status: 'active', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+    localStorage.setItem('hd_system_customer_sessions', JSON.stringify([
+      { id: SESSION_T, tableId: TABLE_T, sessionToken: 'tok', status: 'active',
+        storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID,
+        openedAt: '2026-09-06T00:00:00Z', createdAt: '2026-09-06T00:00:00Z', updatedAt: '2026-09-06T00:00:00Z' },
+    ]));
+    const delSpy = vi.spyOn(syncService, 'deleteRow').mockResolvedValue(true);
+    (svc as any).getSelectedBranchId = () => BRANCH_UUIDS['br-01']; // keep branch guard out
+    await expect(svc.deleteTable(TABLE_T)).rejects.toThrow('MESA_OCUPADA');
+    // Mesa NÃO foi removida localmente (nem na chave particionada por org —
+    // set() grava em `${key}_${org}`; o get() tem fallback para a global)
+    const tablesPart = JSON.parse(localStorage.getItem(`hd_system_tables_${DEFAULT_ORG_ID}`) || '[]');
+    const tables = JSON.parse(localStorage.getItem('hd_system_tables') || '[]');
+    expect(tablesPart.find((t: any) => t.id === TABLE_T)).toBeUndefined();
+    expect(tables.find((t: any) => t.id === TABLE_T)).toBeTruthy();
+    expect(delSpy).not.toHaveBeenCalled();
+    delSpy.mockRestore();
+  });
+
+  it('deleteTable BLOQUEIA mesa com venda pendente sem sessão (pedido aberto)', async () => {
+    localStorage.setItem('hd_system_tables', JSON.stringify([
+      { id: TABLE_T, name: 'Mesa 1', status: 'active', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+    localStorage.setItem('hd_system_sales', JSON.stringify([
+      { id: 's-pending', tableId: TABLE_T, status: 'pending', total: 12, storeBranchId: BRANCH_UUIDS['br-01'], payments: [] },
+    ]));
+    (svc as any).getSelectedBranchId = () => BRANCH_UUIDS['br-01'];
+    await expect(svc.deleteTable(TABLE_T)).rejects.toThrow(/pedido em aberto/);
+    const tables = JSON.parse(localStorage.getItem('hd_system_tables') || '[]');
+    expect(tables.find((t: any) => t.id === TABLE_T)).toBeTruthy();
+  });
+
+  it('deleteTable no ar: chama RPC excluir_mesa e remove local após sucesso', async () => {
+    localStorage.setItem('hd_system_tables', JSON.stringify([
+      { id: TABLE_T, name: 'Mesa 1', status: 'active', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+    // Histórico: venda completada antiga referencia a mesa (FK NO ACTION)
+    localStorage.setItem('hd_system_sales', JSON.stringify([
+      { id: 's-old', tableId: TABLE_T, status: 'completed', total: 30, storeBranchId: BRANCH_UUIDS['br-01'], payments: [{ method: 'cash', amount: 30 }] },
+    ]));
+    const rpcSpy = vi.spyOn(supabase, 'rpc').mockResolvedValue({
+      data: { success: true, detached_sales: 1 }, error: null,
+    } as any);
+    const delSpy = vi.spyOn(syncService, 'deleteRow').mockResolvedValue(true);
+    (svc as any).getSelectedBranchId = () => BRANCH_UUIDS['br-01'];
+    await svc.deleteTable(TABLE_T);
+    expect(rpcSpy).toHaveBeenCalledWith('excluir_mesa', { p_table_id: TABLE_T });
+    expect(delSpy).not.toHaveBeenCalled(); // RPC já fez o DELETE físico
+    const tablesPart = JSON.parse(localStorage.getItem(`hd_system_tables_${DEFAULT_ORG_ID}`) || '[]');
+    expect(tablesPart.find((t: any) => t.id === TABLE_T)).toBeUndefined();
+    rpcSpy.mockRestore();
+    delSpy.mockRestore();
+  });
+
+  it('deleteTable no ar: erro 23503/permissão da RPC NÃO remove a mesa local (throw)', async () => {
+    localStorage.setItem('hd_system_tables', JSON.stringify([
+      { id: TABLE_T, name: 'Mesa 1', status: 'active', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+    const rpcSpy = vi.spyOn(supabase, 'rpc').mockResolvedValue({
+      data: { success: false, message: 'Permissão negada: mesa de outra organização.' }, error: null,
+    } as any);
+    (svc as any).getSelectedBranchId = () => BRANCH_UUIDS['br-01'];
+    await expect(svc.deleteTable(TABLE_T)).rejects.toThrow('Permissão negada');
+    const tables = JSON.parse(localStorage.getItem('hd_system_tables') || '[]');
+    expect(tables.find((t: any) => t.id === TABLE_T)).toBeTruthy();
+    rpcSpy.mockRestore();
+  });
+
+  it('deleteTable offline: mantém legado (remove local + fila DELETE), sem RPC', async () => {
+    localStorage.setItem('hd_system_tables', JSON.stringify([
+      { id: TABLE_T, name: 'Mesa 1', status: 'active', storeBranchId: BRANCH_UUIDS['br-01'], organizationId: DEFAULT_ORG_ID },
+    ]));
+    const onlineSpy = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    const rpcSpy = vi.spyOn(supabase, 'rpc');
+    const delSpy = vi.spyOn(syncService, 'deleteRow').mockResolvedValue(true);
+    (svc as any).getSelectedBranchId = () => BRANCH_UUIDS['br-01'];
+    await svc.deleteTable(TABLE_T);
+    expect(rpcSpy).not.toHaveBeenCalled();
+    expect(delSpy).toHaveBeenCalledWith('tables', TABLE_T);
+    const tablesPart = JSON.parse(localStorage.getItem(`hd_system_tables_${DEFAULT_ORG_ID}`) || '[]');
+    expect(tablesPart.find((t: any) => t.id === TABLE_T)).toBeUndefined();
+    onlineSpy.mockRestore();
+    rpcSpy.mockRestore();
+    delSpy.mockRestore();
   });
 });

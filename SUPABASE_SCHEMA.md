@@ -963,7 +963,7 @@ Configuracao PIX (chave exibida manualmente - sem gateway automatico).
 | updated_at | TIMESTAMPTZ | YES | | |
 
 RLS: superadmin_all_pix_config[ALL], user_insert_pix_config[INSERT], user_update_pix_config[UPDATE], user_delete_pix_config[DELETE], user_select_pix_config[SELECT]
-Realtime: nao publicada - REPLICA: default
+Realtime: PUBLICA (20260906_pix_config_realtime.sql) - REPLICA: FULL. Sincronizada nos 3 caminhos: savePixConfig (upsert id = store_branch_id, 1:1 por filial), updatePixConfigFromRemote (realtime, branch-scoped) e hydrateFromCloud (fetchRows pix_config). Checkout consome: PaymentModal -> pixConfigService.getEffectivePixKey(branchId, settings.pixKey).
 
 ### api_keys
 Chaves de API (integracoes - atualmente so localStorage no app, ver Pendencias).
@@ -1264,6 +1264,7 @@ Resumo de DLQ por filial/org.
 - create_filial_backup(...) -> uuid. Grants: authenticated + service_role.
 - fn_insserir_dlq(...) -> uuid. DLQ. Grants: anon + authenticated + service_role (excecao 0f).
 - transfer_table_session(p_session_id, p_new_table_id) -> jsonb. Server-only. Grants: service_role.
+- excluir_mesa(p_table_id uuid) -> jsonb. Guard de exclusao de mesa (20260906, auditoria secao C): SECURITY DEFINER valida org+filial (regra 9: service_role/superadmin bypass; colaborador so da propria filial), BLOQUEIA mesa com sessao `active` (MESA_OCUPADA - fechar_comanda primeiro), desvincula table_id de TODAS as linhas sales/customer_sessions da mesa (qualquer status, inclusive tombstones - NULL em FK NO ACTION e permitido, historico preservado) e faz DELETE fisico numa transacao. Sem ele, DELETE de mesa com referencia (ex.: venda soft-deleted) falha 23503 -> DLQ movimentacoes_falhas / ressuscitacao no merge. Grants: SOMENTE authenticated + service_role (NUNCA anon - regra 9). Frontend: storageService.deleteTable (guard local + RPC online; offline mantem legado com fila). Migration: 20260906_excluir_mesa.sql.
 - gerar_token_e_criar_sessao(p_user_id, p_email) -> text. Server-only. Grants: service_role.
 - debug_auth() -> jsonb. Server-only. Grants: service_role.
 - reprocessar_movimentacoes_falhas() -> TABLE. Server-only. Grants: service_role.
@@ -1295,7 +1296,9 @@ Localizacao atual dos .sql de projeto:
 - `supabase/RLS_FIXES.sql`, `supabase/ATOMIC_RPCS.sql` : referencias canonicas de RLS/RPCs (mantidas na raiz de `supabase/`).
 
 Principais migracoes recentes de projeto (por data):
+- 20260906_pix_config_realtime.sql (pix_config na publicacao supabase_realtime + REPLICA FULL - PIX por filial)
 - 20260906_solicitar_fechamento_comanda.sql (RPC solicitar_fechamento_comanda - pedir a conta anon, P0-3)
+- 20260906_excluir_mesa.sql (RPC excluir_mesa - guard de exclusao de mesa/comanda, secao C)
 - 20260905_fechar_comanda.sql (RPC fechar_comanda - finalizador de comanda/sessao)
 - 20260831_add_open_containers.sql (tabela open_containers + RLS + Realtime)
 - 20260822_system_users_permissions.sql (permissions em system_users)

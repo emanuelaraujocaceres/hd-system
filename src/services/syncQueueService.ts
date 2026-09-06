@@ -59,7 +59,9 @@ type TableName =
   | 'stock_loss_log'
   | 'delivery_worker_earnings'
   // Terminais de pagamento / maquininhas (2026-09-01)
-  | 'payment_terminals';
+  | 'payment_terminals'
+  // PIX por filial (2026-09-06)
+  | 'pix_config';
 
 type QueueAction = 'upsert' | 'delete' | 'upsert_batch';
 

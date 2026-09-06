@@ -57,6 +57,8 @@ import {
 } from '../data/mockData';
 import { syncService } from './syncService';
 import { supabase } from '../lib/supabase';
+import { pixConfigService } from './pixConfigService';
+import type { PixBranchConfig, PixKeyType } from './pixConfigService';
 import { undoManager } from '../lib/undoManager';
 import { asArray, mapRows, safeParseJson } from '../lib/safeSync';
 
@@ -2252,7 +2254,7 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
       // PASSO 3: Buscar todos os dados filtrados pela filial
       // Todas as tabelas agora têm store_branch_id NOT NULL (banco convertido).
       // store_branches: já buscado no PASSO 1 (precisamos de TODAS para o seletor)
-      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders, moduleVisibility, productLots, stockLossLogs, openContainers, productRecipes, paymentTerminals] =
+      const [products, categories, customers, suppliers, sales, financial, settings, users, movements, caixa, saleItems, boletos, creditPayments, nfRecords, footerMessages, mediaDevices, printers, tables, customerSessions, digitalMenuConfig, branchThemes, apiKeys, deliverySettings, deliveryNeighborhoods, deliveryDistanceRates, deliveryOrders, moduleVisibility, productLots, stockLossLogs, openContainers, productRecipes, paymentTerminals, pixConfigs] =
         await Promise.all([
           syncService.fetchRows('products', resolvedBranchId),
           syncService.fetchRows('categories', resolvedBranchId),
@@ -2293,6 +2295,8 @@ async hydrateFromCloud(branchId?: string): Promise<{ ok: boolean; resolvedBranch
           syncService.fetchRows('product_recipes', resolvedBranchId),
           // Terminais de pagamento / maquininhas (2026-09-01)
           syncService.fetchRows('payment_terminals', resolvedBranchId),
+          // PIX por filial (2026-09-06)
+          syncService.fetchRows('pix_config', resolvedBranchId),
         ]);
 
       // ── HELPER: merge cloud rows into local data by ID ──────────
@@ -2963,6 +2967,22 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
           (k) => this.syncApiKey(k),
         );
         if (merged !== null) this.set(KEYS.API_KEYS, merged);
+      }
+
+      // ── PIX CONFIG (chave PIX por filial — 2026-09-06) ────────────
+      // Grava direto nas chaves locais do pixConfigService (mesmas chaves que o
+      // PaymentModal lê). Sem mergeBy: é 1:1 por filial e o fetch já vem filtrado
+      // pela filial da hidratação.
+      {
+        for (const r of pixConfigs || []) {
+          pixConfigService.saveConfig(r.store_branch_id, {
+            chavePix: r.chave_pix || '',
+            tipoChave: (r.tipo_chave as PixKeyType) || 'aleatoria',
+            nomeTitular: r.nome_titular || '',
+            cidade: r.cidade || '',
+            ativo: r.ativo !== false,
+          });
+        }
       }
 
 // ── MODULE VISIBILITY (visibilidade de módulos por filial) ──
@@ -5490,10 +5510,49 @@ private updateReceivableFromPayments(saleId: string) {
     this.syncTable(table);
   }
 
-  deleteTable(id: string) {
-    const all = this.get<Table[]>(KEYS.TABLES, []).filter((x) => x.id !== id);
-    this.set(KEYS.TABLES, all);
-    syncService.deleteRow('tables', id);
+  async deleteTable(id: string) {
+    const all = this.get<Table[]>(KEYS.TABLES, []);
+    const sessions = this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, []);
+    const sales = this.get<Sale[]>(KEYS.SALES, []);
+
+    // ── Guard anti-FK (auditoria 2026-09-06, seção C) ────────────────────
+    // FKs: customer_sessions.table_id e sales.table_id → tables.id (NO ACTION).
+    // Deletar mesa com referência ativa = 23503 (DLQ movimentacoes_falhas ou
+    // ressuscitação no merge safeCloud). Regras:
+    //   1) Mesa OCUPADA (sessão ativa) → BLOQUEIA. O operador fecha primeiro
+    //      (fechar_comanda no ComandaView).
+    //   2) Venda pendente sem sessão (legado) → BLOQUEIA (pedido em aberto).
+    //   3) Histórico (qualquer status, inclusive tombstones que só existem no
+    //      cloud) → RPC excluir_mesa desvincula table_id de TODAS as linhas e
+    //      deleta numa transação. Sem RPC, tombstone/resíduo mantém a FK e o
+    //      DELETE nunca passa no cloud.
+    const activeSession = sessions.find((s) => s.tableId === id && s.status === 'active');
+    if (activeSession) {
+      throw new Error('MESA_OCUPADA: Feche a comanda ativa desta mesa antes de excluí-la.');
+    }
+    const pendingSale = sales.find((s) => s.tableId === id && s.status === 'pending');
+    if (pendingSale) {
+      throw new Error('MESA_OCUPADA: A mesa ainda tem um pedido em aberto. Finalize a comanda antes de excluí-la.');
+    }
+
+    // Online: RPC atômico (detach + delete). Só remove localmente após sucesso
+    // (erro de permissão/ocupação NÃO remove — o estado local permanece íntegro
+    // e o usuário vê a mensagem via throw).
+    if (navigator.onLine) {
+      const { data, error } = await supabase.rpc('excluir_mesa', { p_table_id: id });
+      if (error || data?.success === false) {
+        const msg = data?.message || error?.message || 'Não foi possível excluir a mesa.';
+        console.warn(`[Storage] excluir_mesa falhou para mesa ${id}:`, msg);
+        throw new Error(msg);
+      }
+    }
+
+    // Offline: comportamento legado (remove local + fila de DELETE — é o único
+    // caminho; o RPC não roda offline e a fila é o mecanismo de sync existente).
+    if (!navigator.onLine) syncService.deleteRow('tables', id);
+
+    this.set(KEYS.TABLES, all.filter((x) => x.id !== id));
+    this.notify(); // BUG-028: toda escrita local DEVE notificar
   }
 
   updateTableFromRemote(row: any) {
@@ -5537,6 +5596,55 @@ private updateReceivableFromPayments(saleId: string) {
     const all = this.get<Table[]>(KEYS.TABLES, []).filter((x) => x.id !== id);
     this.set(KEYS.TABLES, all);
     this.notify(); // Notificar listeners (UI atualiza em tempo real)
+  }
+
+  // --- PIX CONFIG (por filial) 2026-09-06 ───────────────────────────────
+  // A chave PIX agora é por filial: `pix_config` (Supabase) sincroniza e o
+  // checkout (PaymentModal) já lê por filial via pixConfigService.
+  // getEffectivePixKey(branchId, settings.pixKey) → config da filial > global.
+  // Esta camada: (a) grava local + cloud ao salvar; (b) hidrata de outra filial
+  // via Realtime (updatePixConfigFromRemote); (c) entra na hidratação completa.
+  savePixConfig(branchId: string, config: PixBranchConfig) {
+    pixConfigService.saveConfig(branchId, config);
+    const orgId = this.orgIdForBranch(branchId, this.getCurrentOrgId());
+    syncService.upsertRow('pix_config', {
+      // id determinístico = store_branch_id (1 linha por filial) → upsert idempotente
+      id: branchId,
+      organization_id: orgId,
+      store_branch_id: branchId,
+      nome_titular: config.nomeTitular || '',
+      tipo_chave: config.tipoChave || 'aleatoria',
+      chave_pix: config.chavePix || '',
+      cidade: config.cidade || null,
+      ativo: config.ativo !== false,
+    });
+  }
+
+  updatePixConfigFromRemote(row: any) {
+    this.setChangeSource('remote');
+    // Branch isolation (BUG-024): config PIX de OUTRA filial nunca entra local
+    if (!this.isRemoteFromCurrentBranch(row)) {
+      console.log(`[HD-Sync] Ignoring remote pix config from other branch: ${row.store_branch_id}`);
+      return;
+    }
+    pixConfigService.saveConfig(row.store_branch_id, {
+      chavePix: row.chave_pix || '',
+      tipoChave: (row.tipo_chave as PixKeyType) || 'aleatoria',
+      nomeTitular: row.nome_titular || '',
+      cidade: row.cidade || '',
+      ativo: row.ativo !== false,
+    });
+    this.notify();
+  }
+
+  removePixConfigFromRemote(id: string) {
+    // id = store_branch_id (escrita 1:1 determinística). Guard de filial manual:
+    // DELETE de outra filial nunca remove a config local (mesmo princípio dos
+    // demais remove*FromRemote — BUG-025).
+    const currentBranch = this.getSelectedBranchId();
+    if (currentBranch && id !== currentBranch) return;
+    pixConfigService.removeConfig(id);
+    this.notify();
   }
 
   // --- CUSTOMER SESSIONS ---

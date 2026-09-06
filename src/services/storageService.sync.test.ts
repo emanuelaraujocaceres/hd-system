@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StorageService } from './storageService';
 import { syncService } from './syncService';
+import { pixConfigService } from './pixConfigService';
 
 describe('storageService — consistência de mappers de sync (blindagem)', () => {
   let svc: StorageService;
@@ -538,5 +539,63 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     expect(sales.find((s: any) => s.id === 's1')).toBeUndefined(); // removida
     expect(sales.find((s: any) => s.id === 's2')).toBeTruthy();    // preservada
     recalcSpy.mockRestore();
+  });
+
+  // ─── PIX por filial (2026-09-06): mappers de sync do pix_config ───
+  it('savePixConfig grava local + envia payload mapeado (id = branchId, 1:1 por filial)', () => {
+    const upsertSpy = vi.spyOn(syncService, 'upsertRow').mockResolvedValue({} as any);
+    const branchId = 'f3265a77-5946-5cd3-b09c-725ac4d26952'; // BRANCH_UUIDS["br-01"]
+    (svc as any).savePixConfig(branchId, {
+      chavePix: 'pix@filial.com',
+      tipoChave: 'email',
+      nomeTitular: 'Filial Matriz',
+      cidade: 'SAO PAULO',
+      ativo: true,
+    });
+    const call = upsertSpy.mock.calls.find((c) => c[0] === 'pix_config');
+    expect(call).toBeTruthy();
+    expect((call as any)[1]).toMatchObject({
+      id: branchId, // determinístico → upsert idempotente
+      store_branch_id: branchId,
+      chave_pix: 'pix@filial.com',
+      tipo_chave: 'email',
+      nome_titular: 'Filial Matriz',
+      cidade: 'SAO PAULO',
+      ativo: true,
+    });
+    expect((call as any)[1].organization_id).toBeTruthy();
+    // Local também gravado na chave lida pelo PaymentModal
+    expect(pixConfigService.getConfig(branchId)?.chavePix).toBe('pix@filial.com');
+    upsertSpy.mockRestore();
+  });
+
+  it('updatePixConfigFromRemote grava config local da MESMA filial (branch guard ok)', () => {
+    (svc as any).isRemoteFromCurrentBranch = () => true;
+    (svc as any).updatePixConfigFromRemote({
+      id: 'b1', store_branch_id: 'b1', organization_id: 'o1',
+      chave_pix: 'chave-realtime', tipo_chave: 'telefone',
+      nome_titular: 'Titular', cidade: 'CAMPINAS', ativo: false,
+    });
+    const cfg = pixConfigService.getConfig('b1');
+    expect(cfg?.chavePix).toBe('chave-realtime');
+    expect(cfg?.tipoChave).toBe('telefone');
+    expect(cfg?.ativo).toBe(false);
+  });
+
+  it('updatePixConfigFromRemote IGNORA config de outra filial (isolamento BUG-024)', () => {
+    (svc as any).isRemoteFromCurrentBranch = () => false;
+    (svc as any).updatePixConfigFromRemote({
+      id: 'b-other', store_branch_id: 'b-other', chave_pix: 'vazou',
+    });
+    expect(pixConfigService.getConfig('b-other')).toBeNull();
+  });
+
+  it('removePixConfigFromRemote remove config da filial atual e preserva a de outra filial', () => {
+    (svc as any).getSelectedBranchId = () => 'b1';
+    pixConfigService.saveConfig('b1', { chavePix: 'a', tipoChave: 'email', nomeTitular: 'A', cidade: '', ativo: true });
+    pixConfigService.saveConfig('b2', { chavePix: 'b', tipoChave: 'email', nomeTitular: 'B', cidade: '', ativo: true });
+    (svc as any).removePixConfigFromRemote('b1');
+    expect(pixConfigService.getConfig('b1')).toBeNull();
+    expect(pixConfigService.getConfig('b2')?.chavePix).toBe('b');
   });
 });

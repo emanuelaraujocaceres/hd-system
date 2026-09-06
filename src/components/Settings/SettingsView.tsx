@@ -894,19 +894,24 @@ const [savingTv, setSavingTv] = useState(false);
     }
   };
 
-  const handleDeleteTable = (id: string) => {
+  const handleDeleteTable = async (id: string) => {
     try {
       // Encontrar a mesa antes de deletar para pegar o token
       const table = tables.find((t) => t.id === id);
       if (table) {
-        // Usar o método do storageService para deletar (sync com cloud)
-        storageService.deleteTable(id);
+        // Usar o método do storageService para deletar (guard anti-FK + sync com
+        // cloud via RPC excluir_mesa). Throw com MESA_OCUPADA/PERMISSÃO mantém a
+        // mesa intacta e mostra o motivo exato.
+        await storageService.deleteTable(id);
         setTables(storageService.getTables());
         posAudio.chime();
         setSuccessMessage(`Mesa "${table.name}" removida.`);
       }
     } catch (err: any) {
-      setErrorMessage(friendlyErrorMessage(err, 'Não foi possível remover a mesa.'));
+      const msg = err?.message || '';
+      // Guard específico (auditoria seção C): mostra o motivo exato em vez do
+      // fallback genérico
+      setErrorMessage(/^(MESA_OCUPADA|Permissão negada)/.test(msg) ? msg : friendlyErrorMessage(err, 'Não foi possível remover a mesa.'));
       posAudio.error();
     }
   };

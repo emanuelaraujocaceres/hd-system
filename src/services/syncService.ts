@@ -75,6 +75,8 @@ const BRANCH_REQUIRED_TABLES: TableName[] = [
   'stock_loss_log',
   // Terminais de pagamento / maquininhas (2026-09-01): escopadas por filial
   'payment_terminals',
+  // PIX por filial (2026-09-06): chave PIX por filial, escopada por branch
+  'pix_config',
 ];
 
 /**
@@ -126,7 +128,9 @@ export type TableName =
   // Delivery Worker Earnings (2026)
   | 'delivery_worker_earnings'
   // Terminais de pagamento / maquininhas (2026-09)
-  | 'payment_terminals';
+  | 'payment_terminals'
+  // PIX por filial (2026-09-06)
+  | 'pix_config';
 
 type SyncChangeCallback = (table: TableName, payload: any) => void;
 type ConnectionListener = (online: boolean) => void;
@@ -306,6 +310,8 @@ class SupabaseSyncService {
       'stock_loss_log',
       // Terminais de pagamento / maquininhas (2026-09-01)
       'payment_terminals',
+      // PIX por filial (2026-09-06): publicada no supabase_realtime (regra 2)
+      'pix_config',
     ];
 
     this.channel = supabase.channel('hd-system-realtime');

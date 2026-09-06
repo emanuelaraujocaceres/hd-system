@@ -708,6 +708,10 @@ export const App: React.FC = () => {
           if (event === 'DELETE') storageService.deletePaymentTerminalFromRemote(row.id);
           else storageService.updatePaymentTerminalFromRemote(row);
           break;
+        case 'pix_config':
+          if (event === 'DELETE') storageService.removePixConfigFromRemote(row.id);
+          else storageService.updatePixConfigFromRemote(row);
+          break;
         case 'module_visibility':
           if (event === 'DELETE') storageService.removeModuleVisibilityFromRemote(row.id);
           else storageService.updateModuleVisibilityFromRemote(row);
