@@ -11,8 +11,8 @@ import { Product } from '../../types';
 const LABEL_W_MM = 58;
 const LABEL_H_MM = 40;
 const A4_COLS = 3;
-const A4_ROWS = 4;
-const LABELS_PER_SHEET = A4_COLS * A4_ROWS; // 12
+const A4_ROWS = 5;
+const LABELS_PER_SHEET = A4_COLS * A4_ROWS; // 15 (3 colunas × 5 linhas — decisão do usuário)
 
 // A4 em pixels @96dpi (210mm ≈ 794px, 297mm ≈ 1123px) — dimensões da folha no
 // preview em tela. A escala é calculada dinamicamente para a folha inteira
@@ -299,10 +299,10 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
                   <p className="text-[9px] text-slate-400 font-bold mb-1">
                     Folha {currentPage + 1} de {pages.length}
                   </p>
-                  {/* Grade 3x4 TRAVADA: A4_ROWS linhas fixas de LABEL_H_MM + gap
+                  {/* Grade 3x5 TRAVADA: A4_ROWS linhas fixas de LABEL_H_MM + gap
                       de 3mm. Com overflow-hidden no conteúdo, a folha é
-                      fisicamente incapaz de exibir mais de 12 etiquetas (3
-                      colunas × 4 linhas) — inclusive se o conteúdo tentar
+                      fisicamente incapaz de exibir mais de 15 etiquetas (3
+                      colunas × 5 linhas) — inclusive se o conteúdo tentar
                       estourar. A última folha com menos itens simplesmente
                       deixa células vazias, igual à área de impressão. */}
                   <div
@@ -399,7 +399,7 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
           </div>
         )}
 
-        {/* Printable area — A4 (12 por folha, paginado). Só existe no modo A4:
+        {/* Printable area — A4 (15 por folha, paginado). Só existe no modo A4:
             se os dois blocos estivessem sempre no DOM, a impressão mostrava as
             DUAS áreas sobrepostas (etiqueta térmica por cima da 1ª da folha →
             código de barras duplicado em qualquer modo). */}
