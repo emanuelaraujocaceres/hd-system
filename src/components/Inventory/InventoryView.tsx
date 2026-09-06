@@ -1252,7 +1252,32 @@ minStock: parseInt(formMinStock) || 0,
             <p className="text-sm text-slate-400 dark:text-[#71717a] font-semibold">Nenhum produto encontrado</p>
           </div>
         ) : (
-          sortedProducts.map((p) => {
+          <div className="space-y-3">
+            {/* Select-all (mobile) — mesma lógica do checkbox do cabeçalho da
+                tabela desktop, para paridade entre as duas listagens */}
+            <div className="flex items-center gap-2.5 px-1">
+              <input
+                type="checkbox"
+                checked={selectedProducts.size > 0 && selectedProducts.size === sortedProducts.length}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setSelectedProducts(new Set(sortedProducts.map((p) => p.id)));
+                  } else {
+                    setSelectedProducts(new Set());
+                  }
+                }}
+                className="rounded text-indigo-600"
+              />
+              <span className="text-xs font-bold text-slate-500 dark:text-[#a1a1aa]">
+                Selecionar todos ({sortedProducts.length})
+              </span>
+              {selectedProducts.size > 0 && (
+                <span className="ml-auto text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                  {selectedProducts.size} selecionado(s)
+                </span>
+              )}
+            </div>
+            {sortedProducts.map((p) => {
             const isLow = p.currentStock <= p.minStock;
             const isOut = p.currentStock === 0;
             const wholesaleHint = wholesaleStockHint(p);
@@ -1261,11 +1286,29 @@ minStock: parseInt(formMinStock) || 0,
               <div
                 key={p.id}
                 className={`bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-2xl shadow-sm p-3.5 space-y-3 ${
-                  highlightedProductId === p.id ? 'ring-2 ring-indigo-500/50 animate-pulse' : ''
+                  highlightedProductId === p.id
+                    ? 'ring-2 ring-indigo-500/50 animate-pulse'
+                    : selectedProducts.has(p.id)
+                    ? 'ring-2 ring-indigo-500/40 border-indigo-300 dark:border-indigo-500/40'
+                    : ''
                 }`}
               >
-                {/* Top row: image + product info */}
+                {/* Top row: checkbox (seleção múltipla) + image + product info */}
                 <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedProducts.has(p.id)}
+                    onChange={(e) => {
+                      setSelectedProducts((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(p.id);
+                        else next.delete(p.id);
+                        return next;
+                      });
+                    }}
+                    className="mt-1.5 rounded text-indigo-600 shrink-0"
+                    aria-label={`Selecionar ${p.name}`}
+                  />
                   <img
                     src={p.imageUrl}
                     alt={p.name}
@@ -1351,7 +1394,8 @@ minStock: parseInt(formMinStock) || 0,
                 </div>
               </div>
             );
-          })
+            })}
+          </div>
         )}
       </div>
 
