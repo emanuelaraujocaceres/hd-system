@@ -36,6 +36,7 @@ import { CategoryManagerModal } from './CategoryManagerModal';
 import { LotManagerModal } from './LotManagerModal';
 import { StockCameraScannerModal } from './StockCameraScannerModal';
 import { OpenContainersModal } from './OpenContainersModal';
+import { buildWikimediaSearchUrl, wikimediaSearchToUrls } from '../../lib/imageSearch';
 import { Skeleton, TableSkeleton } from '../shared/Skeleton';
 import { BottomSheet } from '../shared/BottomSheet';
 import { MoneyInput, parseBrlToNumber, formatNumberToBrl } from '../shared/MoneyInput';
@@ -113,6 +114,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [isSearchingImages, setIsSearchingImages] = useState(false);
   const [imageSuggestions, setImageSuggestions] = useState<string[]>([]);
+  // Origem das sugestões exibidas: 'web' (Wikimedia), 'fallback' (padrão) ou
+  // 'idle' (nenhuma) — alimenta o rótulo da grade de sugestões.
+  const [imageSource, setImageSource] = useState<'web' | 'fallback' | 'idle'>('idle');
   const [showManualUrlInput, setShowManualUrlInput] = useState(false);
 
   // Product Form state
@@ -207,6 +211,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setFormIsComposite(false);
       setFormUseLots(false);
       setImageSuggestions([]);
+      setImageSource('idle');
       setIsSearchingImages(false);
       setIsProductModalOpen(true);
       if (onClearInitialBarcode) onClearInitialBarcode();
@@ -288,9 +293,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   };
 
   // Busca real de imagens por termo (Wikimedia Commons - aberto, sem chave, CORS liberado)
+  // O termo vem SEMPRE do campo Nome do produto (decisão do usuário): sem nome
+  // preenchido, a busca nem começa — avisamos em vez de pesquisar "produto".
   const handleAutoSearchImage = async () => {
+    const term = (formName || '').trim();
+    if (!term) {
+      addToast('error', 'Preencha o campo Nome do produto para buscar a imagem.');
+      setIsSearchingImages(false);
+      return;
+    }
     setIsSearchingImages(true);
-    const term = (formName || formCategory || 'produto').trim();
 
     // Presets como fallback caso a busca online falhe ou não retorne nada
     const presetMap: Record<string, string[]> = {
@@ -342,26 +354,21 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     // fallback genérico sobrescrevia os resultados reais da web)
     let hasRealResults = false;
 
+    // Timeout de 8s: rede lenta não deve deixar o usuário esperando para
+    // sempre. AbortController derruba o fetch — o AbortError cai no catch.
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+
     try {
-      const url =
-        'https://commons.wikimedia.org/w/api.php' +
-        '?action=query&generator=search' +
-        `&gsrsearch=${encodeURIComponent(term)}&gsrnamespace=6&gsrlimit=8` +
-        '&prop=imageinfo&iiprop=url|mediatype&iiurlwidth=400&format=json&origin=*';
-      const res = await fetch(url);
+      const res = await fetch(buildWikimediaSearchUrl(term), { signal: controller.signal });
       if (!res.ok) throw new Error('Busca de imagens indisponível');
       const data = await res.json();
 
-      type PageInfo = { imageinfo?: { thumburl?: string; url?: string; mediatype?: string }[] };
-      const pages: Record<string, PageInfo> = data?.query?.pages || {};
-      const found = Object.values(pages)
-        .filter((p) => p.imageinfo?.[0]?.mediatype === 'BITMAP')
-        .map((p) => p.imageinfo?.[0]?.thumburl || p.imageinfo?.[0]?.url)
-        .filter((u): u is string => !!u)
-        .slice(0, 3);
+      const found = wikimediaSearchToUrls(data, 3);
 
       if (found.length > 0) {
         hasRealResults = true;
+        setImageSource('web');
         setImageSuggestions(found);
         setFormImageUrl(found[0]);
         posAudio.chime();
@@ -369,12 +376,18 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       }
 
       addToast('warning', `Nenhuma imagem encontrada para "${term}" — mostrando opções padrão.`);
-    } catch {
-      addToast('warning', 'Sem conexão com a busca de imagens — mostrando opções padrão.');
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        addToast('warning', 'A busca de imagens demorou demais — mostrando opções padrão.');
+      } else {
+        addToast('warning', 'Sem conexão com a busca de imagens — mostrando opções padrão.');
+      }
     } finally {
+      window.clearTimeout(timeoutId);
       setIsSearchingImages(false);
       // Só mostra as opções padrão quando a busca online falhou ou veio vazia.
       if (!hasRealResults) {
+        setImageSource('fallback');
         const fallback = fallbackImages();
         setImageSuggestions(fallback);
         if (fallback[0]) {
@@ -410,6 +423,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setFormFractionProductId('');
     setFormRecipeIngredients([]);
     setImageSuggestions([]);
+    setImageSource('idle');
     setIsSearchingImages(false);
   };
 
@@ -1792,7 +1806,9 @@ minStock: parseInt(formMinStock) || 0,
                   <div className="space-y-1.5 pt-1 border-t border-slate-200 dark:border-[#27272a]">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
                       <Sparkles className="w-3 h-3 text-amber-500" />
-                      Sugestões Encontradas (Clique para escolher):
+                      {imageSource === 'web'
+                        ? 'Imagens encontradas na web (Wikimedia Commons):'
+                        : 'Opções padrão (busca online sem resultados):'}
                     </span>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {imageSuggestions.map((img, idx) => (
