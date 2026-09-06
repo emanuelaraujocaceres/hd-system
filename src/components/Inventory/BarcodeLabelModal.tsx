@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Printer, ClipboardList } from 'lucide-react';
-import { Product, SystemSettings } from '../../types';
+import { Product } from '../../types';
 
 // ─── ETIQUETA PADRÃO ÚNICA (A4 = TÉRMICA) ───────────────────────────────────
 // O tamanho da etiqueta é SEMPRE o mesmo (58mm x 40mm), independente da
@@ -14,19 +14,12 @@ const A4_COLS = 3;
 const A4_ROWS = 4;
 const LABELS_PER_SHEET = A4_COLS * A4_ROWS; // 12
 
-// EAN-13 como SVG RESPONSIVO (width="100%"): o tamanho físico do código é o
-// do container (em mm), então o mesmo SVG escaneia igual na térmica (203dpi)
-// e no A4 (laser/jato de tinta). Antes usava pixels fixos (320px ≈ 84mm) que
-// extrapolavam a etiqueta — código cortado/clipado na impressão.
-function generateEan13Svg(code: string, vbWidth: number = 200, vbHeight: number = 55): string {
-  // EAN-13 encoding patterns
-  const L_PATTERNS = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
-  const G_PATTERNS = ['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
-  const R_PATTERNS = ['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
-  const FIRST_DIGIT_PATTERNS = ['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
-
+// EAN-13: devolve os 13 dígitos completos (12 + dígito verificador) a partir
+// de qualquer código. Aceita só dígitos (remove não-numéricos), trunca em 12 e
+// completa com zeros — nunca lança erro, mesmo com código vazio.
+export function computeEan13(code: string): string {
   // Pad or truncate to 12 digits (EAN-13 with check digit)
-  let digits = code.replace(/\D/g, '').slice(0, 12).padEnd(12, '0');
+  const digits = code.replace(/\D/g, '').slice(0, 12).padEnd(12, '0');
 
   // Calculate check digit
   let sum = 0;
@@ -34,7 +27,23 @@ function generateEan13Svg(code: string, vbWidth: number = 200, vbHeight: number 
     sum += parseInt(digits[i]) * (i % 2 === 0 ? 1 : 3);
   }
   const checkDigit = (10 - (sum % 10)) % 10;
-  const fullCode = digits + checkDigit;
+  return digits + checkDigit;
+}
+
+// EAN-13 como SVG RESPONSIVO (width="100%"): o tamanho físico do código é o
+// do container (em mm), então o mesmo SVG escaneia igual na térmica (203dpi)
+// e no A4 (laser/jato de tinta). Antes usava pixels fixos (320px ≈ 84mm) que
+// extrapolavam a etiqueta — código cortado/clipado na impressão.
+// Só as BARRAS vão no SVG; os dígitos são renderizados pelo <p> do LabelBody
+// (computeEan13) para não duplicar a numeração dentro da etiqueta.
+function generateEan13Svg(code: string, vbWidth: number = 200, vbHeight: number = 55): string {
+  // EAN-13 encoding patterns
+  const L_PATTERNS = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+  const G_PATTERNS = ['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+  const R_PATTERNS = ['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
+  const FIRST_DIGIT_PATTERNS = ['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+
+  const fullCode = computeEan13(code);
 
   const firstDigit = parseInt(fullCode[0]);
   const pattern = FIRST_DIGIT_PATTERNS[firstDigit];
@@ -82,27 +91,34 @@ function generateEan13Svg(code: string, vbWidth: number = 200, vbHeight: number 
   bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="white"/>`; x += barWidth;
   bars += `<rect x="${x}" y="0" width="${barWidth}" height="${vbHeight}" fill="black"/>`; x += barWidth;
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vbWidth} ${vbHeight + 14}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet">${bars}<text x="${vbWidth/2}" y="${vbHeight + 12}" text-anchor="middle" font-family="monospace" font-size="11" fill="black">${fullCode}</text></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vbWidth} ${vbHeight}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet">${bars}</svg>`;
 }
 
 interface BarcodeLabelModalProps {
   isOpen: boolean;
   onClose: () => void;
   products: Product[];
-  settings: SystemSettings;
 }
 
 // Corpo da etiqueta 58x40mm: nome, preço, código de barras (responsivo) e dígitos.
+// preço/dígitos usam text-center para ficarem centralizados mesmo fora do
+// wrapper flex do BarcodeLabel (ex.: preview da impressora térmica).
 const LabelBody: React.FC<{ product: Product }> = ({ product }) => (
   <>
-    <p className="font-bold text-center leading-tight truncate w-full text-slate-900" style={{ fontSize: '10px' }}>
+    <p className="font-bold text-center leading-tight truncate w-full text-slate-900" style={{ fontSize: '10px' }} title={product.name}>
       {product.name}
     </p>
-    <p className="font-bold text-emerald-600" style={{ fontSize: '13px' }}>
+    <p className="font-bold text-emerald-600 text-center" style={{ fontSize: '13px' }}>
       R$ {product.salePrice.toFixed(2)}
     </p>
-    <div className="w-full px-1" dangerouslySetInnerHTML={{ __html: generateEan13Svg(product.barcode, 200, 55) }} />
-    <p className="font-mono tracking-tight text-slate-700" style={{ fontSize: '8px' }}>{product.barcode}</p>
+    {product.barcode ? (
+      <div className="w-full px-1" dangerouslySetInnerHTML={{ __html: generateEan13Svg(product.barcode, 200, 55) }} />
+    ) : (
+      <p className="text-center text-[9px] font-bold text-rose-500 leading-tight py-1">SEM CÓDIGO DE BARRAS</p>
+    )}
+    {product.barcode && (
+      <p className="font-mono tracking-tight text-center text-slate-700" style={{ fontSize: '8px' }}>{computeEan13(product.barcode)}</p>
+    )}
   </>
 );
 
@@ -119,7 +135,6 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
   isOpen,
   onClose,
   products,
-  settings,
 }) => {
   const [printMode, setPrintMode] = useState<'a4' | 'thermal'>('a4');
   const [thermalQuantity, setThermalQuantity] = useState(1);
@@ -164,7 +179,7 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
 
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 print:hidden">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 print:hidden shrink-0">
           <div className="flex items-center gap-2 font-bold text-sm text-slate-900 dark:text-white">
             <span className="text-indigo-600">|||</span>
             <span>Gerador de Etiquetas de Código de Barras</span>
@@ -181,7 +196,7 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
         </div>
 
         {/* Mode Selector */}
-        <div className="px-6 pt-4 print:hidden">
+        <div className="px-6 pt-4 print:hidden shrink-0">
           <div className="flex bg-slate-100 dark:bg-slate-800 rounded-xl p-1 gap-1">
             <button
               onClick={() => setPrintMode('a4')}
@@ -210,7 +225,7 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
 
         {/* A4 Mode — Preview */}
         {printMode === 'a4' && (
-          <div className="p-6 overflow-auto bg-slate-100 dark:bg-slate-950 flex flex-col items-center print:hidden">
+          <div className="p-6 overflow-auto min-h-0 flex-1 bg-slate-100 dark:bg-slate-950 flex flex-col items-center print:hidden">
             <p className="text-xs text-slate-500 mb-4 text-center">
               Etiqueta padrão {LABEL_W_MM}×{LABEL_H_MM}mm — {LABELS_PER_SHEET} por folha A4
               {pages.length > 1 ? ` em ${pages.length} folhas` : ''}
@@ -236,7 +251,7 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
 
         {/* Thermal Mode — Preview */}
         {printMode === 'thermal' && (
-          <div className="p-6 overflow-y-auto bg-slate-100 dark:bg-slate-950 flex flex-col items-center print:hidden">
+          <div className="p-6 overflow-y-auto min-h-0 flex-1 bg-slate-100 dark:bg-slate-950 flex flex-col items-center print:hidden">
             <p className="text-xs text-slate-500 mb-4 text-center">
               Impressão térmica — etiqueta padrão {LABEL_W_MM}×{LABEL_H_MM}mm, uma por etiqueta
               {products.length > 1 ? ` (${products.length} produtos, em sequência)` : ''}
@@ -245,7 +260,9 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
             <div className="bg-white rounded-lg border-2 border-dashed border-slate-300 shadow-md p-1"
               style={{ width: `${LABEL_W_MM}mm`, height: `${LABEL_H_MM}mm` }}
             >
-              <LabelBody product={products[0]} />
+              <div className="flex flex-col items-center justify-between w-full h-full">
+                <LabelBody product={products[0]} />
+              </div>
             </div>
 
             {/* Quantity Selector */}
@@ -287,37 +304,44 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
           </div>
         )}
 
-        {/* Printable area — A4 (12 por folha, paginado) */}
-        <div className="hidden print:block">
-          <div id="printable-barcode-sheet">
-            {pages.map((chunk, ci) => (
-              <div key={ci} className={`label-wrap ${ci < pages.length - 1 ? 'label-break' : ''}`}>
-                <div
-                  className="grid grid-cols-3 gap-[3mm]"
-                  style={{ width: '202mm', margin: '4mm auto' }}
-                >
-                  {chunk.map((p) => (
-                    <BarcodeLabel key={p.id} product={p} />
-                  ))}
+        {/* Printable area — A4 (12 por folha, paginado). Só existe no modo A4:
+            se os dois blocos estivessem sempre no DOM, a impressão mostrava as
+            DUAS áreas sobrepostas (etiqueta térmica por cima da 1ª da folha →
+            código de barras duplicado em qualquer modo). */}
+        {printMode === 'a4' && (
+          <div className="hidden print:block">
+            <div id="printable-barcode-sheet">
+              {pages.map((chunk, ci) => (
+                <div key={ci} className={`label-wrap ${ci < pages.length - 1 ? 'label-break' : ''}`}>
+                  <div
+                    className="grid grid-cols-3 gap-[3mm]"
+                    style={{ width: '202mm', margin: '4mm auto' }}
+                  >
+                    {chunk.map((p) => (
+                      <BarcodeLabel key={p.id} product={p} />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Printable area — Thermal (1 etiqueta por página/talão) */}
-        <div className="hidden print:block">
-          <div id="printable-thermal-label-print">
-            {thermalLabels.map((p, idx) => (
-              <div key={idx} className={idx < thermalLabels.length - 1 ? 'label-break' : ''}>
-                <BarcodeLabel product={p} />
-              </div>
-            ))}
+        {printMode === 'thermal' && (
+          <div className="hidden print:block">
+            <div id="printable-thermal-label-print">
+              {thermalLabels.map((p, idx) => (
+                <div key={idx} className={idx < thermalLabels.length - 1 ? 'label-break' : ''}>
+                  <BarcodeLabel product={p} />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Footer */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2 print:hidden">
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2 print:hidden shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300"

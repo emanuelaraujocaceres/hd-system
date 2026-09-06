@@ -418,6 +418,23 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     setIsProductModalOpen(true);
   };
 
+  // Abre o gerador de etiquetas: se há seleção ativa (checkbox), usa TODOS os
+  // selecionados; senão, gera só o produto da linha clicada. Comportamento
+  // único para ícone da linha, card mobile e botão em massa da toolbar.
+  const openBarcodeLabels = (row?: Product) => {
+    const targets = selectedProducts.size > 0
+      ? [...selectedProducts].map((id) => products.find((p) => p.id === id)).filter((p): p is Product => !!p)
+      : row
+        ? [row]
+        : [];
+    if (targets.length > 0) {
+      setBarcodeProducts(targets);
+      setIsBarcodeModalOpen(true);
+    } else {
+      addToast('warning', 'Nenhum produto válido para gerar etiqueta');
+    }
+  };
+
   const openEditProductModal = (product: Product) => {
     setEditingProduct(product);
     setFormName(product.name);
@@ -1013,15 +1030,7 @@ minStock: parseInt(formMinStock) || 0,
             Limpar seleção
           </button>
           <button
-            onClick={() => {
-              const sel = [...selectedProducts]
-                .map((id) => products.find((p) => p.id === id))
-                .filter((p): p is Product => !!p);
-              if (sel.length > 0) {
-                setBarcodeProducts(sel);
-                setIsBarcodeModalOpen(true);
-              }
-            }}
+            onClick={() => openBarcodeLabels()}
             className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[10px] font-bold"
             title="Gerar folha de etiquetas dos produtos selecionados"
           >
@@ -1219,12 +1228,9 @@ minStock: parseInt(formMinStock) || 0,
                             <Boxes className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => {
-                              setBarcodeProducts([p]);
-                              setIsBarcodeModalOpen(true);
-                            }}
+                            onClick={() => openBarcodeLabels(p)}
                             className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors min-h-[44px] min-w-[44px]"
-                            title="Gerar Folha de Etiquetas"
+                            title={selectedProducts.size > 0 ? 'Gerar etiquetas dos produtos selecionados' : 'Gerar folha de etiquetas deste produto'}
                           >
                             <Barcode className="w-4 h-4" />
                           </button>
@@ -1243,7 +1249,7 @@ minStock: parseInt(formMinStock) || 0,
                             className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-[#27272a] transition-colors min-h-[44px] min-w-[44px]"
                             title="Atualizar Código de Barras"
                           >
-                            <Barcode className="w-4 h-4" />
+                            <Camera className="w-4 h-4" />
                           </button>
                           {p.useLots && (
                             <button
@@ -1350,12 +1356,9 @@ minStock: parseInt(formMinStock) || 0,
                     Estoque
                   </button>
                   <button
-                    onClick={() => {
-                      setBarcodeProducts([p]);
-                      setIsBarcodeModalOpen(true);
-                    }}
+                    onClick={() => openBarcodeLabels(p)}
                     className="flex-1 py-2 rounded-xl text-[11px] font-bold text-slate-600 dark:text-[#a1a1aa] bg-slate-100 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] hover:bg-slate-200 dark:hover:bg-[#27272a] transition-colors flex items-center justify-center gap-1.5"
-                    title="Gerar Folha de Etiquetas"
+                    title={selectedProducts.size > 0 ? 'Gerar etiquetas dos produtos selecionados' : 'Gerar folha de etiquetas deste produto'}
                   >
                     <Barcode className="w-3.5 h-3.5" />
                     Etiqueta
@@ -2145,7 +2148,6 @@ minStock: parseInt(formMinStock) || 0,
         isOpen={isBarcodeModalOpen}
         onClose={() => setIsBarcodeModalOpen(false)}
         products={barcodeProducts}
-        settings={settings}
       />
 
       {/* CATEGORY MANAGEMENT MODAL */}
