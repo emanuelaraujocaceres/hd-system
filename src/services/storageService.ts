@@ -5545,6 +5545,7 @@ private updateReceivableFromPayments(saleId: string) {
         console.warn(`[Storage] excluir_mesa falhou para mesa ${id}:`, msg);
         throw new Error(msg);
       }
+      this.notify(); // notifica listeners (App/ComandaView) após sucesso online
     }
 
     // Offline: comportamento legado (remove local + fila de DELETE — é o único
