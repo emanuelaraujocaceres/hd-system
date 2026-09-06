@@ -140,6 +140,7 @@ const LabelBody: React.FC<{ product: Product }> = ({ product }) => (
 
 const BarcodeLabel: React.FC<{ product: Product }> = ({ product }) => (
   <div
+    data-testid="barcode-label"
     className="flex flex-col items-center justify-between bg-white text-black border border-gray-300 p-1"
     style={{ width: `${LABEL_W_MM}mm`, height: `${LABEL_H_MM}mm` }}
   >
@@ -282,6 +283,7 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
                 com transform-origin top left — a folha inteira, grade 3x4, cabe
                 no modal sem rolagem e a última folha pode ter menos etiquetas. */}
             <div
+              data-testid="a4-preview-sheet"
               className="bg-white rounded-lg shadow-lg border border-slate-300"
               style={{ width: `${A4_W_PX * previewScale}px`, height: `${A4_H_PX * previewScale}px`, overflow: 'hidden' }}
             >
@@ -293,11 +295,20 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
                   transformOrigin: 'top left',
                 }}
               >
-                <div className="w-full h-full pt-3 px-3">
+                <div className="w-full h-full pt-3 px-3 overflow-hidden">
                   <p className="text-[9px] text-slate-400 font-bold mb-1">
                     Folha {currentPage + 1} de {pages.length}
                   </p>
-                  <div className="grid grid-cols-3 gap-[3mm]">
+                  {/* Grade 3x4 TRAVADA: A4_ROWS linhas fixas de LABEL_H_MM + gap
+                      de 3mm. Com overflow-hidden no conteúdo, a folha é
+                      fisicamente incapaz de exibir mais de 12 etiquetas (3
+                      colunas × 4 linhas) — inclusive se o conteúdo tentar
+                      estourar. A última folha com menos itens simplesmente
+                      deixa células vazias, igual à área de impressão. */}
+                  <div
+                    className="grid grid-cols-3 gap-[3mm]"
+                    style={{ gridTemplateRows: `repeat(${A4_ROWS}, ${LABEL_H_MM}mm)` }}
+                  >
                     {pages[currentPage]?.map((p) => (
                       <BarcodeLabel key={p.id} product={p} />
                     ))}
