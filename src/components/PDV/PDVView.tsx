@@ -676,8 +676,11 @@ export const PDVView: React.FC<PDVViewProps> = ({
           })}
         </div>
 
-        {/* Product Cards Catalog Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5 flex-1 overflow-y-auto pr-1">
+        {/* Product Cards Catalog Grid — mobile: altura máxima ~2 linhas (quadrado com
+            ~5 produtos + barrinha de rolagem interna) para o carrinho (55vh)
+            ficar logo abaixo, sem rolar a tela inteira. Desktop (lg+) mantém o
+            grid flex-1 ocupando a coluna inteira. */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5 flex-1 overflow-y-auto pr-1 max-h-[380px] lg:max-h-none">
           {filteredProducts.map((entry, index) => {
             const p = entry.product;
             const isLowStock = p.currentStock <= p.minStock;
