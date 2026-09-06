@@ -65,6 +65,7 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
   const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
+  const [novaComandaOpen, setNovaComandaOpen] = useState(false);
 
   // ── Detalhe (PDV restrito do operador) ──
   const [productSearch, setProductSearch] = useState('');
@@ -162,6 +163,12 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     );
   }, [comandaGroups, searchTerm]);
 
+  // Mesas livres para o modal "Nova Comanda": sem sessão ativa, sem vendas e habilitadas.
+  const groupsToOpen = useMemo(
+    () => comandaGroups.filter((g) => !g.session && g.sales.length === 0 && g.table.status !== 'inactive'),
+    [comandaGroups]
+  );
+
   const totalOpenComandas = comandaGroups.filter((g) => g.session).length;
   const freeTables = comandaGroups.filter((g) => !g.session && g.sales.length === 0).length;
   const totalRevenue = comandaGroups.reduce((acc, g) => acc + g.total, 0);
@@ -229,9 +236,14 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
       .slice(0, 8);
   }, [products, productSearch]);
 
-  const handleAddItem = async () => {
+  const handleAddItem = async (explicitProduct?: Product) => {
     if (!detailSession) return;
-    const product = filteredProducts.find((p) => p.id === productSearch) ||
+    // BUG-FIX (2026-09-06): ao clicar na sugestão, o produto é passado
+    // diretamente (explicitProduct) — ANTES o clique setava o estado e
+    // handleAddItem lia o estado ANTIGO (letras digitadas), falhava o find por
+    // id e o campo era preenchido com o id do produto (parecia código de barras).
+    const product = explicitProduct ||
+      filteredProducts.find((p) => p.id === productSearch) ||
       (productSearch
         ? products.find((p) => p.name.toLowerCase() === productSearch.trim().toLowerCase() && p.active)
         : undefined);
@@ -361,7 +373,7 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
               title="Quantidade"
             />
             <button
-              onClick={handleAddItem}
+              onClick={() => handleAddItem()}
               disabled={adding}
               className="px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white font-bold text-xs flex items-center gap-1.5 transition-colors"
             >
@@ -377,10 +389,7 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => {
-                    setProductSearch(p.id);
-                    handleAddItem();
-                  }}
+                  onClick={() => handleAddItem(p)}
                   onMouseDown={(e) => e.preventDefault()}
                   className="w-full px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-[#27272a] flex items-center justify-between text-xs"
                 >
@@ -508,6 +517,13 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
             Clique em uma mesa para abrir a comanda ou gerenciar itens e finalizar o pagamento.
           </p>
         </div>
+        <button
+          onClick={() => setNovaComandaOpen(true)}
+          className="shrink-0 px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold text-sm flex items-center gap-2 transition-colors shadow-lg shadow-orange-600/20"
+        >
+          <Plus className="w-4 h-4" />
+          Nova Comanda
+        </button>
       </div>
 
       {/* Search */}
@@ -577,6 +593,64 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
           </div>
           <p className="text-sm text-slate-500 dark:text-[#71717a]">Nenhuma mesa cadastrada nesta filial</p>
           <p className="text-xs text-slate-400">Cadastre mesas em Configurações &gt; Cardápio/Mesas para começar.</p>
+        </div>
+      )}
+
+      {/* Modal Nova Comanda — seleção de mesa livre */}
+      {novaComandaOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setNovaComandaOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-[#18181b] w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-200 dark:border-[#27272a] flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Plus className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                Nova Comanda
+              </h3>
+              <button
+                onClick={() => setNovaComandaOpen(false)}
+                className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-[#27272a]"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto max-h-[60vh] p-3 space-y-2">
+              <p className="text-xs text-slate-500 dark:text-[#71717a] px-1">
+                Selecione a mesa livre para abrir a comanda:
+              </p>
+              {groupsToOpen.length === 0 ? (
+                <div className="text-center py-8 space-y-2">
+                  <p className="text-sm text-slate-500 dark:text-[#71717a]">Nenhuma mesa livre disponível.</p>
+                  <p className="text-xs text-slate-400">Cadastre mesas em Configurações &gt; Cardápio/Mesas.</p>
+                </div>
+              ) : (
+                groupsToOpen.map((group) => (
+                  <button
+                    key={group.table.id}
+                    type="button"
+                    onClick={() => {
+                      setNovaComandaOpen(false);
+                      handleOpenComanda(group);
+                    }}
+                    className="w-full p-3 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] hover:bg-slate-50 dark:hover:bg-[#27272a]/30 flex items-center gap-3 text-left"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <QrCode className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{group.table.name}</p>
+                      <p className="text-[11px] text-slate-500">Livre — toque para abrir</p>
+                    </div>
+                    <ChevronLeft className="w-4 h-4 rotate-180 text-slate-400 shrink-0" />
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
