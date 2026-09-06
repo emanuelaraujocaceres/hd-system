@@ -3528,6 +3528,7 @@ id: StorageService.ensureUuid(settings.id),
     const productOrg = this.orgIdForBranch(productBranch, product?.organizationId || this.getCurrentOrgId());
     syncService.upsertRow('products', {
       id,
+      name: product?.name || '', // NOT NULL no banco — tombstone com nome p/ evitar 23502
       organization_id: productOrg,
       store_branch_id: productBranch,
       deleted_at: new Date().toISOString(),

@@ -683,6 +683,9 @@ describe('storageService — produto excluído NÃO ressurge (tombstone, BUG pro
     expect(upsertSpy).toHaveBeenCalledWith('products', expect.objectContaining({
       id: PROD_A,
       deleted_at: expect.any(String),
+      // Nome obrigatório no tombstone (products.name é NOT NULL) — sem ele o
+      // upsert do soft-delete falha com 23502 e o produto "ressuscita" (DLQ).
+      name: expect.any(String),
     }));
   });
 
