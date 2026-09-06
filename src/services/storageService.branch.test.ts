@@ -60,6 +60,59 @@ describe('storageService — isolamento de filial (BUG-024/025)', () => {
     ));
   };
 
+  describe('saveCustomerSession — P0-2 (org real preservada, não sobrescrever para default)', () => {
+    // Branch custom FORA do INITIAL_BRANCHES mock: no mundo real (cardápio/delivery
+    // anon) a filial do QR não está no seed local, então orgIdForBranch cai no
+    // fallback (organizationId do caller) — exatamente a superfície do bug P0-2.
+    const CUSTOM_BRANCH = 'b0000000-0000-4000-8000-000000000000';
+
+    it('preserva organizationId informado pelo caller (ex.: cardápio/delivery anon)', () => {
+      const upsertSpy = vi.spyOn(syncService, 'upsertRow').mockResolvedValue({} as any);
+      const REAL_ORG = '11111111-2222-3333-4444-555555555555';
+      svc.saveCustomerSession({
+        id: '1'.repeat(36) as any,
+        tableId: undefined,
+        sessionToken: 'tok',
+        status: 'active',
+        openedAt: new Date().toISOString(),
+        storeBranchId: CUSTOM_BRANCH,
+        organizationId: REAL_ORG,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      // org real NÃO pode virar DEFAULT (BUG: sobrescrevia com getCurrentOrgId())
+      expect(upsertSpy).toHaveBeenCalledWith('customer_sessions', expect.objectContaining({
+        organization_id: REAL_ORG,
+        store_branch_id: CUSTOM_BRANCH,
+        // P0-1: delivery sem mesa → table_id null (antes 'delivery-<uuid>' → 22P02)
+        table_id: null,
+      }));
+      // Local também preserva a org (a partição de storage é a org ATUAL, mas o
+      // objeto gravado mantém a org real da sessão)
+      const saved = JSON.parse(localStorage.getItem(`hd_system_customer_sessions_${DEFAULT_ORG_ID}`) || '[]');
+      expect(saved[0]?.organizationId).toBe(REAL_ORG);
+    });
+
+    it('sem organizationId no caller → fallback para a org atual (comportamento legado)', () => {
+      const upsertSpy = vi.spyOn(syncService, 'upsertRow').mockResolvedValue({} as any);
+      // Cast: CustomerSession tipa organizationId como obrigatório, mas o runtime
+      // (cardápio/delivery) pode passar objeto sem ele — é exatamente o caso legado.
+      svc.saveCustomerSession({
+        id: '2'.repeat(36) as any,
+        tableId: undefined,
+        sessionToken: 'tok2',
+        status: 'active',
+        openedAt: new Date().toISOString(),
+        storeBranchId: CUSTOM_BRANCH,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as any);
+      expect(upsertSpy).toHaveBeenCalledWith('customer_sessions', expect.objectContaining({
+        organization_id: DEFAULT_ORG_ID,
+      }));
+    });
+  });
+
   describe('isRemoteFromCurrentBranch', () => {
     it('row da MESMA filial da atual → true (deve processar)', () => {
       localStorage.setItem('hd_system_selected_branch_id', BRANCH_UUIDS['br-01']);

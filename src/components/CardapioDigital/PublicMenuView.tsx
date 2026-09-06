@@ -184,10 +184,14 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           setTable(deliveryTable);
 
           // Sessão do cliente (para CRM/operador identificar o pedido)
+          // P0-1: em delivery NÃO vinculamos a uma mesa real — o table_id é null
+          // (coluna UUID FK->tables). Antes o id virtual 'delivery-<uuid>' era
+          // enviado como table_id e quebrava com 22P02 na DLQ (pedido preso no
+          // celular). A fonte do delivery é sinalizada por orderSource='delivery'.
           const deviceFingerprint = navigator.userAgent.slice(0, 100) + (screen.width + 'x' + screen.height);
           const newSession: CustomerSession = {
             id: crypto.randomUUID(),
-            tableId: deliveryTable.id,
+            tableId: undefined,
             sessionToken: sessionId,
             status: 'active',
             openedAt: new Date().toISOString(),
@@ -478,7 +482,10 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         customerName: isDeliveryMode ? customer.name.trim() : undefined,
         storeBranchId: table.storeBranchId,
         organizationId: table.organizationId,
-        tableId: table.id,
+        // P0-1: delivery NÃO envia mesa — table_id null (coluna UUID FK->tables).
+        // Antes, o id virtual 'delivery-<uuid>' quebrava com 22P02 na DLQ. A
+        // origem do delivery vem de orderSource='delivery' (DeliveryBoard filtra por ela).
+        tableId: isDeliveryMode ? undefined : table.id,
         customerSessionId: session?.id || undefined,
         notes: isDeliveryMode ? `Tel: ${customer.phone.trim()} | End: ${customer.address.trim()}` : undefined,
         items: saleItems,

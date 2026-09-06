@@ -5541,7 +5541,11 @@ private updateReceivableFromPayments(saleId: string) {
 
   saveCustomerSession(session: CustomerSession) {
     session.id = StorageService.ensureUuid(session.id);
-    session.organizationId = this.getCurrentOrgId();
+    // P0-2: NÃO sobrescrever org quando o caller já trouxe o org real da filial
+    // (ex.: delivery/cardápio anon resolve no fetch REST). Antes, sobrescrevia
+    // com getCurrentOrgId() (anon -> DEFAULT_ORG_ID), gravando session de org
+    // real com org default no cloud e o operador (RLS por org) não a recebia.
+    if (!session.organizationId) session.organizationId = this.getCurrentOrgId();
     const all = this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, []);
     const idx = all.findIndex((s) => s.id === session.id);
     if (idx >= 0) all[idx] = session;
