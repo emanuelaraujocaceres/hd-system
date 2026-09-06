@@ -45,6 +45,7 @@ import { productSchema } from '../../validators/schemas';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { uploadProductImage } from '../../lib/supabase';
 import { undoManager } from '../../lib/undoManager';
+import { getProductsNeedingImageResync } from '../../lib/productImageSync';
 
 /** Rótulo derivado (não persiste): para produtos com wholesaleOptions, exibe
  *  "X caixas de N + Y doses soltas" calculado a partir de currentStock. */
@@ -439,6 +440,37 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   };
 
   const [savingProduct, setSavingProduct] = useState(false);
+
+  // Reenvia ao cloud as imagens locais REAIS (produtos que ficaram com
+  // fallback genérico no cloud: a foto aparece só na máquina que salvou,
+  // outros aparelhos ficam "sem foto" porque hidratam do cloud).
+  const [resyncingImages, setResyncingImages] = useState(false);
+
+  const handleResyncImages = async () => {
+    const targets = getProductsNeedingImageResync(products);
+    const skipped = products.length - targets.length;
+    if (targets.length === 0) {
+      addToast('info', `Nenhuma imagem para reenviar${skipped > 0 ? ` (${skipped} sem imagem local real)` : ''}.`);
+      return;
+    }
+    setResyncingImages(true);
+    let ok = 0;
+    const failed: string[] = [];
+    for (const p of targets) {
+      try {
+        storageService.saveProduct(p);
+        ok += 1;
+      } catch {
+        failed.push(p.name);
+      }
+    }
+    setResyncingImages(false);
+    if (failed.length === 0) {
+      addToast('success', `${ok} imagem(ns) reenviada(s) ao cloud${skipped > 0 ? `; ${skipped} sem imagem local` : ''}.`);
+    } else {
+      addToast('error', `${ok} reenviada(s); ${failed.length} falharam: ${failed.slice(0, 3).join(', ')}${failed.length > 3 ? '…' : ''}`);
+    }
+  };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -962,6 +994,16 @@ minStock: parseInt(formMinStock) || 0,
                 TV
               </button>
             </div>
+
+            <button
+              onClick={handleResyncImages}
+              disabled={resyncingImages}
+              title="Envia ao cloud as imagens locais que ainda não estão lá — resolve produtos que aparecem sem foto em outros aparelhos"
+              className="px-3 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`w-4 h-4 ${resyncingImages ? 'animate-spin' : ''}`} />
+              Reenviar imagens
+            </button>
           </div>
         </div>
       </div>
