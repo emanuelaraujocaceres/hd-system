@@ -223,14 +223,28 @@ export const DeliveryBoardView: React.FC<DeliveryBoardViewProps> = ({ user }) =>
     posAudio.chime();
   };
 
-  const handleCancelOrder = (orderId: string) => {
+  const handleCancelOrder = async (orderId: string) => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) return;
     if (confirm('Tem certeza que deseja cancelar este pedido?')) {
-      // Cancela também o sale do cardápio (se vier do cardápio)
+      // Cancela também o sale do cardápio (se vier do cardápio), restaurando
+      // o estoque de forma atômica (cancel_sale_atomic) — jamais apenas
+      // marcar cancelled, senão o estoque baixado no addSale vaza.
       if (order.saleRef) {
-        const sale = storageService.getSales().find((s) => s.id === order.saleRef);
-        if (sale) storageService.saveSale({ ...sale, status: 'cancelled', kitchenStatus: 'cancelled', updatedAt: new Date().toISOString() });
+        try {
+          const res = await storageService.cancelSaleWithStockRestore(order.saleRef);
+          if (!res.success) {
+            posAudio.error();
+            console.warn('[DeliveryBoard] Falha ao cancelar venda do cardápio:', res.message);
+            loadOrders();
+            return;
+          }
+        } catch (e: any) {
+          posAudio.error();
+          console.warn('[DeliveryBoard] Erro ao cancelar venda do cardápio:', e?.message);
+          loadOrders();
+          return;
+        }
       }
       storageService.updateDeliveryOrderStatus(orderId, 'cancelled', {
         cancelledAt: new Date().toISOString(),

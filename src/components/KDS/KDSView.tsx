@@ -274,19 +274,18 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
     }
   };
 
-  const handleCancelOrder = (saleId: string) => {
+  const handleCancelOrder = async (saleId: string) => {
     try {
-      const sale = sales.find((s) => s.id === saleId);
-      if (!sale) return;
-      storageService.saveSale({
-        ...sale,
-        kitchenStatus: 'cancelled',
-        status: 'cancelled',
-        updatedAt: new Date().toISOString(),
-      });
+      const res = await storageService.cancelSaleWithStockRestore(saleId);
+      if (!res.success) {
+        posAudio.error();
+        addToast('error', res.message || 'Não foi possível cancelar o pedido. Tente novamente.');
+        return;
+      }
       posAudio.click();
-      addToast('warning', 'Pedido cancelado.');
+      addToast('warning', 'Pedido cancelado — estoque restaurado.');
     } catch (err: any) {
+      posAudio.error();
       addToast('error', 'Erro ao cancelar pedido.');
     }
   };
