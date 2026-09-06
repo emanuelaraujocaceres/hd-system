@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Printer, ClipboardList } from 'lucide-react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { X, Printer, ClipboardList, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Product } from '../../types';
 
 // ─── ETIQUETA PADRÃO ÚNICA (A4 = TÉRMICA) ───────────────────────────────────
@@ -13,6 +13,22 @@ const LABEL_H_MM = 40;
 const A4_COLS = 3;
 const A4_ROWS = 4;
 const LABELS_PER_SHEET = A4_COLS * A4_ROWS; // 12
+
+// A4 em pixels @96dpi (210mm ≈ 794px, 297mm ≈ 1123px) — dimensões da folha no
+// preview em tela. A escala é calculada dinamicamente para a folha inteira
+// caber sem rolagem (ver useLayoutEffect no componente).
+const A4_W_PX = 794;
+const A4_H_PX = 1123;
+
+// Paginação A4: divide os produtos em folhas de até `perSheet` etiquetas
+// (3 colunas x 4 linhas). Função pura e exportada para testes.
+export function paginateProducts(items: Product[], perSheet: number = LABELS_PER_SHEET): Product[][] {
+  const pages: Product[][] = [];
+  for (let i = 0; i < items.length; i += perSheet) {
+    pages.push(items.slice(i, i + perSheet));
+  }
+  return pages;
+}
 
 // EAN-13: devolve os 13 dígitos completos (12 + dígito verificador) a partir
 // de qualquer código. Aceita só dígitos (remove não-numéricos), trunca em 12 e
@@ -138,6 +154,36 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
 }) => {
   const [printMode, setPrintMode] = useState<'a4' | 'thermal'>('a4');
   const [thermalQuantity, setThermalQuantity] = useState(1);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [previewScale, setPreviewScale] = useState(0.55);
+  const previewAreaRef = useRef<HTMLDivElement | null>(null);
+
+  // Reset da página ao trocar o modo (A4/térmica) ou o conjunto de produtos —
+  // evita "Página 3" apontando para uma folha que não existe mais.
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [printMode, products.length]);
+
+  // Escala dinâmica da folha A4 no preview: mede o container disponível e
+  // calcula a maior escala em que a folha inteira (794x1123px) cabe sem
+  // rolagem, respeitando o menor eixo (largura OU altura). Recalcula no resize.
+  useLayoutEffect(() => {
+    const computeScale = () => {
+      const el = previewAreaRef.current;
+      if (!el) return;
+      const w = el.clientWidth - 16;
+      const h = el.clientHeight - 20;
+      if (w <= 0 || h <= 0) return;
+      setPreviewScale(Math.max(0.25, Math.min(1, w / A4_W_PX, h / A4_H_PX)));
+    };
+    computeScale();
+    window.addEventListener('resize', computeScale);
+    const t = window.setTimeout(computeScale, 0);
+    return () => {
+      window.removeEventListener('resize', computeScale);
+      window.clearTimeout(t);
+    };
+  }, [printMode]);
 
   if (!isOpen || products.length === 0) return null;
 
@@ -146,10 +192,7 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
   };
 
   // Paginação A4: 12 produtos distintos por folha, quantas folhas forem precisas.
-  const pages: Product[][] = [];
-  for (let i = 0; i < products.length; i += LABELS_PER_SHEET) {
-    pages.push(products.slice(i, i + LABELS_PER_SHEET));
-  }
+  const pages: Product[][] = paginateProducts(products);
 
   // Lista de impressão térmica: 1 etiqueta por produto (x cópias), uma a uma.
   const thermalLabels: Product[] = [];
@@ -223,29 +266,70 @@ export const BarcodeLabelModal: React.FC<BarcodeLabelModalProps> = ({
           </div>
         </div>
 
-        {/* A4 Mode — Preview */}
+        {/* A4 Mode — Preview (1 folha por vez, escalada para caber inteira) */}
         {printMode === 'a4' && (
-          <div className="p-6 overflow-auto min-h-0 flex-1 bg-slate-100 dark:bg-slate-950 flex flex-col items-center print:hidden">
-            <p className="text-xs text-slate-500 mb-4 text-center">
+          <div
+            ref={previewAreaRef}
+            className="p-6 min-h-0 flex-1 bg-slate-100 dark:bg-slate-950 flex flex-col items-center overflow-auto print:hidden"
+          >
+            <p className="text-xs text-slate-500 mb-3 text-center shrink-0">
               Etiqueta padrão {LABEL_W_MM}×{LABEL_H_MM}mm — {LABELS_PER_SHEET} por folha A4
               {pages.length > 1 ? ` em ${pages.length} folhas` : ''}
             </p>
-            {pages.map((chunk, ci) => (
+
+            {/* Folha A4 com transform scale: o wrapper externo tem o tamanho
+                ESCALADO (overflow hidden) e o conteúdo interno mantém 794x1123px
+                com transform-origin top left — a folha inteira, grade 3x4, cabe
+                no modal sem rolagem e a última folha pode ter menos etiquetas. */}
+            <div
+              className="bg-white rounded-lg shadow-lg border border-slate-300"
+              style={{ width: `${A4_W_PX * previewScale}px`, height: `${A4_H_PX * previewScale}px`, overflow: 'hidden' }}
+            >
               <div
-                key={ci}
-                className="bg-white p-3 rounded-xl border border-slate-300 shadow-md mb-4"
-                style={{ width: '200mm' }}
+                style={{
+                  width: `${A4_W_PX}px`,
+                  height: `${A4_H_PX}px`,
+                  transform: `scale(${previewScale})`,
+                  transformOrigin: 'top left',
+                }}
               >
-                <p className="text-[9px] text-slate-400 mb-1 font-bold">
-                  Folha {ci + 1} de {pages.length}
-                </p>
-                <div className="grid grid-cols-3 gap-[3mm]">
-                  {chunk.map((p) => (
-                    <BarcodeLabel key={p.id} product={p} />
-                  ))}
+                <div className="w-full h-full pt-3 px-3">
+                  <p className="text-[9px] text-slate-400 font-bold mb-1">
+                    Folha {currentPage + 1} de {pages.length}
+                  </p>
+                  <div className="grid grid-cols-3 gap-[3mm]">
+                    {pages[currentPage]?.map((p) => (
+                      <BarcodeLabel key={p.id} product={p} />
+                    ))}
+                  </div>
                 </div>
               </div>
-            ))}
+            </div>
+
+            {/* Paginação (só aparece com mais de uma folha) */}
+            {pages.length > 1 && (
+              <div className="flex items-center gap-4 mt-3 shrink-0">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+                  disabled={currentPage === 0}
+                  className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:pointer-events-none hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                  aria-label="Página anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Página {currentPage + 1} de {pages.length}
+                </span>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(pages.length - 1, p + 1))}
+                  disabled={currentPage >= pages.length - 1}
+                  className="p-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:pointer-events-none hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                  aria-label="Próxima página"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         )}
 
