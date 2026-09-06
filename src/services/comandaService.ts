@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { storageService } from './storageService';
-import { CustomerSession, Product, Sale, PaymentDetails } from '../types';
+import { CustomerSession, Product, Sale, PaymentDetails, Table } from '../types';
 
 /**
  * comandaService — operações de gerenciamento da comanda (mesa) pelo OPERADOR.
@@ -88,6 +88,66 @@ export function getTotalComanda(comandaId: string): number {
     .getSales()
     .filter((s) => s.customerSessionId === comandaId && s.status === 'pending')
     .reduce((acc, s) => acc + (s.total > 0 ? s.total : (s.items?.reduce((x, i) => x + (i.total || 0), 0) || 0)), 0);
+}
+
+/**
+ * Abre (ou reabre) a comanda de uma mesa pelo OPERADOR — decisão 2026-09-06
+ * (frente "mesa travada"/"mesas livres não aparecem"):
+ *
+ *   1. Mesa com sessão ACTIVE   → REUTILIZA a existente (a sessão da mesa é
+ *      única; o operador gerencia a mesma do celular do cliente, multi-dispositivo).
+ *   2. Mesa com sessão anterior (completed/cancelled) → REATIVA a existente
+ *      (preserva histórico/vendas daquela sessão; limpa closedAt).
+ *   3. Mesa sem nenhuma sessão  → cria sessão nova (status 'active').
+ *   4. Vendas PENDING da mesa SEM customerSessionId (órfãs — comanda criada
+ *      antes do fluxo de sessão, ex.: mesa 1 "travada") são ANEXADAS à sessão
+ *      via saveSale (UPSERT DE HEADER — NUNCA addSale, que re-baixaria o
+ *      estoque; a baixa atômica já aconteceu no adicionarItem original).
+ *
+ * Retorna a sessão ativa resultante + quantas vendas órfãs foram anexadas.
+ */
+export function abrirComanda(table: Table): { session: CustomerSession; attached: number } {
+  const all = storageService.getCustomerSessions().filter((s) => s.tableId === table.id);
+  let session: CustomerSession | null = all.find((s) => s.status === 'active') || null;
+  let attached = 0;
+
+  if (!session) {
+    const previous = all.find((s) => s.status !== 'active');
+    if (previous) {
+      session = {
+        ...previous,
+        status: 'active',
+        closedAt: undefined,
+        customerName: undefined,
+        updatedAt: new Date().toISOString(),
+      };
+    } else {
+      session = {
+        id: `ses-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        tableId: table.id,
+        sessionToken: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+        status: 'active',
+        openedAt: new Date().toISOString(),
+        storeBranchId: table.storeBranchId,
+        organizationId: table.organizationId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    storageService.saveCustomerSession(session);
+  }
+
+  // Anexa vendas pendentes órfãs da mesa (só atualiza o header — itens e baixa
+  // de estoque permanecem como estavam).
+  const orphans = storageService.getSales().filter(
+    (s) => s.tableId === table.id && !s.customerSessionId && s.status === 'pending'
+  );
+  for (const s of orphans) {
+    storageService.saveSale({ ...s, customerSessionId: session.id, updatedAt: new Date().toISOString() });
+    attached += 1;
+  }
+
+  return { session, attached };
 }
 
 /**

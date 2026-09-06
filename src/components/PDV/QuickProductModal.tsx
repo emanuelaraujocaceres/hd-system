@@ -83,8 +83,9 @@ export const QuickProductModal: React.FC<QuickProductModalProps> = ({
         currentStock: parseInt(stock, 10) || 0,
         minStock: 0,
         maxStock: 100,
-        imageUrl:
-          'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80',
+        // Sem imagem: '' em vez do fallback genérico do Unsplash (NUNCA gravar
+        // imagem fake no cloud — decisão 2026-09-06).
+        imageUrl: '',
         active: true,
         updatedAt: new Date().toISOString(),
         storeBranchId: storageService.getSelectedBranchId() || user?.storeBranchId,

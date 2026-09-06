@@ -16,7 +16,7 @@ import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { PaymentModal } from '../PDV/PaymentModal';
-import { buscarItens, getTotalComanda, adicionarItem, removerItem, fecharComanda, ItemComanda } from '../../services/comandaService';
+import { buscarItens, getTotalComanda, adicionarItem, removerItem, fecharComanda, abrirComanda, ItemComanda } from '../../services/comandaService';
 
 interface ComandaViewProps {
   sales: Sale[];
@@ -107,6 +107,12 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
         tableSaleMap.set(session.tableId, []);
       }
     }
+    // ✅ TODAS as mesas da filial aparecem (inclusive LIVRES) — o operador abre
+    // comanda em mesa livre sem depender de pedido via QR (decisão 2026-09-06).
+    // Mesas com status 'inactive' aparecem com badge DESABILITADA (sem clique).
+    for (const t of tables) {
+      if (!tableSaleMap.has(t.id)) tableSaleMap.set(t.id, []);
+    }
 
     const groups: ComandaGroup[] = [];
     tableSaleMap.forEach((tableSales, tableId) => {
@@ -156,12 +162,17 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     );
   }, [comandaGroups, searchTerm]);
 
-  const totalOpenComandas = comandaGroups.length;
+  const totalOpenComandas = comandaGroups.filter((g) => g.session).length;
+  const freeTables = comandaGroups.filter((g) => !g.session && g.sales.length === 0).length;
   const totalRevenue = comandaGroups.reduce((acc, g) => acc + g.total, 0);
 
   // ── Sessão em detalhe ──
+  // Fallback para storageService: quando o operador ACABA de abrir a comanda
+  // (abrirComanda), a prop `customerSessions` pode ainda não ter o novo registro
+  // no render — busca direto no storage para abrir o detalhe sem esperar o loop.
   const detailSession = detailSessionId
-    ? customerSessions.find((s) => s.id === detailSessionId) || null
+    ? (customerSessions.find((s) => s.id === detailSessionId) ||
+       storageService.getCustomerSessions().find((s) => s.id === detailSessionId) || null)
     : null;
   const detailTable = detailSession ? tables.find((t) => t.id === detailSession.tableId) || null : null;
   const detailItems = useMemo<ItemComanda[]>(
@@ -179,6 +190,31 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     setQuantity(1);
     setSelectedCustomer(null);
   }, []);
+
+  // Abre (ou reabre) a comanda da mesa e navega para o detalhe. Mesa livre →
+  // abrirComanda cria/reativa a sessão; mesa com sessão ativa → gerencia direto.
+  const handleOpenComanda = (group: ComandaGroup) => {
+    if (group.table.status === 'inactive') {
+      addToast('warning', 'Esta mesa está desabilitada. Habilite-a em Configurações > Cardápio/Mesas.');
+      return;
+    }
+    if (group.session) {
+      setDetailSessionId(group.session.id);
+      posAudio.click();
+      return;
+    }
+    try {
+      const { session, attached } = abrirComanda(group.table);
+      if (attached > 0) {
+        addToast('info', `${attached} pedido(s) pendente(s) anexado(s) à comanda de ${group.table.name}.`);
+      }
+      posAudio.click();
+      setDetailSessionId(session.id);
+    } catch (e: any) {
+      posAudio.error();
+      addToast('error', friendlyErrorMessage(e, 'Não foi possível abrir a comanda.'));
+    }
+  };
 
   // Produtos filtrados pela busca (ativa na tela de detalhe)
   const filteredProducts = useMemo(() => {
@@ -466,10 +502,10 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
             </span>
           </h2>
           <p className="text-xs text-slate-500">
-            {totalOpenComandas} comanda{totalOpenComandas !== 1 ? 's' : ''} aberta{totalOpenComandas !== 1 ? 's' : ''} • Total: R$ {totalRevenue.toFixed(2)}
+            {totalOpenComandas} comanda{totalOpenComandas !== 1 ? 's' : ''} aberta{totalOpenComandas !== 1 ? 's' : ''} • {freeTables} mesa{freeTables !== 1 ? 's' : ''} livre{freeTables !== 1 ? 's' : ''} • Total: R$ {totalRevenue.toFixed(2)}
           </p>
           <p className="text-[11px] text-slate-400 mt-1">
-            Clique em uma mesa ativa para gerenciar itens e finalizar o pagamento.
+            Clique em uma mesa para abrir a comanda ou gerenciar itens e finalizar o pagamento.
           </p>
         </div>
       </div>
@@ -492,18 +528,8 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
           {filteredGroups.map((group) => (
             <button
               key={group.table.id}
-              onClick={() => {
-                if (group.session) {
-                  setDetailSessionId(group.session.id);
-                  posAudio.click();
-                } else {
-                  addToast('warning', 'Esta mesa não possui sessão ativa.');
-                }
-              }}
-              disabled={!group.session}
-              className={`w-full rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm overflow-hidden p-4 flex items-center gap-3 text-left transition-colors ${
-                group.session ? 'hover:bg-slate-50 dark:hover:bg-[#27272a]/30 cursor-pointer' : 'opacity-60 cursor-not-allowed'
-              }`}
+              onClick={() => handleOpenComanda(group)}
+              className="w-full rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm overflow-hidden p-4 flex items-center gap-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-[#27272a]/30 cursor-pointer"
             >
               <div className="w-11 h-11 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-600 dark:text-orange-400 shrink-0">
                 <QrCode className="w-5 h-5" />
@@ -516,6 +542,11 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
                       ATIVA
                     </span>
                   )}
+                  {group.table.status === 'inactive' && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-500/10 text-slate-500 border border-slate-500/20">
+                      DESABILITADA
+                    </span>
+                  )}
                   {group.sales.some((s) => s.kitchenStatus === 'closing_request') && (
                     <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-orange-500/10 text-orange-600 border border-orange-500/20">
                       SOLICITOU CONTA
@@ -523,14 +554,17 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
                   )}
                 </p>
                 <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
-                  {group.sales.length} pedido{group.sales.length !== 1 ? 's' : ''} • {group.itemCount} item(ns)
-                  {group.session?.openedAt && ` • Sessão desde ${new Date(group.session.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+                  {group.session
+                    ? `${group.sales.length} pedido${group.sales.length !== 1 ? 's' : ''} • ${group.itemCount} item(ns)${group.session.openedAt ? ` • Sessão desde ${new Date(group.session.openedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}`
+                    : group.sales.length > 0
+                      ? `${group.sales.length} pedido(s) pendente(s) • toque para reabrir a comanda`
+                      : 'Nenhuma comanda aberta — toque para abrir'}
                 </p>
               </div>
               <div className="text-right shrink-0">
                 <p className="text-lg font-bold text-slate-900 dark:text-white">R$ {group.total.toFixed(2)}</p>
                 <p className="text-[10px] text-slate-400">
-                  {group.session ? 'Gerenciar →' : 'total'}
+                  {group.session ? 'Gerenciar →' : 'Abrir Comanda'}
                 </p>
               </div>
             </button>
@@ -541,8 +575,8 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
           <div className="w-16 h-16 rounded-3xl bg-slate-100 dark:bg-[#27272a] flex items-center justify-center mx-auto">
             <ClipboardList className="w-8 h-8 text-slate-400" />
           </div>
-          <p className="text-sm text-slate-500 dark:text-[#71717a]">Nenhuma comanda aberta no momento</p>
-          <p className="text-xs text-slate-400">As comandas aparecerão aqui quando clientes fizerem pedidos pelo cardápio digital</p>
+          <p className="text-sm text-slate-500 dark:text-[#71717a]">Nenhuma mesa cadastrada nesta filial</p>
+          <p className="text-xs text-slate-400">Cadastre mesas em Configurações &gt; Cardápio/Mesas para começar.</p>
         </div>
       )}
     </div>

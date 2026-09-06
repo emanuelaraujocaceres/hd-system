@@ -3446,6 +3446,11 @@ const [savingTv, setSavingTv] = useState(false);
                     }`}>
                       {table.status === 'active' ? 'Ativa' : 'Inativa'}
                     </span>
+                    {storageService.getCustomerSessions().some((s) => s.tableId === table.id && s.status === 'active') && (
+                      <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase bg-orange-500/10 text-orange-600 border border-orange-500/20">
+                        Comanda aberta
+                      </span>
+                    )}
                     <button
                       onClick={() => handleViewCardapio(table)}
                       className="p-2 rounded-lg text-teal-500 hover:bg-teal-500/10"

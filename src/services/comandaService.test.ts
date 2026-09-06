@@ -1,144 +1,184 @@
 /**
- * comandaService — regressão do fluxo do OPERADOR na comanda.
+ * Regressão de `abrirComanda` (decisão 2026-09-06 — frente "mesa travada").
  *
- * Blindagem da regra (2026-09-05): item adicionado pelo operador usa
- * orderSource='comanda' (NÃO 'cardapio_digital') para não vazar para o
- * KDS/Pedidos (que só mostra 'cardapio_digital'/'delivery').
+ * Regras cobertas:
+ *   1. Mesa livre (sem sessão e sem vendas) → cria sessão ACTIVE nova.
+ *   2. Mesa com sessão ACTIVE existente → REUTILIZA (não duplica a sessão;
+ *      multi-dispositivo: operador e celular do cliente gerenciam a mesma).
+ *   3. Mesa com sessão anterior (completed/cancelled) → REATIVA a existente
+ *      (preserva id; limpa closedAt).
+ *   4. Mesa com venda PENDING órfã (SEM customerSessionId — caso da mesa 1
+ *      "travada") → ANEXA à sessão via saveSale (header update). NUNCA chama
+ *      addSale/re-baixa estoque; nenhuma escrita em stock_movements/products.
+ *   5. Venda órfã CANCELADA não é anexada.
+ *
+ * Setup hermético (espelha storageService.branch.test.ts): os dados são
+ * SEMEADOS direto em localStorage (chave particionada `hd_system_<tabela>_<org>`),
+ * sem passar por instâncias — `abrirComanda` usa o singleton do módulo, então
+ * todas as leituras/asserts usam o mesmo `storageService` exportado. Nenhum
+ * estado persiste entre testes (localStorage.clear() + seeds explícitos).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { adicionarItem, buscarItens, getTotalComanda, removerItem, ItemComanda } from './comandaService';
-import { CustomerSession, Product, Sale } from '../types';
+import { storageService } from './storageService';
+import { syncService } from './syncService';
+import { abrirComanda } from './comandaService';
+import { BRANCH_UUIDS, DEFAULT_ORG_ID } from '../data/mockData';
+import type { Sale } from '../types';
 
-const { storageServiceMock, supabaseMock } = vi.hoisted(() => ({
-  storageServiceMock: {
-    getSales: vi.fn(),
-    addSale: vi.fn(),
-    cancelSaleWithStockRestore: vi.fn(),
-    getSelectedBranchId: vi.fn(() => 'branch-1'),
-    getCustomerSessions: vi.fn(),
-    saveCustomerSession: vi.fn(),
-  },
-  supabaseMock: { rpc: vi.fn() },
-}));
+describe('comandaService — abrirComanda (mesa livre / órfã / reutilização)', () => {
+  const BRANCH = BRANCH_UUIDS['br-01'];
+  const TABLE_ID = 'tbl-1';
+  let upsertSpy: ReturnType<typeof vi.spyOn>;
 
-vi.mock('./storageService', () => ({ storageService: storageServiceMock }));
-vi.mock('../lib/supabase', () => ({ supabase: supabaseMock }));
-
-const mkProduct = (overrides: Partial<Product> = {}): Product =>
-  ({
-    id: 'p1',
-    name: 'Cerveja',
-    salePrice: 8.5,
-    costPrice: 4,
-    stockQuantity: 10,
-    categoryId: 'c1',
-    storeBranchId: 'b1',
-    organizationId: 'o1',
-    ...overrides,
-  } as Product);
-
-const mkSession = (overrides: Partial<CustomerSession> = {}): CustomerSession =>
-  ({
-    id: 'cs1',
-    tableId: 't1',
-    customerName: 'Mesa 1',
-    status: 'active',
-    storeBranchId: 'b1',
-    organizationId: 'o1',
-    openedAt: new Date().toISOString(),
-    ...overrides,
-  } as CustomerSession);
-
-const mkPendingSale = (id: string, sessionId: string, items: any[], productId: string): Sale =>
-  ({
-    id,
-    customerSessionId: sessionId,
-    tableId: 't1',
-    status: 'pending',
-    orderSource: 'comanda',
-    kitchenStatus: 'pending',
-    items,
-    total: items.reduce((a: number, i: any) => a + (i.total || 0), 0),
-    date: '2026-09-05T10:00:00Z',
-  } as Sale);
-
-describe('adicionarItem — fluxo do operador', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    localStorage.clear();
+    // org default (sem perfil) → chaves particionadas com DEFAULT_ORG_ID
+    localStorage.setItem('hd_system_selected_branch_id', BRANCH);
+    localStorage.setItem('hd_system_branches', JSON.stringify([
+      { id: BRANCH, name: 'Matriz', code: 'SP-01', organizationId: DEFAULT_ORG_ID, active: true },
+    ]));
+    upsertSpy = vi.spyOn(syncService, 'upsertRow').mockResolvedValue({} as any);
+    vi.spyOn(syncService, 'deleteRow').mockResolvedValue(true as any);
   });
 
-  it('cria venda pending com orderSource="comanda" (não vai pro KDS) e baixa via addSale', async () => {
-    storageServiceMock.addSale.mockResolvedValue({ success: true });
+  const seedTable = (id = TABLE_ID) => {
+    localStorage.setItem(`hd_system_tables_${DEFAULT_ORG_ID}`, JSON.stringify([
+      {
+        id,
+        name: 'Mesa 1',
+        number: 1,
+        qrToken: 'qr-1',
+        status: 'active',
+        storeBranchId: BRANCH,
+        organizationId: DEFAULT_ORG_ID,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]));
+    return { id, name: 'Mesa 1', number: 1, qrToken: 'qr-1', status: 'active' as const, storeBranchId: BRANCH, organizationId: DEFAULT_ORG_ID, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  };
 
-    const res = await adicionarItem({ product: mkProduct(), quantity: 2, session: mkSession(), operatorName: 'Juninho', operatorId: 'op-1' });
+  const seedOrphanSale = (id: string, code: string, status: Sale['status'], tableId = TABLE_ID) => {
+    localStorage.setItem(`hd_system_sales_${DEFAULT_ORG_ID}`, JSON.stringify([
+      {
+        id,
+        code,
+        date: new Date().toISOString(),
+        operatorId: 'op-1',
+        operatorName: 'Operador',
+        customerName: 'Cliente Não Identificado',
+        storeBranchId: BRANCH,
+        organizationId: DEFAULT_ORG_ID,
+        tableId,
+        customerSessionId: undefined,
+        orderSource: 'comanda',
+        kitchenStatus: status === 'cancelled' ? 'cancelled' : 'pending',
+        items: [{ productId: 'prod-1', productName: 'Cerveja', unitPrice: 8, quantity: 2, total: 16 }],
+        subtotal: 16,
+        discount: 0,
+        total: 16,
+        payments: [],
+        status,
+        updatedAt: new Date().toISOString(),
+      },
+    ]));
+  };
 
-    expect(res.success).toBe(true);
-    expect(storageServiceMock.addSale).toHaveBeenCalledTimes(1);
-    const sale = storageServiceMock.addSale.mock.calls[0][0] as Sale;
-    expect(sale.orderSource).toBe('comanda');
-    expect(sale.orderSource).not.toBe('cardapio_digital'); // sai do KDS/Pedidos e do celular do cliente
-    expect(sale.customerSessionId).toBe('cs1');
-    expect(sale.status).toBe('pending');
-    expect(sale.kitchenStatus).toBe('pending');
-    expect(sale.total).toBe(17);
-    expect(sale.items[0].productId).toBe('p1');
-    expect(sale.items[0].quantity).toBe(2);
+  it('mesa livre cria sessão ACTIVE nova (cenário feliz)', () => {
+    const table = seedTable();
+    const { session, attached } = abrirComanda(table);
+
+    expect(attached).toBe(0);
+    expect(session.status).toBe('active');
+    expect(session.tableId).toBe(TABLE_ID);
+    expect(session.sessionToken).toBeTruthy();
+    expect(session.storeBranchId).toBe(BRANCH);
+    expect(session.organizationId).toBe(DEFAULT_ORG_ID);
+
+    const stored = storageService.getCustomerSessions().filter((s) => s.tableId === TABLE_ID);
+    expect(stored).toHaveLength(1);
+    expect(stored[0].id).toBe(session.id);
+    // A sessão nova foi sincronizada ao cloud
+    expect(upsertSpy.mock.calls.some((c) => c[0] === 'customer_sessions')).toBe(true);
   });
 
-  it('recusa quantidade inválida sem chamar addSale', async () => {
-    const res = await adicionarItem({ product: mkProduct(), quantity: 0, session: mkSession(), operatorName: 'Juninho', operatorId: 'op-1' });
-    expect(res.success).toBe(false);
-    expect(storageServiceMock.addSale).not.toHaveBeenCalled();
+  it('mesa com sessão ACTIVE existente reutiliza a mesma sessão (não duplica)', () => {
+    const table = seedTable();
+    const first = abrirComanda(table).session;
+    upsertSpy.mockClear();
+
+    const { session, attached } = abrirComanda(table);
+
+    expect(session.id).toBe(first.id);
+    expect(attached).toBe(0);
+    expect(storageService.getCustomerSessions().filter((s) => s.tableId === TABLE_ID)).toHaveLength(1);
+    // Nenhuma escrita nova de sessão (já existia)
+    expect(upsertSpy.mock.calls.some((c) => c[0] === 'customer_sessions')).toBe(false);
   });
 
-  it('recusa produto sem id sem chamar addSale', async () => {
-    const res = await adicionarItem({ product: mkProduct({ id: '' }), quantity: 1, session: mkSession(), operatorName: 'Juninho', operatorId: 'op-1' });
-    expect(res.success).toBe(false);
-    expect(storageServiceMock.addSale).not.toHaveBeenCalled();
-  });
-});
+  it('mesa com sessão anterior COMPLETED reativa a existente (preserva id, limpa closedAt)', () => {
+    const table = seedTable();
+    const OLD_SESSION_ID = 'b0000000-0000-4000-8000-000000000099'; // UUID real (cloud)
+    const oldSession = {
+      id: OLD_SESSION_ID,
+      tableId: TABLE_ID,
+      sessionToken: 'tok-old',
+      status: 'completed' as const,
+      openedAt: '2026-09-01T10:00:00.000Z',
+      closedAt: '2026-09-01T12:00:00.000Z',
+      storeBranchId: BRANCH,
+      organizationId: DEFAULT_ORG_ID,
+      createdAt: '2026-09-01T10:00:00.000Z',
+      updatedAt: '2026-09-01T12:00:00.000Z',
+    };
+    localStorage.setItem(`hd_system_customer_sessions_${DEFAULT_ORG_ID}`, JSON.stringify([oldSession]));
 
-describe('buscarItens / getTotalComanda', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+    const { session, attached } = abrirComanda(table);
 
-  it('consolida somente vendas pending da sessão', () => {
-    const sale1 = mkPendingSale('s1', 'cs1', [{ productId: 'p1', productName: 'Cerveja', unitPrice: 8.5, quantity: 2, total: 17 }], 'p1');
-    const sale2 = mkPendingSale('s2', 'cs1', [{ productId: 'p2', productName: 'Petisco', unitPrice: 5, quantity: 1, total: 5 }], 'p2');
-    const completed = { ...mkPendingSale('s3', 'cs1', [{ productId: 'p9', productName: 'X', unitPrice: 1, quantity: 1, total: 1 }], 'p9'), status: 'completed' };
-    const otherSession = mkPendingSale('s4', 'cs-999', [{ productId: 'p7', productName: 'Y', unitPrice: 1, quantity: 1, total: 1 }], 'p7');
-    storageServiceMock.getSales.mockReturnValue([sale1, sale2, completed, otherSession]);
-
-    const items: ItemComanda[] = buscarItens('cs1');
-    expect(items).toHaveLength(2);
-    expect(items[0].productId).toBe('p1');
-    expect(items[1].productId).toBe('p2');
-    expect(getTotalComanda('cs1')).toBe(22);
-  });
-
-  it('retorna total 0 quando a sessão não tem vendas pending', () => {
-    storageServiceMock.getSales.mockReturnValue([]);
-    expect(getTotalComanda('cs1')).toBe(0);
-    expect(buscarItens('cs1')).toHaveLength(0);
-  });
-});
-
-describe('removerItem', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    storageServiceMock.cancelSaleWithStockRestore.mockResolvedValue({ success: true });
+    // Mesmo registro reativado: id preservado (ensureUuid é no-op em UUID),
+    // openedAt do seed mantido, status active e closedAt limpo — sem sessão nova.
+    expect(session.id).toBe(OLD_SESSION_ID);
+    expect(session.status).toBe('active');
+    expect(session.closedAt).toBeUndefined();
+    expect(session.openedAt).toBe('2026-09-01T10:00:00.000Z');
+    expect(attached).toBe(0);
+    const stored = storageService.getCustomerSessions().filter((s) => s.tableId === TABLE_ID);
+    expect(stored).toHaveLength(1);
+    expect(stored[0].status).toBe('active');
+    expect(stored[0].id).toBe(OLD_SESSION_ID);
   });
 
-  it('restaura estoque via cancelSaleWithStockRestore para venda válida', async () => {
-    const res = await removerItem('s1');
-    expect(res.success).toBe(true);
-    expect(storageServiceMock.cancelSaleWithStockRestore).toHaveBeenCalledWith('s1');
+  it('venda órfã pendente é ANEXADA à sessão sem re-baixar estoque (caso mesa 1 travada)', () => {
+    const table = seedTable();
+    seedOrphanSale('sale-orphan-1', 'VEN-sale-orphan-1', 'pending');
+    upsertSpy.mockClear();
+
+    const { session, attached } = abrirComanda(table);
+
+    expect(attached).toBe(1);
+    const sale = storageService.getSales().find((s) => s.code === 'VEN-sale-orphan-1');
+    expect(sale).toBeTruthy();
+    expect(sale!.customerSessionId).toBe(session.id);
+    // Itens originais preservados (header update não mexe em itens — saveSale)
+    expect(sale!.items).toHaveLength(1);
+
+    // NENHUMA escrita de estoque: a baixa atômica já aconteceu no adicionarItem
+    // original; anexar a sessão NUNCA re-baixa (senão duplicaria débito+log).
+    const stockWrites = upsertSpy.mock.calls.filter(
+      (c) => c[0] === 'stock_movements' || c[0] === 'products'
+    );
+    expect(stockWrites).toHaveLength(0);
+    // Só header da venda e a sessão foram sincronizados
+    expect(upsertSpy.mock.calls.some((c) => c[0] === 'sales')).toBe(true);
   });
 
-  it('recusa saleId vazio sem tocar no estoque', async () => {
-    const res = await removerItem('');
-    expect(res.success).toBe(false);
-    expect(storageServiceMock.cancelSaleWithStockRestore).not.toHaveBeenCalled();
+  it('venda órfã CANCELADA não é anexada à sessão', () => {
+    const table = seedTable();
+    seedOrphanSale('sale-canc-1', 'VEN-CANC', 'cancelled');
+
+    const { attached } = abrirComanda(table);
+
+    expect(attached).toBe(0);
+    expect(storageService.getSales().find((s) => s.code === 'VEN-CANC')!.customerSessionId).toBeUndefined();
   });
 });

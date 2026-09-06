@@ -410,7 +410,12 @@ export const DeliveryClientView: React.FC<DeliveryClientViewProps> = ({ branch, 
                     className="p-3 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-2"
                   >
                     {product.imageUrl && (
-                      <img src={product.imageUrl} alt={product.name} className="w-full h-24 object-cover rounded-xl" />
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name}
+                        loading="lazy"
+                        className="w-full aspect-square object-cover rounded-xl"
+                      />
                     )}
                     <div>
                       <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1">{product.name}</p>

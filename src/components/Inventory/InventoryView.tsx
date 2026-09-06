@@ -501,7 +501,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       const salePrice = parseBrlToNumber(formSalePrice);
 
       // Upload image to Supabase Storage if it's a base64 data URL
-      let finalImageUrl = formImageUrl || 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300&auto=format&fit=crop&q=80';
+      // Sem imagem: grava '' (string vazia) em vez do fallback genérico do
+      // Unsplash — o fallback fake poluía o cloud (87 produtos na Adega - Matriz
+      // gravados com a mesma URL) e o celular mostrava "sem foto" mesmo com foto
+      // real no PC (local-first). Decisão 2026-09-06: NUNCA gravar imagem fake.
+      let finalImageUrl = formImageUrl || '';
       if (formImageUrl?.startsWith('data:image/')) {
         const tempId = editingProduct?.id || `prod-${Date.now()}`;
         finalImageUrl = await uploadProductImage(formImageUrl, tempId);
