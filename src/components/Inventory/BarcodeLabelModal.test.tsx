@@ -44,24 +44,24 @@ describe('computeEan13', () => {
   });
 });
 
-describe('paginateProducts — folhas A4 de 15 etiquetas (3×5)', () => {
-  it('uma folha para até 15 produtos (cenário feliz)', () => {
-    const pages = paginateProducts(makeProducts(15));
+describe('paginateProducts — folhas A4 de 18 etiquetas (3×6)', () => {
+  it('uma folha para até 18 produtos (cenário feliz)', () => {
+    const pages = paginateProducts(makeProducts(18));
     expect(pages).toHaveLength(1);
-    expect(pages[0]).toHaveLength(15);
+    expect(pages[0]).toHaveLength(18);
   });
 
-  it('folha extra apenas quando passa de 15 produtos', () => {
-    const pages = paginateProducts(makeProducts(16));
+  it('folha extra apenas quando passa de 18 produtos', () => {
+    const pages = paginateProducts(makeProducts(19));
     expect(pages).toHaveLength(2);
-    expect(pages[0]).toHaveLength(15);
+    expect(pages[0]).toHaveLength(18);
     expect(pages[1]).toHaveLength(1);
   });
 
-  it('última folha com menos etiquetas (238 produtos → 16 folhas, última com 13)', () => {
+  it('última folha com menos etiquetas (238 produtos → 14 folhas, última com 4)', () => {
     const pages = paginateProducts(makeProducts(238));
-    expect(pages).toHaveLength(16);
-    expect(pages[15]).toHaveLength(238 - 15 * 15);
+    expect(pages).toHaveLength(14);
+    expect(pages[13]).toHaveLength(238 - 13 * 18);
   });
 
   it('lista vazia → nenhuma folha', () => {
@@ -71,7 +71,7 @@ describe('paginateProducts — folhas A4 de 15 etiquetas (3×5)', () => {
 
 describe('BarcodeLabelModal — pré-visualização A4 paginada', () => {
   it('mostra "Página 1 de N" e navega entre folhas com as setas', () => {
-    render(<BarcodeLabelModal isOpen products={makeProducts(35)} onClose={() => {}} />);
+    render(<BarcodeLabelModal isOpen products={makeProducts(37)} onClose={() => {}} />);
     expect(screen.getByText('Página 1 de 3')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Próxima página'));
     expect(screen.getByText('Página 2 de 3')).toBeTruthy();
@@ -79,32 +79,32 @@ describe('BarcodeLabelModal — pré-visualização A4 paginada', () => {
     expect(screen.getByText('Página 1 de 3')).toBeTruthy();
   });
 
-  it('última folha renderiza só as etiquetas restantes (16 produtos)', () => {
-    render(<BarcodeLabelModal isOpen products={makeProducts(16)} onClose={() => {}} />);
+  it('última folha renderiza só as etiquetas restantes (19 produtos)', () => {
+    render(<BarcodeLabelModal isOpen products={makeProducts(19)} onClose={() => {}} />);
     fireEvent.click(screen.getByLabelText('Próxima página'));
     expect(screen.getByText('Página 2 de 2')).toBeTruthy();
-    // "Produto 16" aparece no preview E na área de impressão (hidden no DOM) — 
+    // "Produto 19" aparece no preview E na área de impressão (hidden no DOM) — 
     // o que importa é que a 2ª folha contém a etiqueta restante.
-    expect(screen.getAllByText('Produto 16').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Produto 19').length).toBeGreaterThan(0);
   });
 
-  it('NUNCA mostra mais de 15 etiquetas por folha (18 produtos → 15 + 3)', () => {
-    render(<BarcodeLabelModal isOpen products={makeProducts(18)} onClose={() => {}} />);
-    // Preview (folha escalada): exatamente 15 etiquetas (grade 3×5 travada).
+  it('NUNCA mostra mais de 18 etiquetas por folha (20 produtos → 18 + 2)', () => {
+    render(<BarcodeLabelModal isOpen products={makeProducts(20)} onClose={() => {}} />);
+    // Preview (folha escalada): exatamente 18 etiquetas (grade 3×6 travada).
     // A área de impressão também está no DOM (hidden) com TODAS as etiquetas
-    // (18), por isso o escopo é restrito ao preview via data-testid.
+    // (20), por isso o escopo é restrito ao preview via data-testid.
     const sheet = within(screen.getByTestId('a4-preview-sheet'));
-    expect(sheet.getAllByTestId('barcode-label')).toHaveLength(15);
-    // Folha 2: só as 3 restantes
+    expect(sheet.getAllByTestId('barcode-label')).toHaveLength(18);
+    // Folha 2: só as 2 restantes
     fireEvent.click(screen.getByLabelText('Próxima página'));
-    expect(sheet.getAllByTestId('barcode-label')).toHaveLength(3);
+    expect(sheet.getAllByTestId('barcode-label')).toHaveLength(2);
     expect(screen.getByText('Página 2 de 2')).toBeTruthy();
   });
 
-  it('folha com 15 produtos exata → única página com 15 etiquetas', () => {
-    render(<BarcodeLabelModal isOpen products={makeProducts(15)} onClose={() => {}} />);
+  it('folha com 18 produtos exata → única página com 18 etiquetas', () => {
+    render(<BarcodeLabelModal isOpen products={makeProducts(18)} onClose={() => {}} />);
     const sheet = within(screen.getByTestId('a4-preview-sheet'));
-    expect(sheet.getAllByTestId('barcode-label')).toHaveLength(15);
+    expect(sheet.getAllByTestId('barcode-label')).toHaveLength(18);
     // Sem paginação (uma folha só) — setas não existem
     expect(screen.queryByLabelText('Próxima página')).toBeNull();
     expect(screen.queryByText(/Página 1 de/)).toBeNull();
