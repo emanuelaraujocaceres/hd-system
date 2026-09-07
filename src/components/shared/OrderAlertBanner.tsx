@@ -16,11 +16,13 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
   const lastPendingRef = useRef(0);
   const lastClosingRef = useRef(0);
+  const [dismissedClosing, setDismissedClosing] = useState<Set<string>>(new Set());
 
   const refresh = () => {
     const sales = storageService.getSales().filter(s => s.orderSource === 'cardapio_digital' && s.kitchenStatus !== 'cancelled' && s.status !== 'cancelled' && s.status !== 'completed');
     const pend = sales.filter(s => (s.kitchenStatus || 'pending') === 'pending');
-    const clos = sales.filter(s => s.kitchenStatus === 'closing_request');
+    const allClos = sales.filter(s => s.kitchenStatus === 'closing_request');
+    const clos = allClos.filter(s => !dismissedClosing.has(s.customerSessionId || s.id));
     setPendingCount(pend.length);
     setClosingCount(clos.length);
     if (pend.length > 0) {
@@ -64,7 +66,7 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
     const unsub = storageService.subscribe(() => refresh());
     const iv = setInterval(refresh, 1000);
     return () => { unsub(); clearInterval(iv); };
-  }, [tables]);
+  }, [tables, dismissedClosing]);
 
   if (pendingCount === 0 && closingCount === 0) return null;
 
@@ -92,6 +94,7 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
             <p className="text-xs opacity-90">{closingCount} comanda{closingCount>1?'s':''} aguardando pagamento</p>
           </div>
           <button onClick={() => {
+            if (closingSessionId) setDismissedClosing(prev => new Set(prev).add(closingSessionId));
             const detail: any = {};
             if (closingSessionId) detail.sessionId = closingSessionId;
             if (closingTable?.id) detail.tableId = closingTable.id;
