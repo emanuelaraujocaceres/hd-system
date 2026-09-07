@@ -787,16 +787,16 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
 
       {/* Products Grid */}
       <div className="flex-1 px-4 pb-24 overflow-y-auto">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
           {filteredProducts.map((product) => {
             const inCart = cart.find((item) => item.product.id === product.id);
             return (
               <div
                 key={product.id}
-                className="bg-white dark:bg-[#18181b] rounded-2xl border border-slate-200 dark:border-[#27272a] overflow-hidden flex flex-col"
+                className="bg-white dark:bg-[#18181b] rounded-xl border border-slate-200 dark:border-[#27272a] overflow-hidden flex flex-col"
               >
-                {/* Image - padronizada: altura fixa, contain, fundo branco */}
-                <div className="w-full h-40 bg-white dark:bg-white relative flex items-center justify-center p-2">
+                {/* Image - compacta: menos espaço em branco lateral */}
+                <div className="w-full h-36 bg-white dark:bg-white relative flex items-center justify-center p-1">
                   {product.imageUrl ? (
                     <img
                       src={product.imageUrl}
@@ -818,8 +818,8 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
                     </div>
                   )}
                 </div>
-                {/* Info */}
-                  <div className="p-3 flex-1 flex flex-col">
+                {/* Info - compacto */}
+                  <div className="p-2 flex-1 flex flex-col">
                   <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-2 mb-1">
                     {product.name}
                   </p>

@@ -401,15 +401,15 @@ export const DeliveryClientView: React.FC<DeliveryClientViewProps> = ({ branch, 
               action={{ label: 'Limpar busca', onClick: () => { setSearchTerm(''); setSelectedCategory('all'); } }}
             />
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
               {filteredProducts.map(product => {
                 const inCart = cart.find(item => item.productId === product.id);
                 return (
                   <div
                     key={product.id}
-                    className="p-3 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-2 flex flex-col"
+                    className="p-2 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-1.5 flex flex-col"
                   >
-                    <div className="w-full h-40 bg-white rounded-xl flex items-center justify-center p-2 overflow-hidden">
+                    <div className="w-full h-36 bg-white rounded-lg flex items-center justify-center p-1 overflow-hidden">
                       {product.imageUrl ? (
                         <img
                           src={product.imageUrl}
