@@ -579,14 +579,13 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       const allTableSales = storageService.getSales().filter(s => s.tableId === table.id && s.status !== 'completed' && s.status !== 'cancelled');
       const targetSales = allTableSales.length > 0 ? allTableSales : myOrders;
       const saleIds: string[] = [];
-      // Calcula troco para dinheiro se cliente precisar
-      const needsChange = paymentMethod === 'cash' && closingNeedsChange;
-      const changeDueTotal = needsChange ? Math.max(0, closingCashGiven - myComandaTotal) : 0;
+      const isCash = paymentMethod === 'cash';
+      const changeDueTotal = isCash ? Math.max(0, closingCashGiven - myComandaTotal) : 0;
+      const hasCashGiven = isCash && closingCashGiven > 0;
       for (const sale of targetSales) {
         const saleTotal = sale.total > 0 ? sale.total : (sale.items?.reduce((a, i) => a + (i.total || 0), 0) || 0);
         let payment: any = { method: paymentMethod, amount: saleTotal };
-        if (needsChange) {
-          // Repassa troco para o operador ver no Pedidos (primeira venda carrega cashGiven total)
+        if (hasCashGiven) {
           payment.cashGiven = closingCashGiven;
           payment.changeDue = changeDueTotal;
         }
@@ -1104,24 +1103,17 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
             </div>
             {selectedPayment === 'cash' && (
               <div className="space-y-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20">
-                <label className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
-                  <input type="checkbox" checked={closingNeedsChange} onChange={(e) => setClosingNeedsChange(e.target.checked)} className="rounded text-teal-600" />
-                  Precisa de troco?
-                </label>
-                {closingNeedsChange && (
-                  <div>
-                    <label className="text-xs font-bold text-slate-600 dark:text-slate-300">Troco pra quanto? R$</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={closingCashGiven}
-                      onChange={(e) => setClosingCashGiven(parseFloat(e.target.value) || 0)}
-                      className="w-full mt-1 px-3 py-2 bg-white dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-sm font-bold"
-                      placeholder={myComandaTotal.toFixed(2)}
-                    />
-                    <p className="text-xs mt-1 font-bold text-emerald-600">Troco: R$ {Math.max(0, closingCashGiven - myComandaTotal).toFixed(2)}</p>
-                  </div>
-                )}
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300">Troco pra quanto? R$</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={closingCashGiven}
+                  onChange={(e) => setClosingCashGiven(parseFloat(e.target.value) || 0)}
+                  className="w-full mt-1 px-3 py-2 bg-white dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-sm font-bold"
+                  placeholder={myComandaTotal.toFixed(2)}
+                />
+                <p className="text-xs mt-1 font-bold text-emerald-600">Troco: R$ {Math.max(0, closingCashGiven - myComandaTotal).toFixed(2)}</p>
+                <p className="text-[11px] text-slate-500">Deixe igual ao total se não precisar de troco.</p>
               </div>
             )}
             <div className="flex gap-2 pt-1">
