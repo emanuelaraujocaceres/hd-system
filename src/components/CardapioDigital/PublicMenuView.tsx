@@ -552,13 +552,16 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       // Cliente SOLICITA o fechamento informando a FORMA DE PAGAMENTO desejada.
       // Operador fecha e cobra na página de Comandas. kitchenStatus='closing_request'
       // sinaliza o Pedidos (KDS) e payments[0].method exibe a forma escolhida.
+      // Pega TODAS as vendas da mesa (não só myOrders que filtra por sessão atual) — inclui Entregue
+      const allTableSales = storageService.getSales().filter(s => s.tableId === table.id && s.status !== 'completed' && s.status !== 'cancelled');
+      const targetSales = allTableSales.length > 0 ? allTableSales : myOrders;
       const saleIds: string[] = [];
-      for (const sale of myOrders) {
+      for (const sale of targetSales) {
         const saleTotal = sale.total > 0 ? sale.total : (sale.items?.reduce((a, i) => a + (i.total || 0), 0) || 0);
         const updatedSale: Sale = {
           ...sale,
           status: 'pending', // Aguardando operador finalizar
-          kitchenStatus: 'closing_request', // Sinaliza pedido de fechamento
+          kitchenStatus: 'closing_request', // Sinaliza pedido de fechamento — move Entregue também
           payments: [{ method: paymentMethod, amount: saleTotal }] as any, // forma de pagamento solicitada
           updatedAt: new Date().toISOString(),
         };
