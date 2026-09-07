@@ -473,7 +473,7 @@ export const INITIAL_SETTINGS: SystemSettings = {
   state: 'SP',
   pixKey: '12345678000190',
   printerPaperSize: '80mm',
-  autoPrintReceipt: true,
+  autoPrintReceipt: false,
   soundEffectsEnabled: true,
   receiptHeaderMsg: 'Obrigado pela preferência! Volte Sempre ao HD-System.',
   receiptFooterMsg: 'HD-System - www.hd-system.com.br',
