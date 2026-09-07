@@ -1,6 +1,6 @@
 # SUPABASE SCHEMA - Referencia Completa do Banco de Dados
 
-> Atualizado em 2026-08-23 apos auditoria completa (Etapas 1-5: catalogo de tabelas/colunas/PKs, policies de RLS, realtime + REPLICA IDENTITY, funcoes/triggers, inventory de migrations) e verificacao do frontend (src/services/syncService.ts).
+> Atualizado em 2026-09-07 — decisões da sessão 07/09: pix_config estrito por filial sem fallback global, autoPrintReceipt false por padrão, cardápio ordenação A-Z e imagem h-36 contain. Base anterior: 2026-08-23 auditoria completa (Etapas 1-5: catalogo de tabelas/colunas/PKs, policies de RLS, realtime + REPLICA IDENTITY, funcoes/triggers, inventory de migrations) e verificacao do frontend (src/services/syncService.ts).
 >
 > Esta versao foi regenerada a partir do catalogo vivo do banco (fonte da verdade, conforme AGENTS.md regra 1). Substitui a versao anterior, que continha colunas fantasma (system_users.pin), 3 objetos ausentes (user_permissions, vw_dlq_pendentes, vw_dlq_resumo) e colunas desatualizadas em sales/system_users/products.
 
@@ -158,9 +158,11 @@ Configuracoes do sistema - uma linha por organizacao (id = organization_id).
 | id | UUID | NO | PK | PK (= organization_id) |
 | organization_id | UUID | YES | FK->organizations | Org |
 | store_branch_id | UUID | NO | FK->store_branches | Filial (nao filtrar por ela - ver syncService.ts) |
-| settings | JSONB | YES | | Configuracoes |
+| settings | JSONB | YES | | Configuracoes (ver `settings.autoPrintReceipt` abaixo) |
 | version | INTEGER | NO | | Versao p/ conflito |
 | updated_at | TIMESTAMPTZ | YES | | |
+
+> `settings.autoPrintReceipt` — **false por padrão (decisão 07/09)**: `INITIAL_SETTINGS.autoPrintReceipt = false` (`src/data/mockData.ts` / `src/types/index.ts: SystemSettings.autoPrintReceipt: boolean`). `ThermalReceiptModal` só auto-imprime quando `settings.autoPrintReceipt === true`; `SettingsView` (`autoPrintReceipt` state + switch `id="autoPrint"`) persiste via `storageService`. Até ativação manual, impressão é sempre manual.
 
 RLS: superadmin_all_settings[ALL], system_settings_select_own[SELECT], org_branch_select_system_settings[SELECT], org_branch_insert_system_settings[INSERT], org_branch_update_system_settings[UPDATE], org_branch_delete_system_settings[DELETE], admin_select_org_settings[SELECT], admin_insert_org_settings[INSERT], admin_update_org_settings[UPDATE], admin_delete_org_settings[DELETE]
 Realtime: publicada - REPLICA: full
@@ -901,7 +903,7 @@ RLS: superadmin_all_customer_sessions[ALL], org_branch_insert_customer_sessions[
 Realtime: publicada - REPLICA: full
 
 ### digital_menu_config
-Configuracao do cardapio digital.
+Configuracao do cardapio digital. **Decisão 07/09 (frontend `PublicMenuView.tsx`): ordenação A-Z e imagem `h-36 contain`** — produtos filtrados (`is_active && show_on_cardapio && stock_quantity>0`) são ordenados com `[...base].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'))`; card com `w-full h-36 bg-white p-1` + `img max-w-full max-h-full w-auto h-auto object-contain` (sem corte/estiramento, preserva proporção mesmo sem imagem: fallback `Package`).
 
 | Coluna | Tipo | Null | Key | Descricao |
 |--------|------|------|-----|-----------|
@@ -947,7 +949,7 @@ Realtime: publicada - REPLICA: full
 ## Tabelas de Pagamento / Integracao
 
 ### pix_config
-Configuracao PIX (chave exibida manualmente - sem gateway automatico).
+Configuracao PIX (chave exibida manualmente - sem gateway automatico). **Decisão 07/09: estrito por filial sem fallback global** — cada filial deve ter sua própria linha em `pix_config` (`id = store_branch_id`, 1:1 por filial); ausência/inativo = sem PIX na filial (não usa `system_settings.settings.pixKey` / `INITIAL_SETTINGS.pixKey`).
 
 | Coluna | Tipo | Null | Key | Descricao |
 |--------|------|------|-----|-----------|
@@ -963,7 +965,7 @@ Configuracao PIX (chave exibida manualmente - sem gateway automatico).
 | updated_at | TIMESTAMPTZ | YES | | |
 
 RLS: superadmin_all_pix_config[ALL], user_insert_pix_config[INSERT], user_update_pix_config[UPDATE], user_delete_pix_config[DELETE], user_select_pix_config[SELECT]
-Realtime: PUBLICA (20260906_pix_config_realtime.sql) - REPLICA: FULL. Sincronizada nos 3 caminhos: savePixConfig (upsert id = store_branch_id, 1:1 por filial), updatePixConfigFromRemote (realtime, branch-scoped) e hydrateFromCloud (fetchRows pix_config). Checkout consome: PaymentModal -> pixConfigService.getEffectivePixKey(branchId, settings.pixKey).
+Realtime: PUBLICA (20260906_pix_config_realtime.sql) - REPLICA: FULL. Sincronizada nos 3 caminhos: savePixConfig (upsert id = store_branch_id, 1:1 por filial), updatePixConfigFromRemote (realtime, branch-scoped) e hydrateFromCloud (fetchRows pix_config). Checkout consome: PaymentModal -> `pixConfigService.getEffectivePixKey(branchId)` — **estrito por filial, sem fallback global (07/09)**; se `pix_config` da filial inexistente/inativo retorna `null` (venda sem PIX). O 2º parâmetro `_globalPixKey` de `getEffectivePixKey` é ignorado (mantido apenas por compatibilidade, ver `src/services/pixConfigService.ts:67`). `settings.pixKey` não é fallback.
 
 ### api_keys
 Chaves de API (integracoes - atualmente so localStorage no app, ver Pendencias).
