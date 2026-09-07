@@ -83,12 +83,13 @@ const STATUS_CONFIG: Record<KdsStatus, { label: string; color: string; icon: Rea
 const FOOD_CATEGORIES = ['pratos', 'lanches', 'pizzas', 'saladas', 'carnes', 'massas', 'entradas', 'sobremesas'];
 const DRINK_CATEGORIES = ['bebidas', 'cervezas', 'sucos', 'vinhos', 'coquetéis', 'cafés'];
 
-export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user }) => {
+export const KDSView: React.FC<KDSViewProps> = ({ sales: salesProp, tables, products, user }) => {
   const { addToast } = useToast();
   const [now, setNow] = useState(Date.now());
   const [filterType, setFilterType] = useState<'all' | 'food' | 'drink'>('all');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
+  const [localSales, setLocalSales] = useState<Sale[]>(() => storageService.getSales());
 
   // Update elapsed time every 30 seconds
   useEffect(() => {
@@ -96,16 +97,20 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
     return () => clearInterval(interval);
   }, []);
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates — mantém sales fresco direto do storage (não depende só da prop do App)
   useEffect(() => {
     const unsub = storageService.subscribe(() => {
+      setLocalSales(storageService.getSales());
       setNow(Date.now());
     });
     return () => { unsub(); };
   }, []);
 
+  const effectiveSales = localSales.length > 0 ? localSales : salesProp;
+
   // Build KDS orders from cardapio_digital sales — exclui comandas já fechadas/completed
   const kdsOrders = useMemo<KdsOrder[]>(() => {
+    const sales = effectiveSales;
     const cardapioSales = sales.filter(
       (s) => (s.orderSource === 'cardapio_digital' || s.orderSource === 'delivery') && s.kitchenStatus !== 'cancelled' && s.status !== 'completed' && s.status !== 'cancelled'
     );
@@ -134,7 +139,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
 
       return { sale, table, items, isFood, isDrink, timeElapsed };
     });
-  }, [sales, tables, products, now]);
+  }, [effectiveSales, tables, products, now]);
 
   // Filter by type
   const filteredOrders = useMemo(() => {
@@ -207,7 +212,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
     try {
       for (const itemKey of selectedItems) {
         const [saleId, productId] = itemKey.split('::');
-        const sale = sales.find((s) => s.id === saleId);
+        const sale = effectiveSales.find((s) => s.id === saleId);
         if (!sale) continue;
 
         // Update kitchenStatus for the whole sale (simplified) or per-item in future
@@ -266,7 +271,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
     const nextStatus = STATUS_CONFIG[currentStatus].next;
     if (!nextStatus) return;
     try {
-      const sale = sales.find((s) => s.id === saleId);
+      const sale = effectiveSales.find((s) => s.id === saleId);
       if (!sale) return;
       // Delivery: "Entregue" finaliza e computa a venda (não vira comanda)
       if (nextStatus === 'delivered' && sale.orderSource === 'delivery') {
