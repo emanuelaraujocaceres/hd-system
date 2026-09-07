@@ -16,15 +16,11 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
   const [lastPending, setLastPending] = useState(0);
   const [lastClosing, setLastClosing] = useState(0);
-  const [dismissedClosing, setDismissedClosing] = useState<Set<string>>(new Set());
-  const [dismissedPending, setDismissedPending] = useState<Set<string>>(new Set());
 
   const refresh = () => {
     const sales = storageService.getSales().filter(s => s.orderSource === 'cardapio_digital' && s.kitchenStatus !== 'cancelled' && s.status !== 'cancelled' && s.status !== 'completed');
-    const allPend = sales.filter(s => (s.kitchenStatus || 'pending') === 'pending');
-    const pend = allPend.filter(s => !dismissedPending.has(s.id));
-    const allClos = sales.filter(s => s.kitchenStatus === 'closing_request');
-    const clos = allClos.filter(s => !dismissedClosing.has(s.customerSessionId || s.id));
+    const pend = sales.filter(s => (s.kitchenStatus || 'pending') === 'pending');
+    const clos = sales.filter(s => s.kitchenStatus === 'closing_request');
     setPendingCount(pend.length);
     setClosingCount(clos.length);
     if (pend.length > 0) {
@@ -80,12 +76,7 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
             <p className="text-sm font-bold">{pendingCount} pedido{pendingCount>1?'s':''} pendente{pendingCount>1?'s':''}{pendingTable ? ` • ${pendingTable.name}` : ''}</p>
             <p className="text-xs opacity-90">Toque para aceitar e ir para Pedidos</p>
           </div>
-          <button onClick={() => {
-            const firstPend = storageService.getSales().find(s => (s.kitchenStatus || 'pending') === 'pending' && s.orderSource === 'cardapio_digital' && !dismissedPending.has(s.id));
-            if (firstPend) setDismissedPending(prev => new Set(prev).add(firstPend.id));
-            setPendingCount(0);
-            onNavigate('kds');
-          }} className="px-3 py-1.5 rounded-lg bg-white text-amber-600 text-xs font-bold">Aceitar</button>
+          <button onClick={() => onNavigate('kds')} className="px-3 py-1.5 rounded-lg bg-white text-amber-600 text-xs font-bold">Aceitar</button>
         </div>
       )}
       {closingCount > 0 && (
@@ -95,8 +86,6 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
             <p className="text-xs opacity-90">{closingCount} comanda{closingCount>1?'s':''} aguardando pagamento</p>
           </div>
           <button onClick={() => {
-            if (closingSessionId) setDismissedClosing(prev => new Set(prev).add(closingSessionId));
-            setClosingCount(0);
             const detail: any = {};
             if (closingSessionId) detail.sessionId = closingSessionId;
             if (closingTable?.id) detail.tableId = closingTable.id;

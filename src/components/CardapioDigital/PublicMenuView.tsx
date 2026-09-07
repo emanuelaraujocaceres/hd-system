@@ -430,20 +430,9 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   ];
   const submittingRef = useRef(false);
 
-  // Load my orders on mount and after submit — só pendentes (comanda aberta); se sessão fechada, limpa
+  // Load my orders on mount and after submit — só pendentes (comanda aberta)
   const loadMyOrders = useCallback(() => {
     if (!table) return;
-    const activeSession = storageService.getCustomerSessions().find(s => s.tableId === table.id && s.status === 'active');
-    if (!activeSession) {
-      const allSales = storageService.getSales();
-      const hasLocalPending = allSales.some(s => s.tableId === table.id && s.status !== 'completed' && s.status !== 'cancelled');
-      if (hasLocalPending) {
-        const filtered = allSales.filter(s => s.tableId !== table.id || s.status === 'completed' || s.status === 'cancelled');
-        ;(storageService as any).set('hd_system_sales', filtered);
-        setMyOrders([]);
-        return;
-      }
-    }
     const allSales = storageService.getSales();
     const tableSales = allSales.filter(
       (s) => s.tableId === table.id && (s.orderSource === 'cardapio_digital' || s.orderSource === 'delivery') && s.status !== 'completed' && s.status !== 'cancelled'
