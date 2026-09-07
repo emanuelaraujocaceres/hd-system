@@ -700,6 +700,22 @@ class SupabaseSyncService {
       }
     }
 
+    // Sanitização defensiva: '__no_table__' é placeholder de UI (ComandaView)
+    // e NUNCA pode ir ao banco como UUID — envia como null para evitar 22P02.
+    // Aplica a todas as colunas FK que podem conter o placeholder.
+    if (row && typeof row === 'object') {
+      for (const k of ['table_id', 'customer_session_id', 'delivery_order_id', 'customer_id', 'user_id']) {
+        if ((row as any)[k] === '__no_table__') (row as any)[k] = null;
+      }
+      // Também sanitiza product_id / sale_id / organization_id se vierem com placeholder
+      for (const k of ['product_id', 'sale_id']) {
+        if (typeof (row as any)[k] === 'string' && !UUID_RE.test((row as any)[k])) {
+          // mantém null se já for null, senão converte inválidos (ex: '' ou '__no_table__') para null
+          if ((row as any)[k] === '__no_table__' || (row as any)[k] === '') (row as any)[k] = null;
+        }
+      }
+    }
+
     // Validação defensiva: store_branch_id obrigatório e em formato UUID
     // (bloqueia short codes como "br-01" que causavam 22P02 no banco).
     if (BRANCH_REQUIRED_TABLES.includes(table)) {
@@ -709,11 +725,20 @@ class SupabaseSyncService {
         console.warn(`[HD-Sync] ⚠️ Skipping ${table} upsert — store_branch_id ausente ou inválido ("${raw}", id: ${row.id})`);
         return false;
       }
-      // DEFESA ADICIONAL (2026-09-06): Tabela deve ter campo 'name' — sales não têm
-      // esse campo e seriam incorretamente aceitos se a branch validation passasse.
-      if (table === 'tables' && !('name' in row)) {
-        console.warn(`[HD-Sync] ⚠️ Skipping ${table} upsert — payload não tem campo 'name' (provavelmente sale disfarçado). id: ${row.id}`);
-        return false;
+      // DEFESA: Bloquear upsert de dados de sale disfarçados como tabela
+      // (evita que itens de venda sejam inseridos na tabela 'tables').
+      if (table === 'tables') {
+        const saleFields = ['order_source', 'customer_session_id', 'total'];
+        const hasSaleFields = saleFields.some(field => row[field] !== undefined);
+        if (hasSaleFields) {
+          console.warn(`[syncService] Bloqueando upsert de mesa com dados de sale:`, row);
+          return false; // bloqueia a escrita — dados de sale devem ir na tabela 'sales'
+        }
+        // Garante que o payload tenha o campo 'name' esperado para mesas
+        if (!('name' in row)) {
+          console.warn(`[HD-Sync] ⚠️ Skipping ${table} upsert — payload não tem campo 'name' (provavelmente sale disfarçado). id: ${row.id}`);
+          return false;
+        }
       }
     }
 

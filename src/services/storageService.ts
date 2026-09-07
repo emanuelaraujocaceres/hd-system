@@ -1002,15 +1002,19 @@ expiration_date: p.expirationDate || null,
       // getCurrentOrgId() (PDV logged in — no behavior change).
       const orgId = this.orgIdForBranch(branchUuid, s.organizationId || this.getCurrentOrgId());
       // First upsert the parent sale — wait for it to complete
+      // '__no_table__' é placeholder de UI — nunca enviar como UUID (22P02).
+      const saleTableId = s.tableId === '__no_table__' ? null : (s.tableId || null);
+      const saleCustomerSessionId = s.customerSessionId && StorageService.UUID_RE.test(s.customerSessionId) ? s.customerSessionId : null;
+      const saleDeliveryOrderId = s.deliveryOrderId && StorageService.UUID_RE.test(s.deliveryOrderId) ? s.deliveryOrderId : null;
       await syncService.upsertRow('sales', {
         id: s.id,
         organization_id: orgId,
         store_branch_id: branchUuid,
         user_id: s.operatorId && StorageService.UUID_RE.test(s.operatorId) ? s.operatorId : null,
         customer_id: s.customerId || null,
-        table_id: s.tableId || null,
-        customer_session_id: s.customerSessionId || null,
-        delivery_order_id: s.deliveryOrderId || null,
+        table_id: saleTableId,
+        customer_session_id: saleCustomerSessionId,
+        delivery_order_id: saleDeliveryOrderId,
         code: s.code,
         created_at: s.date,                    // timestamp do momento da finalização
         operator_name: s.operatorName,         // nome real do usuário logado
@@ -3659,6 +3663,18 @@ id: StorageService.ensureUuid(settings.id),
       const { data, error } = await (supabase as any).rpc('cancel_sale_atomic', { p_sale_id: saleId });
       if (error) {
         console.warn('[HD-Sync] cancel_sale_atomic RPC failed:', error.message);
+        // FALLBACK P0 — venda corrompida com product_id fantasma (ex.: 00000000-0000-0000-0000-000000000001
+        // = DEFAULT_ORG_ID usado por engano como produto). RPC falha com "Produto não encontrado".
+        // Nesse caso NÃO faz sentido bloquear o operador: faz delete local + delete direto no cloud
+        // SEM restauração de estoque (estoque nunca foi deduzido corretamente).
+        if (/Produto não encontrado/i.test(error.message || '')) {
+          console.warn('[HD-Sync] cancel_sale_atomic fallback: produto fantasma — forçando exclusão local sem restaurar estoque');
+          // Tenta delete direto na tabela sales (bypass RPC) — se RLS permitir, remove no cloud
+          try { await (supabase as any).from('sales').delete().eq('id', saleId); } catch {}
+          try { await syncService.deleteRow('sales', saleId); } catch {}
+          this.deleteSale(saleId);
+          return { success: true, message: 'Venda corrompida removida (estoque não restaurado — produto não existia).' };
+        }
         await this.insertDLQ('DELETE', 'sales', saleId, { saleId }, error.message, { branchId: this.getSelectedBranchId(), orgId: this.getCurrentOrgId() });
         return { success: false, message: `Falha ao cancelar venda no servidor: ${error.message}` };
       }
@@ -3666,6 +3682,14 @@ id: StorageService.ensureUuid(settings.id),
       if (data && (data as any).success === false) {
         const msg = (data as any).message || 'Não foi possível cancelar a venda.';
         console.warn('[HD-Sync] cancel_sale_atomic RPC rejected:', msg);
+        // Mesmo fallback para retorno do tipo {success:false, error:"Produto não encontrado..."} 
+        if (/Produto não encontrado/i.test(msg || '')) {
+          console.warn('[HD-Sync] cancel_sale_atomic fallback (data): produto fantasma — forçando exclusão local');
+          try { await (supabase as any).from('sales').delete().eq('id', saleId); } catch {}
+          try { await syncService.deleteRow('sales', saleId); } catch {}
+          this.deleteSale(saleId);
+          return { success: true, message: 'Venda corrompida removida (estoque não restaurado — produto não existia).' };
+        }
         return { success: false, message: msg };
       }
       // Sucesso: remove a venda localmente (deleteSale faz o sync da exclusão).
@@ -5273,9 +5297,12 @@ private updateReceivableFromPayments(saleId: string) {
 
   private syncCustomerSession(s: CustomerSession) {
     const orgId = this.orgIdForBranch(s.storeBranchId, s.organizationId);
+    // '__no_table__' é um placeholder de UI (ComandaView.tsx:102) — não é UUID real.
+    // Converter para null para evitar erro "invalid input syntax for type uuid" no Supabase.
+    const tableId = s.tableId === '__no_table__' ? null : (s.tableId || null);
     syncService.upsertRow('customer_sessions', {
       id: s.id,
-      table_id: s.tableId || null,
+      table_id: tableId,
       organization_id: orgId,
       store_branch_id: s.storeBranchId || null,
       session_token: s.sessionToken,

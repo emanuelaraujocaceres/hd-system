@@ -22,6 +22,20 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
   onNewSale,
 }) => {
   const [printStatus, setPrintStatus] = useState<'idle' | 'printing' | 'ok'>('idle');
+  // Hooks DEVEM ficar antes de qualquer early return (Regra dos Hooks - #310)
+  const autoPrintedRef = useRef(false);
+  const handlePrintRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    if (!isOpen || !sale) {
+      autoPrintedRef.current = false;
+      return;
+    }
+    if (!settings.autoPrintReceipt || autoPrintedRef.current) return;
+    autoPrintedRef.current = true;
+    const t = setTimeout(() => handlePrintRef.current(), 150);
+    return () => clearTimeout(t);
+  }, [isOpen, sale, settings.autoPrintReceipt]);
 
   if (!isOpen || !sale) return null;
 
@@ -75,23 +89,8 @@ export const ThermalReceiptModal: React.FC<ThermalReceiptModalProps> = ({
     setPrintStatus('ok');
   };
 
-  // autoPrintReceipt: quando ativo, dispara a impressão (térmica direta se
-  // pareada, senão window.print) assim que o modal abre — sem interação dupla.
-  const autoPrintedRef = useRef(false);
-  const handlePrintRef = useRef<() => void>(() => {});
+  // Mantém ref atualizada para o auto-print (hook já declarado antes do early return)
   handlePrintRef.current = handlePrint;
-
-  useEffect(() => {
-    if (!isOpen || !sale) {
-      autoPrintedRef.current = false;
-      return;
-    }
-    if (!settings.autoPrintReceipt || autoPrintedRef.current) return;
-    autoPrintedRef.current = true;
-    // Pequeno atraso para o layout do recibo assentar antes do print.
-    const t = setTimeout(() => handlePrintRef.current(), 150);
-    return () => clearTimeout(t);
-  }, [isOpen, sale, settings.autoPrintReceipt]);
 
   const handleWhatsAppShare = () => {
     // Comprovante completo em texto (espelha o cupom ESC/POS), pré-preenchido
