@@ -90,6 +90,9 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales: salesProp, tables, prod
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
   const [localSales, setLocalSales] = useState<Sale[]>(() => storageService.getSales());
+  const [checkoutSale, setCheckoutSale] = useState<Sale | null>(null);
+  const [checkoutCashGiven, setCheckoutCashGiven] = useState<number>(0);
+  const [checkoutNeedsChange, setCheckoutNeedsChange] = useState(false);
 
   // Update elapsed time every 30 seconds
   useEffect(() => {
@@ -470,7 +473,11 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales: salesProp, tables, prod
                                 Pagam.: <strong className="text-slate-900 dark:text-white">{order.sale.payments?.[0]?.method || '?'}</strong>
                               </div>
                               <button
-                                onClick={() => handleFinalizeComanda(order.sale)}
+                                onClick={() => {
+                                  setCheckoutSale(order.sale);
+                                  setCheckoutCashGiven(order.sale.total || 0);
+                                  setCheckoutNeedsChange(false);
+                                }}
                                 className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-bold"
                               >
                                 Finalizar
@@ -515,6 +522,91 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales: salesProp, tables, prod
           })}
         </div>
       </div>
+
+      {/* Checkout Modal para Fechamento Solicitado */}
+      {checkoutSale && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setCheckoutSale(null)}>
+          <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-200 dark:border-[#27272a]">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Finalizar Comanda</h3>
+              <p className="text-xs text-slate-500">
+                {(() => {
+                  const t = tables.find(x => x.id === checkoutSale.tableId);
+                  return t ? t.name : `Mesa ${checkoutSale.tableId?.slice(0,8) || ''}`;
+                })()} • Total R$ {(checkoutSale.total || 0).toFixed(2)}
+              </p>
+              <p className="text-[11px] text-slate-400">Forma escolhida pelo cliente: <strong className="text-indigo-600">{checkoutSale.payments?.[0]?.method || 'pix'}</strong></p>
+            </div>
+            <div className="p-5 space-y-4">
+              {/* Pagamento já vem do cliente, mas permite confirmar/ajustar troco */}
+              {(() => {
+                const method = checkoutSale.payments?.[0]?.method || 'pix';
+                const total = checkoutSale.total || 0;
+                const changeDue = checkoutNeedsChange ? Math.max(0, checkoutCashGiven - total) : 0;
+                return (
+                  <>
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] text-center">
+                      <p className="text-xs text-slate-500">Total a receber</p>
+                      <p className="text-2xl font-extrabold text-emerald-600">R$ {total.toFixed(2)}</p>
+                      <p className="text-xs text-slate-500 capitalize">{method === 'cash' ? 'Dinheiro' : method === 'pix' ? 'PIX' : method === 'credit_card' ? 'Crédito' : method === 'debit_card' ? 'Débito' : method}</p>
+                    </div>
+                    {method === 'cash' && (
+                      <div className="space-y-3">
+                        <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                          <input type="checkbox" checked={checkoutNeedsChange} onChange={e => setCheckoutNeedsChange(e.target.checked)} className="rounded text-indigo-600" />
+                          Precisa de troco?
+                        </label>
+                        {checkoutNeedsChange && (
+                          <div>
+                            <label className="text-xs font-bold text-slate-600">Troco pra quanto? R$</label>
+                            <input type="number" step="0.01" value={checkoutCashGiven} onChange={e => setCheckoutCashGiven(parseFloat(e.target.value) || 0)} className="w-full mt-1 px-3 py-2 bg-white dark:bg-[#09090b] border border-slate-300 dark:border-[#27272a] rounded-xl text-sm font-bold" />
+                            <p className="text-xs mt-1 font-bold text-emerald-600">Troco: R$ {changeDue.toFixed(2)}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+            <div className="p-4 bg-slate-50 dark:bg-[#09090b] border-t border-slate-200 dark:border-[#27272a] flex gap-2">
+              <button onClick={() => setCheckoutSale(null)} className="flex-1 py-2.5 rounded-xl bg-slate-200 dark:bg-[#27272a] text-slate-700 dark:text-slate-300 font-bold text-sm">Cancelar</button>
+              <button
+                onClick={async () => {
+                  if (!checkoutSale) return;
+                  const s = checkoutSale;
+                  // Monta payments final com troco se cash
+                  let payments: any[] = s.payments && s.payments.length > 0 ? [...s.payments] : [{ method: 'pix', amount: s.total }];
+                  const total = s.total || 0;
+                  if (payments[0]?.method === 'cash' && checkoutNeedsChange) {
+                    const changeDue = Math.max(0, checkoutCashGiven - total);
+                    payments[0] = { ...payments[0], amount: total, cashGiven: checkoutCashGiven, changeDue };
+                  }
+                  // Atualiza sale com payments finais antes de fechar
+                  const updatedSale = { ...s, payments, total } as Sale;
+                  // Se tiver sessão, fecha comanda inteira (todas as vendas da mesa zeram e somam no caixa correto)
+                  if (s.customerSessionId) {
+                    const res = await fecharComanda(s.customerSessionId, payments, user.name);
+                    if (res && (res as any).success === false) {
+                      addToast('error', (res as any).message || 'Erro ao fechar');
+                      return;
+                    }
+                  } else {
+                    // Sem sessão (venda avulsa): só marca completed
+                    storageService.saveSale({ ...updatedSale, status: 'completed', kitchenStatus: 'delivered', updatedAt: new Date().toISOString() } as any);
+                  }
+                  posAudio.chime();
+                  addToast('success', 'Comanda finalizada e valor zerado!');
+                  setCheckoutSale(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm"
+              >
+                Confirmar e Finalizar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

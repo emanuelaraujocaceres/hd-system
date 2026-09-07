@@ -428,12 +428,33 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   ];
   const submittingRef = useRef(false);
 
-  // Load my orders on mount and after submit
-  const loadMyOrders = useCallback(() => {
+  // Load my orders on mount and after submit — só pendentes (comanda aberta); se cloud já fechou, limpa local
+  const loadMyOrders = useCallback(async () => {
     if (!table) return;
+    // Se o cloud já marcou a comanda como fechada (sem pendentes), limpa o carrinho local (anon não recebe Realtime de sales completed)
+    try {
+      const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const res = await fetch(`${baseUrl}/rest/v1/sales?store_branch_id=eq.${table.storeBranchId}&table_id=eq.${table.id}&status=neq.completed&status=neq.cancelled&select=id`, {
+        headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, 'x-branch-id': table.storeBranchId } as any,
+      });
+      if (res.ok) {
+        const cloudPending = await res.json();
+        if (Array.isArray(cloudPending) && cloudPending.length === 0) {
+          const allSales = storageService.getSales();
+          const hasLocalPending = allSales.some(s => s.tableId === table.id && s.status !== 'completed' && s.status !== 'cancelled');
+          if (hasLocalPending) {
+            const filtered = allSales.filter(s => s.tableId !== table.id || s.status === 'completed' || s.status === 'cancelled');
+            ;(storageService as any).set('hd_system_sales', filtered);
+            setMyOrders([]);
+            return;
+          }
+        }
+      }
+    } catch {}
     const allSales = storageService.getSales();
     const tableSales = allSales.filter(
-      (s) => s.tableId === table.id && (s.orderSource === 'cardapio_digital' || s.orderSource === 'delivery')
+      (s) => s.tableId === table.id && (s.orderSource === 'cardapio_digital' || s.orderSource === 'delivery') && s.status !== 'completed' && s.status !== 'cancelled'
     );
     setMyOrders(tableSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   }, [table]);
