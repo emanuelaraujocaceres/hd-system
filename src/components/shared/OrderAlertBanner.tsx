@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { Sale, Table } from '../../types';
@@ -14,8 +14,8 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
   const [closingTable, setClosingTable] = useState<Table | null>(null);
   const [pendingTable, setPendingTable] = useState<Table | null>(null);
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
-  const [lastPending, setLastPending] = useState(0);
-  const [lastClosing, setLastClosing] = useState(0);
+  const lastPendingRef = useRef(0);
+  const lastClosingRef = useRef(0);
 
   const refresh = () => {
     const sales = storageService.getSales().filter(s => s.orderSource === 'cardapio_digital' && s.kitchenStatus !== 'cancelled' && s.status !== 'cancelled' && s.status !== 'completed');
@@ -31,13 +31,13 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
         if (sess) t = tables.find(x => x.id === sess.tableId) || null;
       }
       setPendingTable(t);
-      if (pend.length > lastPending) {
+      if (pend.length > lastPendingRef.current) {
         posAudio.chime();
         if (navigator.vibrate) navigator.vibrate(200);
       }
-      setLastPending(pend.length);
+      lastPendingRef.current = pend.length;
     } else {
-      setLastPending(0);
+      lastPendingRef.current = 0;
     }
     if (clos.length > 0) {
       const sale = clos[0];
@@ -48,14 +48,14 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
       }
       setClosingTable(t);
       setClosingSessionId(sale.customerSessionId || null);
-      if (clos.length > lastClosing) {
+      if (clos.length > lastClosingRef.current) {
         posAudio.chime();
         if (navigator.vibrate) navigator.vibrate(200);
       }
-      setLastClosing(clos.length);
+      lastClosingRef.current = clos.length;
     } else {
       setClosingSessionId(null);
-      setLastClosing(0);
+      lastClosingRef.current = 0;
     }
   };
 
@@ -76,7 +76,13 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
             <p className="text-sm font-bold">{pendingCount} pedido{pendingCount>1?'s':''} pendente{pendingCount>1?'s':''}{pendingTable ? ` • ${pendingTable.name}` : ''}</p>
             <p className="text-xs opacity-90">Toque para aceitar e ir para Pedidos</p>
           </div>
-          <button onClick={() => onNavigate('kds')} className="px-3 py-1.5 rounded-lg bg-white text-amber-600 text-xs font-bold">Aceitar</button>
+          <button onClick={() => {
+            const firstPend = storageService.getSales().find(s => (s.kitchenStatus || 'pending') === 'pending' && s.orderSource === 'cardapio_digital' && s.status !== 'completed' && s.status !== 'cancelled');
+            if (firstPend) {
+              storageService.saveSale({ ...firstPend, kitchenStatus: 'preparing', updatedAt: new Date().toISOString() } as any);
+            }
+            onNavigate('kds');
+          }} className="px-3 py-1.5 rounded-lg bg-white text-amber-600 text-xs font-bold">Aceitar</button>
         </div>
       )}
       {closingCount > 0 && (
