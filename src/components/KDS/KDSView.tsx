@@ -188,6 +188,8 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales: salesProp, tables, prod
           updatedAt: new Date().toISOString(),
         });
       }
+      // Recalcula caixa para contabilizar o pagamento da comanda fechada
+      ;(storageService as any).recalcAndSyncCaixa?.(true);
       posAudio.chime();
       addToast('success', `Comanda ${sale.tableId?.slice(0, 8) || 'sem mesa'} finalizada!`);
     } catch (e: any) {
@@ -595,6 +597,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales: salesProp, tables, prod
                     // Sem sessão (venda avulsa): só marca completed
                     storageService.saveSale({ ...updatedSale, status: 'completed', kitchenStatus: 'delivered', updatedAt: new Date().toISOString() } as any);
                   }
+                  ;(storageService as any).recalcAndSyncCaixa?.(true);
                   posAudio.chime();
                   addToast('success', 'Comanda finalizada e valor zerado!');
                   setCheckoutSale(null);

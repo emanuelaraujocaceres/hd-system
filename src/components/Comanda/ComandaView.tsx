@@ -98,7 +98,7 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     const tableSaleMap = new Map<string, Sale[]>();
     const cardapioSales = sales.filter((s) => s.orderSource === 'cardapio_digital' || s.tableId);
     for (const sale of cardapioSales) {
-      if (sale.status === 'cancelled') continue;
+      if (sale.status === 'cancelled' || sale.status === 'completed') continue;
       const tableId = sale.tableId || '__no_table__';
       if (!tableSaleMap.has(tableId)) tableSaleMap.set(tableId, []);
       tableSaleMap.get(tableId)!.push(sale);
