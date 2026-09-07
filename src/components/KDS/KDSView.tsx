@@ -476,9 +476,10 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales: salesProp, tables, prod
                               </div>
                               <button
                                 onClick={() => {
+                                  const cashGiven = (order.sale.payments?.[0] as any)?.cashGiven;
                                   setCheckoutSale(order.sale);
-                                  setCheckoutCashGiven(order.sale.total || 0);
-                                  setCheckoutNeedsChange(false);
+                                  setCheckoutCashGiven(cashGiven || order.sale.total || 0);
+                                  setCheckoutNeedsChange(!!cashGiven && cashGiven > (order.sale.total || 0));
                                 }}
                                 className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-bold"
                               >
