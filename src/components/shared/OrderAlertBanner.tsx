@@ -85,7 +85,7 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
             if (closingSessionId) detail.sessionId = closingSessionId;
             if (closingTable?.id) detail.tableId = closingTable.id;
             if (detail.sessionId || detail.tableId) window.dispatchEvent(new CustomEvent('hd:open-comanda', { detail }));
-            onNavigate('comandas', closingTable?.id);
+            onNavigate('comanda', closingTable?.id);
           }} className="px-3 py-1.5 rounded-lg bg-white text-indigo-600 text-xs font-bold">Ver Comanda</button>
         </div>
       )}
