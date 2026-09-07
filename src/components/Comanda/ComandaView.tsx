@@ -178,7 +178,17 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
   // Abrir comanda via banner de notificação (Pedidos -> Comandas) — após comandaGroups pronto
   useEffect(() => {
     const handler = (e: Event) => {
-      const tableId = (e as CustomEvent).detail?.tableId;
+      const detail = (e as CustomEvent).detail || {};
+      const sessionId = detail.sessionId as string | undefined;
+      const tableId = detail.tableId as string | undefined;
+      if (sessionId) {
+        // Prioriza sessão direta (mais confiável que tableId quando há Sem Mesa)
+        const sess = customerSessions.find(s => s.id === sessionId) || storageService.getCustomerSessions().find(s => s.id === sessionId);
+        if (sess) {
+          setDetailSessionId(sess.id);
+          return;
+        }
+      }
       if (!tableId) return;
       const group = comandaGroups.find(g => g.table.id === tableId);
       if (group?.session) setDetailSessionId(group.session.id);
@@ -189,7 +199,7 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     };
     window.addEventListener('hd:open-comanda', handler as EventListener);
     return () => window.removeEventListener('hd:open-comanda', handler as EventListener);
-  }, [comandaGroups]);
+  }, [comandaGroups, customerSessions]);
 
   // ── Sessão em detalhe ──
   // Fallback para storageService: quando o operador ACABA de abrir a comanda

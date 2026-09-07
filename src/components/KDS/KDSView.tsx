@@ -104,10 +104,10 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
     return () => { unsub(); };
   }, []);
 
-  // Build KDS orders from cardapio_digital sales
+  // Build KDS orders from cardapio_digital sales — exclui comandas já fechadas/completed
   const kdsOrders = useMemo<KdsOrder[]>(() => {
     const cardapioSales = sales.filter(
-      (s) => (s.orderSource === 'cardapio_digital' || s.orderSource === 'delivery') && s.kitchenStatus !== 'cancelled'
+      (s) => (s.orderSource === 'cardapio_digital' || s.orderSource === 'delivery') && s.kitchenStatus !== 'cancelled' && s.status !== 'completed' && s.status !== 'cancelled'
     );
 
     return cardapioSales.map((sale) => {

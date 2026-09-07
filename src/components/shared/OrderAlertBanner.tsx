@@ -13,16 +13,22 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
   const [closingCount, setClosingCount] = useState(0);
   const [closingTable, setClosingTable] = useState<Table | null>(null);
   const [pendingTable, setPendingTable] = useState<Table | null>(null);
+  const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
   const [lastPending, setLastPending] = useState(0);
 
   const refresh = () => {
-    const sales = storageService.getSales().filter(s => s.orderSource === 'cardapio_digital' && s.kitchenStatus !== 'cancelled' && s.status !== 'cancelled');
+    const sales = storageService.getSales().filter(s => s.orderSource === 'cardapio_digital' && s.kitchenStatus !== 'cancelled' && s.status !== 'cancelled' && s.status !== 'completed');
     const pend = sales.filter(s => (s.kitchenStatus || 'pending') === 'pending');
     const clos = sales.filter(s => s.kitchenStatus === 'closing_request');
     setPendingCount(pend.length);
     setClosingCount(clos.length);
     if (pend.length > 0) {
-      const t = tables.find(x => x.id === pend[0].tableId) || null;
+      const sale = pend[0];
+      let t = tables.find(x => x.id === sale.tableId) || null;
+      if (!t && sale.customerSessionId) {
+        const sess = storageService.getCustomerSessions().find(x => x.id === sale.customerSessionId);
+        if (sess) t = tables.find(x => x.id === sess.tableId) || null;
+      }
       setPendingTable(t);
       if (pend.length > lastPending) {
         posAudio.chime();
@@ -33,11 +39,19 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
       setLastPending(0);
     }
     if (clos.length > 0) {
-      const t = tables.find(x => x.id === clos[0].tableId) || null;
+      const sale = clos[0];
+      let t = tables.find(x => x.id === sale.tableId) || null;
+      if (!t && sale.customerSessionId) {
+        const sess = storageService.getCustomerSessions().find(x => x.id === sale.customerSessionId);
+        if (sess) t = tables.find(x => x.id === sess.tableId) || null;
+      }
       setClosingTable(t);
+      setClosingSessionId(sale.customerSessionId || null);
       if (clos.length > 0 && pendingCount === 0) {
         posAudio.chime();
       }
+    } else {
+      setClosingSessionId(null);
     }
   };
 
@@ -67,10 +81,11 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
             <p className="text-xs opacity-90">{closingCount} comanda{closingCount>1?'s':''} aguardando pagamento</p>
           </div>
           <button onClick={() => {
-            const tableId = closingTable?.id;
-            // Notifica ComandaView via evento para abrir a mesa correta
-            if (tableId) window.dispatchEvent(new CustomEvent('hd:open-comanda', { detail: { tableId } }));
-            onNavigate('comandas', tableId);
+            const detail: any = {};
+            if (closingSessionId) detail.sessionId = closingSessionId;
+            if (closingTable?.id) detail.tableId = closingTable.id;
+            if (detail.sessionId || detail.tableId) window.dispatchEvent(new CustomEvent('hd:open-comanda', { detail }));
+            onNavigate('comandas', closingTable?.id);
           }} className="px-3 py-1.5 rounded-lg bg-white text-indigo-600 text-xs font-bold">Ver Comanda</button>
         </div>
       )}
