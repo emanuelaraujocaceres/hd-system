@@ -59,14 +59,14 @@ class PixConfigService {
   }
 
   /**
-   * Retorna a chave PIX efetiva para uma filial.
-   * Prioridade: config da filial > settings.pixKey (global).
-   * Retorna null se nenhuma chave estiver configurada.
+   * Retorna a chave PIX efetiva para uma filial — ESTRITAMENTE isolada por filial.
+   * REGRA: nunca usar fallback global (settings.pixKey). Cada filial deve ter sua
+   * própria linha em pix_config; se não tiver, retorna null (venda sem PIX).
+   * Isso garante que org com 1 filial (Matriz) também seja isolada.
    */
-  getEffectivePixKey(branchId: string, globalPixKey?: string): string | null {
+  getEffectivePixKey(branchId: string, _globalPixKey?: string): string | null {
     const config = this.getConfig(branchId);
     if (config?.ativo && config.chavePix) return config.chavePix;
-    if (globalPixKey) return globalPixKey;
     return null;
   }
 

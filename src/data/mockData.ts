@@ -471,7 +471,7 @@ export const INITIAL_SETTINGS: SystemSettings = {
   address: 'Av. Paulista, 1000 - Bela Vista',
   city: 'São Paulo',
   state: 'SP',
-  pixKey: '12345678000190',
+  pixKey: '',
   printerPaperSize: '80mm',
   autoPrintReceipt: false,
   soundEffectsEnabled: true,

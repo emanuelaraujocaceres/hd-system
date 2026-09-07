@@ -54,6 +54,7 @@ import { useToast } from '../shared/Toast';
 import { ResetDataButton } from '../shared/ResetDataButton';
 import { DeliverySettingsView } from './DeliverySettingsView';
 import { ModuleVisibilityView } from './ModuleVisibilityView';
+import { pixConfigService } from '../../services/pixConfigService';
 
 interface SettingsViewProps {
   settings: SystemSettings;
@@ -143,9 +144,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ settings, branches, 
   const [savingBranch, setSavingBranch] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
 const [savingTv, setSavingTv] = useState(false);
-  const [pixKey, setPixKey] = useState(settings.pixKey || '');
-  const [pixReceiverName, setPixReceiverName] = useState(settings.pixReceiverName || '');
+  // PIX por filial — estritamente isolado (sem fallback global)
+  const getCurrentPixBranchId = () => storageService.getSelectedBranchId() || storageService.getSelectedBranch()?.id || '';
+  const loadPixForBranch = (branchId: string) => pixConfigService.getConfig(branchId);
+  const [pixKey, setPixKey] = useState(() => loadPixForBranch(getCurrentPixBranchId())?.chavePix || '');
+  const [pixReceiverName, setPixReceiverName] = useState(() => loadPixForBranch(getCurrentPixBranchId())?.nomeTitular || '');
   const [savingPix, setSavingPix] = useState(false);
+  // Recarrega PIX ao trocar de filial
+  useEffect(() => {
+    const branchId = getCurrentPixBranchId();
+    const cfg = loadPixForBranch(branchId);
+    setPixKey(cfg?.chavePix || '');
+    setPixReceiverName(cfg?.nomeTitular || '');
+  }, [branches]);
 
   // Loading states
   const [tvSlideSpeed, setTvSlideSpeed] = useState(settings.tvSlideSpeed || 6);
@@ -422,16 +433,23 @@ const [savingTv, setSavingTv] = useState(false);
       setErrorMessage('Chave Pix é obrigatória.');
       return;
     }
+    const branchId = getCurrentPixBranchId();
+    if (!branchId) {
+      setErrorMessage('Selecione uma filial para salvar o PIX.');
+      return;
+    }
     setSavingPix(true);
     try {
-      const updated: SystemSettings = {
-        ...settings,
-        pixKey: pixKey.trim(),
-        pixReceiverName: pixReceiverName?.trim() || undefined,
-      };
-      storageService.saveSettings(updated);
+      // Estritamente por filial — 1 linha pix_config por filial, sem global
+      storageService.savePixConfig(branchId, {
+        chavePix: pixKey.trim(),
+        tipoChave: 'email',
+        nomeTitular: pixReceiverName?.trim() || '',
+        cidade: '',
+        ativo: true,
+      });
       posAudio.chime();
-      setSuccessMessage('Chave Pix salva com sucesso!');
+      setSuccessMessage(`Chave Pix salva para a filial ${storageService.getSelectedBranch()?.name || ''} (isolada)!`);
       setSavingPix(false);
     } catch (err: any) {
       setErrorMessage(friendlyErrorMessage(err, 'Não foi possível salvar a chave Pix.'));
@@ -2020,7 +2038,8 @@ const [savingTv, setSavingTv] = useState(false);
               </div>
               <div>
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">Configurações Pix</h3>
-                <p className="text-xs text-slate-500 dark:text-[#71717a]">Chave Pix para recebimento de pagamentos</p>
+                <p className="text-xs text-slate-500 dark:text-[#71717a]">Chave Pix por filial — isolada (cada filial tem sua chave, mesmo com 1 filial não há global)</p>
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">Filial atual: {storageService.getSelectedBranch()?.name || '—'} ({storageService.getSelectedBranchId()?.slice(0,8) || ''})</p>
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
