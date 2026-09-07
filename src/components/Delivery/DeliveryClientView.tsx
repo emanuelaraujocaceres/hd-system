@@ -407,16 +407,20 @@ export const DeliveryClientView: React.FC<DeliveryClientViewProps> = ({ branch, 
                 return (
                   <div
                     key={product.id}
-                    className="p-3 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-2"
+                    className="p-3 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] space-y-2 flex flex-col"
                   >
-                    {product.imageUrl && (
-                      <img
-                        src={product.imageUrl}
-                        alt={product.name}
-                        loading="lazy"
-                        className="w-full aspect-square object-cover rounded-xl"
-                      />
-                    )}
+                    <div className="w-full h-40 bg-white rounded-xl flex items-center justify-center p-2 overflow-hidden">
+                      {product.imageUrl ? (
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          loading="lazy"
+                          className="max-w-full max-h-full w-auto h-auto object-contain"
+                        />
+                      ) : (
+                        <span className="text-slate-300 text-xs">Sem imagem</span>
+                      )}
+                    </div>
                     <div>
                       <p className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1">{product.name}</p>
                       {product.description && (

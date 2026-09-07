@@ -795,20 +795,20 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
                 key={product.id}
                 className="bg-white dark:bg-[#18181b] rounded-2xl border border-slate-200 dark:border-[#27272a] overflow-hidden flex flex-col"
               >
-                {/* Image */}
-                <div className="w-full aspect-square bg-slate-100 dark:bg-[#09090b] relative">
+                {/* Image - padronizada: altura fixa, contain, fundo branco */}
+                <div className="w-full h-40 bg-white dark:bg-white relative flex items-center justify-center p-2">
                   {product.imageUrl ? (
                     <img
                       src={product.imageUrl}
                       alt={product.name}
                       loading="lazy"
-                      className="w-full h-full object-cover"
+                      className="max-w-full max-h-full w-auto h-auto object-contain"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMjAiIGhlaWdodD0iMTIwIiBmaWxsPSIjZjBmOGY4Ii8+PC9zdmc+';
                       }}
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
+                    <div className="w-full h-full flex items-center justify-center bg-slate-50">
                       <Package className="w-8 h-8 text-slate-300" />
                     </div>
                   )}
