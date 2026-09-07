@@ -497,25 +497,35 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
           </button>
         </div>
 
-        {/* Payment Modal (modo comanda) */}
-        <PaymentModal
-          isOpen={paymentOpen}
-          onClose={() => setPaymentOpen(false)}
-          cartItems={[]}
-          customers={customers}
-          selectedCustomer={selectedCustomer}
-          setSelectedCustomer={setSelectedCustomer}
-          subtotal={detailTotal}
-          discount={0}
-          setDiscount={() => {}}
-          settings={storageService.getSettings()}
-          user={user}
-          onSaleSuccess={() => {}}
-          comandaMode={{
-            title: `Finalizar Comanda — ${detailTable ? detailTable.name : ''}`,
-            onConfirmComanda: handleFinalizeComanda,
-          }}
-        />
+        {/* Payment Modal (modo comanda) — pré-seleciona forma do cliente (closing_request) */}
+        {(() => {
+          const sessSales = detailSessionId ? sales.filter(s => s.customerSessionId === detailSessionId) : [];
+          const closing = sessSales.find(s => s.kitchenStatus === 'closing_request');
+          const initialMethod = (closing?.payments?.[0]?.method as any) || undefined;
+          const initialCashGiven = (closing?.payments?.[0] as any)?.cashGiven as number | undefined;
+          return (
+            <PaymentModal
+              isOpen={paymentOpen}
+              onClose={() => setPaymentOpen(false)}
+              cartItems={[]}
+              customers={customers}
+              selectedCustomer={selectedCustomer}
+              setSelectedCustomer={setSelectedCustomer}
+              subtotal={detailTotal}
+              discount={0}
+              setDiscount={() => {}}
+              settings={storageService.getSettings()}
+              user={user}
+              onSaleSuccess={() => {}}
+              comandaMode={{
+                title: `Finalizar Comanda — ${detailTable ? detailTable.name : ''}`,
+                onConfirmComanda: handleFinalizeComanda,
+              }}
+              initialMethod={initialMethod}
+              initialCashGiven={initialCashGiven}
+            />
+          );
+        })()}
 
         {/* Loading backdrop while closing */}
         {adding && (
