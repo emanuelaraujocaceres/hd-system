@@ -20,6 +20,7 @@ import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
 import { printSaleReceipt } from '../../services/printService';
 import { fecharComanda } from '../../services/comandaService';
+import { PaymentModal } from '../PDV/PaymentModal';
 
 interface KDSViewProps {
   sales: Sale[];
@@ -93,6 +94,17 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales: salesProp, tables, prod
   const [checkoutSale, setCheckoutSale] = useState<Sale | null>(null);
   const [checkoutCashGiven, setCheckoutCashGiven] = useState<number>(0);
   const [checkoutNeedsChange, setCheckoutNeedsChange] = useState(false);
+  const effectiveSales = localSales.length > 0 ? localSales : salesProp;
+  const checkoutCartItems = useMemo(() => {
+    if (!checkoutSale) return [];
+    const sessionId = checkoutSale.customerSessionId;
+    const salesForComanda = sessionId ? effectiveSales.filter(s => s.customerSessionId === sessionId) : [checkoutSale];
+    return salesForComanda.flatMap(s => (s.items || []).map(item => {
+      const product = products.find(p => p.id === item.productId) || ({ id: item.productId, name: item.productName, salePrice: item.unitPrice, barcode: '' } as any);
+      return { product, quantity: item.quantity, unitPrice: item.unitPrice, discount: 0, totalPrice: (item as any).total || item.unitPrice * item.quantity } as any;
+    }));
+  }, [checkoutSale, effectiveSales, products]);
+  const checkoutSubtotal = useMemo(() => checkoutCartItems.reduce((sum: number, it: any) => sum + it.totalPrice, 0), [checkoutCartItems]);
 
   // Update elapsed time every 30 seconds
   useEffect(() => {
@@ -108,8 +120,6 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales: salesProp, tables, prod
     });
     return () => { unsub(); };
   }, []);
-
-  const effectiveSales = localSales.length > 0 ? localSales : salesProp;
 
   // Build KDS orders from cardapio_digital sales — exclui comandas já fechadas/completed
   const kdsOrders = useMemo<KdsOrder[]>(() => {
@@ -526,8 +536,8 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales: salesProp, tables, prod
         </div>
       </div>
 
-      {/* Checkout Modal para Fechamento Solicitado */}
-      {checkoutSale && (
+      {/* Checkout Modal para Fechamento Solicitado - LEGADO DESATIVADO, agora usa PaymentModal completo abaixo */}
+      {false && checkoutSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setCheckoutSale(null)}>
           <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="p-5 border-b border-slate-200 dark:border-[#27272a]">
@@ -610,6 +620,41 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales: salesProp, tables, prod
             </div>
           </div>
         </div>
+      )}
+      {checkoutSale && (
+        <PaymentModal
+          isOpen={!!checkoutSale}
+          onClose={() => setCheckoutSale(null)}
+          cartItems={checkoutCartItems as any}
+          customers={[]}
+          selectedCustomer={null}
+          setSelectedCustomer={() => {}}
+          subtotal={checkoutSubtotal}
+          discount={0}
+          setDiscount={() => {}}
+          settings={storageService.getSettings()}
+          user={user}
+          onSaleSuccess={() => setCheckoutSale(null)}
+          comandaMode={{
+            title: `Finalizar Comanda • ${(() => { const t = tables.find(x => x.id === checkoutSale!.tableId); return t ? t.name : `Mesa ${checkoutSale!.tableId?.slice(0,8) || ''}`; })()} • Total R$ ${(checkoutSale!.total || 0).toFixed(2)}`,
+            onConfirmComanda: async (payments) => {
+              if (!checkoutSale) return;
+              const s = checkoutSale;
+              if (s.customerSessionId) {
+                const res = await fecharComanda(s.customerSessionId, payments, user.name);
+                if (res && (res as any).success === false) return res as any;
+              } else {
+                const total = checkoutSubtotal;
+                storageService.saveSale({ ...s, payments, total, status: 'completed', kitchenStatus: 'delivered', updatedAt: new Date().toISOString() } as any);
+              }
+              ;(storageService as any).recalcAndSyncCaixa?.(true);
+              posAudio.chime();
+              return { success: true };
+            }
+          }}
+          initialMethod={(checkoutSale?.payments?.[0]?.method as any) || 'pix'}
+          initialCashGiven={(checkoutSale?.payments?.[0] as any)?.cashGiven || checkoutSale?.total || 0}
+        />
       )}
     </div>
   );

@@ -66,6 +66,8 @@ interface PaymentModalProps {
     title?: string;
     onConfirmComanda: (payments: PaymentDetails[], total: number) => Promise<{ success: boolean; message?: string } | void>;
   };
+  initialMethod?: PaymentMethod;
+  initialCashGiven?: number;
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
@@ -82,11 +84,21 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   user,
   onSaleSuccess,
   comandaMode,
+  initialMethod,
+  initialCashGiven,
 }) => {
   const totalAmount = Math.max(0, subtotal - discount);
 
-  const [method, setMethod] = useState<PaymentMethod>('cash');
-  const [cashGiven, setCashGiven] = useState<number>(totalAmount);
+  const [method, setMethod] = useState<PaymentMethod>(initialMethod || 'cash');
+  const [cashGiven, setCashGiven] = useState<number>(initialCashGiven ?? totalAmount);
+
+  useEffect(() => {
+    if (isOpen && initialMethod) setMethod(initialMethod);
+  }, [isOpen, initialMethod]);
+  useEffect(() => {
+    if (isOpen && initialCashGiven !== undefined) setCashGiven(initialCashGiven);
+    else setCashGiven(totalAmount);
+  }, [totalAmount, isOpen, initialCashGiven]);
   const [installments, setInstallments] = useState<number>(1);
   const [cardBrand, setCardBrand] = useState<string>('Visa');
 
