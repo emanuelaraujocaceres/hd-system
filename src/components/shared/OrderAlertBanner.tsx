@@ -15,6 +15,7 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
   const [pendingTable, setPendingTable] = useState<Table | null>(null);
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
   const [lastPending, setLastPending] = useState(0);
+  const [lastClosing, setLastClosing] = useState(0);
   const [dismissedClosing, setDismissedClosing] = useState<Set<string>>(new Set());
   const [dismissedPending, setDismissedPending] = useState<Set<string>>(new Set());
 
@@ -51,11 +52,14 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
       }
       setClosingTable(t);
       setClosingSessionId(sale.customerSessionId || null);
-      if (clos.length > 0 && pendingCount === 0) {
+      if (clos.length > lastClosing) {
         posAudio.chime();
+        if (navigator.vibrate) navigator.vibrate(200);
       }
+      setLastClosing(clos.length);
     } else {
       setClosingSessionId(null);
+      setLastClosing(0);
     }
   };
 
