@@ -375,8 +375,8 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   }, [products]);
 
   const filteredProducts = useMemo(() => {
-    if (selectedCategory === 'all') return products;
-    return products.filter((p) => p.category === selectedCategory);
+    const base = selectedCategory === 'all' ? products : products.filter((p) => p.category === selectedCategory);
+    return [...base].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   }, [products, selectedCategory]);
 
   const cartTotal = useMemo(() => {

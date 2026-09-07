@@ -96,7 +96,7 @@ export const DeliveryClientView: React.FC<DeliveryClientViewProps> = ({ branch, 
       );
     }
     
-    return result;
+    return [...result].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   }, [products, selectedCategory, searchTerm]);
 
   // Cálculo de taxa de entrega
