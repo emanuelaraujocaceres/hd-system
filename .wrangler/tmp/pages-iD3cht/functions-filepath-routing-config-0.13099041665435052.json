@@ -1,0 +1,69 @@
+{
+  "routes": [
+    {
+      "routePath": "/api/admin/create-branch",
+      "mountPath": "/api/admin",
+      "method": "POST",
+      "module": [
+        "api/admin/create-branch.ts:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/admin/create-organization",
+      "mountPath": "/api/admin",
+      "method": "POST",
+      "module": [
+        "api/admin/create-organization.ts:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/admin/create-user",
+      "mountPath": "/api/admin",
+      "method": "POST",
+      "module": [
+        "api/admin/create-user.ts:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/admin/delete-organization",
+      "mountPath": "/api/admin",
+      "method": "POST",
+      "module": [
+        "api/admin/delete-organization.ts:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/admin/set-organization-active",
+      "mountPath": "/api/admin",
+      "method": "POST",
+      "module": [
+        "api/admin/set-organization-active.ts:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/admin/set-user-active",
+      "mountPath": "/api/admin",
+      "method": "POST",
+      "module": [
+        "api/admin/set-user-active.ts:onRequestPost"
+      ]
+    },
+    {
+      "routePath": "/api/health",
+      "mountPath": "/api",
+      "method": "GET",
+      "module": [
+        "api/health.ts:onRequestGet"
+      ]
+    },
+    {
+      "routePath": "/",
+      "mountPath": "/",
+      "method": "",
+      "middleware": [
+        "_middleware.ts:onRequest"
+      ]
+    }
+  ],
+  "baseURL": "/"
+}
