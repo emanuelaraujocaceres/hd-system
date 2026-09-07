@@ -59,8 +59,10 @@ export interface FecharComandaResult {
 
 /** Consolida todas as vendas `pending` da sessão em itens flat (para a UI). */
 export function buscarItens(comandaId: string): ItemComanda[] {
+  const session = storageService.getCustomerSessions().find(s => s.id === comandaId);
+  const tableId = session?.tableId;
   const sales = storageService.getSales().filter(
-    (s) => s.customerSessionId === comandaId && s.status === 'pending'
+    (s) => (s.customerSessionId === comandaId || (tableId && s.tableId === tableId)) && s.status === 'pending'
   );
   const items: ItemComanda[] = [];
   for (const sale of sales) {
@@ -84,9 +86,11 @@ export function buscarItens(comandaId: string): ItemComanda[] {
 
 /** Soma das vendas `pending` da sessão. */
 export function getTotalComanda(comandaId: string): number {
+  const session = storageService.getCustomerSessions().find(s => s.id === comandaId);
+  const tableId = session?.tableId;
   return storageService
     .getSales()
-    .filter((s) => s.customerSessionId === comandaId && s.status === 'pending')
+    .filter((s) => (s.customerSessionId === comandaId || (tableId && s.tableId === tableId)) && s.status === 'pending')
     .reduce((acc, s) => acc + (s.total > 0 ? s.total : (s.items?.reduce((x, i) => x + (i.total || 0), 0) || 0)), 0);
 }
 
