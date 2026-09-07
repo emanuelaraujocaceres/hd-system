@@ -19,6 +19,7 @@ import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
 import { printSaleReceipt } from '../../services/printService';
+import { fecharComanda } from '../../services/comandaService';
 
 interface KDSViewProps {
   sales: Sale[];
@@ -162,18 +163,28 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
     return grouped;
   }, [filteredOrders]);
 
-  // Handle finalize comanda (operator closes with payment)
-  const handleFinalizeComanda = (sale: Sale) => {
-    // Navigate to ComandaView with this sale
-    // For now, just mark as completed and print receipt
-    storageService.saveSale({
-      ...sale,
-      status: 'completed',
-      kitchenStatus: 'delivered',
-      updatedAt: new Date().toISOString(),
-    });
-    posAudio.chime();
-    addToast('success', `Comanda ${sale.tableId?.slice(0, 8)} finalizada!`);
+  // Handle finalize comanda (operator closes with payment) — usa RPC fechar_comanda quando tem sessão
+  const handleFinalizeComanda = async (sale: Sale) => {
+    try {
+      if (sale.customerSessionId) {
+        const res = await fecharComanda(sale.customerSessionId, sale.payments || [{ method: 'pix', amount: sale.total } as any], user.name);
+        if (res && (res as any).success === false) {
+          addToast('error', (res as any).message || 'Erro ao fechar comanda');
+          return;
+        }
+      } else {
+        storageService.saveSale({
+          ...sale,
+          status: 'completed',
+          kitchenStatus: 'delivered',
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      posAudio.chime();
+      addToast('success', `Comanda ${sale.tableId?.slice(0, 8) || 'sem mesa'} finalizada!`);
+    } catch (e: any) {
+      addToast('error', e?.message || 'Erro ao finalizar');
+    }
   };
 
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -402,7 +413,7 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
                         {/* Table + Time */}
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-slate-900 dark:text-white">
-                            {order.sale.orderSource === 'delivery' ? `DELIVERY${order.sale.customerName ? ' · ' + order.sale.customerName : ''}` : (order.table?.name || 'Sem Mesa')}
+                            {order.sale.orderSource === 'delivery' ? `DELIVERY${order.sale.customerName ? ' · ' + order.sale.customerName : ''}` : (order.table?.name || (order.sale.tableId ? `Mesa ${order.sale.tableId.slice(0,8)}` : 'Sem Mesa'))}
                           </span>
                           <span className={`text-[10px] font-bold ${
                             order.timeElapsed > 15 ? 'text-rose-500' : 'text-slate-400'
@@ -482,15 +493,13 @@ export const KDSView: React.FC<KDSViewProps> = ({ sales, tables, products, user 
                               </button>
                             </>
                           ) : null}
-                          {status !== 'delivered' && status !== 'closing_request' && (
-                            <button
-                              onClick={() => handleCancelOrder(order.sale.id)}
-                              className="px-2 py-1.5 rounded-lg text-rose-500 text-[10px] font-bold hover:bg-rose-500/10"
-                              title="Cancelar"
-                            >
-                              ✕
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleCancelOrder(order.sale.id)}
+                            className="px-2 py-1.5 rounded-lg text-rose-500 text-[10px] font-bold hover:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20"
+                            title="Excluir pedido — remove da Comanda e do cardápio"
+                          >
+                            ✕
+                          </button>
                         </div>
                       </div>
                     ))

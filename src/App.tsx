@@ -21,6 +21,7 @@ import { LoginModal } from './components/Auth/LoginModal';
 import { UserProfileModal } from './components/Auth/UserProfileModal';
 import { SyncBanner } from './components/Sync/SyncBanner';
 import { NotificationBanner } from './components/Notifications/NotificationBanner';
+import { OrderAlertBanner } from './components/shared/OrderAlertBanner';
 import { NotificationBridge } from './components/Notifications/NotificationBridge';
 import { storageService } from './services/storageService';
 import { syncService, setOrgOnlineAllowed as syncSetOrgOnlineAllowed } from './services/syncService';
@@ -1302,6 +1303,10 @@ export const App: React.FC = () => {
 
         {/* Global Notification Banner — solicita permissão */}
         {!isTvMode && <NotificationBanner />}
+        {!isTvMode && <OrderAlertBanner onNavigate={(tab, tableId) => {
+          handleTabChange(tab);
+          if (tableId) setTimeout(() => window.dispatchEvent(new CustomEvent('hd:open-comanda', { detail: { tableId } })), 300);
+        }} tables={storageService.getTables()} />}
 
         {/* Global viewing org indicator (superadmin) */}
         {user?.superadmin && !isTvMode && activeTab !== 'organizations' && localStorage.getItem('hd_system_viewing_org') && (

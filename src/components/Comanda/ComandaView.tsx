@@ -175,6 +175,22 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
   const freeTables = comandaGroups.filter((g) => !g.session && g.sales.length === 0).length;
   const totalRevenue = comandaGroups.reduce((acc, g) => acc + g.total, 0);
 
+  // Abrir comanda via banner de notificação (Pedidos -> Comandas) — após comandaGroups pronto
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const tableId = (e as CustomEvent).detail?.tableId;
+      if (!tableId) return;
+      const group = comandaGroups.find(g => g.table.id === tableId);
+      if (group?.session) setDetailSessionId(group.session.id);
+      else {
+        const el = document.getElementById(`comanda-${tableId}`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    };
+    window.addEventListener('hd:open-comanda', handler as EventListener);
+    return () => window.removeEventListener('hd:open-comanda', handler as EventListener);
+  }, [comandaGroups]);
+
   // ── Sessão em detalhe ──
   // Fallback para storageService: quando o operador ACABA de abrir a comanda
   // (abrirComanda), a prop `customerSessions` pode ainda não ter o novo registro

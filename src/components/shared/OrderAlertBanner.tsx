@@ -1,0 +1,79 @@
+import React, { useEffect, useState } from 'react';
+import { storageService } from '../../services/storageService';
+import { posAudio } from '../../services/audioService';
+import { Sale, Table } from '../../types';
+
+interface Props {
+  onNavigate: (tab: string, tableId?: string) => void;
+  tables: Table[];
+}
+
+export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
+  const [pendingCount, setPendingCount] = useState(0);
+  const [closingCount, setClosingCount] = useState(0);
+  const [closingTable, setClosingTable] = useState<Table | null>(null);
+  const [pendingTable, setPendingTable] = useState<Table | null>(null);
+  const [lastPending, setLastPending] = useState(0);
+
+  const refresh = () => {
+    const sales = storageService.getSales().filter(s => s.orderSource === 'cardapio_digital' && s.kitchenStatus !== 'cancelled' && s.status !== 'cancelled');
+    const pend = sales.filter(s => (s.kitchenStatus || 'pending') === 'pending');
+    const clos = sales.filter(s => s.kitchenStatus === 'closing_request');
+    setPendingCount(pend.length);
+    setClosingCount(clos.length);
+    if (pend.length > 0) {
+      const t = tables.find(x => x.id === pend[0].tableId) || null;
+      setPendingTable(t);
+      if (pend.length > lastPending) {
+        posAudio.chime();
+        if (navigator.vibrate) navigator.vibrate(200);
+      }
+      setLastPending(pend.length);
+    } else {
+      setLastPending(0);
+    }
+    if (clos.length > 0) {
+      const t = tables.find(x => x.id === clos[0].tableId) || null;
+      setClosingTable(t);
+      if (clos.length > 0 && pendingCount === 0) {
+        posAudio.chime();
+      }
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+    const unsub = storageService.subscribe(() => refresh());
+    return () => { unsub(); };
+  }, [tables]);
+
+  if (pendingCount === 0 && closingCount === 0) return null;
+
+  return (
+    <div className="fixed top-14 left-1/2 -translate-x-1/2 z-40 flex flex-col gap-2 w-[95%] max-w-lg pointer-events-none">
+      {pendingCount > 0 && (
+        <div className="pointer-events-auto flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-amber-500 text-white shadow-lg border border-amber-600">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold">{pendingCount} pedido{pendingCount>1?'s':''} pendente{pendingCount>1?'s':''}{pendingTable ? ` • ${pendingTable.name}` : ''}</p>
+            <p className="text-xs opacity-90">Toque para aceitar e ir para Pedidos</p>
+          </div>
+          <button onClick={() => onNavigate('kds')} className="px-3 py-1.5 rounded-lg bg-white text-amber-600 text-xs font-bold">Aceitar</button>
+        </div>
+      )}
+      {closingCount > 0 && (
+        <div className="pointer-events-auto flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-indigo-600 text-white shadow-lg border border-indigo-700">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold">Fechamento solicitado{closingTable ? ` • ${closingTable.name}` : ''}</p>
+            <p className="text-xs opacity-90">{closingCount} comanda{closingCount>1?'s':''} aguardando pagamento</p>
+          </div>
+          <button onClick={() => {
+            const tableId = closingTable?.id;
+            // Notifica ComandaView via evento para abrir a mesa correta
+            if (tableId) window.dispatchEvent(new CustomEvent('hd:open-comanda', { detail: { tableId } }));
+            onNavigate('comandas', tableId);
+          }} className="px-3 py-1.5 rounded-lg bg-white text-indigo-600 text-xs font-bold">Ver Comanda</button>
+        </div>
+      )}
+    </div>
+  );
+};
