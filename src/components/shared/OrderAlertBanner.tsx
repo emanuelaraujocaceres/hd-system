@@ -62,7 +62,7 @@ export const OrderAlertBanner: React.FC<Props> = ({ onNavigate, tables }) => {
   useEffect(() => {
     refresh();
     const unsub = storageService.subscribe(() => refresh());
-    const iv = setInterval(refresh, 2000);
+    const iv = setInterval(refresh, 1000);
     return () => { unsub(); clearInterval(iv); };
   }, [tables]);
 
