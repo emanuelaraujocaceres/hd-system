@@ -710,7 +710,54 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       // incluindo órfãs/stale de sessões anteriores -> fechamento falhava no RPC por
       // v_owned mismatch. Agora fecha só as vendas da MINHA sessão (myOrders já
       // escopado por customerSessionId). Entregue já está em myOrders (status pending).
-      const targetSales = myOrders;
+      // Autocura antes da RPC: o celular pode estar com sessão/token stale
+      // (carregado antes do fix de sessão compartilhada) ou com vendas locais
+      // que nunca subiram. Revalida a ativa remota e envia SÓ o que o cloud
+      // reconhece — sem isso, 1 item stale derruba o lote todo (v_owned).
+      let rpcSession = session;
+      try {
+        const deviceFp = navigator.userAgent.slice(0, 100) + (screen.width + 'x' + screen.height);
+        const re = await ensureAnonSession(table, deviceFp, session?.sessionToken || sessionId, session?.id);
+        if (re.sessionId && re.sessionId !== session?.id) {
+          const adoptedNow: CustomerSession = {
+            ...(session as CustomerSession),
+            id: re.sessionId,
+            sessionToken: re.sessionToken || session?.sessionToken || sessionId,
+            status: 'active',
+            updatedAt: new Date().toISOString(),
+          };
+          storageService.saveCustomerSession(adoptedNow, { skipSync: true });
+          setSession(adoptedNow);
+          rpcSession = adoptedNow;
+        } else if (re.sessionToken && session && re.sessionToken !== session.sessionToken) {
+          const fixed: CustomerSession = { ...session, sessionToken: re.sessionToken, updatedAt: new Date().toISOString() };
+          storageService.saveCustomerSession(fixed, { skipSync: true });
+          setSession(fixed);
+          rpcSession = fixed;
+        }
+      } catch {
+        // sem rede para revalidar: segue com a sessão local
+      }
+      // Só envia vendas que o cloud confirma na sessão (remove stale local).
+      let eligible = myOrders;
+      try {
+        const full = await fetchSessionSalesFull(rpcSession?.id || session?.id || '', table.storeBranchId);
+        if (full.length > 0) {
+          const ids = new Set(full.map((f) => f.id));
+          const filtered = myOrders.filter((s) => ids.has(s.id));
+          if (filtered.length !== myOrders.length) {
+            console.warn(`[Cardapio] ${myOrders.length - filtered.length} venda(s) local(is) fora do cloud — fora do fechamento.`);
+          }
+          if (filtered.length === 0) {
+            setClosingError('Suas vendas ainda não chegaram na nuvem. Aguarde alguns segundos e tente de novo.');
+            return;
+          }
+          eligible = filtered;
+        }
+      } catch {
+        // segue com myOrders
+      }
+      const targetSales = eligible;
       const saleIds: string[] = [];
       const isCash = paymentMethod === 'cash';
       const changeDueTotal = isCash ? Math.max(0, closingCashGiven - myComandaTotal) : 0;
@@ -743,7 +790,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       // Via fetch anon PURO (sem GoTrueClient/JWT do operador) e com o token
       // REMOTO da sessão compartilhada — o supabase-js com JWT falhava e o
       // token fresco da página falhava no v_owned.
-      const tokenForRpc = session?.sessionToken || sessionId;
+      const tokenForRpc = rpcSession?.sessionToken || session?.sessionToken || sessionId;
       const closeRes = await requestClosingAnon(saleIds, tokenForRpc, paymentMethod, table.storeBranchId);
       if (!closeRes.ok) {
         // Lote falhou (ex.: uma venda stale sem posse contamina o lote todo) —
