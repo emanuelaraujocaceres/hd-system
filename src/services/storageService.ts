@@ -3985,7 +3985,7 @@ id: StorageService.ensureUuid(settings.id),
     this.set(KEYS.CREDIT_PAYMENTS, payments);
   }
 
-  async addSale(sale: Sale): Promise<{ success: boolean; message?: string }> {
+  async addSale(sale: Sale, opts?: { skipSync?: boolean }): Promise<{ success: boolean; message?: string }> {
     sale.id = StorageService.ensureUuid(sale.id);
     // Preserva o organizationId definido por quem criou a venda (ex.: cardápio
     // digital usa o da filial da mesa). Só cai no getCurrentOrgId() se ausente.
@@ -4076,14 +4076,25 @@ id: StorageService.ensureUuid(settings.id),
     const visible = this.getSales().some((s: Sale) => s.id === sale.id);
     console.log(`[HD-Sale] ✅ venda gravada local (total=${storedCount}) | visível em getSales()=${visible} | branch=${sale.storeBranchId || '(vazio)'} org=${sale.organizationId || '(vazio)'}`);
     if (!visible) console.warn('[HD-Sale] ⚠️ venda gravada mas FILTRADA por getSales() — investigar filtro de filial/org!');
-    await this.syncSale(sale);
+    // skipSync: cardápio anon grava o cloud via serviço anon dedicado
+    // (cliente anon puro, sem JWT do operador). Sem isso, o upsert ia com o JWT
+    // do operador logado no mesmo aparelho → 42501/401 e venda presa no aparelho.
+    if (!opts?.skipSync) {
+      await this.syncSale(sale);
 
-    // 🔥 Sincroniza sale_items ao cloud. O canal realtime de sale_items NÃO tem
-    // filtro de org/filial, então entrega o pedido AO VIVO para TODOS os operadores,
-    // inclusive pedidos do cardápio (anon), cuja venda é filtrada pelo canal de sales.
-    // Antes os itens nunca iam pro cloud → pedido só aparecia após reload e sem os
-    // itens no dispositivo do operador.
-    cloudSaleItems.forEach((it: any) => syncService.upsertRow('sale_items', it));
+      // 🔥 Sincroniza sale_items ao cloud. O canal realtime de sale_items NÃO tem
+      // filtro de org/filial, então entrega o pedido AO VIVO para TODOS os operadores,
+      // inclusive pedidos do cardápio (anon), cuja venda é filtrada pelo canal de sales.
+      // Antes os itens nunca iam pro cloud → pedido só aparecia após reload e sem os
+      // itens no dispositivo do operador.
+      cloudSaleItems.forEach((it: any) => syncService.upsertRow('sale_items', it));
+    } else {
+      // Cardápio anon: espelho local já gravado acima (Minha Comanda lê por
+      // filial da mesa). Cloud (sales/items/RPC) vai pelo serviço anon dedicado
+      // com cliente anon puro — aqui NÃO toca receivable/caixa/estoque/RPC do
+      // aparelho anon (sem caixa/produtos locais; RPC iria com JWT errado).
+      return { success: true };
+    }
     // Venda fiado → criar conta a receber vinculada (id da conta = id da venda)
     this.createReceivableFromSale(sale);
 
@@ -4179,12 +4190,12 @@ id: StorageService.ensureUuid(settings.id),
         if (matched) branchUuid = matched.id;
       }
 
-      // SANITIZAÇÃO RPC: getCurrentOrgId() retorna '' para superadmin sem org
-      // salva (acesso global). PostgREST tenta cast ''::uuid → 22P02
-      // "invalid input syntax for type uuid: """ — EXATAMENTE o erro observado.
-      // Regra igual ao upsertRow: org inválida → null para superadmin, skip p/ comum.
-      const rpcOrgId = this.getCurrentOrgId();
-      const rpcOrgParam = rpcOrgId && StorageService.UUID_RE.test(rpcOrgId) ? rpcOrgId : null;
+      // SANITIZAÇÃO RPC: prefere a org DA VENDA (cardápio anon usa a org da
+      // mesa, ex. 9bfe...; getCurrentOrgId() no aparelho anon retorna
+      // DEFAULT_ORG 000...001 e a RPC falhava/marcava org errada).
+      // getCurrentOrgId() só como fallback (PDV logado). '' → null/skip.
+      const rpcOrgCandidate = sale.organizationId || this.getCurrentOrgId();
+      const rpcOrgParam = rpcOrgCandidate && StorageService.UUID_RE.test(rpcOrgCandidate) ? rpcOrgCandidate : null;
       const rpcProductId = sale.items?.[0]?.productId && StorageService.UUID_RE.test(sale.items[0].productId)
         ? sale.items[0].productId
         : null;
@@ -5693,7 +5704,7 @@ private updateReceivableFromPayments(saleId: string) {
     return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
 
-  saveCustomerSession(session: CustomerSession) {
+  saveCustomerSession(session: CustomerSession, opts?: { skipSync?: boolean }) {
     session.id = StorageService.ensureUuid(session.id);
     // P0-2: NÃO sobrescrever org quando o caller já trouxe o org real da filial
     // (ex.: delivery/cardápio anon resolve no fetch REST). Antes, sobrescrevia
@@ -5705,7 +5716,8 @@ private updateReceivableFromPayments(saleId: string) {
     if (idx >= 0) all[idx] = session;
     else all.push(session);
     this.set(KEYS.CUSTOMER_SESSIONS, all);
-    this.syncCustomerSession(session);
+    // skipSync: cardápio anon sobe via serviço anon dedicado (sem JWT do operador)
+    if (!opts?.skipSync) this.syncCustomerSession(session);
   }
 
   updateCustomerSessionFromRemote(row: any) {

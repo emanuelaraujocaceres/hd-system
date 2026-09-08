@@ -17,6 +17,7 @@ import {
 import { Product, Table, DigitalMenuConfig, CustomerSession, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
 import { supabase } from '../../lib/supabase';
+import { ensureAnonSession, submitAnonSale } from '../../services/cardapioAnonService';
 import { printRoutedItems } from '../../services/printService';
 import { routeItemsToPrinters } from '../../services/printerRouting';
 
@@ -365,8 +366,15 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        storageService.saveCustomerSession(newSession);
+        // Espelho local (Minha Comanda lê daqui) sem sync — o cloud vai pelo
+        // serviço anon dedicado (sem JWT do operador). Sem skipSync, o upsert
+        // ia com o JWT logado no mesmo aparelho → 42501/401.
+        storageService.saveCustomerSession(newSession, { skipSync: true });
         setSession(newSession);
+        // Sobe a sessão como anon puro (fire-and-forget; venda posterior usa o id)
+        ensureAnonSession(foundTable, deviceFingerprint, sessionId, newSession.id).then((r) => {
+          if (!r.ok) console.warn('[Cardapio] sessão anon não subiu:', r.error);
+        });
         setLoading(false);
       } catch (err: any) {
         setError('Erro ao carregar o cardápio. Tente novamente.');
@@ -520,7 +528,19 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         updatedAt: new Date().toISOString(),
       };
 
-      await storageService.addSale(sale);
+      if (!isDeliveryMode) {
+        // Mesa (QR público): 1) espelho local sem sync do operador +
+        // 2) cloud como anon puro (sales + items + RPC estoque). Sem isso, o
+        // upsert ia com o JWT do operador do mesmo aparelho → RLS 42501.
+        await storageService.addSale(sale, { skipSync: true });
+        const res = await submitAnonSale(sale, table);
+        if (!res.ok) {
+          console.warn('[Cardapio] venda anon não subiu:', res.error);
+          throw new Error(res.error || 'Falha ao enviar pedido. Tente novamente.');
+        }
+      } else {
+        await storageService.addSale(sale);
+      }
 
       // Delivery: grava dados do cliente na sessão (CRM/operador) e no aparelho
       if (isDeliveryMode && session) {
