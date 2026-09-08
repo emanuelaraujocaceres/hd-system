@@ -328,14 +328,18 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           }
         }
 
-        // Check for existing session for this device (same celular reutiliza)
+        // Check for existing session for this device + MESA (isolamento por mesa)
+        // BUGFIX 2026-09-08: antes buscava só por deviceFingerprint + active,
+        // então o mesmo celular ao escanear QR de outra mesa reaproveitava a
+        // sessão da mesa anterior -> venda bipolar (tableId da nova mesa,
+        // customerSessionId da antiga). Agora escopa por tableId.
         const deviceFingerprint = navigator.userAgent.slice(0, 100) + (screen.width + 'x' + screen.height);
         const sessions = storageService.getCustomerSessions();
         const existingSession = sessions.find(
-          (s) => s.deviceFingerprint === deviceFingerprint && s.status === 'active'
+          (s) => s.deviceFingerprint === deviceFingerprint && s.status === 'active' && s.tableId === foundTable.id
         );
 
-        // Se já existe sessão para este dispositivo, reutiliza
+        // Se já existe sessão para este dispositivo NESTA MESA, reutiliza
         if (existingSession) {
           setSession(existingSession);
           setLoading(false);
@@ -430,15 +434,21 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   ];
   const submittingRef = useRef(false);
 
-  // Load my orders on mount and after submit — só pendentes (comanda aberta)
+  // Load my orders on mount and after submit — só pendentes da MINHA sessão
+  // BUGFIX 2026-09-08: antes filtrava só por tableId, então o próximo cliente
+  // na mesma mesa herda vendas stale (halls fantasma). Agora isola por
+  // customerSessionId (= sessão deste aparelho nesta mesa).
   const loadMyOrders = useCallback(() => {
-    if (!table) return;
+    if (!table || !session) return;
     const allSales = storageService.getSales();
     const tableSales = allSales.filter(
-      (s) => s.tableId === table.id && (s.orderSource === 'cardapio_digital' || s.orderSource === 'delivery') && s.status !== 'completed' && s.status !== 'cancelled'
+      (s) => s.customerSessionId === session.id && s.tableId === table.id && (s.orderSource === 'cardapio_digital' || s.orderSource === 'delivery') && s.status !== 'completed' && s.status !== 'cancelled'
     );
+    // Fallback transitório: se ainda há vendas órfãs antigas (sem customerSessionId)
+    // da mesma mesa criadas antes do fix, não mostrar para o novo cliente.
+    // O operador ainda as vê na ComandaView e pode removê-las.
     setMyOrders(tableSales.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-  }, [table]);
+  }, [table, session]);
 
   useEffect(() => {
     loadMyOrders();
@@ -554,9 +564,11 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       // Cliente SOLICITA o fechamento informando a FORMA DE PAGAMENTO desejada.
       // Operador fecha e cobra na página de Comandas. kitchenStatus='closing_request'
       // sinaliza o Pedidos (KDS) e payments[0].method exibe a forma escolhida.
-      // Pega TODAS as vendas da mesa (não só myOrders que filtra por sessão atual) — inclui Entregue
-      const allTableSales = storageService.getSales().filter(s => s.tableId === table.id && s.status !== 'completed' && s.status !== 'cancelled');
-      const targetSales = allTableSales.length > 0 ? allTableSales : myOrders;
+      // BUGFIX 2026-09-08: antes pegava TODAS as vendas da mesa (allTableSales por tableId)
+      // incluindo órfãs/stale de sessões anteriores -> fechamento falhava no RPC por
+      // v_owned mismatch. Agora fecha só as vendas da MINHA sessão (myOrders já
+      // escopado por customerSessionId). Entregue já está em myOrders (status pending).
+      const targetSales = myOrders;
       const saleIds: string[] = [];
       const isCash = paymentMethod === 'cash';
       const changeDueTotal = isCash ? Math.max(0, closingCashGiven - myComandaTotal) : 0;
@@ -586,10 +598,14 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       // P0-3: RPC SECURITY DEFINER com EXECUTE anon (exceção documentada 0f/0e,
       // idem process_sale_transaction) — única via de escrita do pedido de
       // fechamento; evita policy de UPDATE permissiva em sales (regra 0b).
+      // BUGFIX 2026-09-08: token deve ser o da sessão reaproveitada (session.sessionToken),
+      // não o UUID fresco do useState da página (sessionId). Antes, reuso de sessão
+      // enviava token divergente -> RPC falhava em v_owned <> length.
+      const tokenForRpc = session?.sessionToken || sessionId;
       try {
         await supabase.rpc('solicitar_fechamento_comanda', {
           p_sale_ids: saleIds,
-          p_session_token: sessionId,
+          p_session_token: tokenForRpc,
           p_payment_method: paymentMethod,
         });
       } catch (rpcErr) {
