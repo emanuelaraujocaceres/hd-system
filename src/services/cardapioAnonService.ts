@@ -222,4 +222,32 @@ export async function submitAnonSale(
   return { ok: true };
 }
 
+export interface SessionSaleStatus {
+  id: string;
+  status: string;
+  kitchen_status: string;
+  total: number;
+}
+
+// Lê o status atual das vendas da sessão direto do cloud (anon puro).
+// O aparelho anon NÃO assina Realtime (App adia sem login), então sem isso a
+// Minha Comanda nunca saberia que o operador cancelou/finalizou — ficava
+// presa no `pending` local. Poll a cada 5s espelha status sem reenviar nada.
+export async function fetchSessionSalesStatus(
+  sessionId: string,
+  branchId: string
+): Promise<SessionSaleStatus[]> {
+  try {
+    const url =
+      `${ANON_URL}/rest/v1/sales?customer_session_id=eq.${encodeURIComponent(sessionId)}` +
+      `&select=id,status,kitchen_status,total&order=created_at.desc&limit=50`;
+    const res = await fetch(url, { headers: anonHeaders(branchId) });
+    if (!res.ok) return [];
+    const rows = await res.json().catch(() => []);
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
 export { snakeSession };

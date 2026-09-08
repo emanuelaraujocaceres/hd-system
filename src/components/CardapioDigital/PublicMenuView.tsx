@@ -17,7 +17,7 @@ import {
 import { Product, Table, DigitalMenuConfig, CustomerSession, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
 import { supabase } from '../../lib/supabase';
-import { ensureAnonSession, submitAnonSale } from '../../services/cardapioAnonService';
+import { ensureAnonSession, submitAnonSale, fetchSessionSalesStatus } from '../../services/cardapioAnonService';
 import { printRoutedItems } from '../../services/printService';
 import { routeItemsToPrinters } from '../../services/printerRouting';
 
@@ -471,10 +471,39 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
 
   useEffect(() => {
     loadMyOrders();
-    // Refresh orders every 5 seconds
-    const interval = setInterval(loadMyOrders, 5000);
+    // Refresh orders every 5 seconds + espelha cancelamento/finalização do
+    // operador (o anon não tem Realtime; sem o poll a Minha Comanda ficava
+    // presa no status local). Só espelha status/total — nunca reenvia.
+    const interval = setInterval(async () => {
+      if (table && session && !isDeliveryMode) {
+        try {
+          const remote = await fetchSessionSalesStatus(session.id, table.storeBranchId);
+          if (remote.length > 0) {
+            let changed = false;
+            for (const r of remote) {
+              const local = storageService.getSalesByBranch(table.storeBranchId, table.organizationId).find((s) => s.id === r.id);
+              if (local && (local.status !== r.status || (local.kitchenStatus || 'pending') !== (r.kitchen_status || 'pending'))) {
+                storageService.saveSale(
+                  { ...local, status: r.status as any, kitchenStatus: (r.kitchen_status as any) || local.kitchenStatus, total: typeof r.total === 'number' ? r.total : local.total, updatedAt: new Date().toISOString() },
+                  { skipSync: true }
+                );
+                changed = true;
+              }
+            }
+            if (changed) loadMyOrders();
+            else loadMyOrders();
+          } else {
+            loadMyOrders();
+          }
+        } catch {
+          loadMyOrders();
+        }
+      } else {
+        loadMyOrders();
+      }
+    }, 5000);
     return () => clearInterval(interval);
-  }, [loadMyOrders]);
+  }, [loadMyOrders, table, session, isDeliveryMode]);
 
   const myComandaTotal = myOrders.reduce((sum, s) => {
     const saleTotal = s.total > 0 ? s.total : (s.items?.reduce((a, i) => a + (i.total || 0), 0) || 0);
