@@ -1,20 +1,52 @@
-import { supabaseAnon } from '../lib/supabaseAnon';
+import { ANON_URL, ANON_KEY } from '../lib/supabaseAnon';
 import type { CustomerSession, Sale, Table } from '../types';
 
 // Serviço de ESCRITA anônima do cardápio público (#/mesa/ mesa, #/delivery).
 //
-// Usa `supabaseAnon` (sem sessão persistida) para que os inserts caiam nas
-// policies `*_insert_anon WITH CHECK (true)` (exceção 0f). O cliente padrão
-// `supabase` carrega o JWT do operador logado no mesmo aparelho e os mesmos
-// inserts caem no `org_branch_insert_* TO authenticated` → 42501/401.
+// Usa fetch REST PURO com SÓ apikey + Bearer anon (sem supabase-js e sem JWT
+// do operador). O supabase-js, mesmo com persistSession:false, compartilha a
+// storage key do GoTrueClient do operador logado no mesmo aparelho
+// ("Multiple GoTrueClient instances") e os upserts iam com role=authenticated
+// → `org_branch_insert_*` negava (42501/401) em vez de cair no
+// `*_insert_anon WITH CHECK (true)` (exceção 0f). O fetch manual com a mesma
+// ANON_KEY já retornou 200 para a mesa — policies anon OK, problema era o client.
 //
 // Fluxo mesa:
-//   1. ensureAnonSession(table, deviceFingerprint, sessionToken) — POST direto
-//      em customer_sessions (upsert por id). Retorna a sessão.
-//   2. submitAnonSale(sale, table) — POST em sales + POST em sale_items +
-//      RPC process_sale_transaction (SECURITY DEFINER, baixa de estoque).
-//      A RPC precisa de GRANT anon (migration 20260908 re-grant).
-// Tudo com client anon puro; o chamador grava o espelho local com skipSync.
+//   1. ensureAnonSession(table, deviceFingerprint, sessionToken)
+//   2. submitAnonSale(sale, table) — sales + sale_items + process_sale_transaction.
+// O chamador grava o espelho local com skipSync (Minha Comanda imediata).
+
+function anonHeaders(branchId?: string): Record<string, string> {
+  const h: Record<string, string> = {
+    apikey: ANON_KEY,
+    Authorization: `Bearer ${ANON_KEY}`,
+    'Content-Type': 'application/json',
+    Prefer: 'resolution=merge-duplicates,return=representation',
+  };
+  if (branchId) h['x-branch-id'] = branchId;
+  return h;
+}
+
+async function postRest(
+  path: string,
+  body: unknown,
+  branchId?: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${ANON_URL}/rest/v1/${path}`, {
+      method: 'POST',
+      headers: anonHeaders(branchId),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 300)}` };
+    }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'fetch anon falhou' };
+  }
+}
 
 function snakeSession(s: CustomerSession) {
   return {
@@ -36,7 +68,8 @@ export async function ensureAnonSession(
   sessionId?: string
 ): Promise<{ ok: boolean; error?: string }> {
   const id = sessionId || crypto.randomUUID();
-  const { error } = await supabaseAnon.from('customer_sessions').upsert(
+  return postRest(
+    'customer_sessions?on_conflict=id',
     {
       id,
       table_id: table.id,
@@ -46,11 +79,9 @@ export async function ensureAnonSession(
       status: 'active',
       device_fingerprint: deviceFingerprint,
       customer_name: null,
-    } as any,
-    { onConflict: 'id' }
+    },
+    table.storeBranchId
   );
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
 }
 
 export async function submitAnonSale(
@@ -58,7 +89,8 @@ export async function submitAnonSale(
   table: Table
 ): Promise<{ ok: boolean; error?: string }> {
   // 1) header da venda
-  const { error: saleErr } = await supabaseAnon.from('sales').upsert(
+  const r1 = await postRest(
+    'sales?on_conflict=id',
     {
       id: sale.id,
       organization_id: sale.organizationId,
@@ -97,12 +129,12 @@ export async function submitAnonSale(
       status: sale.status,
       notes: sale.notes || sale.customerName || null,
       customer_name: sale.customerName || null,
-    } as any,
-    { onConflict: 'id' }
+    },
+    table.storeBranchId
   );
-  if (saleErr) return { ok: false, error: `sales: ${saleErr.message}` };
+  if (!r1.ok) return { ok: false, error: `sales: ${r1.error}` };
 
-  // 2) itens (IDs estáveis gerados no front)
+  // 2) itens
   const rows = (sale.items || []).map((it) => ({
     id: crypto.randomUUID(),
     sale_id: sale.id,
@@ -114,15 +146,13 @@ export async function submitAnonSale(
     store_branch_id: sale.storeBranchId,
   }));
   if (rows.length > 0) {
-    const { error: itemsErr } = await supabaseAnon
-      .from('sale_items')
-      .upsert(rows as any, { onConflict: 'id' });
-    if (itemsErr) return { ok: false, error: `sale_items: ${itemsErr.message}` };
+    const r2 = await postRest('sale_items?on_conflict=id', rows, table.storeBranchId);
+    if (!r2.ok) return { ok: false, error: `sale_items: ${r2.error}` };
   }
 
-  // 3) baixa de estoque atômica (SECURITY DEFINER, GRANT anon)
-  const { error: rpcErr } = await supabaseAnon.rpc(
-    'process_sale_transaction' as any,
+  // 3) baixa de estoque atômica (SECURITY DEFINER, GRANT anon re-concedido)
+  const r3 = await postRest(
+    'rpc/process_sale_transaction',
     {
       p_sale_id: sale.id,
       p_product_id: sale.items?.[0]?.productId || null,
@@ -141,9 +171,10 @@ export async function submitAnonSale(
         total: it.total,
         discount: 0,
       })),
-    } as any
+    },
+    table.storeBranchId
   );
-  if (rpcErr) return { ok: false, error: `rpc: ${rpcErr.message}` };
+  if (!r3.ok) return { ok: false, error: `rpc: ${r3.error}` };
   return { ok: true };
 }
 
