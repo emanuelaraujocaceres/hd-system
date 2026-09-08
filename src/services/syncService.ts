@@ -1270,12 +1270,17 @@ class SupabaseSyncService {
   }
 
   /**
-   * Modo anon LEGÍTIMO = cardápio digital/delivery (aparelho SEM perfil local
-   * salvo). As policies sales_*_anon / stock_movements_*_anon autorizam essas
-   * escritas — o guard de sessão NUNCA bloqueia esse fluxo (exceção 0f).
+   * Modo anon LEGÍTIMO = cardápio digital/delivery.
+   * Antes verificava só ausência de perfil local, mas o mesmo celular pode ter
+   * logado no app (tem perfil) e depois abrir o QR da mesa — nesse caso o
+   * guard bloqueava como "sem sessão válida" e a venda caía na fila/DLQ 42501.
+   * Agora também considera a rota: #/mesa/, #/delivery e #/cardapio são
+   * sempre anon, independente de perfil salvo (exceção 0f).
    */
   private isMenuAnonMode(): boolean {
     try {
+      const hash = window.location.hash || '';
+      if (hash.includes('#/mesa/') || hash.includes('#/delivery') || hash.includes('#/cardapio')) return true;
       if (localStorage.getItem('hd_system_logged_in_email') === 'LOGGED_OUT') return false;
       return !localStorage.getItem('hd_system_user_profile');
     } catch {
