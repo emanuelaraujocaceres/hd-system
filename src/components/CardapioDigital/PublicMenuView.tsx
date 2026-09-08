@@ -579,7 +579,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       } else {
         loadMyOrders();
       }
-    }, 5000);
+    }, 3000);
     return () => clearInterval(interval);
   }, [loadMyOrders, table, session, isDeliveryMode]);
 
