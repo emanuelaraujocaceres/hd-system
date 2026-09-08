@@ -1,5 +1,5 @@
 /**
- * SupabaseSyncService — force rebuild 2026-09-08 12:52
+ * SupabaseSyncService — force rebuild 2026-09-08 12:58:30
  * Bridge entre localStorage e Supabase para sincronização em tempo real.
  * 
  * Estratégia OFFLINE-FIRST:
