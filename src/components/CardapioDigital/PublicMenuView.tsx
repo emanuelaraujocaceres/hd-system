@@ -346,35 +346,38 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           (s) => s.deviceFingerprint === deviceFingerprint && s.status === 'active' && s.tableId === foundTable.id
         );
 
-        // Se já existe sessão para este dispositivo NESTA MESA, reutiliza
-        if (existingSession) {
+        // A mesa tem UMA sessão ativa compartilhada (constraint
+        // one_active_session_per_table). Adota a ativa remota quando houver;
+        // só cria quando a mesa está livre. Sem isso, cada aparelho tentava
+        // inserir sua sessão → 23505, e a venda caía em FK 23503.
+        const candidateId = existingSession?.id || crypto.randomUUID();
+        const token = existingSession?.sessionToken || sessionId;
+        const remote = await ensureAnonSession(foundTable, deviceFingerprint, token, candidateId);
+        const finalId = remote.sessionId || candidateId;
+        if (!remote.ok) console.warn('[Cardapio] sessão anon não subiu:', remote.error);
+        if (existingSession && existingSession.id === finalId) {
           setSession(existingSession);
           setLoading(false);
           return;
         }
-
-        // Criar nova sessão (múltiplos dispositivos permitidos na mesma mesa)
-        const newSession: CustomerSession = {
-          id: crypto.randomUUID(),
-          tableId: foundTable.id,
-          sessionToken: sessionId,
-          status: 'active',
-          openedAt: new Date().toISOString(),
-          deviceFingerprint,
-          storeBranchId: foundTable.storeBranchId,
-          organizationId: foundTable.organizationId,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+        // Adota a sessão vencedora (a ativa da mesa) no espelho local.
         // Espelho local (Minha Comanda lê daqui) sem sync — o cloud vai pelo
         // serviço anon dedicado (sem JWT do operador). Sem skipSync, o upsert
         // ia com o JWT logado no mesmo aparelho → 42501/401.
-        storageService.saveCustomerSession(newSession, { skipSync: true });
-        setSession(newSession);
-        // Sobe a sessão como anon puro (fire-and-forget; venda posterior usa o id)
-        ensureAnonSession(foundTable, deviceFingerprint, sessionId, newSession.id).then((r) => {
-          if (!r.ok) console.warn('[Cardapio] sessão anon não subiu:', r.error);
-        });
+        const adopted: CustomerSession = {
+          id: finalId,
+          tableId: foundTable.id,
+          sessionToken: token,
+          status: 'active',
+          openedAt: existingSession?.openedAt || new Date().toISOString(),
+          deviceFingerprint,
+          storeBranchId: foundTable.storeBranchId,
+          organizationId: foundTable.organizationId,
+          createdAt: existingSession?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        storageService.saveCustomerSession(adopted, { skipSync: true });
+        setSession(adopted);
         setLoading(false);
       } catch (err: any) {
         setError('Erro ao carregar o cardápio. Tente novamente.');

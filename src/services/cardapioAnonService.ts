@@ -61,14 +61,38 @@ function snakeSession(s: CustomerSession) {
   };
 }
 
+export interface AnonSessionResult {
+  ok: boolean;
+  error?: string;
+  sessionId?: string;
+  reused?: boolean;
+}
+
+// A mesa tem UMA sessão ativa compartilhada (constraint
+// one_active_session_per_table). Todos os aparelhos da mesa usam a mesma
+// sessão — por isso primeiro busca a ativa remota e só cria se não houver.
 export async function ensureAnonSession(
   table: Table,
   deviceFingerprint: string,
   sessionToken: string,
   sessionId?: string
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<AnonSessionResult> {
+  // 1) tenta reutilizar a ativa da mesa (GET anon com x-branch-id)
+  try {
+    const url = `${ANON_URL}/rest/v1/customer_sessions?table_id=eq.${table.id}&status=eq.active&select=id,session_token&limit=1`;
+    const res = await fetch(url, { headers: anonHeaders(table.storeBranchId) });
+    if (res.ok) {
+      const rows = await res.json().catch(() => []);
+      if (Array.isArray(rows) && rows.length > 0 && rows[0]?.id) {
+        return { ok: true, sessionId: rows[0].id, reused: true };
+      }
+    }
+  } catch {
+    // sem rede / 401 na leitura → cai para criação abaixo
+  }
+  // 2) nenhuma ativa → cria a nossa
   const id = sessionId || crypto.randomUUID();
-  return postRest(
+  const r = await postRest(
     'customer_sessions?on_conflict=id',
     {
       id,
@@ -82,6 +106,26 @@ export async function ensureAnonSession(
     },
     table.storeBranchId
   );
+  if (!r.ok) {
+    // Corrida: outro aparelho criou a ativa entre o GET e o POST (23505).
+    // Busca de novo e adota a vencedora em vez de falhar.
+    if (r.error && r.error.includes('23505')) {
+      try {
+        const url = `${ANON_URL}/rest/v1/customer_sessions?table_id=eq.${table.id}&status=eq.active&select=id&limit=1`;
+        const res = await fetch(url, { headers: anonHeaders(table.storeBranchId) });
+        if (res.ok) {
+          const rows = await res.json().catch(() => []);
+          if (Array.isArray(rows) && rows.length > 0 && rows[0]?.id) {
+            return { ok: true, sessionId: rows[0].id, reused: true };
+          }
+        }
+      } catch {
+        // ignora, retorna o erro original abaixo
+      }
+    }
+    return { ok: false, error: r.error };
+  }
+  return { ok: true, sessionId: id, reused: false };
 }
 
 export async function submitAnonSale(
