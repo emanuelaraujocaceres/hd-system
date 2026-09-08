@@ -333,8 +333,14 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         // então o mesmo celular ao escanear QR de outra mesa reaproveitava a
         // sessão da mesa anterior -> venda bipolar (tableId da nova mesa,
         // customerSessionId da antiga). Agora escopa por tableId.
+        // FIX Anon 2026-09-08: getCustomerSessions() filtra por filial selecionada
+        // (getSelectedBranchId) — no celular anon retorna [] e esconde tudo, por
+        // isso QR só funcionava no PC logado. Agora lê por filial da mesa quando
+        // não há filial selecionada.
         const deviceFingerprint = navigator.userAgent.slice(0, 100) + (screen.width + 'x' + screen.height);
-        const sessions = storageService.getCustomerSessions();
+        const sessions = storageService.getSelectedBranchId()
+          ? storageService.getCustomerSessions()
+          : storageService.getCustomerSessionsByBranch(foundTable.storeBranchId, foundTable.organizationId);
         const existingSession = sessions.find(
           (s) => s.deviceFingerprint === deviceFingerprint && s.status === 'active' && s.tableId === foundTable.id
         );
@@ -440,7 +446,9 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   // customerSessionId (= sessão deste aparelho nesta mesa).
   const loadMyOrders = useCallback(() => {
     if (!table || !session) return;
-    const allSales = storageService.getSales();
+    const allSales = storageService.getSelectedBranchId()
+      ? storageService.getSales()
+      : storageService.getSalesByBranch(table.storeBranchId, table.organizationId);
     const tableSales = allSales.filter(
       (s) => s.customerSessionId === session.id && s.tableId === table.id && (s.orderSource === 'cardapio_digital' || s.orderSource === 'delivery') && s.status !== 'completed' && s.status !== 'cancelled'
     );

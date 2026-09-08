@@ -5680,6 +5680,19 @@ private updateReceivableFromPayments(saleId: string) {
     return this.filterBySelectedBranch(this.filterByOrg(this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, [])));
   }
 
+  // Anon helpers — usados pelo cardápio QR quando não há filial selecionada no seletor
+  // (getSelectedBranchId() vazio -> filterBySelectedBranch retornaria [] e esconderia tudo).
+  getCustomerSessionsByBranch(branchId: string, orgId?: string): CustomerSession[] {
+    const all = this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, []);
+    return all.filter(s => s.storeBranchId === branchId && (!orgId || s.organizationId === orgId));
+  }
+  getSalesByBranch(branchId: string, orgId?: string): Sale[] {
+    const fallback = this.isDefaultOrg() ? INITIAL_SALES : [];
+    const all = this.get<Sale[]>(KEYS.SALES, fallback);
+    const filtered = all.filter(s => s.storeBranchId === branchId && (!orgId || s.organizationId === orgId));
+    return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }
+
   saveCustomerSession(session: CustomerSession) {
     session.id = StorageService.ensureUuid(session.id);
     // P0-2: NÃO sobrescrever org quando o caller já trouxe o org real da filial
