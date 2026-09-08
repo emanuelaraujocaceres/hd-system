@@ -253,6 +253,75 @@ export interface SessionSaleStatus {
   total: number;
 }
 
+export interface SessionSaleFull extends SessionSaleStatus {
+  code: string;
+  table_id: string | null;
+  customer_session_id: string | null;
+  organization_id: string;
+  store_branch_id: string;
+  order_source: string;
+  created_at: string;
+  items: { productId: string; productName: string; unitPrice: number; quantity: number; total: number }[];
+}
+
+// Puxa TODAS as vendas da sessão (com itens) para espelhar aparelhos que
+// acabaram de entrar na mesa. Sem isso, cada celular só via o próprio
+// espelho local: um mostrava 1 produto, outro zerado, outro outro produto.
+export async function fetchSessionSalesFull(
+  sessionId: string,
+  branchId: string
+): Promise<SessionSaleFull[]> {
+  try {
+    const sUrl =
+      `${ANON_URL}/rest/v1/sales?customer_session_id=eq.${encodeURIComponent(sessionId)}` +
+      `&select=id,code,status,kitchen_status,total,table_id,customer_session_id,organization_id,store_branch_id,order_source,created_at&order=created_at.asc&limit=100`;
+    const sRes = await fetch(sUrl, { headers: anonHeaders(branchId) });
+    if (!sRes.ok) return [];
+    const sales = (await sRes.json().catch(() => [])) as any[];
+    if (!Array.isArray(sales) || sales.length === 0) return [];
+    const ids = sales.map((s) => s.id).filter(Boolean);
+    let itemsBySale = new Map<string, any[]>();
+    if (ids.length > 0) {
+      const iUrl =
+        `${ANON_URL}/rest/v1/sale_items?sale_id=in.(${ids.map((id) => encodeURIComponent(id)).join(',')})` +
+        `&select=sale_id,product_id,product_name,quantity,unit_price,total_price&limit=500`;
+      const iRes = await fetch(iUrl, { headers: anonHeaders(branchId) });
+      if (iRes.ok) {
+        const items = (await iRes.json().catch(() => [])) as any[];
+        if (Array.isArray(items)) {
+          for (const it of items) {
+            const arr = itemsBySale.get(it.sale_id) || [];
+            arr.push(it);
+            itemsBySale.set(it.sale_id, arr);
+          }
+        }
+      }
+    }
+    return sales.map((s) => ({
+      id: s.id,
+      code: s.code || '',
+      status: s.status,
+      kitchen_status: s.kitchen_status || 'pending',
+      total: typeof s.total === 'number' ? s.total : 0,
+      table_id: s.table_id || null,
+      customer_session_id: s.customer_session_id || null,
+      organization_id: s.organization_id,
+      store_branch_id: s.store_branch_id,
+      order_source: s.order_source || 'cardapio_digital',
+      created_at: s.created_at || new Date().toISOString(),
+      items: (itemsBySale.get(s.id) || []).map((it: any) => ({
+        productId: it.product_id,
+        productName: it.product_name || '',
+        unitPrice: Number(it.unit_price) || 0,
+        quantity: Number(it.quantity) || 0,
+        total: Number(it.total_price) || 0,
+      })),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 // Lê o status atual das vendas da sessão direto do cloud (anon puro).
 // O aparelho anon NÃO assina Realtime (App adia sem login), então sem isso a
 // Minha Comanda nunca saberia que o operador cancelou/finalizou — ficava

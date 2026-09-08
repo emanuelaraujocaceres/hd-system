@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { Product, Table, DigitalMenuConfig, CustomerSession, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
-import { ensureAnonSession, submitAnonSale, fetchSessionSalesStatus, requestClosingAnon } from '../../services/cardapioAnonService';
+import { ensureAnonSession, submitAnonSale, fetchSessionSalesStatus, fetchSessionSalesFull, requestClosingAnon } from '../../services/cardapioAnonService';
 import { printRoutedItems } from '../../services/printService';
 import { routeItemsToPrinters } from '../../services/printerRouting';
 
@@ -357,6 +357,41 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         // posse por ele; o UUID fresco da página falhava no v_owned.
         const finalToken = remote.sessionToken || token;
         if (!remote.ok) console.warn('[Cardapio] sessão anon não subiu:', remote.error);
+        // Espelha a comanda COMPARTILHADA da mesa: quem entra agora vê os
+        // pedidos já feitos por outros aparelhos (não começa zerado).
+        try {
+          const full = await fetchSessionSalesFull(finalId, foundTable.storeBranchId);
+          for (const r of full) {
+            const known = storageService.getSalesByBranch(foundTable.storeBranchId, foundTable.organizationId).some((s) => s.id === r.id);
+            if (!known) {
+              storageService.saveSale(
+                {
+                  id: r.id,
+                  code: r.code,
+                  date: r.created_at,
+                  operatorId: 'cardapio_digital',
+                  operatorName: 'Cliente (Cardápio Digital)',
+                  storeBranchId: r.store_branch_id,
+                  organizationId: r.organization_id,
+                  tableId: (r.table_id || foundTable.id) as any,
+                  customerSessionId: (r.customer_session_id || finalId) as any,
+                  items: r.items as any,
+                  subtotal: r.total,
+                  discount: 0,
+                  total: r.total,
+                  payments: [] as any,
+                  status: r.status as any,
+                  orderSource: (r.order_source as any) || 'cardapio_digital',
+                  kitchenStatus: (r.kitchen_status as any) || 'pending',
+                  updatedAt: new Date().toISOString(),
+                } as any,
+                { skipSync: true }
+              );
+            }
+          }
+        } catch {
+          // espelho é best-effort; o poll de 5s completa em seguida
+        }
         if (existingSession && existingSession.id === finalId) {
           setSession(existingSession);
           setLoading(false);
@@ -479,12 +514,40 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
     const interval = setInterval(async () => {
       if (table && session && !isDeliveryMode) {
         try {
-          const remote = await fetchSessionSalesStatus(session.id, table.storeBranchId);
-          if (remote.length > 0) {
+          // Full espelha TUDO: insere vendas de outros aparelhos que ainda não
+          // estão neste espelho local + atualiza status (cancelled some da lista).
+          const full = await fetchSessionSalesFull(session.id, table.storeBranchId);
+          if (full.length > 0) {
+            const locals = storageService.getSalesByBranch(table.storeBranchId, table.organizationId);
             let changed = false;
-            for (const r of remote) {
-              const local = storageService.getSalesByBranch(table.storeBranchId, table.organizationId).find((s) => s.id === r.id);
-              if (local && (local.status !== r.status || (local.kitchenStatus || 'pending') !== (r.kitchen_status || 'pending'))) {
+            for (const r of full) {
+              const local = locals.find((s) => s.id === r.id);
+              if (!local) {
+                storageService.saveSale(
+                  {
+                    id: r.id,
+                    code: r.code,
+                    date: r.created_at,
+                    operatorId: 'cardapio_digital',
+                    operatorName: 'Cliente (Cardápio Digital)',
+                    storeBranchId: r.store_branch_id,
+                    organizationId: r.organization_id,
+                    tableId: (r.table_id || table.id) as any,
+                    customerSessionId: (r.customer_session_id || session.id) as any,
+                    items: r.items as any,
+                    subtotal: r.total,
+                    discount: 0,
+                    total: r.total,
+                    payments: [] as any,
+                    status: r.status as any,
+                    orderSource: (r.order_source as any) || 'cardapio_digital',
+                    kitchenStatus: (r.kitchen_status as any) || 'pending',
+                    updatedAt: new Date().toISOString(),
+                  } as any,
+                  { skipSync: true }
+                );
+                changed = true;
+              } else if (local.status !== r.status || (local.kitchenStatus || 'pending') !== (r.kitchen_status || 'pending')) {
                 storageService.saveSale(
                   { ...local, status: r.status as any, kitchenStatus: (r.kitchen_status as any) || local.kitchenStatus, total: typeof r.total === 'number' ? r.total : local.total, updatedAt: new Date().toISOString() },
                   { skipSync: true }
@@ -492,9 +555,22 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
                 changed = true;
               }
             }
-            if (changed) loadMyOrders();
-            else loadMyOrders();
+            loadMyOrders();
+            void changed;
           } else {
+            // Fallback leve: só status (quando o full vier vazio por rede parcial)
+            const remote = await fetchSessionSalesStatus(session.id, table.storeBranchId);
+            if (remote.length > 0) {
+              for (const r of remote) {
+                const local = storageService.getSalesByBranch(table.storeBranchId, table.organizationId).find((s) => s.id === r.id);
+                if (local && (local.status !== r.status || (local.kitchenStatus || 'pending') !== (r.kitchen_status || 'pending'))) {
+                  storageService.saveSale(
+                    { ...local, status: r.status as any, kitchenStatus: (r.kitchen_status as any) || local.kitchenStatus, total: typeof r.total === 'number' ? r.total : local.total, updatedAt: new Date().toISOString() },
+                    { skipSync: true }
+                  );
+                }
+              }
+            }
             loadMyOrders();
           }
         } catch {
