@@ -476,6 +476,9 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   const [myOrders, setMyOrders] = useState<Sale[]>([]);
   const [showMyComanda, setShowMyComanda] = useState(false);
   const [closingComanda, setClosingComanda] = useState(false);
+  // Erro visível do fechamento (antes era só console.warn — no celular sem
+  // console o cliente não sabia por que o operador não recebia).
+  const [closingError, setClosingError] = useState<string | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<string>('');
   const [closingCashGiven, setClosingCashGiven] = useState<number>(0);
@@ -698,6 +701,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   const handleRequestCloseComanda = async (paymentMethod: string) => {
     if (!table || myOrders.length === 0 || !paymentMethod) return;
     setClosingComanda(true);
+    setClosingError(null);
     try {
       // Cliente SOLICITA o fechamento informando a FORMA DE PAGAMENTO desejada.
       // Operador fecha e cobra na página de Comandas. kitchenStatus='closing_request'
@@ -742,13 +746,35 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       const tokenForRpc = session?.sessionToken || sessionId;
       const closeRes = await requestClosingAnon(saleIds, tokenForRpc, paymentMethod, table.storeBranchId);
       if (!closeRes.ok) {
-        // Falha de rede/RPC/posse: o pedido não chega ao operador, mas os itens
-        // já estão no cloud — o operador ainda fecha manualmente na ComandaView.
-        console.warn('[Cardapio] Falha ao enviar pedido de fechamento:', closeRes.error);
+        // Lote falhou (ex.: uma venda stale sem posse contamina o lote todo) —
+        // tenta venda a venda para salvar as válidas em vez de perder tudo.
+        console.warn('[Cardapio] fechamento em lote falhou, tentando por venda:', closeRes.error);
+        const failed: string[] = [];
+        for (const sid of saleIds) {
+          const one = await requestClosingAnon([sid], tokenForRpc, paymentMethod, table.storeBranchId);
+          if (!one.ok) failed.push(sid);
+        }
+        if (failed.length === saleIds.length) {
+          // Nenhuma passou: reverte o espelho local e MOSTRA o erro na tela
+          // (antes era só console — no celular o cliente não sabia de nada).
+          for (const sale of targetSales) {
+            const current = storageService.getSalesByBranch(table.storeBranchId, table.organizationId).find((s) => s.id === sale.id);
+            if (current) {
+              storageService.saveSale({ ...current, kitchenStatus: sale.kitchenStatus, payments: sale.payments as any, updatedAt: new Date().toISOString() }, { skipSync: true });
+            }
+          }
+          loadMyOrders();
+          setClosingError(closeRes.error || 'Não foi possível solicitar o fechamento. Feche e abra a comanda e tente de novo.');
+          return;
+        }
+        // Parcial: ao menos uma chegou ao operador — segue com aviso visível.
+        if (failed.length > 0) {
+          setClosingError(`${saleIds.length - failed.length}/${saleIds.length} enviadas. Chame o operador para o restante.`);
+        }
       }
 
       // NÃO fecha a sessão — operador faz isso ao finalizar
-      // Cliente vê mensagem de aguardando
+      // Cliente vê mensagem de aguardando (falha total já retornou acima)
       setShowPaymentModal(false);
       setSelectedPayment('');
       setClosingNeedsChange(false);
@@ -756,7 +782,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       setShowMyComanda(false);
       setOrderSuccess(true); // Mostra tela de sucesso
     } catch (err: any) {
-      // silent fail
+      setClosingError(err?.message || 'Não foi possível solicitar o fechamento. Tente de novo.');
     } finally {
       setClosingComanda(false);
     }
@@ -1243,9 +1269,14 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
                 <p className="text-[11px] text-slate-500">Deixe igual ao total se não precisar de troco.</p>
               </div>
             )}
+            {closingError && (
+              <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2">
+                {closingError}
+              </p>
+            )}
             <div className="flex gap-2 pt-1">
               <button
-                onClick={() => setShowPaymentModal(false)}
+                onClick={() => { setClosingError(null); setShowPaymentModal(false); }}
                 disabled={closingComanda}
                 className="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-[#27272a] text-slate-600 dark:text-slate-300 text-xs font-bold"
               >

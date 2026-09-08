@@ -79,17 +79,32 @@ export async function requestClosingAnon(
   paymentMethod: string,
   branchId: string
 ): Promise<{ ok: boolean; error?: string }> {
-  const r = await postRest(
-    'rpc/solicitar_fechamento_comanda',
-    {
-      p_sale_ids: saleIds,
-      p_session_token: sessionToken,
-      p_payment_method: paymentMethod,
-    },
-    branchId
-  );
-  if (!r.ok) return { ok: false, error: r.error };
-  return { ok: true };
+  // A RPC retorna HTTP 200 com {success:false} quando a posse falha (venda de
+  // outra sessão/token). postRest só checa HTTP — sem este parse, o app mostrava
+  // sucesso e o operador nunca recebia (bug do fechamento pelo celular).
+  try {
+    const res = await fetch(`${ANON_URL}/rest/v1/rpc/solicitar_fechamento_comanda`, {
+      method: 'POST',
+      headers: anonHeaders(branchId),
+      body: JSON.stringify({
+        p_sale_ids: saleIds,
+        p_session_token: sessionToken,
+        p_payment_method: paymentMethod,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 300)}` };
+    }
+    const body = await res.json().catch(() => null);
+    const data = Array.isArray(body) ? body[0] : body;
+    if (data && typeof data === 'object' && (data as any).success === false) {
+      return { ok: false, error: (data as any).message || 'Fechamento recusado (posse).' };
+    }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'fetch anon falhou' };
+  }
 }
 
 // A mesa tem UMA sessão ativa compartilhada (constraint
