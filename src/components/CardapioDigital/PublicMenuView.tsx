@@ -16,8 +16,7 @@ import {
 } from 'lucide-react';
 import { Product, Table, DigitalMenuConfig, CustomerSession, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
-import { supabase } from '../../lib/supabase';
-import { ensureAnonSession, submitAnonSale, fetchSessionSalesStatus } from '../../services/cardapioAnonService';
+import { ensureAnonSession, submitAnonSale, fetchSessionSalesStatus, requestClosingAnon } from '../../services/cardapioAnonService';
 import { printRoutedItems } from '../../services/printService';
 import { routeItemsToPrinters } from '../../services/printerRouting';
 
@@ -354,6 +353,9 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         const token = existingSession?.sessionToken || sessionId;
         const remote = await ensureAnonSession(foundTable, deviceFingerprint, token, candidateId);
         const finalId = remote.sessionId || candidateId;
+        // Token REMOTO (sessão compartilhada da mesa) — o fechamento valida
+        // posse por ele; o UUID fresco da página falhava no v_owned.
+        const finalToken = remote.sessionToken || token;
         if (!remote.ok) console.warn('[Cardapio] sessão anon não subiu:', remote.error);
         if (existingSession && existingSession.id === finalId) {
           setSession(existingSession);
@@ -367,7 +369,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         const adopted: CustomerSession = {
           id: finalId,
           tableId: foundTable.id,
-          sessionToken: token,
+          sessionToken: finalToken,
           status: 'active',
           openedAt: existingSession?.openedAt || new Date().toISOString(),
           deviceFingerprint,
@@ -658,21 +660,15 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
       // P0-3: RPC SECURITY DEFINER com EXECUTE anon (exceção documentada 0f/0e,
       // idem process_sale_transaction) — única via de escrita do pedido de
       // fechamento; evita policy de UPDATE permissiva em sales (regra 0b).
-      // BUGFIX 2026-09-08: token deve ser o da sessão reaproveitada (session.sessionToken),
-      // não o UUID fresco do useState da página (sessionId). Antes, reuso de sessão
-      // enviava token divergente -> RPC falhava em v_owned <> length.
+      // Via fetch anon PURO (sem GoTrueClient/JWT do operador) e com o token
+      // REMOTO da sessão compartilhada — o supabase-js com JWT falhava e o
+      // token fresco da página falhava no v_owned.
       const tokenForRpc = session?.sessionToken || sessionId;
-      try {
-        await supabase.rpc('solicitar_fechamento_comanda', {
-          p_sale_ids: saleIds,
-          p_session_token: tokenForRpc,
-          p_payment_method: paymentMethod,
-        });
-      } catch (rpcErr) {
-        // Falha de rede/RPC: o pedido não chega ao operador, mas o pedido em si
-        // (itens) já está no cloud via process_sale_transaction — o operador
-        // ainda consegue fechar manualmente na ComandaView.
-        console.warn('[Cardapio] Falha ao enviar pedido de fechamento:', rpcErr);
+      const closeRes = await requestClosingAnon(saleIds, tokenForRpc, paymentMethod, table.storeBranchId);
+      if (!closeRes.ok) {
+        // Falha de rede/RPC/posse: o pedido não chega ao operador, mas os itens
+        // já estão no cloud — o operador ainda fecha manualmente na ComandaView.
+        console.warn('[Cardapio] Falha ao enviar pedido de fechamento:', closeRes.error);
       }
 
       // NÃO fecha a sessão — operador faz isso ao finalizar

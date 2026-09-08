@@ -65,7 +65,31 @@ export interface AnonSessionResult {
   ok: boolean;
   error?: string;
   sessionId?: string;
+  sessionToken?: string;
   reused?: boolean;
+}
+
+// Pedido de fechamento ("Solicitar fechamento") via anon puro. A RPC valida
+// posse pelo session_token da sessão ATIVA — por isso o token precisa ser o
+// REMOTO (da sessão compartilhada da mesa), não o UUID fresco da página.
+// Retorna ok:false com a mensagem da RPC quando a posse falha.
+export async function requestClosingAnon(
+  saleIds: string[],
+  sessionToken: string,
+  paymentMethod: string,
+  branchId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const r = await postRest(
+    'rpc/solicitar_fechamento_comanda',
+    {
+      p_sale_ids: saleIds,
+      p_session_token: sessionToken,
+      p_payment_method: paymentMethod,
+    },
+    branchId
+  );
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true };
 }
 
 // A mesa tem UMA sessão ativa compartilhada (constraint
@@ -84,7 +108,7 @@ export async function ensureAnonSession(
     if (res.ok) {
       const rows = await res.json().catch(() => []);
       if (Array.isArray(rows) && rows.length > 0 && rows[0]?.id) {
-        return { ok: true, sessionId: rows[0].id, reused: true };
+        return { ok: true, sessionId: rows[0].id, sessionToken: rows[0].session_token, reused: true };
       }
     }
   } catch {
@@ -111,12 +135,12 @@ export async function ensureAnonSession(
     // Busca de novo e adota a vencedora em vez de falhar.
     if (r.error && r.error.includes('23505')) {
       try {
-        const url = `${ANON_URL}/rest/v1/customer_sessions?table_id=eq.${table.id}&status=eq.active&select=id&limit=1`;
+        const url = `${ANON_URL}/rest/v1/customer_sessions?table_id=eq.${table.id}&status=eq.active&select=id,session_token&limit=1`;
         const res = await fetch(url, { headers: anonHeaders(table.storeBranchId) });
         if (res.ok) {
           const rows = await res.json().catch(() => []);
           if (Array.isArray(rows) && rows.length > 0 && rows[0]?.id) {
-            return { ok: true, sessionId: rows[0].id, reused: true };
+            return { ok: true, sessionId: rows[0].id, sessionToken: (rows[0] as any).session_token, reused: true };
           }
         }
       } catch {
