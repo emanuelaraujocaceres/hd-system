@@ -66,6 +66,10 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
   const [novaComandaOpen, setNovaComandaOpen] = useState(false);
+  // Nova Comanda também CRIA a mesa (nome livre, sem número) — igual ao
+  // "Adicionar Mesa" de Configurações > Cardápio/Mesas, e já abre a comanda.
+  const [novaMesaName, setNovaMesaName] = useState('');
+  const [creatingMesa, setCreatingMesa] = useState(false);
 
   // ── Detalhe (PDV restrito do operador) ──
   const [productSearch, setProductSearch] = useState('');
@@ -248,6 +252,51 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     } catch (e: any) {
       posAudio.error();
       addToast('error', friendlyErrorMessage(e, 'Não foi possível abrir a comanda.'));
+    }
+  };
+
+  // Cria a mesa (nome livre, número opcional = sem número) e já abre a comanda.
+  // Igual ao "Adicionar Mesa" de Configurações: saveTable gera o qrToken e
+  // sincroniza; abrirComanda cria/reativa a sessão. saveTable deduplica por
+  // nome — por isso busca a mesa efetiva após salvar antes de abrir.
+  const handleCreateMesaAndOpen = () => {
+    const name = novaMesaName.trim();
+    if (!name) {
+      addToast('warning', 'Dê um nome para a mesa (ex.: Mesa 7, Balcão).');
+      return;
+    }
+    setCreatingMesa(true);
+    try {
+      const now = new Date().toISOString();
+      storageService.saveTable({
+        id: crypto.randomUUID(),
+        name,
+        number: undefined,
+        qrToken: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
+        status: 'active',
+        storeBranchId: user.storeBranchId,
+        organizationId: user.organizationId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const created = storageService.getTables().find(
+        (t) => (t.name || '').trim().toLowerCase() === name.toLowerCase()
+      );
+      if (!created) throw new Error('Mesa não encontrada após salvar.');
+      const { session, attached } = abrirComanda(created);
+      if (attached > 0) {
+        addToast('info', `${attached} pedido(s) pendente(s) anexado(s) à comanda de ${created.name}.`);
+      }
+      posAudio.chime();
+      addToast('success', `Mesa "${created.name}" criada e comanda aberta!`);
+      setNovaMesaName('');
+      setNovaComandaOpen(false);
+      setDetailSessionId(session.id);
+    } catch (e: any) {
+      posAudio.error();
+      addToast('error', friendlyErrorMessage(e, 'Não foi possível criar a mesa.'));
+    } finally {
+      setCreatingMesa(false);
     }
   };
 
@@ -658,12 +707,36 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
             </div>
             <div className="overflow-y-auto max-h-[60vh] p-3 space-y-2">
               <p className="text-xs text-slate-500 dark:text-[#71717a] px-1">
-                Selecione a mesa livre para abrir a comanda:
+                Selecione a mesa livre para abrir a comanda — ou crie uma nova abaixo (só o nome, sem número):
               </p>
+              {/* Criar mesa + abrir comanda (igual a Configurações > Cardápio/Mesas) */}
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] space-y-2">
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                  Nova mesa (nome livre — ex.: Mesa 7, Balcão, Varanda)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={novaMesaName}
+                    onChange={(e) => setNovaMesaName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateMesaAndOpen(); } }}
+                    placeholder="Ex.: Mesa 7"
+                    className="flex-1 min-w-0 px-3 py-2.5 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateMesaAndOpen}
+                    disabled={creatingMesa || !novaMesaName.trim()}
+                    className="shrink-0 px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 transition-colors"
+                  >
+                    {creatingMesa ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    Criar e abrir
+                  </button>
+                </div>
+              </div>
               {groupsToOpen.length === 0 ? (
-                <div className="text-center py-8 space-y-2">
-                  <p className="text-sm text-slate-500 dark:text-[#71717a]">Nenhuma mesa livre disponível.</p>
-                  <p className="text-xs text-slate-400">Cadastre mesas em Configurações &gt; Cardápio/Mesas.</p>
+                <div className="text-center py-4 space-y-1">
+                  <p className="text-sm text-slate-500 dark:text-[#71717a]">Nenhuma mesa livre — crie uma acima.</p>
                 </div>
               ) : (
                 groupsToOpen.map((group) => (
