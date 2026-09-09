@@ -14,6 +14,7 @@ import { Sale, Table, CustomerSession, Customer, UserProfile, Product, PaymentDe
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { useToast } from '../shared/Toast';
+import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { PaymentModal } from '../PDV/PaymentModal';
 import { buscarItens, getTotalComanda, adicionarItem, removerItem, fecharComanda, abrirComanda, ItemComanda } from '../../services/comandaService';
@@ -70,6 +71,14 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
   // "Adicionar Mesa" de Configurações > Cardápio/Mesas, e já abre a comanda.
   const [novaMesaName, setNovaMesaName] = useState('');
   const [creatingMesa, setCreatingMesa] = useState(false);
+  // Encerrar comanda VAZIA (sem itens) + excluir mesa direto por aqui.
+  // Motivo: o "Finalizar Comanda / Pagamento" exige ≥1 item e o deleteTable
+  // bloqueia com MESA_OCUPADA enquanto a sessão está active — sem este caminho
+  // a comanda vazia ficava presa para sempre (nem fecha, nem exclui).
+  const [confirmCloseEmpty, setConfirmCloseEmpty] = useState(false);
+  const [closingEmpty, setClosingEmpty] = useState(false);
+  const [confirmDeleteMesa, setConfirmDeleteMesa] = useState<Table | null>(null);
+  const [deletingMesa, setDeletingMesa] = useState(false);
 
   // ── Detalhe (PDV restrito do operador) ──
   const [productSearch, setProductSearch] = useState('');
@@ -300,6 +309,52 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     }
   };
 
+  // Encerra a comanda mesmo SEM itens (pagamento vazio): a RPC fechar_comanda
+  // só fecha a sessão (total 0, sem mexer em estoque/caixa — nada foi baixado).
+  // Sem isso, comanda vazia nunca liberava a mesa nem permitia excluir.
+  const handleCloseEmptyComanda = async () => {
+    if (!detailSession) return;
+    setClosingEmpty(true);
+    try {
+      const res = await fecharComanda(detailSession.id, [], user.name);
+      if (res.success) {
+        posAudio.chime();
+        addToast('success', `Comanda ${detailTable ? detailTable.name : ''} encerrada (vazia). Mesa livre!`);
+        setConfirmCloseEmpty(false);
+        goBackToList();
+      } else {
+        posAudio.error();
+        addToast('error', res.message || 'Não foi possível encerrar a comanda.');
+      }
+    } catch (e: any) {
+      posAudio.error();
+      addToast('error', friendlyErrorMessage(e, 'Não foi possível encerrar a comanda.'));
+    } finally {
+      setClosingEmpty(false);
+    }
+  };
+
+  // Exclui a mesa direto por aqui (mesmas regras da aba Cardápio/Mesas:
+  // bloqueia com MESA_OCUPADA se tem sessão active ou pedido pending).
+  // A mesa some daqui E de Configurações (mesma entidade `tables`).
+  const handleDeleteMesa = async () => {
+    if (!confirmDeleteMesa) return;
+    setDeletingMesa(true);
+    try {
+      await storageService.deleteTable(confirmDeleteMesa.id);
+      posAudio.chime();
+      addToast('success', `Mesa "${confirmDeleteMesa.name}" excluída.`);
+      setConfirmDeleteMesa(null);
+      goBackToList();
+    } catch (e: any) {
+      posAudio.error();
+      const msg = e?.message || '';
+      addToast('error', /^(MESA_OCUPADA|Permissão negada)/.test(msg) ? msg : friendlyErrorMessage(e, 'Não foi possível excluir a mesa.'));
+    } finally {
+      setDeletingMesa(false);
+    }
+  };
+
   // Produtos filtrados pela busca (ativa na tela de detalhe)
   const filteredProducts = useMemo(() => {
     const term = productSearch.trim().toLowerCase();
@@ -423,6 +478,15 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
               <p className="text-lg font-bold text-slate-900 dark:text-white">R$ {detailTotal.toFixed(2)}</p>
               <p className="text-[10px] text-slate-400">total da mesa</p>
             </div>
+            {detailTable && (
+              <button
+                onClick={() => setConfirmDeleteMesa(detailTable)}
+                className="p-2 rounded-xl text-rose-500 hover:bg-rose-500/10 shrink-0"
+                title="Excluir mesa (igual à lixeira de Configurações > Cardápio/Mesas)"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -533,7 +597,7 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
           </div>
           {detailItems.length === 0 && (
             <p className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mb-2">
-              <AlertCircle className="w-3.5 h-3.5" /> A comanda precisa de ao menos 1 item para finalizar.
+              <AlertCircle className="w-3.5 h-3.5" /> Comanda vazia — finalize com pagamento acima de 1 item, ou encerre sem movimento abaixo.
             </p>
           )}
           <button
@@ -544,6 +608,16 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
             <CreditCard className="w-5 h-5" />
             Finalizar Comanda / Pagamento
           </button>
+          {detailItems.length === 0 && (
+            <button
+              onClick={() => setConfirmCloseEmpty(true)}
+              disabled={closingEmpty}
+              className="w-full mt-2 py-2.5 rounded-xl border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 disabled:opacity-50 font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+            >
+              {closingEmpty ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Encerrar comanda vazia (libera a mesa)
+            </button>
+          )}
         </div>
 
         {/* Payment Modal (modo comanda) — pré-seleciona forma do cliente (closing_request) */}
@@ -580,6 +654,28 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
         {adding && (
           <div className="fixed inset-0 z-40 bg-black/10 pointer-events-none" />
         )}
+
+        {/* Encerrar comanda vazia — fecha a sessão sem movimento (total 0) */}
+        <ConfirmDialog
+          isOpen={confirmCloseEmpty}
+          title="Encerrar comanda vazia?"
+          message="A sessão será fechada sem nenhum item (total R$ 0,00) e a mesa ficará livre. Use quando a comanda foi aberta por engano."
+          itemName={detailTable ? detailTable.name : undefined}
+          confirmLabel={closingEmpty ? 'Encerrando...' : 'Encerrar'}
+          onConfirm={() => { if (!closingEmpty) handleCloseEmptyComanda(); }}
+          onCancel={() => { if (!closingEmpty) setConfirmCloseEmpty(false); }}
+        />
+
+        {/* Excluir mesa — mesmas regras da lixeira de Configurações (bloqueia se ocupada) */}
+        <ConfirmDialog
+          isOpen={confirmDeleteMesa !== null}
+          title="Excluir mesa?"
+          message="A mesa e seu QR Code serão removidos daqui E de Configurações > Cardápio/Mesas. Só é possível com a comanda fechada e sem pedidos pendentes."
+          itemName={confirmDeleteMesa?.name}
+          confirmLabel={deletingMesa ? 'Excluindo...' : 'Excluir'}
+          onConfirm={() => { if (!deletingMesa) handleDeleteMesa(); }}
+          onCancel={() => { if (!deletingMesa) setConfirmDeleteMesa(null); }}
+        />
       </div>
     );
   }
