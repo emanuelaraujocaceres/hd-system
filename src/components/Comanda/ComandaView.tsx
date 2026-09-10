@@ -264,10 +264,10 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     }
   };
 
-  // Cria a mesa (nome livre, número opcional = sem número) e já abre a comanda.
-  // Igual ao "Adicionar Mesa" de Configurações: saveTable gera o qrToken e
-  // sincroniza; abrirComanda cria/reativa a sessão. saveTable deduplica por
-  // nome — por isso busca a mesa efetiva após salvar antes de abrir.
+  // Cria a mesa (nome + número opcional) e já abre a comanda.
+  // Lógica IDÊNTICA ao "Adicionar Mesa" de Configurações > Cardápio/Mesas,
+  // reutilizando saveTable (gera qrToken, dedup por nome, sync cloud) e
+  // depois chama abrirComanda para criar/reativar a sessão e navegar.
   const handleCreateMesaAndOpen = () => {
     const name = novaMesaName.trim();
     if (!name) {
@@ -277,21 +277,27 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     setCreatingMesa(true);
     try {
       const now = new Date().toISOString();
-      storageService.saveTable({
+      // MESMA LÓGICA do handleAddTable de SettingsView.tsx
+      const newTable: Table = {
         id: crypto.randomUUID(),
-        name,
-        number: undefined,
+        name: name,
+        number: undefined, // número opcional (sem número, igual a Settings)
         qrToken: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
         status: 'active',
         storeBranchId: user.storeBranchId,
         organizationId: user.organizationId,
-        createdAt: now,
-        updatedAt: now,
-      });
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      storageService.saveTable(newTable); // dedup por nome, gera qrToken, sync cloud
+
+      // Busca a mesa efetiva após saveTable (dedup por nome pode ter reaproveitado)
       const created = storageService.getTables().find(
         (t) => (t.name || '').trim().toLowerCase() === name.toLowerCase()
       );
       if (!created) throw new Error('Mesa não encontrada após salvar.');
+
+      // Abre/reativa a sessão da mesa (mesma lógica do operador)
       const { session, attached } = abrirComanda(created);
       if (attached > 0) {
         addToast('info', `${attached} pedido(s) pendente(s) anexado(s) à comanda de ${created.name}.`);
