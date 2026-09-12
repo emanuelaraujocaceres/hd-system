@@ -1218,7 +1218,19 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
               Receber — quando o cliente pagar, o valor soma no faturamento e no caixa.
             </p>
 
-            {/* Cliente (quando aberto pelo topo, escolhe aqui) */}
+            {/* Cliente: travado quando aberto pela ficha; seletor só no botão do topo */}
+            {debtModalCustomerId ? (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                  Cliente
+                </label>
+                <div className="w-full px-3 py-2.5 bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white">
+                  {customerDebts.find((d) => d.customer.id === debtModalCustomerId)?.customer.name
+                    || customers.find((c) => c.id === debtModalCustomerId)?.name
+                    || ''}
+                </div>
+              </div>
+            ) : (
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
                 Cliente
@@ -1237,6 +1249,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
                 <option value="__no_customer__">🧾 Cliente Não Identificado</option>
               </select>
             </div>
+            )}
 
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
