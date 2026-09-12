@@ -15,6 +15,7 @@ import {
   Truck,
   ChevronDown,
   ChevronUp,
+  Search,
 } from 'lucide-react';
 import { Product, Table, DigitalMenuConfig, CustomerSession, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -70,6 +71,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showCart, setShowCart] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [menuSearch, setMenuSearch] = useState('');
   // Categorias em até 2 linhas (sem barra de rolagem gigante no celular).
   // O "ver mais" só aparece quando há conteúdo cortado.
   const [catsExpanded, setCatsExpanded] = useState(false);
@@ -444,16 +446,32 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
 
   const filteredProducts = useMemo(() => {
     const base = selectedCategory === 'all' ? products : products.filter((p) => p.category === selectedCategory);
-    return [...base].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-  }, [products, selectedCategory]);
+    const q = menuSearch.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const searched = q
+      ? base.filter((p) => (p.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(q))
+      : base;
+    return [...searched].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  }, [products, selectedCategory, menuSearch]);
 
-  // Detecta se as 2 linhas cortam conteúdo (mostra "ver mais" só se precisar).
-  // Re-mede em resize, observer e após fontes (timing/layout assíncrono no celular).
+  // Detecta se as 4 linhas cortam conteúdo (mostra "ver mais" só se precisar).
+  // O limite é medido na altura real da pílula (4 linhas + gaps) — robusto a
+  // fonte/zoom do celular. Re-mede em resize, observer e após fontes.
   useEffect(() => {
     const el = catsRef.current;
     if (!el) return;
     let raf = 0;
-    const check = () => setCatsOverflow(el.scrollHeight > el.clientHeight + 4);
+    const applyCap = () => {
+      if (catsExpanded) {
+        el.style.maxHeight = '';
+        return;
+      }
+      const rowH = (el.firstElementChild as HTMLElement | null)?.offsetHeight || 30;
+      el.style.maxHeight = `${4 * rowH + 3 * 8}px`;
+    };
+    const check = () => {
+      applyCap();
+      setCatsOverflow(el.scrollHeight > el.clientHeight + 4);
+    };
     const schedule = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(check);
@@ -1042,11 +1060,31 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         </div>
       </div>
 
-      {/* Category Pills — até 2 linhas, sem rolagem lateral */}
+      {/* Category Pills — até 4 linhas, sem rolagem lateral */}
       <div className="px-4 pt-3 pb-2">
+        <div className="relative mb-2">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={menuSearch}
+            onChange={(e) => setMenuSearch(e.target.value)}
+            placeholder="Buscar produto pelo nome..."
+            className="w-full pl-9 pr-8 py-2 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          {menuSearch && (
+            <button
+              type="button"
+              onClick={() => setMenuSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              title="Limpar busca"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
         <div
           ref={catsRef}
-          className={`flex flex-wrap gap-2 overflow-hidden ${catsExpanded ? '' : 'max-h-[70px]'}`}
+          className="flex flex-wrap gap-2 overflow-hidden"
         >
           {categories.map((cat) => (
             <button
