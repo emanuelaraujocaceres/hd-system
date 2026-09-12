@@ -41,6 +41,42 @@ import { isSaleInRange, isAccountInDateRange } from '../../utils/dateFilters';
 
 import { ReportModal } from './ReportModal';
 
+export interface FinanceAccountFilter {
+  searchTerm?: string;
+  filterType?: 'all' | 'payable' | 'receivable';
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+// Lista da sub-tab Contas: exibe a pagar + a receber AVULSAS (ex.: Klebinho).
+// Fiado/fiadio_payment NUNCA aparecem (gerenciados no Fiados). Antes, o gate
+// `type !== 'payable'` escondia também as avulsas a receber — que só
+// existiam no KPI. Puro/testável.
+export const filterFinanceAccounts = (
+  accounts: FinancialAccount[],
+  opts: FinanceAccountFilter = {},
+): FinancialAccount[] => {
+  const { searchTerm = '', filterType = 'all', dateFrom = '', dateTo = '' } = opts;
+  return (accounts || []).filter((a) => {
+    // Registros de fiado NÃO aparecem — gerenciados na página Fiados
+    if (a.category === 'fiado' || a.category === 'fiado_payment') return false;
+    if (filterType !== 'all' && a.type !== filterType) return false;
+    // Filtro de data/hora — por data de vencimento da conta/parcela/ocorrência
+    if (!isAccountInDateRange(a, dateFrom, dateTo)) return false;
+    // Campo de pesquisa
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      return (
+        (a.title || '').toLowerCase().includes(term) ||
+        (a.recipientOrPayer || '').toLowerCase().includes(term) ||
+        (a.id || '').toLowerCase().includes(term) ||
+        (a.notes || '').toLowerCase().includes(term)
+      );
+    }
+    return true;
+  });
+};
+
 interface FinanceViewProps {
   financialAccounts: FinancialAccount[];
   sales: Sale[];
@@ -494,25 +530,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     return labels[method] || method;
   };
 
-  const filteredAccounts = financialAccounts.filter((a) => {
-    // Registros de fiado NÃO aparecem — gerenciados na página Fiados
-    if (a.category === 'fiado' || a.category === 'fiado_payment') return false;
-    // Agora só mostra contas a pagar
-    if (a.type !== 'payable') return false;
-    // Filtro de data/hora — por data de vencimento da conta/parcela/ocorrência
-    if (!isAccountInDateRange(a, dateFrom, dateTo)) return false;
-    // Campo de pesquisa
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
-      return (
-        (a.title || '').toLowerCase().includes(term) ||
-        (a.recipientOrPayer || '').toLowerCase().includes(term) ||
-        (a.id || '').toLowerCase().includes(term) ||
-        (a.notes || '').toLowerCase().includes(term)
-      );
-    }
-    return true;
-  });
+  const filteredAccounts = filterFinanceAccounts(financialAccounts, { searchTerm, filterType, dateFrom, dateTo });
 
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
@@ -683,11 +701,31 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         )}
       </div>
 
-      {/* SUB-TAB 1: CONTAS A PAGAR */}
+      {/* SUB-TAB 1: CONTAS A PAGAR / RECEBER (fiado fica no Fiados) */}
       {activeSubTab === 'contas' && (
         <div className="space-y-4">
-          {/* Campo de pesquisa */}
-          <div className="flex items-center gap-2">
+          {/* Campo de pesquisa + filtro por tipo */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl shrink-0">
+              {([
+                { key: 'all', label: 'Todas' },
+                { key: 'payable', label: 'A Pagar' },
+                { key: 'receivable', label: 'A Receber' },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setFilterType(opt.key)}
+                  className={`px-3 py-2 rounded-lg font-bold text-[11px] transition-colors min-h-[44px] ${
+                    filterType === opt.key
+                      ? 'bg-white dark:bg-slate-900 shadow text-indigo-600 dark:text-indigo-400'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
             <div className="relative flex-1 max-w-sm">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -736,6 +774,15 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <h4 className="font-bold text-sm text-slate-900 dark:text-white truncate">{acc.title}</h4>
+                            {acc.type === 'receivable' ? (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-[9px]">
+                                A Receber
+                              </span>
+                            ) : (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-[9px]">
+                                A Pagar
+                              </span>
+                            )}
                             {acc.isRecurring && (
                               <span className="shrink-0 px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 font-bold text-[9px]">
                                 Recorrente
@@ -759,7 +806,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="text-lg font-extrabold text-rose-600 dark:text-rose-400">
+                          <p className={`text-lg font-extrabold ${acc.type === 'receivable' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             R$ {acc.amount.toFixed(2)}
                           </p>
                           {acc.status === 'paid' ? (
