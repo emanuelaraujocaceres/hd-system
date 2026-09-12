@@ -13,6 +13,8 @@ import {
   X,
   Receipt,
   Truck,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Product, Table, DigitalMenuConfig, CustomerSession, Sale } from '../../types';
 import { storageService } from '../../services/storageService';
@@ -68,6 +70,11 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showCart, setShowCart] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  // Categorias em até 2 linhas (sem barra de rolagem gigante no celular).
+  // O "ver mais" só aparece quando há conteúdo cortado.
+  const [catsExpanded, setCatsExpanded] = useState(false);
+  const [catsOverflow, setCatsOverflow] = useState(false);
+  const catsRef = useRef<HTMLDivElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
@@ -436,6 +443,16 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
     const base = selectedCategory === 'all' ? products : products.filter((p) => p.category === selectedCategory);
     return [...base].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   }, [products, selectedCategory]);
+
+  // Detecta se as 2 linhas cortam conteúdo (mostra "ver mais" só se precisar)
+  useEffect(() => {
+    const el = catsRef.current;
+    if (!el) return;
+    const check = () => setCatsOverflow(el.scrollHeight > el.clientHeight + 4);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, [categories, catsExpanded]);
 
   const cartTotal = useMemo(() => {
     return cart.reduce((sum, item) => sum + getEffectivePrice(item.product) * item.quantity, 0);
@@ -1002,9 +1019,12 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         </div>
       </div>
 
-      {/* Category Pills */}
-      <div className="px-4 py-3 overflow-x-auto">
-        <div className="flex gap-2">
+      {/* Category Pills — até 2 linhas, sem rolagem lateral */}
+      <div className="px-4 pt-3 pb-2">
+        <div
+          ref={catsRef}
+          className={`flex flex-wrap gap-2 overflow-hidden ${catsExpanded ? '' : 'max-h-[70px]'}`}
+        >
           {categories.map((cat) => (
             <button
               key={cat}
@@ -1019,6 +1039,18 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
             </button>
           ))}
         </div>
+        {(catsExpanded || catsOverflow) && (
+          <button
+            onClick={() => setCatsExpanded(!catsExpanded)}
+            className="mt-1.5 w-full py-1 rounded-lg text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center justify-center gap-1"
+          >
+            {catsExpanded ? (
+              <>Ver menos <ChevronUp className="w-3.5 h-3.5" /></>
+            ) : (
+              <>Ver mais categorias <ChevronDown className="w-3.5 h-3.5" /></>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Products Grid */}
