@@ -126,14 +126,16 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
           }
           const branchOrg = branchData.organization_id;
 
-          // Buscar produtos da filial (anon)
+          // Buscar produtos da filial (anon). deleted_at=is.null: soft-delete
+          // (tombstone) não desliga is_active/show_on_cardapio, então sem este
+          // filtro o produto excluído continuava no cardápio (ex.: 09/2026).
           const productsRes = await fetch(
-            `${baseUrl}/rest/v1/products?store_branch_id=eq.${branchData.id}&is_active=eq.true&show_on_cardapio=eq.true&stock_quantity=gt.0&select=*`,
+            `${baseUrl}/rest/v1/products?store_branch_id=eq.${branchData.id}&is_active=eq.true&show_on_cardapio=eq.true&stock_quantity=gt.0&deleted_at=is.null&select=*`,
             { headers: { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}`, 'Content-Type': 'application/json', 'x-branch-id': branchData.id } }
           );
           if (productsRes.ok) {
             const cloudProducts = await productsRes.json();
-            setProducts((cloudProducts || []).map((p: any) => ({
+            setProducts((cloudProducts || []).filter((p: any) => !p.deleted_at).map((p: any) => ({
               id: p.id,
               name: p.name,
               barcode: p.barcode || '',
@@ -266,9 +268,10 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         };
         setTable(foundTable);
 
-        // Fetch products for this branch (with stock > 0)
+        // Fetch products for this branch (with stock > 0). deleted_at=is.null:
+        // ver comentário do fetch de delivery acima (tombstone sem filtro = fantasma).
         const productsRes = await fetch(
-          `${baseUrl}/rest/v1/products?store_branch_id=eq.${foundTable.storeBranchId}&is_active=eq.true&show_on_cardapio=eq.true&stock_quantity=gt.0&select=*`,
+          `${baseUrl}/rest/v1/products?store_branch_id=eq.${foundTable.storeBranchId}&is_active=eq.true&show_on_cardapio=eq.true&stock_quantity=gt.0&deleted_at=is.null&select=*`,
           {
             headers: {
               'apikey': anonKey,
@@ -281,8 +284,8 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
 
         if (productsRes.ok) {
           const products = await productsRes.json();
-          // Map snake_case to camelCase
-          setProducts((products || []).map((p: any) => ({
+          // Map snake_case to camelCase (ignora tombstones por segurança)
+          setProducts((products || []).filter((p: any) => !p.deleted_at).map((p: any) => ({
             id: p.id,
             name: p.name,
             barcode: p.barcode || '',
@@ -444,14 +447,34 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
     return [...base].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   }, [products, selectedCategory]);
 
-  // Detecta se as 2 linhas cortam conteúdo (mostra "ver mais" só se precisar)
+  // Detecta se as 2 linhas cortam conteúdo (mostra "ver mais" só se precisar).
+  // Re-mede em resize, observer e após fontes (timing/layout assíncrono no celular).
   useEffect(() => {
     const el = catsRef.current;
     if (!el) return;
+    let raf = 0;
     const check = () => setCatsOverflow(el.scrollHeight > el.clientHeight + 4);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(check);
+    };
+    schedule();
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(schedule).catch(() => {});
+    }
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(schedule);
+      ro.observe(el);
+    }
+    window.addEventListener('resize', schedule);
+    const t = setTimeout(check, 500);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+      window.removeEventListener('resize', schedule);
+      ro?.disconnect();
+    };
   }, [categories, catsExpanded]);
 
   const cartTotal = useMemo(() => {
@@ -1041,6 +1064,7 @@ export const PublicMenuView: React.FC<PublicMenuViewProps> = ({ tableToken, fili
         </div>
         {(catsExpanded || catsOverflow) && (
           <button
+            type="button"
             onClick={() => setCatsExpanded(!catsExpanded)}
             className="mt-1.5 w-full py-1 rounded-lg text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center justify-center gap-1"
           >
