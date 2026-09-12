@@ -50,6 +50,46 @@ describe('storageService — consistência de mappers de sync (blindagem)', () =
     expect(mapped.organizationId).toBe('o1');
   });
 
+  it('mapSaleFromCloud preserva notes/motivo da dívida manual (não dropa)', () => {
+    const row = {
+      id: 'm1', code: 'VEN-M', created_at: '2026-09-12T10:00:00Z',
+      user_id: 'u1', operator_name: 'Op', customer_id: 'c1', customer_name: 'Cliente',
+      store_branch_id: 'b1', payments_json: JSON.stringify([{ method: 'credit_account', amount: 1 }]),
+      order_source: 'fiado', kitchen_status: 'pending', status: 'completed',
+      organization_id: 'o1', subtotal: 1, total: 1, discount: 0,
+      notes: 'produtos vendidos antes do sistema',
+    };
+    expect((svc as any).mapSaleFromCloud(row, []).notes).toBe('produtos vendidos antes do sistema');
+    // Linha sem notes → undefined (sem inventar), com local → preserva o local
+    expect((svc as any).mapSaleFromCloud({ ...row, notes: null }, []).notes).toBeUndefined();
+    expect((svc as any).mapSaleFromCloud({ ...row, notes: null }, [], { notes: 'motivo local' }).notes).toBe('motivo local');
+  });
+
+  it('updateSaleFromRemote preserva notes no eco realtime (motivo não evapora)', () => {
+    (svc as any).isSuperAdmin = () => true;
+    (svc as any).isRemoteFromCurrentBranch = () => true;
+    (svc as any).getSelectedBranchId = () => 'b1';
+    (svc as any).getRawBranchId = () => 'b1';
+    const recalcSpy = vi.spyOn(svc as any, 'recalcAndSyncCaixa').mockImplementation(() => {});
+    localStorage.setItem('hd_system_sales', JSON.stringify([
+      { id: 'm1', code: 'VEN-M', status: 'completed', storeBranchId: 'b1', date: '2026-09-12T10:00:00Z', total: 1, subtotal: 1, items: [], payments: [{ method: 'credit_account', amount: 1 }], orderSource: 'fiado', notes: 'motivo original' },
+    ]));
+    const row = {
+      id: 'm1', code: 'VEN-M', store_branch_id: 'b1', customer_id: 'c1', customer_name: 'Cliente',
+      notes: 'motivo original', payments_json: JSON.stringify([{ method: 'credit_account', amount: 1 }]),
+      order_source: 'fiado', kitchen_status: 'pending', status: 'completed',
+      organization_id: 'o1', subtotal: 1, total: 1, discount: 0, created_at: '2026-09-12T10:00:00Z',
+    };
+    (svc as any).updateSaleFromRemote(row);
+    let sales = JSON.parse(localStorage.getItem('hd_system_sales') || '[]');
+    expect(sales.find((s: any) => s.id === 'm1')?.notes).toBe('motivo original');
+    // Payload parcial sem notes (legado) → mantém o motivo local existente
+    (svc as any).updateSaleFromRemote({ ...row, notes: null });
+    sales = JSON.parse(localStorage.getItem('hd_system_sales') || '[]');
+    expect(sales.find((s: any) => s.id === 'm1')?.notes).toBe('motivo original');
+    recalcSpy.mockRestore();
+  });
+
   it('updateFinancialFromRemote preserva recurrences/installments (não dropa arrays)', () => {
     const setSpy = vi.spyOn(svc as any, 'set');
     const row = {

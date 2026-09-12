@@ -1589,6 +1589,10 @@ updateCategoryFromRemote(row: any) {
       deliveryOrderId: row.delivery_order_id || existing?.deliveryOrderId || undefined,
       status: row.status || 'completed',
       organizationId: row.organization_id || existing?.organizationId || undefined,
+      // Motivo do lançamento manual de dívida (Fiados): syncSale envia, mas o
+      // mapper dropava na volta e o eco do Realtime apagava o motivo local
+      // (virava "itens não discriminados"). Fallback p/ o valor local existente.
+      notes: row.notes ?? existing?.notes ?? undefined,
     };
 
     const idx = sales.findIndex((s) => s.id === mapped.id);
@@ -2132,6 +2136,8 @@ updateCategoryFromRemote(row: any) {
       status: r.status || 'completed',
       organizationId: r.organization_id || localSale?.organizationId || undefined,
       updatedAt: r.updated_at || new Date().toISOString(),
+      // Motivo do lançamento manual (mesmo caso do updateSaleFromRemote).
+      notes: r.notes || localSale?.notes || undefined,
     };
   }
 
