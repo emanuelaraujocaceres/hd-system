@@ -45,6 +45,8 @@ interface SaleItemPaymentStatus {
   quantity: number;
   total: number;
   paidAmount: number; // how much of this item has been paid
+  saleId?: string; // venda de origem (para localizar o lançamento)
+  isManual?: boolean; // lançamento manual pré-sistema (item sintético)
 }
 
 export interface CustomerDebt {
@@ -122,6 +124,8 @@ export const getSaleDebtItems = (
           quantity: 1,
           total: creditAmount,
           paidAmount: 0, // Will be calculated below via FIFO
+          saleId: sale.id,
+          isManual: true,
         },
       ],
     };
@@ -140,6 +144,8 @@ export const getSaleDebtItems = (
       quantity: item.quantity,
       total: itemCreditTotal,
       paidAmount: 0, // Will be calculated below via FIFO
+      saleId: sale.id,
+      isManual: false,
     });
   }
   return { debt, items: out };
@@ -192,7 +198,17 @@ export const buildManualDebtSale = (input: ManualDebtInput): Sale | null => {
   } as Sale;
 };
 
-// Prévia do histórico de pagamentos (anti-poluição do card): ordena do mais
+// Exclusão segura de lançamento manual: só sem pagamentos vinculados (senão
+// os credit_payments ficariam órfãos e distorceriam o quitado do cliente).
+// Com zero pagamentos, storageService.deleteSale remove venda + recebível
+// (mesmo id, título 'Fiado…') e recalcula o caixa. Puro/testável.
+export const canDeleteManualDebtSale = (
+  sale: Sale | undefined,
+  creditPayments: { saleId: string }[],
+): boolean => {
+  if (!sale || sale.orderSource !== 'fiado') return false;
+  return !(creditPayments || []).some((cp) => cp.saleId === sale.id);
+};
 // recente ao mais antigo e separa os N primeiros; o resto vai em "ver todos".
 // Puro/testável — o card só consome o resultado.
 export const getPaymentsPreview = <T extends { date: string }>(
@@ -497,6 +513,28 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
       posAudio.error();
     }
   }, [confirmDeletePayment, creditPayments, addToast]);
+
+  // ── Excluir lançamento manual de dívida (admin) ────────────────────
+  const [confirmDeleteDebtSaleId, setConfirmDeleteDebtSaleId] = useState<string | null>(null);
+  const handleConfirmDeleteDebt = useCallback(() => {
+    const saleId = confirmDeleteDebtSaleId;
+    setConfirmDeleteDebtSaleId(null);
+    if (!saleId) return;
+    const sale = sales.find((s) => s.id === saleId);
+    if (!canDeleteManualDebtSale(sale, creditPayments)) {
+      addToast('error', 'Exclua os pagamentos deste lançamento antes (aba Pagamentos).');
+      posAudio.error();
+      return;
+    }
+    try {
+      storageService.deleteSale(saleId);
+      posAudio.chime();
+      addToast('success', `Lançamento ${sale!.code} excluído.`);
+    } catch (err: any) {
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível excluir o lançamento. Tente novamente.'));
+      posAudio.error();
+    }
+  }, [confirmDeleteDebtSaleId, sales, creditPayments, addToast]);
 
   // ── Lançamento manual de dívida (pré-sistema) ──────────────────────
   // Cria venda fiado sem itens via buildManualDebtSale + addSale: o recebível,
@@ -812,6 +850,11 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
                             {item.productName}
+                            {item.isManual && (
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold text-[9px] align-middle">
+                                Manual
+                              </span>
+                            )}
                           </p>
                           <p className="text-[10px] text-slate-500 dark:text-[#71717a]">
                             {item.quantity}x {formatCurrency(item.unitPrice)}
@@ -838,6 +881,15 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
                             <span className="text-xs font-bold text-rose-600 dark:text-rose-400">
                               {formatCurrency(item.total)}
                             </span>
+                          )}
+                          {item.isManual && isAdmin && item.saleId && (
+                            <button
+                              onClick={() => setConfirmDeleteDebtSaleId(item.saleId!)}
+                              className="mt-1 ml-auto p-1 rounded-lg hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition-colors block"
+                              title="Excluir lançamento manual"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
                           )}
                         </div>
                       </div>
@@ -1127,6 +1179,17 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
         confirmLabel="Excluir"
         onConfirm={handleConfirmDeletePayment}
         onCancel={() => setConfirmDeletePayment(null)}
+      />
+
+      {/* Confirm: excluir lançamento manual de dívida */}
+      <ConfirmDialog
+        isOpen={confirmDeleteDebtSaleId !== null}
+        title="Excluir lançamento?"
+        message="A dívida manual e sua conta a receber serão removidas. Só é possível sem pagamentos vinculados."
+        itemName={(() => { const s = sales.find((x) => x.id === confirmDeleteDebtSaleId); return s ? `${s.code} — ${s.notes || ''}` : undefined; })()}
+        confirmLabel="Excluir"
+        onConfirm={handleConfirmDeleteDebt}
+        onCancel={() => setConfirmDeleteDebtSaleId(null)}
       />
 
       {/* Debt Modal — lançamento manual (venda pré-sistema) */}

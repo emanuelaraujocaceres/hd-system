@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterOpenDebts, CustomerDebt, getSaleCreditAmount, getSaleDebtItems, buildManualDebtSale, getPaymentsPreview, paymentMethodShortLabel } from './FiadosView';
+import { filterOpenDebts, CustomerDebt, getSaleCreditAmount, getSaleDebtItems, buildManualDebtSale, getPaymentsPreview, paymentMethodShortLabel, canDeleteManualDebtSale } from './FiadosView';
 import { Customer, Sale } from '../../types';
 
 const mkCustomer = (id: string, name: string): Customer =>
@@ -131,6 +131,19 @@ describe('FiadosView — getSaleDebtItems (venda sem itens)', () => {
     const { items } = getSaleDebtItems(s);
     expect(items).toHaveLength(1);
     expect(items[0].productName).toContain('produtos vendidos antes do sistema');
+    expect(items[0].isManual).toBe(true);
+    expect(items[0].saleId).toBe(s.id);
+  });
+
+  it('item de venda normal carrega saleId e não é manual', () => {
+    const s = mkSale({
+      total: 20,
+      items: [{ productId: 'p1', productName: 'A', unitPrice: 20, quantity: 1, total: 20 }],
+      payments: [{ method: 'credit_account', amount: 20 }],
+    });
+    const { items } = getSaleDebtItems(s);
+    expect(items[0].isManual).toBe(false);
+    expect(items[0].saleId).toBe(s.id);
   });
 });
 
@@ -195,5 +208,24 @@ describe('FiadosView — getPaymentsPreview (prévia anti-poluição)', () => {
     expect(paymentMethodShortLabel('pix')).toBe('PIX');
     expect(paymentMethodShortLabel(undefined)).toBe('');
     expect(paymentMethodShortLabel('boleto')).toBe('');
+  });
+});
+
+describe('FiadosView — canDeleteManualDebtSale (exclusão segura)', () => {
+  const manual = { id: 'm1', orderSource: 'fiado' } as any;
+  const normal = { id: 's1', orderSource: 'pdv' } as any;
+
+  it('permite excluir manual sem pagamentos', () => {
+    expect(canDeleteManualDebtSale(manual, [])).toBe(true);
+  });
+
+  it('bloqueia manual COM pagamentos (evita órfãos)', () => {
+    expect(canDeleteManualDebtSale(manual, [{ saleId: 'm1' }])).toBe(false);
+    expect(canDeleteManualDebtSale(manual, [{ saleId: 'outra' }])).toBe(true);
+  });
+
+  it('bloqueia venda normal e venda ausente', () => {
+    expect(canDeleteManualDebtSale(normal, [])).toBe(false);
+    expect(canDeleteManualDebtSale(undefined, [])).toBe(false);
   });
 });
