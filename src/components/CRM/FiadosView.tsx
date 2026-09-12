@@ -1079,8 +1079,8 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
             </div>
 
             <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
-              Lança uma dívida de venda feita antes do sistema. Entra no Fiados e no
-              Financeiro, e o pagamento abate junto no FIFO.
+              Lança uma dívida de venda feita antes do sistema. Fica em Contas a
+              Receber — quando o cliente pagar, o valor soma no faturamento e no caixa.
             </p>
 
             {/* Cliente (quando aberto pelo topo, escolhe aqui) */}

@@ -36,7 +36,7 @@ import { MoneyInput, parseBrlToNumber } from '../shared/MoneyInput';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { DateTimeRangeFilter } from '../shared/DateTimeRangeFilter';
-import { calculateFinanceSummary } from '../../lib/financeSummary';
+import { calculateFinanceSummary, sumManualDebtReceived, isManualDebtSale } from '../../lib/financeSummary';
 import { isSaleInRange, isAccountInDateRange } from '../../utils/dateFilters';
 
 import { ReportModal } from './ReportModal';
@@ -402,11 +402,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
   // Filial selecionada para filtragem
   const selectedBranchId = storageService.getSelectedBranchId();
-  const financeSummary = calculateFinanceSummary(sales, products, selectedBranchId, undefined, undefined, { from: dateFrom, to: dateTo });
+  // Dívida manual pré-sistema: regime de caixa — fora do faturamento no
+  // lançamento; soma quando o cliente paga (período do PAGAMENTO, não da venda)
+  const manualCreditPayments = storageService.getCreditPayments();
+  const manualDebtReceived = sumManualDebtReceived(sales, manualCreditPayments, selectedBranchId, (iso) => isSaleInRange(iso, dateFrom, dateTo));
+  const financeSummary = calculateFinanceSummary(sales, products, selectedBranchId, undefined, undefined, { from: dateFrom, to: dateTo }, manualCreditPayments);
 
   // Filtrar vendas APENAS da filial selecionada E status completed E período
-  const filteredSales = sales.filter((s) => 
-    s.status === 'completed' && s.storeBranchId === selectedBranchId && isSaleInRange(s.date, dateFrom, dateTo)
+  // (dívida manual pré-sistema excluída — entra via manualDebtReceived ao pagar)
+  const filteredSales = sales.filter((s) =>
+    s.status === 'completed' && s.storeBranchId === selectedBranchId && !isManualDebtSale(s) && isSaleInRange(s.date, dateFrom, dateTo)
   );
 
   // Lucro por Produto — ordenação selon profitSort
@@ -439,7 +444,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   // Usuários da filial para cálculo de holerite
   const users = storageService.getUsers().filter((u) => u.storeBranchId === selectedBranchId);
 
-  const totalSalesRevenue = filteredSales.reduce((acc, s) => acc + getSaleTotal(s), 0);
+  const totalSalesRevenue = filteredSales.reduce((acc, s) => acc + getSaleTotal(s), 0) + manualDebtReceived;
   const estimatedTaxes = totalSalesRevenue * 0.06; // 6% Simples Nacional
   const netSalesRevenue = totalSalesRevenue - estimatedTaxes;
 

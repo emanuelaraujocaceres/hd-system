@@ -20,6 +20,7 @@ import { CollaboratorPerformance } from './CollaboratorPerformance';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
 import { DateTimeRangeFilter } from '../shared/DateTimeRangeFilter';
 import { isSaleInRange } from '../../utils/dateFilters';
+import { sumManualDebtReceived, isManualDebtSale } from '../../lib/financeSummary';
 import { useToast } from '../shared/Toast';
 
 import { posAudio } from '../../services/audioService';
@@ -174,14 +175,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // ── Filtro temporal de faturamento (Data Inicial/Final) ─────────
   // Considera apenas vendas COMPLETADAS dentro do intervalo escolhido.
+  // Dívida manual pré-sistema (orderSource 'fiado'): regime de caixa — fora
+  // no lançamento, soma quando o cliente paga (data do PAGAMENTO).
   const periodSales = useMemo(() => {
     return sales.filter((s) => {
       if (s.status !== 'completed') return false;
+      if (isManualDebtSale(s)) return false;
       return isSaleInRange(s.date, dateFrom, dateTo);
     });
   }, [sales, dateFrom, dateTo]);
 
-  const periodRevenue = periodSales.reduce((acc, s) => acc + getSaleTotal(s), 0);
+  const periodRevenue = periodSales.reduce((acc, s) => acc + getSaleTotal(s), 0)
+    + sumManualDebtReceived(sales, storageService.getCreditPayments(), storageService.getSelectedBranchId(), (iso) => isSaleInRange(iso, dateFrom, dateTo));
 
   // ── LUCRO POR FORMA DE PAGAMENTO ────────────────────────────────
   // Para cada venda completada no intervalo, o custo dos itens vendidos é

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateFinanceSummary } from './financeSummary';
+import { calculateFinanceSummary, isManualDebtSale, sumManualDebtReceived } from './financeSummary';
 
 const branchId = 'branch-1';
 const product = { id: 'product-1', costPrice: 4 } as any;
@@ -86,5 +86,53 @@ describe('calculateFinanceSummary', () => {
     );
     expect(summary.salesCount).toBe(1);
     expect(summary.total).toBe(50);
+  });
+});
+
+describe('dívida manual pré-sistema (regime de caixa)', () => {
+  const manual = {
+    id: 'm1', date: '2026-09-02T10:00:00', status: 'completed', storeBranchId: branchId,
+    total: 100, subtotal: 100, items: [],
+    payments: [{ method: 'credit_account', amount: 100 }],
+    orderSource: 'fiado', code: 'VEN-MANUAL',
+  } as any;
+  const inScope = (iso: string) => iso >= '2026-09-02T00:00:00' && iso <= '2026-09-02T23:59:59';
+
+  it('isManualDebtSale marca só orderSource fiado', () => {
+    expect(isManualDebtSale(manual)).toBe(true);
+    expect(isManualDebtSale(sale('2026-09-02T10:00:00', 'credit_account', 50))).toBe(false);
+    expect(isManualDebtSale({ ...manual, orderSource: 'pdv' })).toBe(false);
+  });
+
+  it('lançamento manual NÃO entra no faturamento (só Receber)', () => {
+    const summary = calculateFinanceSummary([manual], [product], branchId, 'day', new Date('2026-09-02T15:00:00'), undefined, []);
+    expect(summary.total).toBe(0);
+    expect(summary.salesCount).toBe(0);
+    expect(summary.manualDebtReceived).toBe(0);
+  });
+
+  it('pagamento da dívida manual SOBE para o faturamento no período do pagamento', () => {
+    const pay = [{ saleId: 'm1', amount: 40, date: '2026-09-02T15:00:00', storeBranchId: branchId }] as any;
+    const summary = calculateFinanceSummary([manual], [product], branchId, 'day', new Date('2026-09-02T15:00:00'), undefined, pay);
+    expect(summary.total).toBe(40);
+    expect(summary.salesCount).toBe(0); // recebimento não é venda nova
+    expect(summary.manualDebtReceived).toBe(40);
+    expect(sumManualDebtReceived([manual], pay, branchId, inScope)).toBe(40);
+  });
+
+  it('pagamento de fiado NORMAL não conta em dobro', () => {
+    const normal = sale('2026-09-02T10:00:00', 'credit_account', 50);
+    const pay = [{ saleId: normal.id, amount: 20, date: '2026-09-02T15:00:00', storeBranchId: branchId }] as any;
+    const summary = calculateFinanceSummary([normal], [product], branchId, 'day', new Date('2026-09-02T15:00:00'), undefined, pay);
+    expect(summary.total).toBe(50); // só a venda (competência); pagamento não soma
+  });
+
+  it('ignora pagamento fora do período, de outra filial ou acima do fiado', () => {
+    const otherDay = [{ saleId: 'm1', amount: 40, date: '2026-09-03T10:00:00', storeBranchId: branchId }] as any;
+    expect(sumManualDebtReceived([manual], otherDay, branchId, inScope)).toBe(0);
+    const otherBranch = [{ saleId: 'm1', amount: 40, date: '2026-09-02T15:00:00', storeBranchId: 'branch-2' }] as any;
+    expect(sumManualDebtReceived([manual], otherBranch, branchId, inScope)).toBe(0);
+    const over = [{ saleId: 'm1', amount: 999, date: '2026-09-02T15:00:00', storeBranchId: branchId }] as any;
+    expect(sumManualDebtReceived([manual], over, branchId, inScope)).toBe(100); // teto = fiado
   });
 });
