@@ -5,7 +5,6 @@ import {
   User,
   CreditCard,
   Calendar,
-  ShoppingCart,
   DollarSign,
   CheckCircle2,
   AlertTriangle,
@@ -193,6 +192,36 @@ export const buildManualDebtSale = (input: ManualDebtInput): Sale | null => {
   } as Sale;
 };
 
+// Prévia do histórico de pagamentos (anti-poluição do card): ordena do mais
+// recente ao mais antigo e separa os N primeiros; o resto vai em "ver todos".
+// Puro/testável — o card só consome o resultado.
+export const getPaymentsPreview = <T extends { date: string }>(
+  payments: T[],
+  limit = 3,
+): { visible: T[]; hiddenCount: number; total: number } => {
+  const sorted = [...(payments || [])].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+  );
+  return {
+    visible: sorted.slice(0, limit),
+    hiddenCount: Math.max(0, sorted.length - limit),
+    total: sorted.length,
+  };
+};
+
+export type FiadoDetailTab = 'itens' | 'vendas' | 'pagamentos';
+
+// Rótulo curto do método (linha enxuta do histórico).
+export const paymentMethodShortLabel = (method?: string): string => {
+  const labels: Record<string, string> = {
+    cash: 'dinheiro',
+    pix: 'PIX',
+    credit_card: 'crédito',
+    debit_card: 'débito',
+  };
+  return (method && labels[method]) || '';
+};
+
 // ─── Component ──────────────────────────────────────────────────
 export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, caixaSession }) => {
   const isAdmin = user.role === 'admin' || !!user.superadmin;
@@ -205,6 +234,9 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'pix' | 'credit_card' | 'debit_card'>('cash');
   const [registeringPayment, setRegisteringPayment] = useState(false);
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
+  // UX do detalhe: abas + prévia de pagamentos (não polui o card)
+  const [expandedTab, setExpandedTab] = useState<FiadoDetailTab>('itens');
+  const [showAllPayments, setShowAllPayments] = useState(false);
   // Lançamento manual de dívida (pré-sistema): sem gate de perfil além do
   // acesso ao módulo (decisão do usuário) — igual ao Registrar Pagamento.
   const [debtModalCustomerId, setDebtModalCustomerId] = useState<string | null>(null);
@@ -627,6 +659,11 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
             : 100;
           const isFullyPaid = debt.remaining <= 0.01;
           const isExpanded = expandedCustomerId === debt.customer.id;
+          // Histórico do cliente (ordenado do mais recente); reutilizado na aba
+          const custPayments = creditPayments
+            .filter((cp) => cp.customerId === debt.customer.id)
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          const paymentsPreview = getPaymentsPreview(custPayments, 3);
 
           return (
             <div
@@ -639,7 +676,11 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
             >
               {/* Card header */}
               <div
-                onClick={() => setExpandedCustomerId(isExpanded ? null : debt.customer.id)}
+                onClick={() => {
+                  setExpandedCustomerId(isExpanded ? null : debt.customer.id);
+                  setExpandedTab('itens');
+                  setShowAllPayments(false);
+                }}
                 className="p-4 border-b border-slate-100 dark:border-[#27272a]"
               >
                 <div className="flex items-start justify-between">
@@ -731,16 +772,31 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
                 </div>
               </div>
 
-              {/* Items list - only shown when expanded */}
+              {/* Detail - only shown when expanded */}
               {isExpanded && (
               <div className="p-4" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center gap-2 mb-3">
-                  <ShoppingCart className="w-3.5 h-3.5 text-slate-400 dark:text-[#71717a]" />
-                  <h4 className="text-[10px] font-bold text-slate-500 dark:text-[#71717a] uppercase tracking-wider">
-                    Itens Comprados ({debt.items.length})
-                  </h4>
+                {/* Abas do detalhe: histórico de pagamentos fica na própria aba */}
+                <div className="flex gap-1 p-1 mb-3 bg-slate-100 dark:bg-[#09090b] rounded-xl">
+                  {([
+                    { key: 'itens', label: `Itens (${debt.items.length})` },
+                    { key: 'vendas', label: `Vendas (${debt.purchaseCount})` },
+                    ...(isAdmin ? [{ key: 'pagamentos', label: `Pagamentos (${custPayments.length})` }] : []),
+                  ] as { key: FiadoDetailTab; label: string }[]).map((tab) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => { setExpandedTab(tab.key); posAudio.click(); }}
+                      className={`flex-1 px-2 py-1.5 rounded-lg font-bold text-[11px] transition-colors ${
+                        expandedTab === tab.key
+                          ? 'bg-white dark:bg-[#18181b] shadow text-amber-600 dark:text-amber-400'
+                          : 'text-slate-500 dark:text-[#71717a] hover:text-slate-700 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
 
+                {expandedTab === 'itens' && (
                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                   {debt.items.map((item, idx) => {
                     const itemPaidPercent =
@@ -788,9 +844,11 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
                     );
                   })}
                 </div>
+                )}
 
                 {/* Sale references */}
-                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-[#27272a]">
+                {expandedTab === 'vendas' && (
+                <div>
                   <div className="flex items-center gap-2 mb-2">
                     <FileText className="w-3 h-3 text-slate-400 dark:text-[#71717a]" />
                     <span className="text-[10px] font-bold text-slate-500 dark:text-[#71717a] uppercase">
@@ -810,29 +868,34 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
                   </div>
                 </div>
 
-                {/* Admin: Credit payment history with delete */}
-                {isAdmin && creditPayments.filter((cp) => cp.customerId === debt.customer.id).length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-100 dark:border-[#27272a]">
-                    <div className="flex items-center gap-2 mb-2">
-                      <DollarSign className="w-3 h-3 text-emerald-500" />
-                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
-                        Pagamentos Registrados
+                )}
+
+                {/* Pagamentos (admin): resumo + últimos 3 + ver todos.
+                    O histórico completo continua no Financeiro. */}
+                {expandedTab === 'pagamentos' && isAdmin && (
+                  <div>
+                    <div className="px-3 py-2 mb-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                        {paymentsPreview.total} pagamento(s)
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-500 dark:text-[#71717a]">
+                        {custPayments.length > 0 ? `último ${formatDate(custPayments[0].date)}` : 'nenhum pagamento'}
                       </span>
                     </div>
-                    <div className="space-y-1.5">
-                      {creditPayments
-                        .filter((cp) => cp.customerId === debt.customer.id)
-                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                        .map((cp) => (
-                          <div key={cp.id} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/30">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                                {formatCurrency(cp.amount)}
+                    {paymentsPreview.total === 0 ? (
+                      <p className="text-center text-[11px] text-slate-400 py-4">
+                        Nenhum pagamento registrado.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {(showAllPayments ? custPayments : paymentsPreview.visible).map((cp) => (
+                          <div key={cp.id} className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-[#09090b] border border-slate-100 dark:border-[#27272a]">
+                            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                              {formatCurrency(cp.amount)}
+                              <span className="ml-1.5 font-semibold text-slate-500 dark:text-[#71717a]">
+                                {formatDate(cp.date)}{cp.paymentMethod ? ` · ${paymentMethodShortLabel(cp.paymentMethod)}` : ''}
                               </span>
-                              <span className="text-[10px] text-slate-500 dark:text-[#71717a]">
-                                {formatDate(cp.date)}
-                              </span>
-                            </div>
+                            </span>
                             <button
                               onClick={() => setConfirmDeletePayment(cp)}
                               className="p-1 rounded-lg hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition-colors"
@@ -842,12 +905,21 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
                             </button>
                           </div>
                         ))}
-                    </div>
+                        {paymentsPreview.hiddenCount > 0 && (
+                          <button
+                            onClick={() => { setShowAllPayments(!showAllPayments); posAudio.click(); }}
+                            className="w-full px-2 py-1.5 rounded-lg text-[11px] font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-600/10 transition-colors"
+                          >
+                            {showAllPayments ? 'Ver menos' : `Ver todos (${paymentsPreview.hiddenCount} a mais)`}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Payment / debt buttons */}
-                <div className="mt-4 space-y-2">
+                {/* Payment / debt buttons — sticky para alcançar sem scroll */}
+                <div className="mt-4 space-y-2 sticky bottom-2 bg-white/95 dark:bg-[#18181b]/95 backdrop-blur rounded-xl border border-slate-200 dark:border-[#27272a] shadow-lg p-2">
                   {!isFullyPaid && (
                     <button
                       onClick={() => {

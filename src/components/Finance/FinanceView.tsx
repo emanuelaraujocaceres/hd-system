@@ -602,6 +602,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
             R$ {totalReceivablePending.toFixed(2)}
           </p>
+          <span className="text-[10px] text-slate-400 dark:text-[#71717a]">inclui vencimentos fora do período</span>
         </button>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm">
@@ -609,6 +610,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           <p className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
             R$ {totalPayablePending.toFixed(2)}
           </p>
+          <span className="text-[10px] text-slate-400 dark:text-[#71717a]">inclui vencimentos fora do período</span>
         </div>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm">
@@ -710,7 +712,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           <div className="space-y-3">
             {filteredAccounts.length === 0 ? (
               <div className="text-center py-8 text-slate-400 text-sm">
-                Nenhuma conta financeira registrada
+                Nenhuma conta com vencimento no período selecionado — ajuste o Período acima ou limpe a busca.
               </div>
             ) : (
               filteredAccounts.map((acc) => {

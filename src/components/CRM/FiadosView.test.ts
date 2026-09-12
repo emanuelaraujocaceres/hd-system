@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterOpenDebts, CustomerDebt, getSaleCreditAmount, getSaleDebtItems, buildManualDebtSale } from './FiadosView';
+import { filterOpenDebts, CustomerDebt, getSaleCreditAmount, getSaleDebtItems, buildManualDebtSale, getPaymentsPreview, paymentMethodShortLabel } from './FiadosView';
 import { Customer, Sale } from '../../types';
 
 const mkCustomer = (id: string, name: string): Customer =>
@@ -166,5 +166,34 @@ describe('FiadosView — buildManualDebtSale (dívida pré-sistema)', () => {
     expect(buildManualDebtSale({ ...base, amount: -5 })).toBeNull();
     expect(buildManualDebtSale({ ...base, reason: '   ' })).toBeNull();
     expect(buildManualDebtSale({ ...base, customerName: '' })).toBeNull();
+  });
+});
+
+describe('FiadosView — getPaymentsPreview (prévia anti-poluição)', () => {
+  const pay = (id: string, date: string) => ({ id, date, amount: 10 });
+
+  it('mostra os 3 mais recentes e conta o resto', () => {
+    const list = [pay('a', '2026-09-01'), pay('b', '2026-09-05'), pay('c', '2026-09-03'), pay('d', '2026-09-04'), pay('e', '2026-09-02')];
+    const prev = getPaymentsPreview(list, 3);
+    expect(prev.visible.map((p) => p.id)).toEqual(['b', 'd', 'c']);
+    expect(prev.hiddenCount).toBe(2);
+    expect(prev.total).toBe(5);
+  });
+
+  it('com 3 ou menos, mostra tudo sem resto', () => {
+    const prev = getPaymentsPreview([pay('a', '2026-09-01')], 3);
+    expect(prev.visible).toHaveLength(1);
+    expect(prev.hiddenCount).toBe(0);
+  });
+
+  it('lista vazia retorna zeros', () => {
+    expect(getPaymentsPreview([], 3)).toEqual({ visible: [], hiddenCount: 0, total: 0 });
+  });
+
+  it('paymentMethodShortLabel traduz os métodos e ignora desconhecido', () => {
+    expect(paymentMethodShortLabel('cash')).toBe('dinheiro');
+    expect(paymentMethodShortLabel('pix')).toBe('PIX');
+    expect(paymentMethodShortLabel(undefined)).toBe('');
+    expect(paymentMethodShortLabel('boleto')).toBe('');
   });
 });
