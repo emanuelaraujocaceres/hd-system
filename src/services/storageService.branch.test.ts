@@ -883,4 +883,53 @@ describe('storageService — produto excluído NÃO ressurge (tombstone, BUG pro
     expect((call as any)[1].status).toBe('paid');
     upsertSpy.mockRestore();
   });
+
+  describe('convertSingleToRecurring — única vira recorrente in-place', () => {
+    const BR = BRANCH_UUIDS['br-01'];
+    const seedOne = (over = {}) => {
+      localStorage.setItem('hd_system_financial_accounts', JSON.stringify([
+        {
+          id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', title: 'Energia', type: 'payable',
+          category: 'conta_pagar', amount: 1100, dueDate: '2026-09-04', status: 'pending',
+          recipientOrPayer: 'Electro', storeBranchId: BR, organizationId: DEFAULT_ORG_ID,
+          ...over,
+        },
+      ]));
+    };
+    const readAll = (): any[] => {
+      const part = JSON.parse(localStorage.getItem(`hd_system_financial_accounts_${DEFAULT_ORG_ID}`) || 'null');
+      return part || JSON.parse(localStorage.getItem('hd_system_financial_accounts') || '[]');
+    };
+
+    it('converte mantendo id/título/valor e gera 12 ocorrências mensais', () => {
+      const upsertSpy = vi.spyOn(syncService, 'upsertRow').mockResolvedValue({} as any);
+      seedOne();
+      const res = (svc as any).convertSingleToRecurring('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', 12, 'monthly');
+      expect(res.success).toBe(true);
+      const acc = readAll().find((a: any) => a.id === 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+      expect(acc).toBeTruthy();
+      expect(acc.isRecurring).toBe(true);
+      expect(acc.recurrenceCount).toBe(12);
+      expect(acc.recurrences).toHaveLength(12);
+      expect(acc.recurrences[0].dueDate).toBe('2026-09-04');
+      expect(acc.recurrences[1].dueDate).toBe('2026-10-04');
+      expect(acc.recurrences[11].dueDate).toBe('2027-08-04');
+      expect(acc.recurrences.every((r: any) => r.status === 'pending')).toBe(true);
+      expect(acc.title).toBe('Energia');
+      expect(acc.amount).toBe(1100);
+      const call = upsertSpy.mock.calls.find((c) => c[0] === 'financial_transactions');
+      expect(call).toBeTruthy();
+      expect((call as any)[1].id).toBe('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+      upsertSpy.mockRestore();
+    });
+
+    it('recusa já-recorrente, quitada e inexistente', () => {
+      seedOne({ isRecurring: true, recurrences: [] });
+      expect((svc as any).convertSingleToRecurring('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', 12, 'monthly').success).toBe(false);
+      seedOne({ status: 'paid' });
+      expect((svc as any).convertSingleToRecurring('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', 12, 'monthly').success).toBe(false);
+      seedOne();
+      expect((svc as any).convertSingleToRecurring('nao-existe', 12, 'monthly').success).toBe(false);
+    });
+  });
 });

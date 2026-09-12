@@ -4640,6 +4640,51 @@ id: StorageService.ensureUuid(settings.id),
     this.syncFinancialAccount(acc);
   }
 
+  // Converte conta ÚNICA pendente em RECORRENTE in-place (MESMO id — histórico
+  // preservado, sem recriar: o upsert atualiza a linha do cloud, sem órfãos).
+  // Gera `count` ocorrências mensais/semanais/quinzenais a partir do vencimento
+  // atual (#1 = vencimento atual). Guards: só única (!isRecurring &&
+  // !isInstallment), pendente/vencida e com amount > 0 e dueDate.
+  convertSingleToRecurring(
+    id: string,
+    count = 12,
+    recurrenceType: 'monthly' | 'weekly' | 'biweekly' = 'monthly',
+  ): { success: boolean; message?: string } {
+    const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, this.isDefaultOrg() ? INITIAL_FINANCIAL_ACCOUNTS : []);
+    const acc = accounts.find((a) => a.id === id);
+    if (!acc) return { success: false, message: 'Conta não encontrada.' };
+    if (acc.isRecurring || acc.isInstallment) return { success: false, message: 'Conta já é recorrente ou parcelada.' };
+    if (acc.status !== 'pending' && acc.status !== 'overdue') return { success: false, message: 'Só contas pendentes podem virar recorrentes.' };
+    if (!(acc.amount > 0) || !acc.dueDate) return { success: false, message: 'Conta sem valor ou vencimento.' };
+    if (!Number.isInteger(count) || count < 2) return { success: false, message: 'Repetições mínimas: 2.' };
+    const stepDays = recurrenceType === 'weekly' ? 7 : recurrenceType === 'biweekly' ? 14 : 0;
+    const recurrences = [];
+    for (let i = 0; i < count; i++) {
+      const d = new Date(acc.dueDate + 'T12:00:00');
+      if (stepDays > 0) d.setDate(d.getDate() + i * stepDays);
+      else d.setMonth(d.getMonth() + i);
+      recurrences.push({
+        id: `${acc.id}-r${i + 1}`,
+        number: i + 1,
+        dueDate: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+        status: 'pending' as const,
+      });
+    }
+    const updated: FinancialAccount = {
+      ...acc,
+      isRecurring: true,
+      recurrenceType,
+      recurrenceCount: count,
+      recurrences,
+    };
+    const idx = accounts.findIndex((a) => a.id === id);
+    accounts[idx] = updated;
+    this.set(KEYS.FINANCIAL, accounts);
+    this.syncFinancialAccount(updated);
+    this.notify();
+    return { success: true };
+  }
+
   // ─── FIADO → CONTAS A RECEBER ────────────────────────────────────
   // A conta a receber de uma venda fiado usa o MESMO id da venda — vínculo
   // determinístico em qualquer dispositivo, sem coluna nova e sem migração.

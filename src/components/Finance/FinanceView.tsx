@@ -427,7 +427,21 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   // dividido) SEM criar venda — só quita a conta. Parceladas/recorrentes usam
   // a Baixa por ocorrência/parcela existente.
   const [payAccountId, setPayAccountId] = useState<string | null>(null);
+  const [confirmConvertAccount, setConfirmConvertAccount] = useState<{ id: string; title: string; dueDate: string } | null>(null);
   const payAccount = financialAccounts.find((a) => a.id === payAccountId) ?? null;
+  const handleConfirmConvert = () => {
+    const target = confirmConvertAccount;
+    setConfirmConvertAccount(null);
+    if (!target) return;
+    const res = storageService.convertSingleToRecurring(target.id, 12, 'monthly');
+    if (!res.success) {
+      posAudio.error();
+      addToast('error', res.message || 'Não foi possível converter.');
+      return;
+    }
+    posAudio.chime();
+    addToast('success', `Conta "${target.title}" agora é recorrente (12x mensal).`);
+  };
   const handleConfirmAccountPayment = async (payments: PaymentDetails[], total: number) => {
     const acc = financialAccounts.find((a) => a.id === payAccountId);
     if (!acc) return { success: false, message: 'Conta não encontrada.' };
@@ -890,7 +904,18 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                             {acc.type === 'receivable' ? 'Receber' : 'Pagar'} R$ {acc.amount.toFixed(2)}
                           </button>
                         )}
-                       <button
+                        {!acc.isRecurring && !acc.isInstallment && (acc.status === 'pending' || acc.status === 'overdue') && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmConvertAccount({ id: acc.id, title: acc.title, dueDate: acc.dueDate });
+                            }}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs transition-all"
+                          >
+                            Tornar recorrente (12x mensal)
+                          </button>
+                        )}
+                        <button
                          onClick={(e) => {
                            e.stopPropagation();
                            if (confirm(`Deseja excluir a conta "${acc.title}"?`)) {
@@ -1616,6 +1641,17 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         confirmLabel="Excluir"
         onConfirm={handleConfirmDeleteAccount}
         onCancel={() => setConfirmDeleteAccount(null)}
+      />
+
+      {/* Confirm: tornar recorrente (12x mensal a partir do vencimento) */}
+      <ConfirmDialog
+        isOpen={confirmConvertAccount !== null}
+        title="Tornar recorrente?"
+        message="Cria 12 ocorrências mensais a partir do vencimento atual, mantendo o registro."
+        itemName={confirmConvertAccount?.title}
+        confirmLabel="Converter"
+        onConfirm={handleConfirmConvert}
+        onCancel={() => setConfirmConvertAccount(null)}
       />
 
       {/* Confirm: excluir venda */}
