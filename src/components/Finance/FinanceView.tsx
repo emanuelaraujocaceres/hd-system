@@ -19,7 +19,7 @@ import {
   FileBarChart,
   Search,
 } from 'lucide-react';
-import { FinancialAccount, FinancialInstallment, FinancialRecurrence, Sale, Product, UserProfile } from '../../types';
+import { FinancialAccount, FinancialInstallment, FinancialRecurrence, Sale, Product, UserProfile, PaymentDetails } from '../../types';
 import { storageService } from '../../services/storageService';
 import { printSaleReceipt } from '../../services/printService';
 
@@ -40,12 +40,15 @@ import { calculateFinanceSummary, sumManualDebtReceived, isManualDebtSale } from
 import { isSaleInRange, isAccountInDateRange } from '../../utils/dateFilters';
 
 import { ReportModal } from './ReportModal';
+import { PaymentModal } from '../PDV/PaymentModal';
 
 export interface FinanceAccountFilter {
   searchTerm?: string;
   filterType?: 'all' | 'payable' | 'receivable';
   dateFrom?: string;
   dateTo?: string;
+  /** Contas avulsas ignoram o Período do topo (decisão do usuário) */
+  ignoreDateRange?: boolean;
 }
 
 // Lista da sub-tab Contas: exibe a pagar + a receber AVULSAS (ex.: Klebinho).
@@ -56,13 +59,14 @@ export const filterFinanceAccounts = (
   accounts: FinancialAccount[],
   opts: FinanceAccountFilter = {},
 ): FinancialAccount[] => {
-  const { searchTerm = '', filterType = 'all', dateFrom = '', dateTo = '' } = opts;
+  const { searchTerm = '', filterType = 'all', dateFrom = '', dateTo = '', ignoreDateRange = false } = opts;
   return (accounts || []).filter((a) => {
     // Registros de fiado NÃO aparecem — gerenciados na página Fiados
     if (a.category === 'fiado' || a.category === 'fiado_payment') return false;
     if (filterType !== 'all' && a.type !== filterType) return false;
     // Filtro de data/hora — por data de vencimento da conta/parcela/ocorrência
-    if (!isAccountInDateRange(a, dateFrom, dateTo)) return false;
+    // (contas avulsas ignoram o Período do topo por decisão do usuário)
+    if (!ignoreDateRange && !isAccountInDateRange(a, dateFrom, dateTo)) return false;
     // Campo de pesquisa
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
@@ -75,6 +79,38 @@ export const filterFinanceAccounts = (
     }
     return true;
   });
+};
+
+export interface AccountSettlement {
+  updated: FinancialAccount;
+  cashIn: number; // dinheiro recebido (suprimento no caixa)
+  cashOut: number; // dinheiro pago (sangria no caixa)
+  primaryMethod: string;
+}
+
+// Monta a baixa de conta avulsa a partir do checkout (PaymentModal):
+// status paid + paidDate + método guardado (coluna payment_method).
+// Só DINHEIRO movimenta o caixa — pix/cartão apenas quitam a conta
+// (mesma regra do pagamento de fiado). Puro/testável.
+export const buildAccountSettlement = (
+  account: FinancialAccount,
+  payments: { method: string; amount: number }[],
+): AccountSettlement => {
+  const parts = (payments || []).filter((p) => (p.amount || 0) > 0);
+  const cash = parts.filter((p) => p.method === 'cash').reduce((s, p) => s + p.amount, 0);
+  const primary = parts.length > 0 ? parts.reduce((a, b) => (b.amount > a.amount ? b : a)).method : '';
+  const round = (v: number) => Math.round(v * 100) / 100;
+  return {
+    updated: {
+      ...account,
+      status: 'paid',
+      paidDate: new Date().toISOString().slice(0, 10),
+      paymentMethod: primary || undefined,
+    },
+    cashIn: account.type === 'receivable' ? round(cash) : 0,
+    cashOut: account.type === 'payable' ? round(cash) : 0,
+    primaryMethod: primary,
+  };
 };
 
 interface FinanceViewProps {
@@ -386,6 +422,27 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     }
   };
 
+  // ── Baixa via checkout completo (PaymentModal em modo diversão) ──────
+  // Conta única pendente/vencida: abre o checkout (dinheiro/troco, PIX, cartão,
+  // dividido) SEM criar venda — só quita a conta. Parceladas/recorrentes usam
+  // a Baixa por ocorrência/parcela existente.
+  const [payAccountId, setPayAccountId] = useState<string | null>(null);
+  const payAccount = financialAccounts.find((a) => a.id === payAccountId) ?? null;
+  const handleConfirmAccountPayment = async (payments: PaymentDetails[], total: number) => {
+    const acc = financialAccounts.find((a) => a.id === payAccountId);
+    if (!acc) return { success: false, message: 'Conta não encontrada.' };
+    try {
+      const { updated, cashIn, cashOut } = buildAccountSettlement(acc, payments);
+      storageService.saveFinancialAccount(updated);
+      if (cashIn > 0) storageService.addSuprimento(cashIn, `Recebimento — ${acc.title}`);
+      if (cashOut > 0) storageService.addSangria(cashOut, `Pagamento — ${acc.title}`);
+      posAudio.chime();
+      addToast('success', acc.type === 'receivable' ? `Recebido R$ ${total.toFixed(2)} — ${acc.title}.` : `Pago R$ ${total.toFixed(2)} — ${acc.title}.`);
+    } catch (err: any) {
+      return { success: false, message: friendlyErrorMessage(err, 'Não foi possível dar baixa. Tente novamente.') };
+    }
+  };
+
   const [confirmDeleteSale, setConfirmDeleteSale] = useState<{ code: string; id: string } | null>(null);
   const handleConfirmDeleteSale = async () => {
     const target = confirmDeleteSale;
@@ -530,7 +587,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     return labels[method] || method;
   };
 
-  const filteredAccounts = filterFinanceAccounts(financialAccounts, { searchTerm, filterType, dateFrom, dateTo });
+  const filteredAccounts = filterFinanceAccounts(financialAccounts, { searchTerm, filterType, dateFrom, dateTo, ignoreDateRange: true });
 
   return (
     <div className="p-3 sm:p-4 md:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-6">
@@ -596,7 +653,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">Período</h3>
-            <p className="text-xs text-slate-500 dark:text-[#71717a]">Filtra vendas, DRE e contas a pagar por data de vencimento.</p>
+            <p className="text-xs text-slate-500 dark:text-[#71717a]">Filtra vendas e DRE. A lista de contas mostra tudo (sem filtro de data).</p>
           </div>
           <DateTimeRangeFilter
             startDate={dateFrom}
@@ -620,7 +677,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
             R$ {totalReceivablePending.toFixed(2)}
           </p>
-          <span className="text-[10px] text-slate-400 dark:text-[#71717a]">inclui vencimentos fora do período</span>
         </button>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm">
@@ -628,7 +684,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           <p className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
             R$ {totalPayablePending.toFixed(2)}
           </p>
-          <span className="text-[10px] text-slate-400 dark:text-[#71717a]">inclui vencimentos fora do período</span>
         </div>
 
         <div className="p-5 rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] shadow-sm">
@@ -750,7 +805,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           <div className="space-y-3">
             {filteredAccounts.length === 0 ? (
               <div className="text-center py-8 text-slate-400 text-sm">
-                Nenhuma conta com vencimento no período selecionado — ajuste o Período acima ou limpe a busca.
+                Nenhuma conta encontrada — ajuste o filtro de tipo ou limpe a busca.
               </div>
             ) : (
               filteredAccounts.map((acc) => {
@@ -822,7 +877,19 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                      </div>
 
                      {/* Botão de deletar conta */}
-                     <div className="px-4 pb-3">
+                     <div className="px-4 pb-3 space-y-2">
+                        {!acc.isRecurring && !acc.isInstallment && acc.status !== 'paid' && acc.status !== 'cancelled' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPayAccountId(acc.id);
+                              posAudio.click();
+                            }}
+                            className={acc.type === 'receivable' ? 'w-full px-3 py-2 rounded-xl text-white font-bold text-xs shadow-md transition-all bg-emerald-600 hover:bg-emerald-700' : 'w-full px-3 py-2 rounded-xl text-white font-bold text-xs shadow-md transition-all bg-indigo-600 hover:bg-indigo-700'}
+                          >
+                            {acc.type === 'receivable' ? 'Receber' : 'Pagar'} R$ {acc.amount.toFixed(2)}
+                          </button>
+                        )}
                        <button
                          onClick={(e) => {
                            e.stopPropagation();
@@ -1565,6 +1632,29 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       {/* Relatório Gerencial (Frente 5) */}
       {isReportOpen && (
         <ReportModal user={user} onClose={() => setIsReportOpen(false)} />
+      )}
+
+      {/* Checkout de baixa (Receber/Pagar) — quita a conta SEM criar venda */}
+      {payAccount && (
+        <PaymentModal
+          isOpen
+          onClose={() => setPayAccountId(null)}
+          cartItems={[]}
+          customers={[]}
+          selectedCustomer={null}
+          setSelectedCustomer={() => {}}
+          subtotal={payAccount.amount}
+          discount={0}
+          setDiscount={() => {}}
+          settings={storageService.getSettings()}
+          user={user}
+          onSaleSuccess={() => {}}
+          comandaMode={{
+            title: payAccount.type === 'receivable' ? `Receber — ${payAccount.title}` : `Pagar — ${payAccount.title}`,
+            onConfirmComanda: handleConfirmAccountPayment,
+            notifySuccess: () => {},
+          }}
+        />
       )}
     </div>
   );

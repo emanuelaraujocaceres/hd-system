@@ -1091,6 +1091,7 @@ expiration_date: p.expirationDate || null,
       payment_date: a.paidDate || null,
       status: a.status,
       notes: a.recipientOrPayer,
+      payment_method: a.paymentMethod || null,
       // Recorrência / parcelamento (colunas novas — migração 20260810)
       is_recurring: a.isRecurring || false,
       is_installment: a.isInstallment || false,
@@ -1842,6 +1843,7 @@ updateCategoryFromRemote(row: any) {
       paidDate: row.payment_date || undefined,
       status: row.status,
       recipientOrPayer: row.notes || '',
+      paymentMethod: row.payment_method || undefined,
       storeBranchId: row.store_branch_id || undefined,
       organizationId: row.organization_id || undefined,
       // Recorrência / parcelamento (colunas novas)
@@ -2711,6 +2713,7 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
              installmentNumber: r.installment_number || undefined,
              recurrences: safeParseJson(r.recurrences_json) || undefined,
              installments: safeParseJson(r.installments_json) || undefined,
+             paymentMethod: r.payment_method || undefined,
            }),
           (a) => this.syncFinancialAccount(a),
           (a) => a.id,

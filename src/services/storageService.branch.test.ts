@@ -868,4 +868,19 @@ describe('storageService — produto excluído NÃO ressurge (tombstone, BUG pro
     rpcSpy.mockRestore();
     delSpy.mockRestore();
   });
+
+  it('saveFinancialAccount envia payment_method ao cloud (baixa com método)', () => {
+    const upsertSpy = vi.spyOn(syncService, 'upsertRow').mockResolvedValue({} as any);
+    (svc as any).saveFinancialAccount({
+      id: '22222222-2222-4222-8222-222222222222',
+      title: 'Cliente Klebinho', type: 'receivable', category: 'conta_receber',
+      amount: 130, dueDate: '2026-09-20', status: 'paid', paidDate: '2026-09-12',
+      recipientOrPayer: 'Cliente', paymentMethod: 'pix',
+    });
+    const call = upsertSpy.mock.calls.find((c) => c[0] === 'financial_transactions');
+    expect(call).toBeTruthy();
+    expect((call as any)[1].payment_method).toBe('pix');
+    expect((call as any)[1].status).toBe('paid');
+    upsertSpy.mockRestore();
+  });
 });

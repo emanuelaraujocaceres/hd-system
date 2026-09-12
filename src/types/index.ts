@@ -356,6 +356,8 @@ export interface FinancialAccount {
   notes?: string;
   storeBranchId?: string;
   organizationId?: string;
+  /** Método usado na baixa (dinheiro/pix/cartão) — coluna payment_method já existe no banco */
+  paymentMethod?: string;
   // Recorrência / Parcelamento
   isRecurring?: boolean;
   isInstallment?: boolean;

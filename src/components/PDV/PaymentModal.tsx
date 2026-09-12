@@ -65,6 +65,12 @@ interface PaymentModalProps {
   comandaMode?: {
     title?: string;
     onConfirmComanda: (payments: PaymentDetails[], total: number) => Promise<{ success: boolean; message?: string } | void>;
+    /**
+     * Sobrescreve a notificação padrão ("Venda Realizada!") do caminho desviado.
+     * O Financeiro usa para baixa de conta avulsa (não é venda) — passa noop e
+     * exibe o próprio toast. Ausente = comportamento original (zero regressão).
+     */
+    notifySuccess?: (total: number, method: string) => void;
   };
   initialMethod?: PaymentMethod;
   initialCashGiven?: number;
@@ -284,7 +290,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         }
         posAudio.chime();
         const primaryMethod = payments[0]?.method || 'cash';
-        globalNotificationService.notifySale(totalAmount, primaryMethod);
+        if (comandaMode.notifySuccess) comandaMode.notifySuccess(totalAmount, primaryMethod);
+        else globalNotificationService.notifySale(totalAmount, primaryMethod);
         onClose();
         return;
       }
