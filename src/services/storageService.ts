@@ -4044,6 +4044,13 @@ id: StorageService.ensureUuid(settings.id),
       branchesLoaded: this.getBranches().length, hasItems: (sale.items?.length ?? 0) > 0,
       paymentMethods: sale.payments?.map((p: any) => p.method), status: sale.status,
     });
+    // PREVENÇÃO (VEN-MTXM60OB-IE51): venda com items=[] e sem notes (motivo)
+    // ficava invisível no Fiados antes do fallback em getSaleDebtItems. O
+    // display hoje cobre, mas o warn ancora o diagnóstico se voltar a ocorrer.
+    // Lançamento manual de dívida tem notes (motivo obrigatório) → não alerta.
+    if ((sale.items?.length ?? 0) === 0 && !(sale.notes || '').trim() && (sale.total || 0) > 0) {
+      console.warn(`[HD-Sale] ⚠️ venda sem itens e sem motivo (${sale.code}, total R$${sale.total}) — aparecerá como "itens não discriminados" no Fiados`);
+    }
     // Save sale_items to separate localStorage key FIRST (with stable IDs)
     // so syncSale can read them and upsert with onConflict: 'id' deduplication.
     if (sale.items && sale.items.length > 0) {

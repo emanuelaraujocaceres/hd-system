@@ -108,12 +108,17 @@ export const getSaleDebtItems = (
   const items = sale.items || [];
   if (items.length === 0) {
     if (creditAmount <= 0) return { debt: 0, items: [] };
+    // O motivo do lançamento manual (dívida pré-sistema) viaja em sale.notes
+    // e aparece aqui como identificação do registro no card.
+    const label = sale.notes?.trim()
+      ? `Venda ${sale.code || ''} — ${sale.notes.trim()}`
+      : `Venda ${sale.code || ''} — itens não discriminados`;
     return {
       debt: creditAmount,
       items: [
         {
           productId: sale.id,
-          productName: `Venda ${sale.code || ''} — itens não discriminados`,
+          productName: label,
           unitPrice: creditAmount,
           quantity: 1,
           total: creditAmount,
@@ -141,6 +146,53 @@ export const getSaleDebtItems = (
   return { debt, items: out };
 };
 
+export interface ManualDebtInput {
+  customerId?: string;
+  customerName: string;
+  amount: number;
+  reason: string;
+  operatorId: string;
+  operatorName: string;
+  storeBranchId: string;
+  organizationId: string;
+}
+
+// Monta a venda fiado de um lançamento manual de dívida (ex.: produtos
+// vendidos no fiado antes do sistema existir). Sem itens: não movimenta
+// estoque (loop de baixa/RPC operam sobre items vazios — precedente
+// VEN-MTXM60OB-IE51), não cria sale_items, e o motivo viaja em `notes`
+// (exibido no card via getSaleDebtItems). O recebível, o KPI do Financeiro
+// e a baixa FIFO funcionam pelo fluxo normal de fiado. Retorna null quando
+// os dados são inválidos (valor <= 0 ou motivo vazio).
+export const buildManualDebtSale = (input: ManualDebtInput): Sale | null => {
+  const amount = Math.round((input.amount || 0) * 100) / 100;
+  const reason = (input.reason || '').trim();
+  const customerName = (input.customerName || '').trim();
+  if (amount <= 0 || !reason || !customerName) return null;
+  const code = `VEN-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  return {
+    id: crypto.randomUUID(),
+    code,
+    date: new Date().toISOString(),
+    operatorId: input.operatorId,
+    operatorName: input.operatorName,
+    customerId: input.customerId,
+    customerName,
+    storeBranchId: input.storeBranchId,
+    items: [],
+    subtotal: amount,
+    discount: 0,
+    total: amount,
+    payments: [{ method: 'credit_account', amount }],
+    orderSource: 'fiado',
+    kitchenStatus: 'pending',
+    status: 'completed',
+    organizationId: input.organizationId,
+    updatedAt: new Date().toISOString(),
+    notes: reason,
+  } as Sale;
+};
+
 // ─── Component ──────────────────────────────────────────────────
 export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, caixaSession }) => {
   const isAdmin = user.role === 'admin' || !!user.superadmin;
@@ -153,6 +205,13 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'pix' | 'credit_card' | 'debit_card'>('cash');
   const [registeringPayment, setRegisteringPayment] = useState(false);
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
+  // Lançamento manual de dívida (pré-sistema): sem gate de perfil além do
+  // acesso ao módulo (decisão do usuário) — igual ao Registrar Pagamento.
+  const [debtModalCustomerId, setDebtModalCustomerId] = useState<string | null>(null);
+  const [debtCustomerPick, setDebtCustomerPick] = useState('');
+  const [debtAmount, setDebtAmount] = useState('');
+  const [debtReason, setDebtReason] = useState('');
+  const [registeringDebt, setRegisteringDebt] = useState(false);
 
   // Atualiza pagamentos ao vivo quando outro dispositivo registra/exclui um pagamento
   useEffect(() => {
@@ -407,6 +466,80 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
     }
   }, [confirmDeletePayment, creditPayments, addToast]);
 
+  // ── Lançamento manual de dívida (pré-sistema) ──────────────────────
+  // Cria venda fiado sem itens via buildManualDebtSale + addSale: o recebível,
+  // o KPI do Financeiro e a baixa FIFO passam a contar juntos, sem etapa
+  // separada. Sem gate de perfil além do acesso ao módulo.
+  const openDebtModal = useCallback((customerId: string) => {
+    setDebtModalCustomerId(customerId);
+    setDebtCustomerPick(customerId);
+    setDebtAmount('');
+    setDebtReason('');
+    posAudio.click();
+  }, []);
+
+  const handleRegisterDebt = useCallback(async () => {
+    const amount = parseBrlToNumber(debtAmount);
+    if (!amount || amount <= 0) {
+      addToast('error', 'Informe um valor de dívida válido.');
+      return;
+    }
+    if (!debtReason.trim()) {
+      addToast('error', 'Informe o motivo do lançamento (ex.: produtos vendidos antes do sistema).');
+      return;
+    }
+    // Cliente pode vir do card ou do seletor (dívida de quem ainda não tem fiado)
+    const pickedId = debtCustomerPick || debtModalCustomerId || '';
+    const debt = customerDebts.find((d) => d.customer.id === pickedId);
+    const known = customers.find((c) => c.id === pickedId);
+    const customerName = debt?.customer.name || known?.name || '';
+    if (!customerName) {
+      addToast('error', 'Selecione o cliente.');
+      return;
+    }
+    const branchId = storageService.getSelectedBranchId();
+    if (!branchId) {
+      addToast('error', 'Nenhuma filial selecionada.');
+      return;
+    }
+    const sale = buildManualDebtSale({
+      customerId: pickedId && pickedId !== '__no_customer__' ? pickedId : undefined,
+      customerName,
+      amount,
+      reason: debtReason,
+      operatorId: user.id,
+      operatorName: user.name,
+      storeBranchId: branchId,
+      organizationId: storageService.getCurrentOrgId(),
+    });
+    if (!sale) {
+      addToast('error', 'Não foi possível montar o lançamento. Confira valor e motivo.');
+      return;
+    }
+    setRegisteringDebt(true);
+    try {
+      const result = await storageService.addSale(sale);
+      if (!result.success) {
+        addToast('error', result.message || 'Não foi possível lançar a dívida. Tente novamente.');
+        posAudio.error();
+        return;
+      }
+      posAudio.chime();
+      addToast('success', `Dívida de ${formatCurrency(amount)} lançada para ${customerName}.`);
+      // Eco local: o Realtime devolve a venda; sem a marca, bip/toast duplicam
+      globalNotificationService.markLocalSale(sale.code);
+      globalNotificationService.notifyFiado(customerName, amount, 'new');
+    } catch (err: any) {
+      addToast('error', friendlyErrorMessage(err, 'Não foi possível lançar a dívida. Tente novamente.'));
+      posAudio.error();
+    } finally {
+      setRegisteringDebt(false);
+      setDebtAmount('');
+      setDebtReason('');
+      setDebtModalCustomerId(null);
+    }
+  }, [debtAmount, debtReason, debtCustomerPick, debtModalCustomerId, customerDebts, customers, user, addToast]);
+
   // ── Helpers ────────────────────────────────────────────────────
   const formatCurrency = (v: number) =>
     `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -435,7 +568,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
         </div>
 
         {/* Summary cards */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-stretch">
           <div className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
             <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase">Em Aberto</p>
             <p className="text-sm font-bold text-amber-700 dark:text-amber-300">{formatCurrency(grandTotalDebt)}</p>
@@ -444,6 +577,14 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
             <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">Recebido</p>
             <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(grandTotalPaid)}</p>
           </div>
+          <button
+            onClick={() => openDebtModal('')}
+            className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
+            title="Lançar dívida de venda feita antes do sistema (entra no Fiados e no Financeiro)"
+          >
+            <Wallet className="w-4 h-4" />
+            Adicionar dívida
+          </button>
         </div>
       </div>
 
@@ -705,9 +846,9 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
                   </div>
                 )}
 
-                {/* Payment button */}
-                {!isFullyPaid && (
-                  <div className="mt-4">
+                {/* Payment / debt buttons */}
+                <div className="mt-4 space-y-2">
+                  {!isFullyPaid && (
                     <button
                       onClick={() => {
                         setPaymentModalSaleId(debt.customer.id);
@@ -719,8 +860,16 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
                       <CreditCard className="w-4 h-4" />
                       Registrar Pagamento
                     </button>
-                  </div>
-                )}
+                  )}
+                  <button
+                    onClick={() => openDebtModal(debt.customer.id)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-amber-600/40 hover:bg-amber-600/10 text-amber-700 dark:text-amber-300 font-bold text-xs transition-all flex items-center justify-center gap-2"
+                    title="Lançar dívida de venda feita antes do sistema"
+                  >
+                    <Wallet className="w-4 h-4" />
+                    Adicionar dívida
+                  </button>
+                </div>
               </div>
               )}
             </div>
@@ -907,6 +1056,103 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
         onConfirm={handleConfirmDeletePayment}
         onCancel={() => setConfirmDeletePayment(null)}
       />
+
+      {/* Debt Modal — lançamento manual (venda pré-sistema) */}
+      {debtModalCustomerId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-amber-500" />
+                Adicionar dívida
+              </h3>
+              <button
+                onClick={() => {
+                  setDebtModalCustomerId(null);
+                  setDebtAmount('');
+                  setDebtReason('');
+                }}
+                className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-500 dark:text-[#71717a]">
+              Lança uma dívida de venda feita antes do sistema. Entra no Fiados e no
+              Financeiro, e o pagamento abate junto no FIFO.
+            </p>
+
+            {/* Cliente (quando aberto pelo topo, escolhe aqui) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                Cliente
+              </label>
+              <select
+                value={debtCustomerPick}
+                onChange={(e) => setDebtCustomerPick(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                <option value="">Selecione...</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+                <option value="__no_customer__">🧾 Cliente Não Identificado</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                Valor da Dívida (R$)
+              </label>
+              <MoneyInput
+                value={debtAmount}
+                onChange={setDebtAmount}
+                placeholder="0,00"
+                autoFocus
+                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-[#a1a1aa] mb-1">
+                Motivo do lançamento
+              </label>
+              <input
+                type="text"
+                value={debtReason}
+                onChange={(e) => setDebtReason(e.target.value)}
+                placeholder="Ex: produtos vendidos no fiado antes do sistema"
+                maxLength={120}
+                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => {
+                  setDebtModalCustomerId(null);
+                  setDebtAmount('');
+                  setDebtReason('');
+                }}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-[#a1a1aa] hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRegisterDebt}
+                disabled={registeringDebt || !debtAmount || parseBrlToNumber(debtAmount) <= 0 || !debtReason.trim() || !debtCustomerPick}
+                className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {registeringDebt ? 'Lançando...' : 'Lançar Dívida'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

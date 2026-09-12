@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterOpenDebts, CustomerDebt, getSaleCreditAmount, getSaleDebtItems } from './FiadosView';
+import { filterOpenDebts, CustomerDebt, getSaleCreditAmount, getSaleDebtItems, buildManualDebtSale } from './FiadosView';
 import { Customer, Sale } from '../../types';
 
 const mkCustomer = (id: string, name: string): Customer =>
@@ -118,5 +118,53 @@ describe('FiadosView — getSaleDebtItems (venda sem itens)', () => {
     const { debt, items } = getSaleDebtItems(s);
     expect(debt).toBe(0);
     expect(items).toHaveLength(0);
+  });
+
+  it('venda sem itens exibe o motivo (notes) como identificação', () => {
+    const s = mkSale({
+      code: 'VEN-MANUAL',
+      total: 30,
+      items: [],
+      payments: [{ method: 'credit_account', amount: 30 }],
+      notes: 'produtos vendidos antes do sistema',
+    });
+    const { items } = getSaleDebtItems(s);
+    expect(items).toHaveLength(1);
+    expect(items[0].productName).toContain('produtos vendidos antes do sistema');
+  });
+});
+
+describe('FiadosView — buildManualDebtSale (dívida pré-sistema)', () => {
+  const base = {
+    customerId: 'cust-1',
+    customerName: 'Dionathan',
+    amount: 100,
+    reason: 'produtos vendidos no fiado antes do sistema',
+    operatorId: 'op-1',
+    operatorName: 'Juninho',
+    storeBranchId: 'br-1',
+    organizationId: 'org-1',
+  };
+
+  it('monta venda fiado sem itens, com motivo e origem fiado', () => {
+    const s = buildManualDebtSale(base);
+    expect(s).not.toBeNull();
+    expect(s!.total).toBe(100);
+    expect(s!.subtotal).toBe(100);
+    expect(s!.items).toEqual([]);
+    expect(s!.payments).toEqual([{ method: 'credit_account', amount: 100 }]);
+    expect(s!.customerId).toBe('cust-1');
+    expect(s!.status).toBe('completed');
+    expect(s!.orderSource).toBe('fiado');
+    expect(s!.notes).toBe(base.reason);
+    // Cai no Fiados (filtro credit_account) e no KPI (recebível via addSale)
+    expect(s!.payments.some((p) => p.method === 'credit_account')).toBe(true);
+  });
+
+  it('rejeita valor zerado ou motivo vazio', () => {
+    expect(buildManualDebtSale({ ...base, amount: 0 })).toBeNull();
+    expect(buildManualDebtSale({ ...base, amount: -5 })).toBeNull();
+    expect(buildManualDebtSale({ ...base, reason: '   ' })).toBeNull();
+    expect(buildManualDebtSale({ ...base, customerName: '' })).toBeNull();
   });
 });
