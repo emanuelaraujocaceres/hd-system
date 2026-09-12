@@ -33,6 +33,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({ user, onClose }) => {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [operatorId, setOperatorId] = useState('');
   const [includeCancelled, setIncludeCancelled] = useState(false);
+  const [includeBills, setIncludeBills] = useState(true);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -51,7 +52,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({ user, onClose }) => {
     setLoading(true);
     setError('');
     try {
-      const res = await fetchReport({ startDate, endDate, paymentMethod, operatorId, includeCancelled });
+      const res = await fetchReport({ startDate, endDate, paymentMethod, operatorId, includeCancelled, includeBills });
       setResult(res);
     } catch (e: any) {
       setError(e?.message || 'Falha ao carregar o relatório.');
@@ -59,7 +60,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({ user, onClose }) => {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, paymentMethod, operatorId, includeCancelled]);
+  }, [startDate, endDate, paymentMethod, operatorId, includeCancelled, includeBills]);
 
   useEffect(() => {
     run();
@@ -178,6 +179,16 @@ export const ReportModal: React.FC<ReportModalProps> = ({ user, onClose }) => {
           Incluir vendas canceladas
         </label>
 
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-400 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={includeBills}
+            onChange={(e) => setIncludeBills(e.target.checked)}
+            className="w-4 h-4 rounded accent-indigo-600"
+          />
+          Incluir contas pagas/recebidas
+        </label>
+
         {/* Resumo ao vivo */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-4 space-y-3">
           {loading ? (
@@ -254,6 +265,22 @@ export const ReportModal: React.FC<ReportModalProps> = ({ user, onClose }) => {
                 {kpis.itemsSold} itens · {kpis.discountTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} em descontos
                 {result.meta.filters.paymentMethod !== 'Todas' && ` · Pagamento: ${result.meta.filters.paymentMethod}`}
               </p>
+              {result.meta.filters.includeBills && (
+                <div className="rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">Contas no período</p>
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="text-rose-600 dark:text-rose-400">
+                      Pagas: {result.model.bills.paidTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      Recebidas: {result.model.bills.receivedTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                  </div>
+                  {[...result.model.bills.paidByMethod, ...result.model.bills.receivedByMethod].length === 0 && (
+                    <p className="text-[11px] text-slate-500 dark:text-[#71717a] mt-1">Sem contas quitadas no período.</p>
+                  )}
+                </div>
+              )}
               {result.model.rows.length === 0 && (
                 <p className="text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2 flex items-center gap-1.5">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />

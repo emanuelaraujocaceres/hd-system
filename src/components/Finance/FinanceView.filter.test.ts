@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterFinanceAccounts, buildAccountSettlement } from './FinanceView';
+import { filterFinanceAccounts, buildAccountSettlement, settleOccurrence } from './FinanceView';
 import { FinancialAccount } from '../../types';
 
 const acc = (over: Partial<FinancialAccount>): FinancialAccount =>
@@ -47,7 +47,7 @@ describe('filterFinanceAccounts — lista Contas Pagar/Receber', () => {
   });
 });
 
-describe('buildAccountSettlement — baixa via checkout', () => {
+describe('buildAccountSettlement — baixa via checkout (sem caixa)', () => {
   const rec = (over = {}) =>
     ({
       id: 'k1', title: 'Cliente Klebinho', type: 'receivable', category: 'conta_receber',
@@ -55,32 +55,64 @@ describe('buildAccountSettlement — baixa via checkout', () => {
       ...over,
     } as FinancialAccount);
 
-  it('recebível em dinheiro: paid + método + suprimento', () => {
-    const { updated, cashIn, cashOut, primaryMethod } = buildAccountSettlement(rec(), [{ method: 'cash', amount: 130 }]);
+  it('recebível em dinheiro: paid + método + flag, sem mexer no caixa', () => {
+    const { updated, primaryMethod } = buildAccountSettlement(rec(), [{ method: 'cash', amount: 130 }], true);
     expect(updated.status).toBe('paid');
     expect(updated.paidDate).toBeTruthy();
     expect(updated.paymentMethod).toBe('cash');
+    expect(updated.includeInReport).toBe(true);
     expect(primaryMethod).toBe('cash');
-    expect(cashIn).toBe(130);
-    expect(cashOut).toBe(0);
+    expect(updated).not.toHaveProperty('cashIn');
   });
 
-  it('a pagar dividido: só o dinheiro vira sangria, método = maior parte', () => {
-    const { updated, cashIn, cashOut, primaryMethod } = buildAccountSettlement(
+  it('a pagar dividido: quita, método = maior parte, flag respeitada', () => {
+    const { updated, primaryMethod } = buildAccountSettlement(
       rec({ type: 'payable' }),
       [{ method: 'cash', amount: 30 }, { method: 'pix', amount: 100 }],
+      false,
     );
     expect(updated.status).toBe('paid');
     expect(updated.paymentMethod).toBe('pix');
+    expect(updated.includeInReport).toBe(false);
     expect(primaryMethod).toBe('pix');
-    expect(cashIn).toBe(0);
-    expect(cashOut).toBe(30);
   });
 
-  it('sem partes válidas: quita sem movimentar caixa', () => {
-    const { updated, cashIn, cashOut } = buildAccountSettlement(rec(), []);
+  it('sem partes válidas: quita sem método', () => {
+    const { updated } = buildAccountSettlement(rec(), []);
     expect(updated.status).toBe('paid');
-    expect(cashIn).toBe(0);
-    expect(cashOut).toBe(0);
+    expect(updated.paymentMethod).toBeUndefined();
+  });
+});
+
+describe('settleOccurrence — baixa de ocorrência/parcela via checkout', () => {
+  const acc = {
+    id: 'r1', title: 'Energia', type: 'payable', category: 'conta_pagar',
+    amount: 1100, dueDate: '2026-09-04', status: 'pending', recipientOrPayer: 'Electro',
+    isRecurring: true, recurrenceType: 'monthly', recurrenceCount: 2,
+    recurrences: [
+      { id: 'r1-r1', number: 1, dueDate: '2026-09-04', status: 'pending' },
+      { id: 'r1-r2', number: 2, dueDate: '2026-10-04', status: 'pending' },
+    ],
+  } as FinancialAccount;
+
+  it('quita só a ocorrência (conta segue pendente) com método e flag', () => {
+    const updated = settleOccurrence(acc, 'r1-r1', 'recurrence', [{ method: 'pix', amount: 1100 }], true)!;
+    expect(updated.recurrences![0].status).toBe('paid');
+    expect(updated.recurrences![0].paymentMethod).toBe('pix');
+    expect(updated.recurrences![0].includeInReport).toBe(true);
+    expect(updated.recurrences![1].status).toBe('pending');
+    expect(updated.status).toBe('pending');
+  });
+
+  it('última pendente quita a conta junto', () => {
+    const almost = { ...acc, recurrences: [{ ...acc.recurrences![0], status: 'paid' as const, paidDate: '2026-09-04' }, acc.recurrences![1]] } as FinancialAccount;
+    const updated = settleOccurrence(almost, 'r1-r2', 'recurrence', [{ method: 'cash', amount: 1100 }], false)!;
+    expect(updated.status).toBe('paid');
+    expect(updated.includeInReport).toBe(false);
+  });
+
+  it('id inexistente ou tipo errado retorna null', () => {
+    expect(settleOccurrence(acc, 'nope', 'recurrence', [{ method: 'cash', amount: 1 }], true)).toBeNull();
+    expect(settleOccurrence(acc, 'r1-r1', 'installment', [{ method: 'cash', amount: 1 }], true)).toBeNull();
   });
 });

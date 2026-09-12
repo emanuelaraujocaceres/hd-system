@@ -358,6 +358,8 @@ export interface FinancialAccount {
   organizationId?: string;
   /** Método usado na baixa (dinheiro/pix/cartão) — coluna payment_method já existe no banco */
   paymentMethod?: string;
+  /** Contabilizar a baixa no Relatório Gerencial (checkbox no checkout; default true) */
+  includeInReport?: boolean;
   // Recorrência / Parcelamento
   isRecurring?: boolean;
   isInstallment?: boolean;
@@ -379,6 +381,9 @@ export interface FinancialInstallment {
   dueDate: string;
   status: 'pending' | 'paid' | 'overdue';
   paidDate?: string;
+  /** Método da baixa + flag do relatório (viajam no JSONB, sem migration) */
+  paymentMethod?: string;
+  includeInReport?: boolean;
 }
 
 // Ocorrência individual de uma conta recorrente
@@ -388,6 +393,9 @@ export interface FinancialRecurrence {
   dueDate: string;
   status: 'pending' | 'paid' | 'overdue';
   paidDate?: string;
+  /** Método da baixa + flag do relatório (viajam no JSONB, sem migration) */
+  paymentMethod?: string;
+  includeInReport?: boolean;
 }
 
 // Histórico de boletos escaneados (sincronizado — tabela scanned_boletos)

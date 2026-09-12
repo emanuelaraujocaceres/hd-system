@@ -83,34 +83,74 @@ export const filterFinanceAccounts = (
 
 export interface AccountSettlement {
   updated: FinancialAccount;
-  cashIn: number; // dinheiro recebido (suprimento no caixa)
-  cashOut: number; // dinheiro pago (sangria no caixa)
   primaryMethod: string;
 }
 
 // Monta a baixa de conta avulsa a partir do checkout (PaymentModal):
-// status paid + paidDate + método guardado (coluna payment_method).
-// Só DINHEIRO movimenta o caixa — pix/cartão apenas quitam a conta
-// (mesma regra do pagamento de fiado). Puro/testável.
+// status paid + paidDate + método (coluna payment_method) + flag do relatório.
+// A baixa NUNCA movimenta o caixa (decisão do usuário) — o reflexo é só no
+// Relatório Gerencial. Puro/testável.
 export const buildAccountSettlement = (
   account: FinancialAccount,
   payments: { method: string; amount: number }[],
+  includeInReport = true,
 ): AccountSettlement => {
   const parts = (payments || []).filter((p) => (p.amount || 0) > 0);
-  const cash = parts.filter((p) => p.method === 'cash').reduce((s, p) => s + p.amount, 0);
   const primary = parts.length > 0 ? parts.reduce((a, b) => (b.amount > a.amount ? b : a)).method : '';
-  const round = (v: number) => Math.round(v * 100) / 100;
   return {
     updated: {
       ...account,
       status: 'paid',
       paidDate: new Date().toISOString().slice(0, 10),
       paymentMethod: primary || undefined,
+      includeInReport,
     },
-    cashIn: account.type === 'receivable' ? round(cash) : 0,
-    cashOut: account.type === 'payable' ? round(cash) : 0,
     primaryMethod: primary,
   };
+};
+
+// Baixa de UMA ocorrência/parcela via checkout: marca só ela (método + flag
+// do relatório); se era a última pendente, quita a conta. Retorna null se o
+// id não existe. Puro/testável.
+export const settleOccurrence = (
+  account: FinancialAccount,
+  occurrenceId: string,
+  kind: 'recurrence' | 'installment',
+  payments: { method: string; amount: number }[],
+  includeInReport = true,
+): FinancialAccount | null => {
+  const parts = (payments || []).filter((p) => (p.amount || 0) > 0);
+  const primary = parts.length > 0 ? parts.reduce((a, b) => (b.amount > a.amount ? b : a)).method : '';
+  const paidDate = new Date().toISOString().slice(0, 10);
+  if (kind === 'recurrence' && account.recurrences) {
+    if (!account.recurrences.some((r) => r.id === occurrenceId)) return null;
+    const recurrences = account.recurrences.map((rec) =>
+      rec.id === occurrenceId
+        ? { ...rec, status: 'paid' as const, paidDate, paymentMethod: primary || undefined, includeInReport }
+        : rec,
+    );
+    const allPaid = recurrences.every((r) => r.status === 'paid');
+    return {
+      ...account,
+      recurrences,
+      ...(allPaid ? { status: 'paid' as const, paidDate, paymentMethod: primary || undefined, includeInReport } : {}),
+    };
+  }
+  if (kind === 'installment' && account.installments) {
+    if (!account.installments.some((i) => i.id === occurrenceId)) return null;
+    const installments = account.installments.map((inst) =>
+      inst.id === occurrenceId
+        ? { ...inst, status: 'paid' as const, paidDate, paymentMethod: primary || undefined, includeInReport }
+        : inst,
+    );
+    const allPaid = installments.every((i) => i.status === 'paid');
+    return {
+      ...account,
+      installments,
+      ...(allPaid ? { status: 'paid' as const, paidDate, paymentMethod: primary || undefined, includeInReport } : {}),
+    };
+  }
+  return null;
 };
 
 interface FinanceViewProps {
@@ -146,6 +186,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const [formAmount, setFormAmount] = useState<string>('');
   const [formDueDate, setFormDueDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [formRecipient, setFormRecipient] = useState('');
+  const [formInclude, setFormInclude] = useState(true);
   const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
   // Recorrência / Parcelamento
   const [formMode, setFormMode] = useState<'single' | 'installment' | 'recurring'>('single');
@@ -208,6 +249,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           amount: amountValue,
           dueDate: formDueDate,
           recipientOrPayer: formRecipient.trim(),
+          includeInReport: formInclude,
         };
         storageService.saveFinancialAccount(newAcc);
         posAudio.chime();
@@ -225,6 +267,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           dueDate: formDueDate,
           status: 'pending',
           recipientOrPayer: formRecipient.trim(),
+          includeInReport: formInclude,
           storeBranchId: branchId,
           organizationId: storageService.getCurrentOrgId(),
         };
@@ -259,6 +302,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           dueDate: formDueDate,
           status: 'pending',
           recipientOrPayer: formRecipient.trim(),
+          includeInReport: formInclude,
           storeBranchId: branchId,
           organizationId: orgId,
           isInstallment: true,
@@ -292,6 +336,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           dueDate: formDueDate,
           status: 'pending',
           recipientOrPayer: formRecipient.trim(),
+          includeInReport: formInclude,
           storeBranchId: branchId,
           organizationId: orgId,
           isRecurring: true,
@@ -313,6 +358,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           dueDate: formDueDate,
           status: 'pending',
           recipientOrPayer: formRecipient.trim(),
+          includeInReport: formInclude,
         };
         storageService.saveFinancialAccount(newAcc);
         posAudio.chime();
@@ -344,46 +390,6 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     }
   };
 
-  // ── Dar baixa em ocorrência individual (recorrência) ──────────
-  const handleMarkRecurrencePaid = useCallback(
-    (account: FinancialAccount, recurrenceId: string) => {
-      if (!account.recurrences) return;
-      const updated = {
-        ...account,
-        recurrences: account.recurrences.map((rec) =>
-          rec.id === recurrenceId ? { ...rec, status: 'paid' as const, paidDate: new Date().toISOString().slice(0, 10) } : rec
-        ),
-      };
-      if (updated.recurrences.every((r) => r.status === 'paid')) {
-        updated.status = 'paid';
-      }
-      storageService.saveFinancialAccount(updated);
-      posAudio.chime();
-      addToast('success', `Ocorrência marcada como paga.`);
-    },
-    [addToast]
-  );
-
-  // ── Dar baixa em parcela individual ─────────────────────────────
-  const handleMarkInstallmentPaid = useCallback(
-    (account: FinancialAccount, installmentId: string) => {
-      if (!account.installments) return;
-      const updated = {
-        ...account,
-        installments: account.installments.map((inst) =>
-          inst.id === installmentId ? { ...inst, status: 'paid' as const, paidDate: new Date().toISOString().slice(0, 10) } : inst
-        ),
-      };
-      if (updated.installments.every((i) => i.status === 'paid')) {
-        updated.status = 'paid';
-      }
-      storageService.saveFinancialAccount(updated);
-      posAudio.chime();
-      addToast('success', `Parcela marcada como paga.`);
-    },
-    [addToast]
-  );
-
   const handleOpenEditAccount = (account: FinancialAccount) => {
     setEditingAccount(account);
     setFormTitle(account.title);
@@ -391,6 +397,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     setFormAmount(account.amount ? String(account.amount).replace('.', ',') : '');
     setFormDueDate(account.dueDate);
     setFormRecipient(account.recipientOrPayer);
+    setFormInclude(account.includeInReport !== false);
     setIsModalOpen(true);
   };
 
@@ -401,6 +408,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     setFormAmount('');
     setFormDueDate(new Date().toISOString().slice(0, 10));
     setFormRecipient('');
+    setFormInclude(true);
     setFormMode('single');
     setFormRecurrenceType('monthly');
     setFormRecurrenceCount('');
@@ -423,10 +431,13 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   };
 
   // ── Baixa via checkout completo (PaymentModal em modo diversão) ──────
-  // Conta única pendente/vencida: abre o checkout (dinheiro/troco, PIX, cartão,
-  // dividido) SEM criar venda — só quita a conta. Parceladas/recorrentes usam
-  // a Baixa por ocorrência/parcela existente.
+  // Conta única pendente/vencida OU uma ocorrência/parcela: abre o checkout
+  // (dinheiro/troco, PIX, cartão, dividido) SEM criar venda — só quita.
+  // NUNCA movimenta o caixa (decisão do usuário); o reflexo é no Relatório.
   const [payAccountId, setPayAccountId] = useState<string | null>(null);
+  const [payOcc, setPayOcc] = useState<{ accountId: string; kind: 'recurrence' | 'installment'; occId: string; amount: number } | null>(null);
+  // Checkbox "Contabilizar no relatório" (default marcado; por baixa)
+  const [settleInclude, setSettleInclude] = useState(true);
   const [confirmConvertAccount, setConfirmConvertAccount] = useState<{ id: string; title: string; dueDate: string } | null>(null);
   const payAccount = financialAccounts.find((a) => a.id === payAccountId) ?? null;
   const handleConfirmConvert = () => {
@@ -443,18 +454,39 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     addToast('success', `Conta "${target.title}" agora é recorrente (12x mensal).`);
   };
   const handleConfirmAccountPayment = async (payments: PaymentDetails[], total: number) => {
+    // Baixa de ocorrência/parcela (via checkout): quita só ela
+    if (payOcc) {
+      const acc = financialAccounts.find((a) => a.id === payOcc.accountId);
+      if (!acc) return { success: false, message: 'Conta não encontrada.' };
+      try {
+        const updated = settleOccurrence(acc, payOcc.occId, payOcc.kind, payments, settleInclude);
+        if (!updated) return { success: false, message: 'Ocorrência não encontrada.' };
+        storageService.saveFinancialAccount(updated);
+        setPayOcc(null);
+        posAudio.chime();
+        addToast('success', `Baixa de R$ ${total.toFixed(2)} registrada — ${acc.title}.`);
+      } catch (err: any) {
+        return { success: false, message: friendlyErrorMessage(err, 'Não foi possível dar baixa. Tente novamente.') };
+      }
+      return;
+    }
+    // Baixa de conta única
     const acc = financialAccounts.find((a) => a.id === payAccountId);
     if (!acc) return { success: false, message: 'Conta não encontrada.' };
     try {
-      const { updated, cashIn, cashOut } = buildAccountSettlement(acc, payments);
+      const { updated } = buildAccountSettlement(acc, payments, settleInclude);
       storageService.saveFinancialAccount(updated);
-      if (cashIn > 0) storageService.addSuprimento(cashIn, `Recebimento — ${acc.title}`);
-      if (cashOut > 0) storageService.addSangria(cashOut, `Pagamento — ${acc.title}`);
       posAudio.chime();
       addToast('success', acc.type === 'receivable' ? `Recebido R$ ${total.toFixed(2)} — ${acc.title}.` : `Pago R$ ${total.toFixed(2)} — ${acc.title}.`);
     } catch (err: any) {
       return { success: false, message: friendlyErrorMessage(err, 'Não foi possível dar baixa. Tente novamente.') };
     }
+  };
+  const openSettleModal = (accountId: string, occ?: { kind: 'recurrence' | 'installment'; occId: string; amount: number }) => {
+    setPayAccountId(accountId);
+    setPayOcc(occ ? { accountId, ...occ } : null);
+    setSettleInclude(true);
+    posAudio.click();
   };
 
   const [confirmDeleteSale, setConfirmDeleteSale] = useState<{ code: string; id: string } | null>(null);
@@ -896,7 +928,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setPayAccountId(acc.id);
+                              openSettleModal(acc.id);
                               posAudio.click();
                             }}
                             className={acc.type === 'receivable' ? 'w-full px-3 py-2 rounded-xl text-white font-bold text-xs shadow-md transition-all bg-emerald-600 hover:bg-emerald-700' : 'w-full px-3 py-2 rounded-xl text-white font-bold text-xs shadow-md transition-all bg-indigo-600 hover:bg-indigo-700'}
@@ -946,7 +978,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold text-rose-600">R$ {acc.amount.toFixed(2)}</span>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleMarkRecurrencePaid(acc, rec.id); }}
+                                  onClick={(e) => { e.stopPropagation(); openSettleModal(acc.id, { kind: 'recurrence', occId: rec.id, amount: acc.amount }); }}
                                   className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition-colors"
                                 >
                                   Baixa
@@ -963,7 +995,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold text-rose-600">R$ {inst.amount.toFixed(2)}</span>
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleMarkInstallmentPaid(acc, inst.id); }}
+                                  onClick={(e) => { e.stopPropagation(); openSettleModal(acc.id, { kind: 'installment', occId: inst.id, amount: inst.amount }); }}
                                   className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] transition-colors"
                                 >
                                   Baixa
@@ -1612,6 +1644,18 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 />
               </div>
 
+              <div>
+                <label className="flex items-center gap-2.5 cursor-pointer select-none px-3 py-2.5 bg-slate-50 dark:bg-slate-800 border rounded-xl">
+                  <input
+                    type="checkbox"
+                    checked={formInclude}
+                    onChange={(e) => setFormInclude(e.target.checked)}
+                    className="w-4 h-4 rounded accent-emerald-600"
+                  />
+                  <span className="text-xs font-bold">Contabilizar no relatório gerencial</span>
+                </label>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -1674,21 +1718,29 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       {payAccount && (
         <PaymentModal
           isOpen
-          onClose={() => setPayAccountId(null)}
+          onClose={() => { setPayAccountId(null); setPayOcc(null); }}
           cartItems={[]}
           customers={[]}
           selectedCustomer={null}
           setSelectedCustomer={() => {}}
-          subtotal={payAccount.amount}
+          subtotal={payOcc?.amount ?? payAccount.amount}
           discount={0}
           setDiscount={() => {}}
           settings={storageService.getSettings()}
           user={user}
           onSaleSuccess={() => {}}
           comandaMode={{
-            title: payAccount.type === 'receivable' ? `Receber — ${payAccount.title}` : `Pagar — ${payAccount.title}`,
+            title: payOcc
+              ? `Baixa — ${payAccount.title}`
+              : payAccount.type === 'receivable' ? `Receber — ${payAccount.title}` : `Pagar — ${payAccount.title}`,
             onConfirmComanda: handleConfirmAccountPayment,
             notifySuccess: () => {},
+            confirmLabel: 'Confirmar Baixa (F8)',
+            reportCheckbox: {
+              checked: settleInclude,
+              onChange: setSettleInclude,
+              label: 'Contabilizar no relatório gerencial',
+            },
           }}
         />
       )}

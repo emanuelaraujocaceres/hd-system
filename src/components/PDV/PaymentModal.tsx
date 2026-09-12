@@ -71,6 +71,14 @@ interface PaymentModalProps {
      * exibe o próprio toast. Ausente = comportamento original (zero regressão).
      */
     notifySuccess?: (total: number, method: string) => void;
+    /**
+     * Checkbox opcional exibido acima do confirmar (ex.: "Contabilizar no
+     * relatório" da baixa de conta avulsa). Só renderiza quando presente —
+     * PDV/comanda nunca passam, fluxo intacto.
+     */
+    reportCheckbox?: { checked: boolean; onChange: (v: boolean) => void; label?: string };
+    /** Rótulo do botão confirmar no modo desviado (default: Comanda). */
+    confirmLabel?: string;
   };
   initialMethod?: PaymentMethod;
   initialCashGiven?: number;
@@ -797,6 +805,23 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </div>
         )}
 
+        {/* Checkbox opcional do modo desviado (ex.: contabilizar conta) */}
+        {comandaMode?.reportCheckbox && (
+          <div className="mx-4 mb-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={comandaMode.reportCheckbox.checked}
+                onChange={(e) => comandaMode.reportCheckbox!.onChange(e.target.checked)}
+                className="w-4 h-4 rounded accent-emerald-600"
+              />
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                {comandaMode.reportCheckbox.label || 'Contabilizar no relatório gerencial'}
+              </span>
+            </label>
+          </div>
+        )}
+
         {/* Footer Buttons */}
         <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
           <button
@@ -816,7 +841,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             className="flex-1 py-3 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 min-h-[44px]"
           >
             <CheckCircle2 className="w-5 h-5" />
-            <span>{comandaMode ? 'Confirmar e Concluir Comanda (F8)' : 'Confirmar e Concluir Venda (F8)'}</span>
+            <span>{comandaMode?.confirmLabel || (comandaMode ? 'Confirmar e Concluir Comanda (F8)' : 'Confirmar e Concluir Venda (F8)')}</span>
           </LoadingButton>
         </div>
       </div>

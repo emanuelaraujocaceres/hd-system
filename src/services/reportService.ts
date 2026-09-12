@@ -29,6 +29,7 @@ export interface ReportFilters {
   paymentMethod: string; // '' = todas
   operatorId: string; // '' = todos
   includeCancelled: boolean;
+  includeBills?: boolean; // default true — seção Contas pagas/recebidas
 }
 
 export interface ReportRow {
@@ -110,6 +111,7 @@ export interface ReportModel {
   byOperator: OperatorSummary[];
   byCategory: CategorySummary[];
   productRanking: ProductSummary[];
+  bills: BillsSection;
 }
 
 export interface ReportMeta {
@@ -121,7 +123,114 @@ export interface ReportMeta {
   endDate: string;
   generatedAt: string;
   generatedBy: string;
-  filters: { paymentMethod: string; operatorName: string; includeCancelled: boolean };
+  filters: { paymentMethod: string; operatorName: string; includeCancelled: boolean; includeBills: boolean };
+}
+
+// ── Contas pagas/recebidas (baixa de conta avulsa no Financeiro) ─────────
+// Bloco SEPARADO das vendas: conta paga não é venda e não pode inflar os KPIs
+// de vendas. Alimentado pelo storage local (offline-first, mesma filial da tela).
+export interface ReportBillRow {
+  title: string;
+  paidDate: string; // YYYY-MM-DD (data da baixa)
+  type: 'payable' | 'receivable';
+  paymentMethod: string;
+  amount: number;
+}
+
+export interface BillsSummary {
+  method: string;
+  label: string;
+  count: number;
+  total: number;
+}
+
+export interface BillsSection {
+  rows: ReportBillRow[];
+  paidByMethod: BillsSummary[];
+  receivedByMethod: BillsSummary[];
+  paidTotal: number;
+  receivedTotal: number;
+}
+
+export const emptyBillsSection = (): BillsSection => ({
+  rows: [], paidByMethod: [], receivedByMethod: [], paidTotal: 0, receivedTotal: 0,
+});
+
+// Monta a seção a partir das contas (puro/testável). Regras:
+// - só conta AVULSA quitada (fiado/fiadio_payment têm fluxo próprio no Fiados/DRE);
+// - só com paidDate dentro do período (compara por data);
+// - só com includeInReport !== false (checkbox do checkout);
+// - ocorrências/parcelas contam individualmente (método/flag próprios,
+//   herdando da conta quando ausentes).
+export function buildBillsSection(
+  accounts: any[],
+  opts: { from: string; to: string; includeBills: boolean; paymentMethod?: string },
+): BillsSection {
+  if (!opts.includeBills) return emptyBillsSection();
+  const fromD = (opts.from || '').slice(0, 10);
+  const toD = (opts.to || '').slice(0, 10);
+  const inRange = (d: string) => {
+    if (!d) return false;
+    const day = d.slice(0, 10);
+    if (fromD && day < fromD) return false;
+    if (toD && day > toD) return false;
+    return true;
+  };
+  const rows: ReportBillRow[] = [];
+  const push = (a: any, paidDate: string, method: string, amount: number, include?: boolean) => {
+    if (include === false) return;
+    if (!inRange(paidDate)) return;
+    if (opts.paymentMethod && method !== opts.paymentMethod) return;
+    rows.push({
+      title: a.title || 'Conta',
+      paidDate: paidDate.slice(0, 10),
+      type: a.type,
+      paymentMethod: method || 'unknown',
+      amount: Math.round((amount || 0) * 100) / 100,
+    });
+  };
+  for (const a of accounts || []) {
+    if (!a || (a.type !== 'payable' && a.type !== 'receivable')) continue;
+    if (a.category === 'fiado' || a.category === 'fiado_payment') continue;
+    const accInclude = a.includeInReport !== false;
+    const accMethod = a.paymentMethod || 'unknown';
+    if (a.isRecurring && Array.isArray(a.recurrences)) {
+      for (const rec of a.recurrences) {
+        if (rec?.status !== 'paid' || !rec.paidDate) continue;
+        push(a, rec.paidDate, rec.paymentMethod || accMethod, a.amount, rec.includeInReport ?? accInclude);
+      }
+      continue;
+    }
+    if (a.isInstallment && Array.isArray(a.installments)) {
+      for (const inst of a.installments) {
+        if (inst?.status !== 'paid' || !inst.paidDate) continue;
+        push(a, inst.paidDate, inst.paymentMethod || accMethod, inst.amount || 0, inst.includeInReport ?? accInclude);
+      }
+      continue;
+    }
+    if (a.status !== 'paid' || !a.paidDate) continue;
+    push(a, a.paidDate, accMethod, a.amount, accInclude);
+  }
+  rows.sort((x, y) => (x.paidDate < y.paidDate ? -1 : x.paidDate > y.paidDate ? 1 : 0));
+  const summarize = (list: ReportBillRow[]): BillsSummary[] => {
+    const map = new Map<string, BillsSummary>();
+    for (const r of list) {
+      const cur = map.get(r.paymentMethod) || { method: r.paymentMethod, label: paymentLabel(r.paymentMethod), count: 0, total: 0 };
+      cur.count += 1;
+      cur.total = Math.round((cur.total + r.amount) * 100) / 100;
+      map.set(r.paymentMethod, cur);
+    }
+    return Array.from(map.values()).sort((x, y) => y.total - x.total);
+  };
+  const paid = rows.filter((r) => r.type === 'payable');
+  const received = rows.filter((r) => r.type === 'receivable');
+  return {
+    rows,
+    paidByMethod: summarize(paid),
+    receivedByMethod: summarize(received),
+    paidTotal: Math.round(paid.reduce((s, r) => s + r.amount, 0) * 100) / 100,
+    receivedTotal: Math.round(received.reduce((s, r) => s + r.amount, 0) * 100) / 100,
+  };
 }
 
 // ── Formatação pt-BR ────────────────────────────────────────────────────────
@@ -134,6 +243,7 @@ const PAYMENT_LABELS: Record<string, string> = {
   credit_card: 'Cartão de Crédito',
   debit_card: 'Cartão de Débito',
   credit_account: 'Fiado / Crédito',
+  unknown: 'Não informado',
 };
 
 export function paymentLabel(method: string): string {
@@ -444,6 +554,14 @@ export async function fetchReport(filters: ReportFilters): Promise<{ model: Repo
     byOperator,
     byCategory,
     productRanking,
+    // Contas quitadas no período (storage local, mesma filial) — bloco separado,
+    // nunca misturado aos KPIs de vendas.
+    bills: buildBillsSection(storageService.getFinancialAccounts(), {
+      from: filters.startDate,
+      to: filters.endDate,
+      includeBills: filters.includeBills !== false,
+      paymentMethod: filters.paymentMethod || undefined,
+    }),
   };
 
   const meta: ReportMeta = {
@@ -459,6 +577,7 @@ export async function fetchReport(filters: ReportFilters): Promise<{ model: Repo
       paymentMethod: filters.paymentMethod ? paymentLabel(filters.paymentMethod) : 'Todas',
       operatorName: '',
       includeCancelled: filters.includeCancelled,
+      includeBills: filters.includeBills !== false,
     },
   };
 
@@ -502,6 +621,21 @@ export function downloadCsv(model: ReportModel, meta: ReportMeta): void {
     ].map(csvCell).join(';'));
   }
 
+  // Bloco 2 — contas pagas/recebidas no período (baixas avulsas do Financeiro)
+  if (model.bills.rows.length > 0) {
+    lines.push('');
+    lines.push(['Tipo', 'Titulo', 'Data Baixa', 'Pagamento', 'Valor'].join(';'));
+    for (const b of model.bills.rows) {
+      lines.push([
+        b.type === 'payable' ? 'Conta Paga' : 'Conta Recebida',
+        b.title,
+        b.paidDate.split('-').reverse().join('/'),
+        paymentLabel(b.paymentMethod),
+        b.amount,
+      ].map(csvCell).join(';'));
+    }
+  }
+
   const bom = '\uFEFF';
   const blob = new Blob([bom + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -525,7 +659,7 @@ function pct(part: number, total: number): string {
 }
 
 function buildHtml(model: ReportModel, meta: ReportMeta): string {
-  const { kpis, byDay, byPayment, byOperator, byCategory, productRanking, sales } = model;
+  const { kpis, byDay, byPayment, byOperator, byCategory, productRanking, sales, bills } = model;
 
   // Gráfico de barras: altura proporcional ao maior dia.
   const maxDay = Math.max(1, ...byDay.map((b) => b.total));
@@ -604,6 +738,7 @@ function buildHtml(model: ReportModel, meta: ReportMeta): string {
     `Período: <strong>${esc(meta.startDate)} a ${esc(meta.endDate)}</strong>`,
     `Pagamento: <strong>${esc(meta.filters.paymentMethod)}</strong>`,
     meta.filters.includeCancelled ? 'Inclui canceladas' : 'Sem canceladas',
+    meta.filters.includeBills ? 'Com contas' : 'Sem contas',
   ].join(' &nbsp;•&nbsp; ');
 
   return `<!DOCTYPE html>
@@ -718,6 +853,27 @@ function buildHtml(model: ReportModel, meta: ReportMeta): string {
     <table>
       <tr><th>Data/Hora</th><th>Operador</th><th>Cliente</th><th>Pagamento</th><th style="text-align:right">Itens</th><th style="text-align:right">Total</th><th></th></tr>
       ${saleRows || '<tr><td colspan="7" class="muted">Sem vendas no período.</td></tr>'}
+    </table>
+
+    <h2 class="sec">💰 Contas Pagas e Recebidas</h2>
+    <table>
+      <tr><th></th><th>Título</th><th>Baixa em</th><th>Forma</th><th style="text-align:right">Valor</th></tr>
+      ${bills.rows.map((b) => `
+      <tr>
+        <td>${b.type === 'payable' ? '🔻 Paga' : '🔺 Recebida'}</td>
+        <td>${esc(b.title)}</td>
+        <td class="num">${esc(b.paidDate.split('-').reverse().join('/'))}</td>
+        <td>${esc(paymentLabel(b.paymentMethod))}</td>
+        <td class="num strong" style="color:${b.type === 'payable' ? '#dc2626' : '#059669'}">${brl.format(b.amount)}</td>
+      </tr>`).join('') || '<tr><td colspan="5" class="muted">Sem contas quitadas no período.</td></tr>'}
+      <tr>
+        <td colspan="4" class="num strong">Total pago</td>
+        <td class="num strong" style="color:#dc2626">${brl.format(bills.paidTotal)}</td>
+      </tr>
+      <tr>
+        <td colspan="4" class="num strong">Total recebido</td>
+        <td class="num strong" style="color:#059669">${brl.format(bills.receivedTotal)}</td>
+      </tr>
     </table>
 
     <footer class="report">

@@ -540,6 +540,7 @@ Transacoes financeiras (contas a pagar/receber, recorrencias, parcelas).
 | installment_number | INTEGER | YES | | Nr da parcela |
 | recurrences_json | JSONB | YES | | Array de recorrencias |
 | installments_json | JSONB | YES | | Array de parcelas |
+| include_in_report | BOOLEAN | YES | | Contabilizar baixa no Relatório Gerencial (migration 20260912, PENDENTE) |
 | sale_id | UUID | YES | FK->sales | Venda relacionada |
 | notes | TEXT | YES | | Observacoes |
 | created_at | TIMESTAMPTZ | YES | | |
@@ -1298,6 +1299,7 @@ Localizacao atual dos .sql de projeto:
 - `supabase/RLS_FIXES.sql`, `supabase/ATOMIC_RPCS.sql` : referencias canonicas de RLS/RPCs (mantidas na raiz de `supabase/`).
 
 Principais migracoes recentes de projeto (por data):
+- 20260912_financial_include_in_report.sql (**PENDENTE DE APLICAÇÃO** via SQL Editor: `include_in_report boolean DEFAULT true` em financial_transactions — flag "Contabilizar no relatório" da baixa de conta avulsa; sem ela, o sync ignora a flag e o relatório conta tudo como true)
 - 20260908_fechar_comanda_fix_orfa_e_bipolar.sql (fix fechar_comanda: fecha órfãs/bipolares da mesma mesa — halls/skol)
 - 20260906_pix_config_realtime.sql (pix_config na publicacao supabase_realtime + REPLICA FULL - PIX por filial)
 - 20260906_solicitar_fechamento_comanda.sql (RPC solicitar_fechamento_comanda - pedir a conta anon, P0-3)

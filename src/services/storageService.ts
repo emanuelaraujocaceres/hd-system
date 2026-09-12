@@ -1092,6 +1092,7 @@ expiration_date: p.expirationDate || null,
       status: a.status,
       notes: a.recipientOrPayer,
       payment_method: a.paymentMethod || null,
+      include_in_report: a.includeInReport !== false,
       // Recorrência / parcelamento (colunas novas — migração 20260810)
       is_recurring: a.isRecurring || false,
       is_installment: a.isInstallment || false,
@@ -1844,6 +1845,8 @@ updateCategoryFromRemote(row: any) {
       status: row.status,
       recipientOrPayer: row.notes || '',
       paymentMethod: row.payment_method || undefined,
+      // Pré-migration a coluna não existe → conta como true (comportamento padrão)
+      includeInReport: row.include_in_report !== false,
       storeBranchId: row.store_branch_id || undefined,
       organizationId: row.organization_id || undefined,
       // Recorrência / parcelamento (colunas novas)
