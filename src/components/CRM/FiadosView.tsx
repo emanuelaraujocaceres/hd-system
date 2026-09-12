@@ -78,6 +78,69 @@ export const filterOpenDebts = (debts: CustomerDebt[], term = ''): CustomerDebt[
   );
 };
 
+// Valor fiado de UMA venda (source of truth dos dois fluxos do Fiados).
+// BUG-005 fix: soma TODOS os pagamentos credit_account (split payment);
+// fallback para saleTotal só quando não há nenhum pagamento credit.
+export const getSaleCreditAmount = (sale: Sale): number => {
+  const saleTotal =
+    sale.total > 0
+      ? sale.total
+      : (sale.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0);
+  return (
+    Math.round(
+      (sale.payments || [])
+        .filter((p) => p.method === 'credit_account')
+        .reduce((sum, p) => sum + (p.amount || 0), 0) * 100,
+    ) / 100 || saleTotal
+  );
+};
+
+// Contribuição de UMA venda para a dívida do cliente (rateio por item).
+// Venda SEM itens (ex.: VEN-MTXM60OB-IE51, items=[] total R$5,50): rateio
+// impossível — o loop original somava 0 e o valor evaporava do EM ABERTO
+// (Financeiro contava 5,50 via payments). Fallback: dívida = fiado direto,
+// com item sintético para exibição e alocação FIFO. Sem isso, o registro de
+// pagamento também ignorava a venda (remainingOnSale = 0).
+export const getSaleDebtItems = (
+  sale: Sale,
+): { debt: number; items: SaleItemPaymentStatus[] } => {
+  const creditAmount = getSaleCreditAmount(sale);
+  const items = sale.items || [];
+  if (items.length === 0) {
+    if (creditAmount <= 0) return { debt: 0, items: [] };
+    return {
+      debt: creditAmount,
+      items: [
+        {
+          productId: sale.id,
+          productName: `Venda ${sale.code || ''} — itens não discriminados`,
+          unitPrice: creditAmount,
+          quantity: 1,
+          total: creditAmount,
+          paidAmount: 0, // Will be calculated below via FIFO
+        },
+      ],
+    };
+  }
+  const saleSubtotal = items.reduce((acc, item) => acc + item.total, 0);
+  const ratio = saleSubtotal > 0 ? creditAmount / saleSubtotal : 1;
+  const out: SaleItemPaymentStatus[] = [];
+  let debt = 0;
+  for (const item of items) {
+    const itemCreditTotal = Math.round(item.total * ratio * 100) / 100;
+    debt += itemCreditTotal;
+    out.push({
+      productId: item.productId,
+      productName: item.productName,
+      unitPrice: item.unitPrice,
+      quantity: item.quantity,
+      total: itemCreditTotal,
+      paidAmount: 0, // Will be calculated below via FIFO
+    });
+  }
+  return { debt, items: out };
+};
+
 // ─── Component ──────────────────────────────────────────────────
 export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, caixaSession }) => {
   const isAdmin = user.role === 'admin' || !!user.superadmin;
@@ -144,42 +207,15 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
       const customerPayments = creditPayments.filter((cp) => cp.customerId === customerId);
       const totalPaid = customerPayments.reduce((acc, cp) => acc + cp.amount, 0);
 
-      // Build item-level payment status for each sale
+      // Build item-level payment status for each sale (rateio extraído em
+      // getSaleDebtItems — cobre venda sem itens, que somava 0)
       const allItems: SaleItemPaymentStatus[] = [];
       let totalDebt = 0;
 
       for (const sale of custSales) {
-        const saleTotal = sale.total > 0 ? sale.total : (sale.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0);
-        // BUG-005 fix: somar TODOS os pagamentos credit_account (split payment),
-        // não usar fallback para saleTotal que infla a dívida
-        const creditAmount = Math.round(
-          (sale.payments || [])
-            .filter((p) => p.method === 'credit_account')
-            .reduce((sum, p) => sum + (p.amount || 0), 0) * 100,
-        ) / 100 || saleTotal;
-
-        // Distribute the sale's credit amount across its items proportionally
-        const saleSubtotal = (sale.items || []).reduce((acc, item) => acc + item.total, 0);
-        const ratio = saleSubtotal > 0 ? creditAmount / saleSubtotal : 1;
-
-        for (const item of sale.items) {
-          const itemCreditTotal = Math.round(item.total * ratio * 100) / 100;
-          totalDebt += itemCreditTotal;
-
-          // Find payments allocated to this item
-          const paidForItem = customerPayments
-            .filter((cp) => cp.saleId === sale.id)
-            .reduce((acc, cp) => acc + cp.amount, 0);
-
-          allItems.push({
-            productId: item.productId,
-            productName: item.productName,
-            unitPrice: item.unitPrice,
-            quantity: item.quantity,
-            total: itemCreditTotal,
-            paidAmount: 0, // Will be calculated below via FIFO
-          });
-        }
+        const contrib = getSaleDebtItems(sale);
+        totalDebt += contrib.debt;
+        allItems.push(...contrib.items);
       }
 
       // FIFO allocation of payments across items (oldest sale first, cheapest item first)
@@ -273,16 +309,16 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
           const sale = sales.find((s) => s.id === saleId);
           if (!sale) continue;
 
-          const saleSubtotal = (sale.items || []).reduce((acc, item) => acc + item.total, 0);
-          const saleTotal = sale.total > 0 ? sale.total : (sale.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0);
-          // BUG-005 fix: somar TODOS os pagamentos credit_account (split payment)
-          const creditAmount = Math.round(
-            (sale.payments || [])
-              .filter((p) => p.method === 'credit_account')
-              .reduce((sum, p) => sum + (p.amount || 0), 0) * 100,
-          ) / 100 || saleTotal;
+          const creditAmount = getSaleCreditAmount(sale);
+          const saleItems = sale.items || [];
+          const saleSubtotal = saleItems.reduce((acc, item) => acc + item.total, 0);
+          // Venda sem itens (ex.: VEN-MTXM60OB-IE51): sem rateio possível, a
+          // dívida da venda é o próprio fiado — senão o pagamento a ignorava
+          // (remainingOnSale = 0) e o valor nunca amortizava.
           const ratio = saleSubtotal > 0 ? creditAmount / saleSubtotal : 1;
-          const totalSaleDebt = Math.round(saleSubtotal * ratio * 100) / 100;
+          const totalSaleDebt = saleItems.length === 0
+            ? creditAmount
+            : Math.round(saleSubtotal * ratio * 100) / 100;
           const remainingOnSale = Math.max(
             0,
             Math.round((totalSaleDebt - totalPaidOnSale) * 100) / 100
