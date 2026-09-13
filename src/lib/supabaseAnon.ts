@@ -25,6 +25,10 @@ export const supabaseAnon = createClient(ANON_URL, ANON_KEY, {
     persistSession: false,
     autoRefreshToken: false,
     detectSessionInUrl: false,
+    // Chave isolada: sem isso o GoTrue reclama de "Multiple GoTrueClient
+    // instances ... under the same storage key" no console. Como este cliente
+    // nunca persiste sessão, a chave nunca é lida/escrita — só silencia o aviso.
+    storageKey: 'sb-tixwhmgzibvazkqbqoev-anon-nopersist',
   },
 });
 
