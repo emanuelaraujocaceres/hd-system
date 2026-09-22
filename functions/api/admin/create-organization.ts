@@ -83,6 +83,7 @@ export async function onRequestPost(context: any) {
     });
 
     if (createAuthErr) {
+      console.error('[create-organization] auth.createUser error:', createAuthErr);
       const msg = createAuthErr.message || '';
       if (msg.includes('already registered') || msg.includes('already exists')) {
         return new Response(JSON.stringify({
