@@ -12,13 +12,9 @@
 #
 # ══════════════════════════════════════════════════════════════════════
 
-[project_id]
-# Staging project ID (create a separate Supabase project for staging)
-# Example: tixwhmgzibvazkqbqoev (production)
-# Staging: create a new project at https://app.supabase.com → New Project
-# Then set the project ID here:
-staging = "YOUR_STAGING_PROJECT_ID"
-production = "tixwhmgzibvazkqbqoev"
+# Project refs (refer�ncia � n�o � se��o v�lida do config.toml da CLI 2.x):
+#   production = tixwhmgzibvazkqbqoev
+#   staging    = YOUR_STAGING_PROJECT_ID
 
 [db]
 port = 54322
@@ -28,10 +24,9 @@ major_version = 15
 [studio]
 port = 54323
 
-[inbucket]
+[local_smtp]
+enabled = true
 port = 54324
-smtp_port = 54325
-pop3_port = 54326
 
 [auth]
 site_url = "http://localhost:3000"
