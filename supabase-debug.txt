@@ -1,0 +1,8 @@
+﻿node.exe : NotFound: FileSystem.readFile (C:\Users\Emanuel\.supabase\profile)
+No C:\Users\Emanuel\AppData\Roaming\npm\supabase.ps1:24 caractere:5
++     & "node$exe"  "$basedir/node_modules/supabase/dist/supabase.js" $ ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (NotFound: FileS...pabase\profile):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+failed to read config: CliConfigParseError

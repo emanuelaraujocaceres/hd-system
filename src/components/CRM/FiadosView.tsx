@@ -16,7 +16,7 @@ import {
   ChevronUp,
   Banknote,
 } from 'lucide-react';
-import { Sale, Customer, UserProfile, CashRegisterSession } from '../../types';
+import { Sale, Customer, UserProfile, CashRegisterSession, PaymentDetails } from '../../types';
 import { storageService } from '../../services/storageService';
 import { posAudio } from '../../services/audioService';
 import { globalNotificationService } from '../../services/globalNotificationService';
@@ -24,6 +24,7 @@ import { useToast } from '../shared/Toast';
 import { MoneyInput, parseBrlToNumber, formatNumberToBrl } from '../shared/MoneyInput';
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { PaymentModal } from '../PDV/PaymentModal';
 
 // ─── Local types ────────────────────────────────────────────────
 interface CreditPayment {
@@ -36,6 +37,7 @@ interface CreditPayment {
   paymentMethod?: string;
   storeBranchId?: string;
   organizationId?: string;
+  isItemPayment?: boolean;
 }
 
 interface SaleItemPaymentStatus {
@@ -245,6 +247,12 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
   const { addToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [creditPayments, setCreditPayments] = useState<CreditPayment[]>(storageService.getCreditPayments());
+  
+  const [itemPaymentTarget, setItemPaymentTarget] = useState<{
+    customerId: string;
+    customer: Customer;
+    item: SaleItemPaymentStatus;
+  } | null>(null);
   const [paymentModalSaleId, setPaymentModalSaleId] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'pix' | 'credit_card' | 'debit_card'>('cash');
@@ -311,7 +319,9 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
       custSales.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
       // Calculate total paid for this customer across all their credit sales
-      const customerPayments = creditPayments.filter((cp) => cp.customerId === customerId);
+            const customerPayments = creditPayments.filter(
+        (cp) => cp.customerId === customerId && !cp.isItemPayment
+      );
       const totalPaid = customerPayments.reduce((acc, cp) => acc + cp.amount, 0);
 
       // Build item-level payment status for each sale (rateio extraído em
@@ -496,6 +506,54 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
     [paymentAmount, paymentMethod, creditPayments, customerDebts, sales, addToast, isCaixaOpen]
   );
 
+  // ── Pagamento por item (quita item específico, com escolha de método) ──
+  const handleItemPayment = useCallback(
+    async (
+      item: SaleItemPaymentStatus,
+      customerId: string,
+      payments: PaymentDetails[],
+      total: number,
+    ): Promise<{ success: boolean; message?: string }> => {
+      const remaining = item.total - item.paidAmount;
+      if (!total || total <= 0) {
+        addToast('error', 'Informe um valor válido.');
+        return { success: false, message: 'Valor inválido.' };
+      }
+      if (total > remaining + 0.01) {
+        addToast('error', `Pagamento excede o saldo restante de R$ ${remaining.toFixed(2)}.`);
+        posAudio.error();
+        return { success: false, message: 'Valor excede o saldo.' };
+      }
+
+      try {
+        const result = storageService.saveSaleItemPayment({
+          saleItemId: item.productId,
+          saleId: item.saleId || '',
+          customerId,
+          amount: total,
+          paymentMethod: payments[0]?.method || 'cash',
+          operatorName: user.name,
+          storeBranchId: storageService.getSelectedBranchId() || '',
+          organizationId: storageService.getCurrentOrgId() || '',
+        });
+
+        if (!result.success) {
+          addToast('error', result.message || 'Falha ao registrar pagamento.');
+          posAudio.error();
+          return result;
+        }
+
+        posAudio.chime();
+        addToast('success', `Pagamento de R$ ${total.toFixed(2)} registrado no item "${item.productName}".`);
+        return { success: true };
+      } catch (err: any) {
+        addToast('error', err?.message || 'Erro ao registrar pagamento.');
+        posAudio.error();
+        return { success: false, message: err?.message };
+      }
+    },
+    [user.name, addToast]
+  );
   // ── Delete credit payment handler (admin only) ──────────────────
   const [confirmDeletePayment, setConfirmDeletePayment] = useState<CreditPayment | null>(null);
   const handleConfirmDeletePayment = useCallback(() => {
@@ -881,6 +939,24 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
                             <span className="text-xs font-bold text-rose-600 dark:text-rose-400">
                               {formatCurrency(item.total)}
                             </span>
+                          )}
+                          {!item.isManual && item.saleId && !isItemPaid && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setItemPaymentTarget({
+                                  customerId: debt.customer.id,
+                                  customer: debt.customer,
+                                  item,
+                                });
+                                posAudio.click();
+                              }}
+                              className="mt-1 ml-auto px-2 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-[10px] flex items-center gap-1 transition-colors"
+                              title="Pagar este item"
+                            >
+                              <DollarSign className="w-3 h-3" />
+                              Pagar
+                            </button>
                           )}
                           {item.isManual && isAdmin && item.saleId && (
                             <button

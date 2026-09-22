@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS product_lots (
   UNIQUE(product_id, lot_number)
 );
 
-COMMENT ON TABLE product_lots IS 'Lotes de produto com validade e quantidade独立. Usado para FEFO.';
+COMMENT ON TABLE product_lots IS 'Lotes de produto com validade e quantidade. Usado para FEFO.';
 COMMENT ON COLUMN product_lots.lot_number IS 'Código do lote do fornecedor (ex: LOTE-2026-001)';
 COMMENT ON COLUMN product_lots.quantity IS 'Quantidade em estoque deste lote específico';
 COMMENT ON COLUMN product_lots.cost_price IS 'Custo específico deste lote (pode diferir de lote para lote)';

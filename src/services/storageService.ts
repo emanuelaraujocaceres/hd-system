@@ -83,6 +83,7 @@ const KEYS = {
   LOGGED_IN_EMAIL: 'hd_system_logged_in_email',
   SETTINGS: 'hd_system_settings',
   CREDIT_PAYMENTS: 'hd_system_credit_payments',
+  SALE_ITEM_PAYMENTS: 'sale_item_payments',
   SCANNED_BOLETOS: 'hd_system_scanned_boletos',
   NF_RECORDS: 'hd_system_nf_records',
   // Frentes TV/impressora (agosto/2026)
@@ -5008,6 +5009,57 @@ private updateReceivableFromPayments(saleId: string) {
     this.syncCreditPayment(p);
     // Baixa (parcial ou total) na conta a receber vinculada à venda fiado
     if (p.saleId) this.updateReceivableFromPayments(p.saleId);
+  }
+
+  
+  saveSaleItemPayment(data: {
+    saleItemId: string;
+    saleId: string;
+    customerId: string;
+    amount: number;
+    paymentMethod?: string;
+    operatorName: string;
+    storeBranchId: string;
+    organizationId: string;
+  }): { success: boolean; message?: string } {
+    try {
+      const record = {
+        id: StorageService.ensureUuid(crypto.randomUUID()),
+        saleItemId: data.saleItemId,
+        saleId: data.saleId,
+        customerId: data.customerId,
+        amount: data.amount,
+        paymentMethod: data.paymentMethod,
+        operatorName: data.operatorName,
+        paidAt: new Date().toISOString(),
+        storeBranchId: data.storeBranchId,
+        organizationId: data.organizationId,
+        createdAt: new Date().toISOString(),
+      };
+
+      const existing = this.get<any[]>(KEYS.SALE_ITEM_PAYMENTS, []);
+      this.set(KEYS.SALE_ITEM_PAYMENTS, [...existing, record]);
+
+      this.saveCreditPayment({
+        id: crypto.randomUUID(),
+        saleId: data.saleId,
+        customerId: data.customerId,
+        amount: data.amount,
+        date: record.paidAt,
+        paymentMethod: data.paymentMethod,
+        storeBranchId: data.storeBranchId,
+        organizationId: data.organizationId,
+        isItemPayment: true,
+      });
+
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, message: e?.message || 'Falha ao salvar pagamento por item.' };
+    }
+  }
+
+  getSaleItemPayments(): any[] {
+    return this.get<any[]>(KEYS.SALE_ITEM_PAYMENTS, []);
   }
 
   deleteCreditPayment(id: string) {
