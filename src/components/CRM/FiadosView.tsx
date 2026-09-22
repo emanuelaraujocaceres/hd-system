@@ -1246,6 +1246,40 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
         </div>
       )}
 
+      {/* Pagamento por item — PaymentModal completo */}
+      {itemPaymentTarget && (
+        <PaymentModal
+          isOpen={true}
+          onClose={() => setItemPaymentTarget(null)}
+          cartItems={[]}
+          customers={[itemPaymentTarget.customer]}
+          selectedCustomer={itemPaymentTarget.customer}
+          setSelectedCustomer={() => {}}
+          subtotal={itemPaymentTarget.item.total - itemPaymentTarget.item.paidAmount}
+          discount={0}
+          setDiscount={() => {}}
+          settings={storageService.getSettings()}
+          user={user}
+          onSaleSuccess={() => {}}
+          comandaMode={{
+            title: `Pagar Item — ${itemPaymentTarget.item.productName}`,
+            confirmLabel: 'Confirmar Pagamento do Item',
+            onConfirmComanda: async (payments: PaymentDetails[], total: number) => {
+              const result = await handleItemPayment(
+                itemPaymentTarget.item,
+                itemPaymentTarget.customerId,
+                payments,
+                total
+              );
+              if (result.success) setItemPaymentTarget(null);
+              return result;
+            },
+          }}
+          initialMethod="cash"
+          initialCashGiven={itemPaymentTarget.item.total - itemPaymentTarget.item.paidAmount}
+        />
+      )}
+
       {/* Confirm: excluir pagamento */}
       <ConfirmDialog
         isOpen={confirmDeletePayment !== null}
