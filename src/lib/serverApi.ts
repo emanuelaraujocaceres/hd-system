@@ -20,6 +20,7 @@ export async function callServerApi<T>(
     const token = await getAuthToken();
     const res = await fetch(path, {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
