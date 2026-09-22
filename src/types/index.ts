@@ -424,6 +424,7 @@ export interface CreditPayment {
   paymentMethod?: string;
   storeBranchId?: string;
   organizationId?: string;
+  isItemPayment?: boolean; // NOVO: true para pagamentos por item (pagamento por item específico), false para pagamentos FIFO normais
 }
 
 // Nota fiscal / documento de entrada (sincronizado — tabela nf_records)
