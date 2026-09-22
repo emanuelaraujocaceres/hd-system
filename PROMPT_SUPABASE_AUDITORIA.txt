@@ -1,0 +1,31 @@
+AUDITORIA DO SUPABASE — 2026-09-22 (branch 1a1e8b81..., superadmin emanuel@gmail.com)
+
+CONTEXTO (não alterar banco sem confirmar):
+- Endpoint /api/admin/create-organization retornou HTTP 500. Causa: env do worker (wrangler.toml) sem SUPABASE_SERVICE_ROLE_KEY config. NÃO é erro de tabela/RLS.
+- HD-Sync OK; hidratação completa; zero vendas/financeiro locais; acesso superadmin liberto.
+- BUG-033 (AGENTS.md) documenta que SQL legado admin_create_organization gera UUID aleatório → system_users.id ≠ auth.users.id → login falha. NÃO usar SQL legado.
+- RLS corrigido (BUG-026, 024, 033); is_superadmin() verificado; org_select_branches deve existir.
+
+O QUE VERIFICAR (leitura / não alteração imediata):
+1. pg_policies: store_branches tem org_select_branches / org_insert / org_update / org_delete? org_select_branches USING (organization_id = get_user_org_id() AND NOT is_superadmin())?
+2. system_users: coluna superadmin boolean, id (PK = auth.users.id), organization_id FK, store_branch_id FK. Nenhum usuário com id aleatório (gen_random_uuid) sem conta auth.
+3. organizations: tabela existe; colunas id, name, created_at.
+4. store_branches: tabela existe; organization_id FK; name/code/active/is_headquarters; nenhuma filial sem organization_id.
+5. auth.users: verificar se existe usuário admin_email (novo) — se já existe, o endpoint falhou antes de criar; se não existe, ainda não foi criado.
+6. RLS: nenhuma policy com USING (true) em production (BUG-RLS-001); is_superadmin() não verifica organization_id IS NULL.
+7. Verificar se hálinha em cash_sessions / financial / sales — localCount=0, cloud=0 esperado.
+
+O QUE FAZER (se necessário, após confirmar leitura):
+- NÃO aplicar migration de RLS agora (já corrigido).
+- NÃO usar admin_create_organization / admin_add_user (SQL legado).
+- Se a criação da org ainda for necessária: usar o endpoint functions/api/admin/create-organization.ts (auth.admin.createUser + mesmo UUID) — requer apenas env no worker, NÃO alteração de banco.
+- Se precisa criar direto no banco (após falha do endpoint): criar auth user com SUPABASE_SERVICE_ROLE_KEY, depois insert em organizations/store_branches/system_users usando o MESMO UUID do auth.user.id (nunca gen_random_uuid).
+
+ARQUIVOS DO WORKSPACE QUE REFERENCIAM ISSO:
+- functions/api/admin/create-organization.ts
+- AGENTS.md (BUG-033, RLS, sync)
+- SUPABASE_SCHEMA.md (schema completo)
+- supabase/RLS_FIXES.sql
+- src/services/storageService.branch.test.ts (linha 342+ isCustomerCreditSettled / __no_customer__ / backfill)
+
+SOLICITAÇÃO: leia primeiro; confirme o que já existe e o que falta; se precisar criar, use UUID consistente com auth.users.id e me avise antes de escrever (não usar SQL legado). Não altere RLS sem backup.
