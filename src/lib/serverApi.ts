@@ -7,8 +7,13 @@ import { supabase } from './supabase';
 
 /** Pega o access token da sessão atual para autenticar chamadas ao servidor */
 export async function getAuthToken(): Promise<string | null> {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session) {
+    // Tentar refresh se a sessão está expirada (não afeta DB/RLS)
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    return refreshed.session?.access_token ?? null;
+  }
+  return data.session.access_token ?? null;
 }
 
 /** Chama uma rota da API do servidor (mesmo domínio — /api/...). */
