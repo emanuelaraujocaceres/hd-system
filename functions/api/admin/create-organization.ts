@@ -133,7 +133,7 @@ export async function onRequestPost(context: any) {
       id: branchId,
       organization_id: orgId,
       name: `${org_name} - Matriz`,
-      code: 'MTZ-01',
+      code: `MTZ-${Date.now().toString().slice(-6)}`,
       active: true,
       is_headquarters: true,
     });
