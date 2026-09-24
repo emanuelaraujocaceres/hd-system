@@ -117,6 +117,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
       storageService.saveUser(updatedUser);
       storageService.saveUserProfile(updatedUser);
+      try { await supabase.auth.updateUser({ data: { name: name.trim() } }); } catch (e: any) { console.warn('[Profile] auth sync:', e?.message); }
       onUserUpdated(updatedUser);
       posAudio.chime();
       setMessage({ type: 'success', text: 'Perfil atualizado com sucesso!' });
@@ -344,8 +345,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-sm font-medium text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  readOnly
+                  className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-500 dark:text-slate-400 cursor-default focus:outline-none focus:ring-0"
                   placeholder="seu@email.com"
                 />
               </div>
