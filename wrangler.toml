@@ -8,4 +8,4 @@ pages_build_output_dir = "dist"
 # 1) Configurar SUPABASE_SERVICE_ROLE_KEY no Cloudflare Dashboard (secret ou [vars]) — NÃO usar SQL legado admin_create_organization (gera UUID aleatório, quebra auth.uid()).
 # 2) Endpoint create-organization.ts usa auth.admin.createUser → system_users.id = authUserId (consistente).
 # 3) Nenhuma migration/RLS alterada; verifique org_select_branches depois.
-SUPABASE_SERVICE_ROLE_KEY = "USAR_DASHBOARD_SECRET_NAO_EXPOR_AQUI"
+
