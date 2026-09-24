@@ -2782,6 +2782,7 @@ if (merged !== null) this.set(KEYS.PRODUCTS, merged);
             paymentMethod: r.payment_method || undefined,
             storeBranchId: r.store_branch_id || undefined,
             organizationId: r.organization_id || undefined,
+            isItemPayment: r.is_item_payment === true,
           }),
           (p) => this.syncCreditPayment(p),
         );
@@ -5083,6 +5084,7 @@ private updateReceivableFromPayments(saleId: string) {
       amount: p.amount,
       paid_at: p.date,
       payment_method: p.paymentMethod || null,
+      is_item_payment: p.isItemPayment === true,
     });
   }
 
@@ -5101,6 +5103,7 @@ private updateReceivableFromPayments(saleId: string) {
       paymentMethod: row.payment_method || undefined,
       storeBranchId: row.store_branch_id || undefined,
       organizationId: row.organization_id || undefined,
+      isItemPayment: row.is_item_payment === true,
     };
     const idx = all.findIndex((x) => x.id === mapped.id);
     if (idx >= 0) all[idx] = mapped;

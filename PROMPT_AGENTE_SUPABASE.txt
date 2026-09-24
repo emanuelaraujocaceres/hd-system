@@ -1,0 +1,6 @@
+INSTRUCAO PARA AGENTE SUPABASE (leitura apenas — nunca alterar DB):
+Verifique SELECT system_users.store_branch_id FROM system_users WHERE id = 'ac7e5faf-e279-413d-a4a1-95c85acf5fa8';
+Confirme se esse UUID existe em store_branches.id.
+Nenhum SQL legado (BUG-033). Nenhum UPDATE/DELETE/ALTER.
+Relatorio apenas.
+Contexto: audit 2026-09-24; 401 em todas as tabelas branch-scoped; causa = store_branch_id do superadmin (1a1e...) nao eh filial existente.
