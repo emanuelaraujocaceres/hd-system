@@ -81,21 +81,37 @@ export const filterOpenDebts = (debts: CustomerDebt[], term = ''): CustomerDebt[
   );
 };
 
-// Valor fiado de UMA venda (source of truth dos dois fluxos do Fiados).
-// BUG-005 fix: soma TODOS os pagamentos credit_account (split payment);
-// fallback para saleTotal só quando não há nenhum pagamento credit.
+// Valor fiado de UMA venda (fonte de verdade: sale.payments para o fluxo original;
+// FASE 4: também considera credit_payments para consistência quando a venda
+// foi criada manualmente ou quando sale.payments está vazio/desatualizado).
 export const getSaleCreditAmount = (sale: Sale): number => {
   const saleTotal =
     sale.total > 0
       ? sale.total
       : (sale.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0);
-  return (
-    Math.round(
-      (sale.payments || [])
-        .filter((p) => p.method === 'credit_account')
-        .reduce((sum, p) => sum + (p.amount || 0), 0) * 100,
-    ) / 100 || saleTotal
-  );
+
+  // Fonte 1: sale.payments (fluxo original)
+  const fromSalePayments = (sale.payments || [])
+    .filter((p) => p.method === 'credit_account')
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  // Se sale.payments tem credit_account, usar (consistente com o fluxo original)
+  if (fromSalePayments > 0) {
+    return Math.round(fromSalePayments * 100) / 100;
+  }
+
+  // Fonte 2: credit_payments vinculados ao saleId (fallback para vendas
+  // criadas manualmente ou quando sale.payments está vazio/desatualizado)
+  const fromCreditPayments = storageService.getCreditPayments()
+    .filter((cp) => cp.saleId === sale.id && !cp.isItemPayment)
+    .reduce((sum, cp) => sum + (cp.amount || 0), 0);
+
+  if (fromCreditPayments > 0) {
+    return Math.round(fromCreditPayments * 100) / 100;
+  }
+
+  // Fallback final: valor total da venda (se não há nenhum pagamento credit)
+  return saleTotal;
 };
 
 // Contribuição de UMA venda para a dívida do cliente (rateio por item).
@@ -271,8 +287,15 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
 
   // Atualiza pagamentos ao vivo quando outro dispositivo registra/exclui um pagamento
   useEffect(() => {
+    // Anti-loop: guarda referência anterior para evitar flicker
+    let lastJson = '';
     const unsub = storageService.subscribe(() => {
-      setCreditPayments(storageService.getCreditPayments());
+      const next = storageService.getCreditPayments();
+      const nextJson = JSON.stringify(next);
+      if (nextJson !== lastJson) {
+        lastJson = nextJson;
+        setCreditPayments(next);
+      }
     });
     return () => { unsub(); };
   }, []);

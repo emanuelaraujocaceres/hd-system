@@ -3652,6 +3652,48 @@ id: StorageService.ensureUuid(settings.id),
     // Also remove from separate localStorage key
     const filtered = existingItems.filter((i: any) => i.sale_id !== id);
     this.set(KEYS.SALE_ITEMS, filtered);
+
+    // ── CLEANUP: remover registros vinculados de fiado ──
+    // 1) Remover credit_payments vinculados
+    const allCreditPayments = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []);
+    const linkedCredit = allCreditPayments.filter((cp) => cp.saleId === id);
+    for (const cp of linkedCredit) {
+      if (cp.id) syncService.deleteRow('credit_payments', cp.id);
+    }
+    if (linkedCredit.length > 0) {
+      this.set(KEYS.CREDIT_PAYMENTS, allCreditPayments.filter((cp) => cp.saleId !== id));
+      console.log(`[Storage] 🧹 deleteSale: ${linkedCredit.length} credit_payment(s) removido(s)`);
+    }
+
+    // 2) Remover sale_item_payments vinculados
+    const allItemPayments = this.get<any[]>(KEYS.SALE_ITEM_PAYMENTS, []);
+    const linkedItemPayments = allItemPayments.filter((p) => p.saleId === id);
+    for (const p of linkedItemPayments) {
+      if (p.id) syncService.deleteRow('sale_item_payments', p.id);
+    }
+    if (linkedItemPayments.length > 0) {
+      this.set(KEYS.SALE_ITEM_PAYMENTS, allItemPayments.filter((p) => p.saleId !== id));
+      console.log(`[Storage] 🧹 deleteSale: ${linkedItemPayments.length} sale_item_payment(s) removido(s)`);
+    }
+
+    // 3) Remover financial_transactions vinculados (receivable 'fiado')
+    const allAccounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, []);
+    const linkedAccounts = allAccounts.filter(
+      (a) => a.id === id && a.type === 'receivable' && a.category === 'fiado',
+    );
+    for (const acc of linkedAccounts) {
+      if (acc.id) syncService.deleteRow('financial_transactions', acc.id);
+    }
+    if (linkedAccounts.length > 0) {
+      this.set(
+        KEYS.FINANCIAL,
+        allAccounts.filter(
+          (a) => !(a.id === id && a.type === 'receivable' && a.category === 'fiado'),
+        ),
+      );
+      console.log(`[Storage] 🧹 deleteSale: ${linkedAccounts.length} financial_account(s) removido(s)`);
+    }
+
     // Observação: o cancelamento de venda (cancelSaleWithStockRestore) NÃO registra
     // entrada de "Desfazer". O RPC cancel_sale_atomic já restaura o estoque no
     // servidor; re-adicionar a venda localmente sem re-deduzir causaria duplicação
@@ -5090,6 +5132,45 @@ private updateReceivableFromPayments(saleId: string) {
     const removed = all.find((x) => x.id === id);
     this.set(KEYS.CREDIT_PAYMENTS, all.filter((x) => x.id !== id));
     syncService.deleteRow('credit_payments', id);
+    // ── CLEANUP: remover registros vinculados ──
+    if (removed) {
+      // 1) Remover sale_item_payments vinculados
+      const itemPayments = this.get<any[]>(KEYS.SALE_ITEM_PAYMENTS, []);
+      const linkedItemPayments = itemPayments.filter(
+        (p) =>
+          p.customerId === removed.customerId &&
+          p.saleId === removed.saleId &&
+          Math.abs((p.amount || 0) - removed.amount) < 0.01,
+      );
+      for (const p of linkedItemPayments) {
+        if (p.id) syncService.deleteRow('sale_item_payments', p.id);
+      }
+      if (linkedItemPayments.length > 0) {
+        this.set(
+          KEYS.SALE_ITEM_PAYMENTS,
+          itemPayments.filter((p) => !linkedItemPayments.some((l) => l.id === p.id)),
+        );
+        console.log(`[Storage] 🧹 deleteCreditPayment: ${linkedItemPayments.length} sale_item_payment(s) removido(s)`);
+      }
+
+      // 2) Remover financial_transactions vinculados
+      const accounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, []);
+      const linkedAccounts = accounts.filter(
+        (a) =>
+          a.category === 'fiado_payment' &&
+          Math.abs((a.amount || 0) - removed.amount) < 0.01,
+      );
+      for (const acc of linkedAccounts) {
+        if (acc.id) syncService.deleteRow('financial_transactions', acc.id);
+      }
+      if (linkedAccounts.length > 0) {
+        this.set(
+          KEYS.FINANCIAL,
+          accounts.filter((a) => !linkedAccounts.some((l) => l.id === a.id)),
+        );
+        console.log(`[Storage] 🧹 deleteCreditPayment: ${linkedAccounts.length} financial_account(s) removido(s)`);
+      }
+    }
     // Pagamento removido → devolver o valor ao saldo da conta a receber
     if (removed?.saleId) this.updateReceivableFromPayments(removed.saleId);
   }
