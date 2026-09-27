@@ -787,6 +787,11 @@ class SupabaseSyncService {
    * If browser is offline, queue the operation for later sync.
    */
   async deleteRow(table: TableName, id: string) {
+    // GUARD: não processar se id for vazio/undefined
+    if (!id) {
+      console.warn(`[HD-Sync] ⚠️ Delete ${table} ignorado — id vazio/undefined`);
+      return false;
+    }
     if (!navigator.onLine || !isOrgOnlineAllowed()) {
       console.log(`[HD-Sync] 📝 Queuing ${table} delete (${isOrgOnlineAllowed() ? 'offline' : 'acesso suspenso'})`);
       syncQueue.enqueue(table, 'delete', { rowId: id });

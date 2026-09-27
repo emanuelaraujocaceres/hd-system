@@ -2178,7 +2178,7 @@ updateCategoryFromRemote(row: any) {
         // DEVE vir ANTES da sessão-ativa (ver BUG acima).
         if (cloudSaleIds.has(s.id)) return false; // já em cloudMapped
         // Sempre preservar vendas de sessões de cliente ativas (comandas em aberto)
-        if (activeSessions.includes(s.customerSessionId)) return true;
+        if (s.customerSessionId && activeSessions.includes(s.customerSessionId)) return true;
         // Se há filial resolvida, manter apenas vendas DESTA filial
         if (resolvedBranchId) return s.storeBranchId === resolvedBranchId;
         return true; // sem filtro de filial: manter tudo (edge case)
@@ -4301,7 +4301,8 @@ id: StorageService.ensureUuid(settings.id),
   saveSale(sale: Sale, opts?: { skipSync?: boolean }) {
     sale.id = StorageService.ensureUuid(sale.id);
     sale.organizationId = sale.organizationId || this.getCurrentOrgId();
-    sale.storeBranchId = sale.storeBranchId || this.getSelectedBranchId() || undefined;
+    const finalBranchId = sale.storeBranchId || this.getSelectedBranchId();
+    if (finalBranchId) sale.storeBranchId = finalBranchId;
     if (!sale.updatedAt) sale.updatedAt = new Date().toISOString();
 
     // Atualiza APENAS o header da venda no array local
@@ -5064,6 +5065,11 @@ private updateReceivableFromPayments(saleId: string) {
   }
 
   deleteCreditPayment(id: string) {
+    // GUARD: não processar se id for vazio/undefined
+    if (!id) {
+      console.warn('[Storage] ⚠️ deleteCreditPayment: id vazio/undefined — ignorado');
+      return;
+    }
     const all = this.get<CreditPayment[]>(KEYS.CREDIT_PAYMENTS, []);
     const removed = all.find((x) => x.id === id);
     this.set(KEYS.CREDIT_PAYMENTS, all.filter((x) => x.id !== id));

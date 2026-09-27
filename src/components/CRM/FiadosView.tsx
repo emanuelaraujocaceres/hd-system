@@ -543,6 +543,23 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
           return result;
         }
 
+        // ── Registra no financeiro (financial_transaction de entrada) ──
+        const sale = sales.find((s) => s.id === item.saleId);
+        storageService.saveFinancialAccount({
+          id: crypto.randomUUID(),
+          title: `Pagamento Fiado por Item - ${item.productName}`,
+          type: 'receivable',
+          category: 'fiado_payment',
+          amount: total,
+          dueDate: new Date().toISOString().slice(0, 10),
+          status: 'paid',
+          paidDate: new Date().toISOString(),
+          recipientOrPayer: item.productName,
+          storeBranchId: sale?.storeBranchId || storageService.getSelectedBranchId(),
+          organizationId: storageService.getCurrentOrgId(),
+          notes: `Pagamento por item via ${payments[0]?.method || 'cash'} - Venda ${sale?.code || ''}`,
+        });
+
         posAudio.chime();
         addToast('success', `Pagamento de R$ ${total.toFixed(2)} registrado no item "${item.productName}".`);
         return { success: true };
@@ -554,11 +571,17 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
     },
     [user.name, addToast]
   );
-  // ── Delete credit payment handler (admin only) ──────────────────
-  const [confirmDeletePayment, setConfirmDeletePayment] = useState<CreditPayment | null>(null);
+   const [confirmDeletePayment, setConfirmDeletePayment] = useState<CreditPayment | null>(null);
   const handleConfirmDeletePayment = useCallback(() => {
     if (!confirmDeletePayment) return;
     const paymentId = confirmDeletePayment.id;
+    // GUARD: id vazio/undefined → não chamar delete (evita DELETE com undefined no cloud)
+    if (!paymentId) {
+      addToast('error', 'Pagamento sem identificador — não é possível excluir.');
+      posAudio.error();
+      setConfirmDeletePayment(null);
+      return;
+    }
     setConfirmDeletePayment(null);
     try {
       const updated = creditPayments.filter((cp) => cp.id !== paymentId);

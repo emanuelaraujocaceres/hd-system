@@ -1,0 +1,11 @@
+AUDITORIA PERFIL DO USUARIO — RESULTADO FINAL (leitura apenas, zero DB alterado, zero SQL legado)
+
+A (Visualizacao): UserProfileModal.tsx (497 linhas) mostra nome, email, avatar, isAdmin (role/superadmin), active, foto. Nenhum erro de visualizacao.
+B (Edicao/Persistencia): handleSaveProfile usa storageService.saveUser/saveUserProfile (localStorage) — NAO chama auth.users.updateUser para nome/email. handleChangePassword chama supabase.auth.updateUser (OK) + storageService.saveUser (OK). ACHADO: edicao de nome/email nao sincroniza com auth.users.
+C (BUG-033/034/026): user.id vem de prop UserProfile (system_users); isAdmin de role/superadmin; nao ha verificacao de UUID no modal (BUG-033 respeitado no fluxo, mas nao validado no UI); acesso ao modulo nao esta restrito por branch-id no modal (BUG-034 nao se aplica ao perfil, mas o HD-Sync usa branch-id para sync).
+D (Sincronizacao): nao ha sync explicito de perfil para outros dispositivos (dependente do storageService.saveUserProfile + subscrever do HD-Sync). Se o usuario edita o nome, o outro dispositivo so ve se o sync puxar o localStorage atualizado.
+E (Risco): perfil nao sincroniza com auth.users — se o usuario trocar de dispositivo, o nome pode nao refletir a ultima edicao se o localStorage nao estiver sincronizado.
+F (Rollback): git revert para arquivo original; nenhuma alteracao em DB/Migrations/RLS.
+G (Evidencias): UserProfileModal.tsx inspecionado (linha 102-129 saveProfile, 131-189 changePassword); storageService referenciado; AGENTS.md (BUG-033/034/026) respeitado; nenhum SQL legado usado.
+
+CONCLUSAO: auditoria completa. Nenhuma alteracao aplicada. O perfil funciona (visualizacao + senha + avatar + role), mas edicao de nome/email nao persiste no auth.users (apenas localStorage). Se precisar corrigir, seria adicionar supabase.auth.updateUser({ data: ... }) no handleSaveProfile — alteracao no frontend, nao no banco.
