@@ -103,7 +103,7 @@ export const getSaleCreditAmount = (sale: Sale): number => {
   // Fonte 2: credit_payments vinculados ao saleId (fallback para vendas
   // criadas manualmente ou quando sale.payments está vazio/desatualizado)
   const fromCreditPayments = storageService.getCreditPayments()
-    .filter((cp) => cp.saleId === sale.id && !cp.isItemPayment)
+    .filter((cp) => cp.saleId === sale.id)
     .reduce((sum, cp) => sum + (cp.amount || 0), 0);
 
   if (fromCreditPayments > 0) {

@@ -3676,20 +3676,32 @@ id: StorageService.ensureUuid(settings.id),
       console.log(`[Storage] 🧹 deleteSale: ${linkedItemPayments.length} sale_item_payment(s) removido(s)`);
     }
 
-    // 3) Remover financial_transactions vinculados (receivable 'fiado')
-    const allAccounts = this.get<FinancialAccount[]>(KEYS.FINANCIAL, []);
-    const linkedAccounts = allAccounts.filter(
-      (a) => a.id === id && a.type === 'receivable' && a.category === 'fiado',
+    // 3) Remover financial_transactions vinculados (receivable 'fiado' com id === saleId)
+    const accountsToClean = this.get<FinancialAccount[]>(KEYS.FINANCIAL, []);
+    const linkedAccountsSafe = accountsToClean.filter(
+      (a) =>
+        a.id === id &&
+        a.type === 'receivable' &&
+        a.category === 'fiado',
     );
+    // CORREÇÃO FASE 4: também verificar por sale_id (se a conta a receber usa
+    // sale_id como referência, não apenas id). Se o id diverge, usar apenas id.
+    const linkedAccounts = linkedAccountsSafe.length > 0
+      ? linkedAccountsSafe
+      : accountsToClean.filter(
+          (a) =>
+            (a.id === id || (a as any).sale_id === id) &&
+            a.type === 'receivable' &&
+            a.category === 'fiado',
+        );
     for (const acc of linkedAccounts) {
       if (acc.id) syncService.deleteRow('financial_transactions', acc.id);
     }
     if (linkedAccounts.length > 0) {
+      const linkedIds = new Set(linkedAccounts.map((a) => a.id));
       this.set(
         KEYS.FINANCIAL,
-        allAccounts.filter(
-          (a) => !(a.id === id && a.type === 'receivable' && a.category === 'fiado'),
-        ),
+        accountsToClean.filter((a) => !linkedIds.has(a.id)),
       );
       console.log(`[Storage] 🧹 deleteSale: ${linkedAccounts.length} financial_account(s) removido(s)`);
     }
