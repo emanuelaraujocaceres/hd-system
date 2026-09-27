@@ -36,6 +36,7 @@ type TableName =
   | 'system_settings'
   | 'scanned_boletos'
   | 'credit_payments'
+  | 'sale_item_payments'
   | 'nf_records'
   | 'footer_messages'
   | 'media_devices'

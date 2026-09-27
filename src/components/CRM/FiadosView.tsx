@@ -320,7 +320,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
 
       // Calculate total paid for this customer across all their credit sales
             const customerPayments = creditPayments.filter(
-        (cp) => cp.customerId === customerId && !cp.isItemPayment
+        (cp) => cp.customerId === customerId
       );
       const totalPaid = customerPayments.reduce((acc, cp) => acc + cp.amount, 0);
 
@@ -335,18 +335,41 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
         allItems.push(...contrib.items);
       }
 
-      // FIFO allocation of payments across items (oldest sale first, cheapest item first)
-      let remainingPaid = totalPaid;
-      // Sort items by total ascending (cheapest first), but process oldest-sales first
-      const sortedItems = [...allItems].sort((a, b) => a.total - b.total);
+      // ── 1) Alocar pagamentos POR ITEM aos itens específicos ──
+      // Cada pagamento com isItemPayment=true referencia um saleItemId
+      // (que no momento é o productId do item). Alocamos esse valor
+      // diretamente ao item correspondente, ANTES do FIFO.
+      const saleItemPayments = storageService.getSaleItemPayments();
+      const customerItemPayments = saleItemPayments.filter(
+        (p) => p.customerId === customerId
+      );
 
-      for (const item of sortedItems) {
-        if (remainingPaid <= 0) break;
-        const apply = Math.min(remainingPaid, item.total);
-        item.paidAmount = Math.round(apply * 100) / 100;
-        remainingPaid = Math.round((remainingPaid - apply) * 100) / 100;
+      let specificPaidTotal = 0;
+      for (const item of allItems) {
+        // Soma todos os pagamentos por item que referenciam este item
+        const specific = customerItemPayments.filter(
+          (p) => p.saleItemId === item.productId && p.saleId === item.saleId
+        );
+        const specificSum = specific.reduce((sum, p) => sum + (p.amount || 0), 0);
+        if (specificSum > 0) {
+          item.paidAmount = Math.min(specificSum, item.total);
+          specificPaidTotal += item.paidAmount;
+        }
       }
 
+      // ── 2) FIFO apenas sobre o restante (pagamentos FIFO) ──
+      // remainingPaid = totalPaid - já alocado por item específico
+      let remainingPaid = Math.round((totalPaid - specificPaidTotal) * 100) / 100;
+      // Sort items by total ascending (cheapest first), but process oldest-sales first
+      const sortedItems = [...allItems].sort((a, b) => a.total - b.total);
+      for (const item of sortedItems) {
+        if (remainingPaid <= 0) break;
+        const itemRemaining = Math.round((item.total - item.paidAmount) * 100) / 100;
+        if (itemRemaining <= 0) continue;
+        const apply = Math.min(remainingPaid, itemRemaining);
+        item.paidAmount = Math.round((item.paidAmount + apply) * 100) / 100;
+        remainingPaid = Math.round((remainingPaid - apply) * 100) / 100;
+      }
       // Now re-sort items back to original order (by total desc, matching display)
       allItems.sort((a, b) => b.total - a.total);
 
@@ -526,6 +549,12 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
       }
 
       try {
+        const branchId = storageService.getSelectedBranchId();
+        if (!branchId) {
+          addToast('error', 'Nenhuma filial selecionada.');
+          posAudio.error();
+          return { success: false, message: 'Filial não selecionada.' };
+        }
         const result = storageService.saveSaleItemPayment({
           saleItemId: item.productId,
           saleId: item.saleId || '',
@@ -533,7 +562,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
           amount: total,
           paymentMethod: payments[0]?.method || 'cash',
           operatorName: user.name,
-          storeBranchId: storageService.getSelectedBranchId() || '',
+          storeBranchId: branchId,
           organizationId: storageService.getCurrentOrgId() || '',
         });
 

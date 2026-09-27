@@ -5042,6 +5042,22 @@ private updateReceivableFromPayments(saleId: string) {
       const existing = this.get<any[]>(KEYS.SALE_ITEM_PAYMENTS, []);
       this.set(KEYS.SALE_ITEM_PAYMENTS, [...existing, record]);
 
+      // ── NOVO: sincronizar com Supabase (tabela sale_item_payments) ──
+      const orgId = this.orgIdForBranch(data.storeBranchId, data.organizationId);
+      syncService.upsertRow('sale_item_payments', {
+        id: record.id,
+        organization_id: orgId,
+        store_branch_id: data.storeBranchId || null,
+        sale_id: data.saleId || null,
+        sale_item_id: data.saleItemId || null,
+        customer_id: data.customerId || null,
+        amount: data.amount,
+        payment_method: data.paymentMethod || null,
+        operator_name: data.operatorName || null,
+        paid_at: record.paidAt,
+        created_at: record.createdAt,
+      });
+
       this.saveCreditPayment({
         id: crypto.randomUUID(),
         saleId: data.saleId,

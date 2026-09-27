@@ -130,6 +130,7 @@ export type TableName =
   // Terminais de pagamento / maquininhas (2026-09)
   | 'payment_terminals'
   // PIX por filial (2026-09-06)
+  | 'sale_item_payments'
   | 'pix_config';
 
 type SyncChangeCallback = (table: TableName, payload: any) => void;
