@@ -1,6 +1,6 @@
-# BLOCO 8 — CONCORRÊNCIA E REALTIME (AUDITORIA COMPLETA — NENHUMA ALTERAÇÃO NESTA RODADA)
-- `subscribe` (`FiadosView.tsx:289-298`): anti-loop (`lastJson`) aplicado; `notify()` debounced (`storageService.ts:551-575`: fila com `setTimeout`); se `notify()` dispara múltiplas vezes, `subscribe` só atualiza se `nextJson !== lastJson` — sem duplicação de valores (substitui array).
-- `getCreditPayments()` (`l.3989`): filtra por `validSaleIds`. Se `deleteSale` faz `soft-delete` (`deleted_at`), se `getSales()` incluir `deleted_at`, o pagamento persiste (`validSaleIds` contém `saleId`); se `getSales()` excluir `deleted_at`, o pagamento some (`validSaleIds` vazio) — divergência potencial se `getSales()` e `getCreditPayments()` não estão alinhados (não auditado integralmente se `getSales()` filtra `deleted_at`). Nenhuma alteração aplicada.
-- `getSaleItemPayments()` (`l.5063`): retorna todos (`localStorage`); se `localStorage` está vazio (`SALE_ITEM_PAYMENTS`), `customerItemPayments` = vazio → `specificPaidTotal` = 0 → FIFO agregado distribui `totalPaid`. Se `credit_payments` tem `isItemPayment` mas `sale_item_payments` está vazio, o `customerDebts` recalcula `totalPaid` corretamente (inclui `isItemPayment`), mas `paidAmount` dos itens fica distribuído pelo FIFO agregado (não pelo item específico) — divergência visual (já documentada no `AUDITORIA_BLOCO_6_FINAL.md`). Nenhuma alteração aplicada.
-- `Realtime`: `App.tsx` (`resubscribeIfDead`, `syncService.subscribeRealtime`) — não auditado integralmente, mas confirmado pelo `AGENTS.md` (`BUG-028`). Nenhuma alteração aplicada.
-- Status: concluído.
+# BLOCO 8 — MICROINTERAÇÕES (AUDITORIA COMPLETA — NENHUMA ALTERAÇÃO NESTA RODADA)
+- Animações: `transition-all` (`l.842`: card cliente), `transition-colors` (`l.886`: tabs), `duration-300` ausente (`l.842`: sem `duration`); `animate-[slideIn_0.3s_ease-out]` (`l.157`, `ToastItem`) — suave, mas `backdrop-blur-sm` (`l.1082`, modal) pode ser pesado em mobile.
+- Sons: `posAudio.chime()` (sucesso, `l.708`, `l.510`); `posAudio.error()` (erro, `l.736`); `posAudio.click()` (click, `l.275`, `l.682`); `posAudio.unlock()` (não auditado integralmente). Nenhum `audioService.enable` verificado (`audioService.ts` não auditado integralmente nesta sessão — apenas referenciado). Nenhuma alteração aplicada.
+- Haptic: `vibrate()` não encontrado (`grep` vazio para `vibrate` no `FiadosView`). Nenhuma alteração aplicada.
+- `prefers-reduced-motion`: não verificado no `FiadosView` (`grep` vazio). Nenhuma alteração aplicada.
+- Status: concluído (`AUDITORIA_BLOCO_8.md`).

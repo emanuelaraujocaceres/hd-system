@@ -1,7 +1,12 @@
-# BLOCO 2 — ESTADO E DADOS (AUDITORIA COMPLETA — NENHUMA ALTERAÇÃO NESTA RODADA)
-- useState (15 variáveis, l.248-270): listados e documentados
-- useMemo (4 variáveis, l.281-402): `customerDebts`, `filteredDebts`, `grandTotalDebt`, `grandTotalPaid`
-- useEffect (1: `subscribe`, l.289-298): anti-loop (`lastJson`) aplicado
-- useCallback (7 funções, l.405-692): documentadas, nenhuma alteração
-- Status: concluído (bloco 2 anterior já documentado, `subscribe` anti-loop confirmado via leitura)
-- Nenhuma alteração aplicada além do `subscribe` anti-loop (já confirmado).
+# BLOCO 2 — HIERARQUIA VISUAL (CONFIRMADO — LEITURA, NENHUMA ALTERAÇÃO)
+- Título (`h2`, `text-xl`, `font-bold`): elemento mais destacado — correto.
+- Subtítulo (`text-xs`, `text-slate-500`): secundário — correto.
+- Cards resumo (`flex gap-2`, `items-stretch`): posicionados acima do conteúdo, visíveis sem scroll — correto.
+- Busca (`w-full`, `pl-10`): posicionada abaixo do header, acima da lista — correto.
+- Cards cliente (`grid-cols-1 lg:grid-cols-2`): ocupam a maior parte da tela — correto.
+- Card expandido (`ring-2 ring-amber-500/30`): destaque visual claro quando expandido — correto.
+- Abas (`rounded-xl`, `shadow` quando ativa): reconhecíveis como navegação — correto.
+- Itens (`flex items-center justify-between`): hierarquia clara (nome > quantidade/preço > status) — correto.
+- Pagamentos (`space-y-1.5`): histórico ordenado por data (mais recente primeiro) — correto.
+- Botões sticky (`sticky bottom-2`, `backdrop-blur`, `shadow-lg`): sempre visíveis sem scroll — correto.
+- Nenhum problema de hierarquia identificado que exija correção crítica. Nenhuma alteração aplicada.

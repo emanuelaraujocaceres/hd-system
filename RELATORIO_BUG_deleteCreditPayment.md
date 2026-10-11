@@ -135,4 +135,11 @@ Correção mínima — apenas adicionar guards `if (!id)` nos 3 níveis:
   2. Executar `npm run lint` + `npm test`.
   3. Verificar manualmente (via `fiado_check.cjs`) se há `credit_payments` órfãos para `Dionathan GORDAO`.
   4. Confirmar que `sale_items` (`403`) e `sales` (`409`) no console F12 também precisam de investigação separada (RLS / conflito de `store_branch_id`).
+## Atualizacao — 2026-10-11 (sessao atual)
+- **Defesa inteligente aplicada** (para evitar que problemas similares travem a fila de sync):
+  1. `src/services/syncService.ts` — `REQUIRED_FIELDS` rejeita payloads com campos obrigatorios vazios (ex.: `name` vazio, `status` invalido, `port` vazio, colunas inexistentes como `button_bg`, `sale_id`, `nf_number`).
+  2. `src/services/storageService.ts` — filtros defensivos em `getProducts()`, `getCategories()`, `getCustomers()`, `getCustomerSessions()`, `getTables()` removem registros corrompidos ao ler do `localStorage`.
+  3. `src/App.tsx` — `useEffect` de limpeza ao montar (`[App-Cleanup]`) remove registros corrompidos diretamente do `localStorage` antes que a fila os processe.
+- **Referencia:** `REGISTRO_PROBLEMAS.md` criado para documentar este e futuros problemas (padrao: registrar em `.md`, consultar `SUPABASE_SCHEMA.md` antes de qualquer alteracao SQL, nunca modificar RLS/migrations sem autorizacao).
+
 - **Nenhum arquivo foi modificado** (apenas leitura, conforme instrução).

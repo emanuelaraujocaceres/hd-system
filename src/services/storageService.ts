@@ -3489,7 +3489,8 @@ id: StorageService.ensureUuid(settings.id),
     const fallback = this.isDefaultOrg() ? INITIAL_PRODUCTS : [];
     const all = this.get<Product[]>(KEYS.PRODUCTS, fallback);
     return this.filterBySelectedBranch<Product>(this.filterByOrg<Product>(all))
-      .filter((p) => !p.deletedAt); // soft-delete (20260906): nunca expor produto excluído
+      .filter((p) => !p.deletedAt) // soft-delete
+      .filter((p) => (p.name || '').trim() !== ''); // defesa: remove produto corrompido sem nome
   }
 
   saveProduct(product: Product): Product {
@@ -3887,7 +3888,7 @@ id: StorageService.ensureUuid(settings.id),
     const all = this.get<Category[]>(KEYS.CATEGORIES, fallback);
     // Deduplica por nome (evita mock + banco com mesmo nome) mantendo a do banco quando houver storeBranchId
     const seen = new Set<string>();
-    const deduped = all.filter((c) => {
+    const deduped = all.filter((c) => (c.name || '').trim() !== '').filter((c) => {
       const key = (c.name || '').toLowerCase().trim();
       if (seen.has(key)) return false;
       seen.add(key);
@@ -3929,7 +3930,7 @@ id: StorageService.ensureUuid(settings.id),
   getCustomers(): Customer[] {
     const fallback = this.isDefaultOrg() ? INITIAL_CUSTOMERS : [];
     const all = this.get<Customer[]>(KEYS.CUSTOMERS, fallback);
-    return this.filterBySelectedBranch<Customer>(this.filterByOrg<Customer>(all));
+    return this.filterBySelectedBranch<Customer>(this.filterByOrg<Customer>(all)).filter((c) => (c.name || '').trim() !== '');
   }
 
   saveCustomer(customer: Customer) {
@@ -5723,32 +5724,31 @@ private updateReceivableFromPayments(saleId: string) {
   // --- TABLES (mesas) ---
   getTables(): Table[] {
     const raw = this.get<Table[]>(KEYS.TABLES, []);
-    // FIX-028: Dedup por nome (manter o mais recente) — previne mesas duplicadas
-    // causadas por saveTable() com IDs diferentes + hidratação do cloud.
+    // FIX-028: Dedup por nome (manter o mais recente)
     const seen = new Map<string, number>(); // name → index no array
     for (let i = 0; i < raw.length; i++) {
       const t = raw[i];
       const key = (t.name || '').trim().toLowerCase();
-      if (!key) continue; // mesas sem nome não são deduplicadas
+      if (!key) continue;
       if (seen.has(key)) {
-        // Manter o mais recente (updatedAt maior)
         const prevIdx = seen.get(key)!;
         const prev = raw[prevIdx];
         const prevTime = prev.updatedAt || prev.createdAt || '';
         const currTime = t.updatedAt || t.createdAt || '';
         if (currTime > prevTime) {
-          raw.splice(prevIdx, 1); // remover o antigo
-          seen.set(key, i - 1); // índice mudou após splice
+          raw.splice(prevIdx, 1);
+          seen.set(key, prevIdx);
         } else {
-          raw.splice(i, 1); // remover o novo (duplicata)
-          i--; // ajustar índice
+          raw.splice(i, 1);
+          i--;
           continue;
         }
       } else {
         seen.set(key, i);
       }
     }
-    return this.filterBySelectedBranch(this.filterByOrg(raw));
+    const validStatus = ['active', 'inactive'];
+    return this.filterBySelectedBranch(this.filterByOrg(raw)).filter((t) => validStatus.includes(t.status));
   }
 
   saveTable(table: Table) {
@@ -5922,7 +5922,9 @@ private updateReceivableFromPayments(saleId: string) {
 
   // --- CUSTOMER SESSIONS ---
   getCustomerSessions(): CustomerSession[] {
-    return this.filterBySelectedBranch(this.filterByOrg(this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, [])));
+    const validStatus = ['active', 'completed', 'cancelled'];
+    return this.filterBySelectedBranch(this.filterByOrg(this.get<CustomerSession[]>(KEYS.CUSTOMER_SESSIONS, [])))
+      .filter((s) => validStatus.includes(s.status));
   }
 
   // Anon helpers — usados pelo cardápio QR quando não há filial selecionada no seletor

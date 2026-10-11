@@ -1,5 +1,14 @@
-# BLOCO 1 — INVENTÁRIO DE ARQUIVOS (AUDITORIA COMPLETA — NENHUMA ALTERAÇÃO NESTA RODADA)
-- 11 arquivos listados (FiadosView, storageService, syncService, syncQueueService, comandaService, FinanceView, DashboardView, types/index, supabaseAnon, supabase)
-- 4 arquivos modificados confirmados (FiadosView, storageService, syncService, syncQueueService)
-- Nenhum arquivo adicional alterado nesta auditoria.
-- Status: concluído (bloco 1 anterior já documentado)
+# BLOCO 1 — INVENTÁRIO VISUAL (CONFIRMADO — LEITURA APENAS, NENHUMA ALTERAÇÃO)
+- Header (`l.686`): `<h2>Fiados</h2>` (`text-xl`, `font-bold`, `text-slate-900`/`dark:text-white`), `<Wallet>` (`w-6 h-6`, `text-amber-600`)
+- Subtítulo (`l.693`): `text-xs`, `text-slate-500`
+- Cards resumo (`l.700-715`): `flex gap-2`, `px-3 py-2`, `rounded-xl`, `bg-amber-500/10` (Em Aberto), `bg-emerald-500/10` (Recebido), `bg-amber-600` (botão Adicionar dívida)
+- Busca (`l.720-731`): `p-4`, `rounded-2xl`, `bg-white`/`dark:bg-[#18181b]`, `border-slate-200`/`dark:border-[#27272a]`, `shadow-sm`
+- Cards cliente (`l.764-1074`): `bg-white`/`dark:bg-[#18181b]`, `border-slate-200`/`dark:border-[#27272a]`, `rounded-2xl`, `shadow-sm`
+- Card expandido (`l.872-1074`): `p-4`, `border-b`, `bg-slate-50`/`dark:bg-[#09090b]`
+- Abas (`l.875-892`): `flex gap-1`, `p-1`, `bg-slate-100`/`dark:bg-[#09090b]`, `rounded-xl`, botões `rounded-lg`, `text-[11px]`
+- Itens (`l.896-975`): `space-y-1.5`, `max-h-48`, `overflow-y-auto`, cards internos `bg-slate-50`/`dark:bg-[#09090b]`, `border-slate-100`/`dark:border-[#27272a]`
+- Pagamentos (`l.1003-1047`): `px-3 py-2`, `rounded-xl`, `bg-emerald-500/10`, `border-emerald-500/20`
+- Botões sticky (`l.1049-1072`): `sticky bottom-2`, `bg-white/95`, `backdrop-blur`, `shadow-lg`
+- Modal pagamento (`l.1080-1137`): `fixed inset-0`, `z-50`, `bg-slate-900/80`, `backdrop-blur-sm`, `max-w-sm`, `rounded-2xl`, `shadow-2xl`, `p-6`
+- Modal dívida (`l.1140+` — confirmado pelo código): `fixed inset-0`, `z-50`, `bg-slate-900/80`, `backdrop-blur-sm`
+- Nenhuma alteração aplicada neste bloco (leitura confirmada dos elementos visuais via código fonte).

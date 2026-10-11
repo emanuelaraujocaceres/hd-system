@@ -945,6 +945,61 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // ─── DEFESA: limpeza de registros corrompidos ao montar ────────────
+  useEffect(() => {
+    try {
+      const productsRaw = localStorage.getItem('hd_system_products');
+      if (productsRaw) {
+        const arr = JSON.parse(productsRaw);
+        const clean = arr.filter((p: any) => (p?.name || '').trim() !== '');
+        if (clean.length !== arr.length) {
+          localStorage.setItem('hd_system_products', JSON.stringify(clean));
+          console.log(`[App-Cleanup] Removidos ${(arr.length - clean.length)} produto(s) corrompido(s) sem nome`);
+        }
+      }
+      const categoriesRaw = localStorage.getItem('hd_system_categories');
+      if (categoriesRaw) {
+        const arr = JSON.parse(categoriesRaw);
+        const clean = arr.filter((c: any) => (c?.name || '').trim() !== '');
+        if (clean.length !== arr.length) {
+          localStorage.setItem('hd_system_categories', JSON.stringify(clean));
+          console.log(`[App-Cleanup] Removidos ${(arr.length - clean.length)} categoria(s) corrompida(s)`);
+        }
+      }
+      const customersRaw = localStorage.getItem('hd_system_customers');
+      if (customersRaw) {
+        const arr = JSON.parse(customersRaw);
+        const clean = arr.filter((c: any) => (c?.name || '').trim() !== '');
+        if (clean.length !== arr.length) {
+          localStorage.setItem('hd_system_customers', JSON.stringify(clean));
+          console.log(`[App-Cleanup] Removidos ${(arr.length - clean.length)} cliente(s) corrompido(s)`);
+        }
+      }
+      const sessionsRaw = localStorage.getItem('hd_system_customer_sessions');
+      if (sessionsRaw) {
+        const arr = JSON.parse(sessionsRaw);
+        const validStatus = ['active', 'completed', 'cancelled'];
+        const clean = arr.filter((s: any) => validStatus.includes(s?.status));
+        if (clean.length !== arr.length) {
+          localStorage.setItem('hd_system_customer_sessions', JSON.stringify(clean));
+          console.log(`[App-Cleanup] Removidos ${(arr.length - clean.length)} sessao(oes) com status invalido`);
+        }
+      }
+      const tablesRaw = localStorage.getItem('hd_system_tables');
+      if (tablesRaw) {
+        const arr = JSON.parse(tablesRaw);
+        const validStatus = ['active', 'inactive'];
+        const clean = arr.filter((t: any) => validStatus.includes(t?.status));
+        if (clean.length !== arr.length) {
+          localStorage.setItem('hd_system_tables', JSON.stringify(clean));
+          console.log(`[App-Cleanup] Removidos ${(arr.length - clean.length)} mesa(s) com status invalido`);
+        }
+      }
+    } catch (e) {
+      console.warn('[App-Cleanup] Erro ao limpar registros corrompidos:', e);
+    }
+  }, []);
+
   // ─── SUPABASE AUTH SESSION ──────────────────────────────────────────
   // On mount, check for existing Supabase Auth session.
   // Listen for auth state changes (sign out, token refresh, etc.).

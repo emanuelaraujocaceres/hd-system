@@ -536,6 +536,16 @@ class SupabaseSyncService {
       // e o Realtime não dispara. Conflict em store_branch_id faz todo
       // dispositivo convergir na única linha da filial. Também removemos `id`
       // do payload para o PK não mudar após a criação.
+      // Defesa contra payloads corrompidos (BUG-037 + dados vazios): rejeita
+      // registros com campos obrigatórios vazios/nulos antes de tentar o
+      // upsert — evita que a fila fique presa em retry infinito.
+      const REQUIRED_FIELDS: Record<TableName, string[]> = { products: ['name'], categories: ['name'], customers: ['name'], suppliers: ['name'], sales: ['status'], sale_items: ['sale_id', 'product_id'], financial_transactions: [], cash_sessions: ['status'], stock_movements: ['product_id'], store_branches: ['name'], system_users: ['name', 'email'], system_settings: [], scanned_boletos: [], credit_payments: ['sale_id'], nf_records: ['nf_number'], footer_messages: [], media_devices: [], printers: ['port'], tables: ['name', 'status'], customer_sessions: ['table_id', 'status'], digital_menu_config: [], branch_themes: [], api_keys: ['key_hash'], delivery_settings: [], delivery_neighborhoods: ['neighborhood'], delivery_distance_rates: ['min_km', 'max_km'], delivery_orders: ['sale_id'], delivery_worker_earnings: [], module_visibility: [], product_lots: ['product_id'], product_recipes: ['composite_product_id'], open_containers: ['product_id'], stock_loss_log: ['product_id'], payment_terminals: [], pix_config: ['chave_pix'], sale_item_payments: ['sale_item_id'], };
+      const required = REQUIRED_FIELDS[table] || [];
+      const missing = required.filter((f) => { const v = row?.[f]; return v === undefined || v === null || v === '' || (typeof v === 'string' && v.trim() === ''); });
+      if (missing.length > 0) {
+        console.warn(`[HD-Sync] 🚫 Upsert ${table} rejeitado — campos obrigatórios vazios: ${missing.join(', ')} (id: ${row?.id || 'unknown'})`);
+        return { ok: false, error: { message: `Campos obrigatórios vazios: ${missing.join(', ')}`, code: 'REQUIRED_FIELD_MISSING' } };
+      }
       const onConflict = table === 'module_visibility' ? 'store_branch_id' : 'id';
       const payload = table === 'module_visibility'
         ? (() => { const { id, ...rest } = row; return rest; })()

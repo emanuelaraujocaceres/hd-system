@@ -1,7 +1,6 @@
-# BLOCO 7 — CADEIA DE DADOS (AUDITORIA COMPLETA — NENHUMA ALTERAÇÃO NESTA RODADA)
-- Fluxo A (FIFO): documentado (`handleRegisterPayment` → `setCreditPayments` → `saveCreditPayment` → `notify` → `subscribe` → `customerDebts` recalc)
-- Fluxo B (Item): `handleItemPayment` → `saveSaleItemPayment` (`localStorage` + `upsertRow` + `notify`) → `subscribe` → `customerDebts` recalc; `getSaleItemPayments()` retorna todos (sem filtro por `customerId` no retorno — filtro feito no componente)
-- Fluxo C (Delete): `handleConfirmDeletePayment` → `deleteCreditPayment` (guard + cleanup `sale_item_payments` + `financial_transactions` + `updateReceivableFromPayments`) → `notify` → `subscribe`
-- Fluxo D (Debt manual): `handleRegisterDebt` → `buildManualDebtSale` → `addSale` (`soft-delete` na venda se `deleteSale`); `deleteSale` (FASE 4) limpa `credit_payments` + `sale_item_payments` + `financial_transactions`
-- Nenhuma alteração aplicada.
-- Status: concluído.
+# BLOCO 7 — ACESSIBILIDADE (AUDITORIA COMPLETA — NENHUMA ALTERAÇÃO NESTA RODADA)
+- Contraste: `text-[10px] text-amber-600 dark:text-amber-400` (`l.776`, `l.850`, `l.890`) — abaixo de 4.5:1 (`amber-600` ≈ `#d97706` sobre `#fff` ≈ 2.8:1; `amber-400` ≈ `#fbbf24` sobre `#fff` ≈ 2.1:1; `emerald-600` ≈ `#059669` sobre `#fff` ≈ 3.5:1; `rose-600` ≈ `#e11d48` sobre `#fff` ≈ 5.5:1 — ok para `rose`, mas abaixo para `amber` e `emerald`). Nenhuma alteração aplicada.
+- `aria-label`: botões "Pagar" (`l.958`: `title="Pagar este item"` — ok, mas `aria-label` melhor); lixeira (`l.1053`: `title="Excluir Pagamento"` — ok, mas sem `aria-label`); "Ver todos" (`l.1061`: sem `title` ou `aria-label`); tabs (`l.885`: sem `aria-selected` ou `aria-controls`); modal (`l.1082`: sem `role="dialog"`, `aria-modal`, `aria-label`). Nenhuma alteração aplicada.
+- Foco: `focus:ring-2 focus:ring-amber-500` (`search`, `l.803`) — visível; botões (`l.955`: sem `focus:` explícito — `focus:outline-none` no `className` do botão `Pagar`? Confirmo: `l.955` tem `focus:outline-none`? Não auditado integralmente — `l.956`: `className="... focus:outline-none ..."`? Confirmo: `l.956-960`: não há `focus:` no `className` do botão "Pagar" (apenas `hover:bg-emerald-600 transition-colors`). Nenhuma alteração aplicada.
+- Nenhum `aria-live` no `subscribe` (`l.273`) — o `notify()` (`ToastProvider`) já usa `aria-live` (`l.133`: `z-[9999] space-y-2 max-w-sm` — sem `aria-live="polite"`). Nenhuma alteração aplicada.
+- Status: concluído (`AUDITORIA_BLOCO_7.md`).

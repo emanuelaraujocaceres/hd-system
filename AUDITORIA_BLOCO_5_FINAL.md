@@ -1,8 +1,9 @@
-# BLOCO 5 — FUNÇÕES DO STORAGE SERVICE (AUDITORIA COMPLETA — NENHUMA ALTERAÇÃO NESTA RODADA)
-- `getCreditPayments` (l.3989-3996): filtro `validSaleIds` mantido; `getSales()` não auditado integralmente (não encontrado se filtra `deleted_at`)
-- `saveCreditPayment` (l.5001-5014): `notify()` via `this.set` + `this.syncCreditPayment` + `updateReceivableFromPayments`
-- `deleteCreditPayment` (l.5083-5176): guard `!id` + cleanup `sale_item_payments` + `financial_transactions` + `updateReceivableFromPayments` + `notify()`
-- `saveSaleItemPayment` (l.5017-5119): `localStorage` + `syncService.upsertRow('sale_item_payments', ...)` + `saveCreditPayment({isItemPayment: true})`
-- `getSaleItemPayments` (l.5121-5123): retorna todos (sem filtro `customerId` no retorno)
-- `saveFinancialAccount`: existe (`l.4903`); `deleteFinancialAccount` existe (`l.4903-4924`); `deleteCreditPayment` NÃO chama `deleteFinancialAccount` (limpo via `filter` no `deleteCreditPayment` — `linkedAccounts` com `category === 'fiado_payment'`)
-- Status: concluído (correções aplicadas confirmadas; nenhuma alteração nova).
+# BLOCO 5 — FEEDBACK E ESTADOS (AUDITORIA COMPLETA — NENHUMA ALTERAÇÃO NESTA RODADA)
+- `addToast` (`FiadosView.tsx`): aceita `addToast('error', 'msg')` (posicional, l.23 `Toast.tsx`), `addToast({type, message})` (objeto, l.94), `addToast('success', 'msg', 6000, 'Undo', fn)` (undo — parâmetro ignorado, `_actionLabel`/`_onAction`). Nenhum problema funcional.
+- `useToast()` (`FiadosView.tsx`, l.23): retorna `{addToast}`; usado corretamente (l.386, 494, 495, 583, etc.). Nenhum `ReferenceError` (`BUG-032` corrigido anteriormente — `import { useToast }` + `const { addToast } = useToast()` presente).
+- `ToastContainer` (`Toast.tsx`, l.133-139): `fixed top-4 right-4`, `z-[9999]`, `max-w-sm`. Posicionamento consistente com resto do sistema.
+- `ToastItem` (`Toast.tsx`, l.157-164): `animate-[slideIn_0.3s_ease-out]`, `bgColors` por tipo (`emerald`, `rose`, `amber`, `blue`), `border` por tipo. Consistente com paleta do sistema.
+- `posAudio.chime()` (`audioService.ts` — não auditado integralmente, mas referenciado): som usado para sucesso; `posAudio.error()` para erro; `posAudio.click()` para click. Nenhuma alteração aplicada.
+- `registeringPayment` / `registeringDebt`: `useState` booleano (`false` inicial); `setRegisteringPayment(true)` antes da operação; `setRegisteringPayment(false)` no `finally` (l.501-503, 647-648). Nenhum bloqueio de UI durante a operação (não há `disabled` no botão, apenas `setState`). Nenhuma alteração aplicada.
+- Nenhum `loading` state visível no botão durante a operação. Nenhuma alteração aplicada (não solicitado pelo usuário para esta auditoria).
+- Status: concluído (leitura confirmada; nenhuma alteração aplicada).
