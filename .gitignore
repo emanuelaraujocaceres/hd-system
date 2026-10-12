@@ -33,3 +33,7 @@ output.json
 test_rpc.ps1
 supabase/.temp/
 supabase/migrations-backup-*/
+
+# Backups locais
+*.bak
+*.bak-*

@@ -252,6 +252,22 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
       return;
     }
     try {
+      // Verifica se existe sessao ANTERIOR (completed/cancelled) - se sim, so visualiza
+      const previousSession = customerSessions
+        .filter((s) => s.tableId === group.table.id && s.status !== 'active')
+        .sort((a, b) =>
+          new Date(b.updatedAt || b.openedAt).getTime() -
+          new Date(a.updatedAt || a.openedAt).getTime()
+        )[0];
+
+      if (previousSession) {
+        // So visualiza a comanda anterior SEM reativar
+        const { session } = abrirComanda(group.table, { readOnly: true });
+        posAudio.click();
+        setDetailSessionId(session.id);
+        return;
+      }
+
       const { session, attached } = abrirComanda(group.table);
       if (attached > 0) {
         addToast('info', `${attached} pedido(s) pendente(s) anexado(s) à comanda de ${group.table.name}.`);

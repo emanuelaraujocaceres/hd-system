@@ -1028,7 +1028,7 @@ export const FiadosView: React.FC<FiadosViewProps> = ({ sales, customers, user, 
                               }}
                               className="mt-1 ml-auto px-3 py-2 min-h-[44px] rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 transition-colors"
                               title="Pagar este item"
-                              aria-label={`Pagar item ${item.productName}`}`
+                              aria-label={`Pagar item ${item.productName}`}
                             >
                               <DollarSign className="w-3.5 h-3.5" />
                               Pagar

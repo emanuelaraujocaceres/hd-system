@@ -110,7 +110,10 @@ export function getTotalComanda(comandaId: string): number {
  *
  * Retorna a sessão ativa resultante + quantas vendas órfãs foram anexadas.
  */
-export function abrirComanda(table: Table): { session: CustomerSession; attached: number } {
+export function abrirComanda(
+  table: Table,
+  options?: { readOnly?: boolean }
+): { session: CustomerSession; attached: number } {
   const all = storageService.getCustomerSessions().filter((s) => s.tableId === table.id);
   let session: CustomerSession | null = all.find((s) => s.status === 'active') || null;
   let attached = 0;
@@ -118,6 +121,11 @@ export function abrirComanda(table: Table): { session: CustomerSession; attached
   if (!session) {
     const previous = all.find((s) => s.status !== 'active');
     if (previous) {
+      // ✅ Se for readOnly (só visualizar), NÃO reativa a comanda
+      if (options?.readOnly) {
+        return { session: previous, attached: 0 };
+      }
+      
       session = {
         ...previous,
         status: 'active',
