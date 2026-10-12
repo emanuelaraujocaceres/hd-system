@@ -66,7 +66,24 @@ export function buscarItens(comandaId: string): ItemComanda[] {
   );
   const items: ItemComanda[] = [];
   for (const sale of sales) {
-    for (const it of sale.items || []) {
+    const saleItems = sale.items || [];
+    // Venda avulsa: tem valor mas sem itens vinculados (dados legados)
+    if (saleItems.length === 0 && (sale.total || 0) > 0) {
+      items.push({
+        saleId: sale.id,
+        saleItemId: `avulso-${sale.id}`,
+        productId: '__AVULSO__',
+        productName: sale.notes?.trim() || 'Venda avulsa',
+        quantity: 1,
+        unitPrice: sale.total,
+        total: sale.total,
+        saleStatus: sale.status,
+        kitchenStatus: sale.kitchenStatus,
+        createdAt: sale.date || sale.updatedAt || '',
+      });
+      continue;
+    }
+    for (const it of saleItems) {
       items.push({
         saleId: sale.id,
         saleItemId: `${sale.id}-${it.productId}`,

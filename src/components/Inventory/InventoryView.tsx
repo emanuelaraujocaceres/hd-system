@@ -43,6 +43,7 @@ import { MoneyInput, parseBrlToNumber, formatNumberToBrl } from '../shared/Money
 import { friendlyErrorMessage } from '../../lib/friendlyError';
 import { productSchema } from '../../validators/schemas';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { ProductImage } from '../shared/ProductImage';
 import { uploadProductImage } from '../../lib/supabase';
 import { undoManager } from '../../lib/undoManager';
 import { getProductsNeedingImageResync } from '../../lib/productImageSync';
@@ -1189,7 +1190,7 @@ minStock: parseInt(formMinStock) || 0,
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <img
+                          <ProductImage
                             src={p.imageUrl}
                             alt={p.name}
                             className="w-10 h-10 rounded-xl object-cover bg-slate-100 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a]"
@@ -1395,7 +1396,7 @@ minStock: parseInt(formMinStock) || 0,
                     className="mt-1.5 rounded text-indigo-600 shrink-0"
                     aria-label={`Selecionar ${p.name}`}
                   />
-                  <img
+                  <ProductImage
                     src={p.imageUrl}
                     alt={p.name}
                     className="w-14 h-14 rounded-xl object-cover bg-slate-100 dark:bg-[#09090b] border border-slate-200 dark:border-[#27272a] shrink-0"
@@ -1822,7 +1823,7 @@ minStock: parseInt(formMinStock) || 0,
                 <div className="flex flex-col sm:flex-row items-center gap-3">
                   <div className="w-20 h-20 rounded-xl bg-white dark:bg-[#18181b] border border-slate-200 dark:border-[#27272a] overflow-hidden shrink-0 shadow-sm flex items-center justify-center relative group">
                     {formImageUrl ? (
-                      <img
+                      <ProductImage
                         src={formImageUrl}
                         alt="Preview"
                         className="w-full h-full object-cover"
@@ -2219,7 +2220,7 @@ minStock: parseInt(formMinStock) || 0,
               </div>
               {stockTargetProduct && (
                 <div className="p-2 rounded-lg bg-indigo-500/5 border border-indigo-500/20 flex items-center gap-2 text-xs">
-                  <img src={stockTargetProduct.imageUrl} alt="" className="w-8 h-8 rounded object-cover" />
+                  <ProductImage src={stockTargetProduct.imageUrl} alt="" className="w-8 h-8 rounded object-cover" />
                   <div>
                     <p className="font-bold text-slate-900 dark:text-white">{stockTargetProduct.name}</p>
                     <p className="text-[10px] text-slate-400">Estoque atual: {stockTargetProduct.currentStock} {stockTargetProduct.unit}</p>

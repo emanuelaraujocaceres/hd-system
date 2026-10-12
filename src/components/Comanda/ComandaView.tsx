@@ -587,7 +587,14 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
                   {item.quantity}x
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{item.productName}</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                    {item.productName}
+                    {item.productId === '__AVULSO__' && (
+                      <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-slate-500/10 text-slate-500 border border-slate-500/20 uppercase">
+                        AVULSO
+                      </span>
+                    )}
+                  </p>
                   <p className="text-[11px] text-slate-500">
                     R$ {item.unitPrice.toFixed(2)} un
                     {item.kitchenStatus === 'closing_request' ? (
@@ -598,6 +605,7 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
                   </p>
                 </div>
                 <span className="text-sm font-bold text-slate-900 dark:text-white">R$ {item.total.toFixed(2)}</span>
+                {item.productId !== '__AVULSO__' && (
                 <button
                   onClick={() => handleRemoveSale(item.saleId)}
                   disabled={removingSaleId === item.saleId}
@@ -606,6 +614,7 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
                 >
                   {removingSaleId === item.saleId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 </button>
+                )}
               </div>
             ))
           )}
