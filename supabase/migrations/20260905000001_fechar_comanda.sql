@@ -109,7 +109,7 @@ BEGIN
       AND status = 'pending'
       AND deleted_at IS NULL
       AND organization_id = v_session.organization_id
-      AND store_branch_id = v_session.store_branch_id
+      AND (store_branch_id IS NOT DISTINCT FROM v_session.store_branch_id)
     FOR UPDATE
   LOOP
     UPDATE sales SET

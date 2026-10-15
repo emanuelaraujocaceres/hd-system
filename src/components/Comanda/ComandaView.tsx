@@ -137,8 +137,8 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
         name: 'Sem Mesa',
         qrToken: '',
         status: 'active',
-        storeBranchId: user.storeBranchId,
-        organizationId: user.organizationId,
+        storeBranchId: user.storeBranchId || storageService.getSelectedBranchId() || undefined,
+        organizationId: user.organizationId || storageService.getCurrentOrgId() || undefined,
         createdAt: '',
         updatedAt: '',
       };
@@ -300,8 +300,8 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
         number: undefined, // número opcional (sem número, igual a Settings)
         qrToken: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
         status: 'active',
-        storeBranchId: user.storeBranchId,
-        organizationId: user.organizationId,
+        storeBranchId: user.storeBranchId || storageService.getSelectedBranchId() || undefined,
+        organizationId: user.organizationId || storageService.getCurrentOrgId() || undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
