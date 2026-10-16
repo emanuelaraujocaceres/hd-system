@@ -48,6 +48,7 @@ export interface AddItemInput {
   session: CustomerSession;
   operatorName: string;
   operatorId: string;
+  tableName?: string; // Nome da mesa para identificar na venda
 }
 
 export interface FecharComandaResult {
@@ -200,7 +201,7 @@ export async function adicionarItem(input: AddItemInput): Promise<{ success: boo
     date: now,
     operatorId: input.operatorId,
     operatorName: input.operatorName,
-    customerName: input.session.customerName || 'Cliente Não Identificado',
+    customerName: input.session.customerName || input.tableName || 'Cliente Não Identificado',
     storeBranchId: input.session.storeBranchId || storageService.getSelectedBranchId(),
     organizationId: input.session.organizationId,
     tableId: input.session.tableId || undefined,

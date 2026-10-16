@@ -432,6 +432,7 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
         session: detailSession,
         operatorName: user.name,
         operatorId: user.id,
+        tableName: detailTable?.name || detailSession?.tableId,
       });
       if (res.success) {
         posAudio.click();
@@ -485,10 +486,10 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
       if (pendingSales.length > 0) {
         // Usa saveSale para persistir, notificar e sincronizar ao cloud
         for (const s of pendingSales) {
-          // Se há cliente selecionado, vincula à venda no fechamento
+          // Se há cliente selecionado, vincula; senão, usa o nome da mesa/comanda
           const saleWithCustomer = selectedCustomer
             ? { ...s, status: 'completed' as const, payments, customerId: selectedCustomer.id, customerName: selectedCustomer.name, updatedAt: new Date().toISOString() }
-            : { ...s, status: 'completed' as const, payments, updatedAt: new Date().toISOString() };
+            : { ...s, status: 'completed' as const, payments, customerName: detailTable?.name || detailSession?.tableId || 'Cliente Não Identificado', updatedAt: new Date().toISOString() };
           storageService.saveSale(saleWithCustomer);
         }
       }
