@@ -1660,6 +1660,10 @@ updateCategoryFromRemote(row: any) {
    * idempotent and cannot cause double-counting. Cloud is updated via
    * syncCaixaSession which does upsertRow with onConflict:'id'.
    */
+  recalcAndSyncCaixaPublic(syncToCloud = false): void {
+    this.recalcAndSyncCaixa(syncToCloud);
+  }
+
   private recalcAndSyncCaixa(syncToCloud = false): void {
     const session = this.getActiveCaixaSession();
     if (!session || session.status !== 'open') return;

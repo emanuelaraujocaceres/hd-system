@@ -493,6 +493,9 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
           storageService.saveSale(saleWithCustomer);
         }
       }
+      // Força recálculo do caixa local imediatamente (sem esperar eco do Realtime)
+      // para que o caixa do menu reflita a comanda fechada.
+      (storageService as any).recalcAndSyncCaixaPublic?.(true);
       console.log(`[Comanda] ✅ Comanda ${detailSession?.tableId || ''} fechada — ${pendingSales.length} venda(s) completed.`);
       // PaymentModal toca o chime no sucesso — aqui só atualizamos a UI
       addToast('success', `Comanda ${detailTable ? detailTable.name : ''} fechada com sucesso! R$ ${(res.total ?? total).toFixed(2)}`);
