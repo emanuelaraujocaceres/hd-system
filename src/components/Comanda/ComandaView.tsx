@@ -485,7 +485,11 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
       if (pendingSales.length > 0) {
         // Usa saveSale para persistir, notificar e sincronizar ao cloud
         for (const s of pendingSales) {
-          storageService.saveSale({ ...s, status: 'completed', payments, updatedAt: new Date().toISOString() });
+          // Se há cliente selecionado, vincula à venda no fechamento
+          const saleWithCustomer = selectedCustomer
+            ? { ...s, status: 'completed' as const, payments, customerId: selectedCustomer.id, customerName: selectedCustomer.name, updatedAt: new Date().toISOString() }
+            : { ...s, status: 'completed' as const, payments, updatedAt: new Date().toISOString() };
+          storageService.saveSale(saleWithCustomer);
         }
       }
       console.log(`[Comanda] ✅ Comanda ${detailSession?.tableId || ''} fechada — ${pendingSales.length} venda(s) completed.`);
