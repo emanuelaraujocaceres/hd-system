@@ -473,6 +473,33 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
     if (!detailSession) return { success: false, message: 'Sessão não encontrada.' };
     const res = await fecharComanda(detailSession.id, payments, user.name);
     if (res.success) {
+      // Força atualização local das vendas 'pending' → 'completed' para a
+      // mesma sessão, sem esperar o eco do Realtime. Isso garante que o
+      // caixa (recalcAndSyncCaixa) e o Financeiro (filteredSales) reflitam
+      // imediatamente após o fechamento da comanda pelo operador.
+      const sessionId = detailSession?.id;
+      const allSales = storageService.getSales();
+      const pendingSales = allSales.filter(
+        (s) => (s.customerSessionId === sessionId || (sessionId && s.tableId === detailSession?.tableId)) && s.status === 'pending'
+      );
+      if (pendingSales.length > 0) {
+        const updatedSales = allSales.map((s) =>
+          pendingSales.some((p) => p.id === s.id)
+            ? { ...s, status: 'completed' as const, payments, updatedAt: new Date().toISOString() }
+            : s
+        );
+        // Grava no localStorage via o mesmo mecanismo do storageService
+        const storageKey = 'hd_system_sales';
+        try {
+          const rawBranchId = storageService.getSelectedBranchId();
+          const orgId = storageService.getCurrentOrgId();
+          const key = rawBranchId ? `hd_system_sales_${orgId}` : storageKey;
+          localStorage.setItem(key, JSON.stringify(updatedSales));
+        } catch (e) {
+          console.warn('[Comanda] Falha ao atualizar vendas localmente após fechamento:', e);
+        }
+      }
+      console.log(`[Comanda] ✅ Comanda ${detailSession?.tableId || ''} fechada — ${pendingSales.length} venda(s) marcada(s) completed localmente.`);
       // PaymentModal toca o chime no sucesso — aqui só atualizamos a UI
       addToast('success', `Comanda ${detailTable ? detailTable.name : ''} fechada com sucesso! R$ ${(res.total ?? total).toFixed(2)}`);
       setSelectedCustomer(null);
