@@ -483,23 +483,12 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
         (s) => (s.customerSessionId === sessionId || (sessionId && s.tableId === detailSession?.tableId)) && s.status === 'pending'
       );
       if (pendingSales.length > 0) {
-        const updatedSales = allSales.map((s) =>
-          pendingSales.some((p) => p.id === s.id)
-            ? { ...s, status: 'completed' as const, payments, updatedAt: new Date().toISOString() }
-            : s
-        );
-        // Grava no localStorage via o mesmo mecanismo do storageService
-        const storageKey = 'hd_system_sales';
-        try {
-          const rawBranchId = storageService.getSelectedBranchId();
-          const orgId = storageService.getCurrentOrgId();
-          const key = rawBranchId ? `hd_system_sales_${orgId}` : storageKey;
-          localStorage.setItem(key, JSON.stringify(updatedSales));
-        } catch (e) {
-          console.warn('[Comanda] Falha ao atualizar vendas localmente após fechamento:', e);
+        // Usa saveSale para persistir, notificar e sincronizar ao cloud
+        for (const s of pendingSales) {
+          storageService.saveSale({ ...s, status: 'completed', payments, updatedAt: new Date().toISOString() });
         }
       }
-      console.log(`[Comanda] ✅ Comanda ${detailSession?.tableId || ''} fechada — ${pendingSales.length} venda(s) marcada(s) completed localmente.`);
+      console.log(`[Comanda] ✅ Comanda ${detailSession?.tableId || ''} fechada — ${pendingSales.length} venda(s) completed.`);
       // PaymentModal toca o chime no sucesso — aqui só atualizamos a UI
       addToast('success', `Comanda ${detailTable ? detailTable.name : ''} fechada com sucesso! R$ ${(res.total ?? total).toFixed(2)}`);
       setSelectedCustomer(null);
