@@ -1599,13 +1599,22 @@ updateCategoryFromRemote(row: any) {
     };
 
     // ── Guard anti-eco (Comanda) ───────────────────────────────
-    if (mapped.status === 'pending' && existing) {
+    // Se remota = pending, mesma sessão/table → suprime recálculo/notificação
+    // (eco do operador). Se a venda local já está 'completed', NUNCA sobrescreve
+    // com 'pending' (evita que o eco reverta o fechamento da comanda).
+    if (existing) {
       const sameSess = mapped.customerSessionId === existing.customerSessionId;
       const sameTbl = mapped.tableId === existing.tableId;
       const sameItm = (mapped.items?.length || 0) === (existing.items?.length || 0);
-      if (sameSess && sameTbl && sameItm && mapped.status === existing.status) {
+      // Eco do operador: mesma venda, mesma comanda, ainda pending → ignora
+      if (mapped.status === 'pending' && sameSess && sameTbl && sameItm) {
         console.log(`[HD-Sync] ⏭️ Eco suprimido: pending ${mapped.id} (sessão ${mapped.customerSessionId})`);
-        return; // Não modifica localStorage, não notifica, não recalcula caixa
+        return;
+      }
+      // Se local já está completed e remoto ainda é pending → NÃO reverte
+      if (existing.status === 'completed' && mapped.status === 'pending') {
+        console.log(`[HD-Sync] ⏭️ Eco ignorado: venda ${mapped.id} já completed localmente, remoto ainda pending`);
+        return;
       }
     }
 
