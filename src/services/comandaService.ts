@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { storageService } from './storageService';
 import { CustomerSession, Product, Sale, PaymentDetails, Table } from '../types';
+import { globalNotificationService } from './globalNotificationService';
 
 /**
  * comandaService — operações de gerenciamento da comanda (mesa) pelo OPERADOR.
@@ -226,7 +227,10 @@ export async function adicionarItem(input: AddItemInput): Promise<{ success: boo
     updatedAt: now,
   };
 
-  return storageService.addSale(sale);
+  const result = storageService.addSale(sale);
+  // Registra a venda local para suprimir eco do Realtime (notificação + caixa)
+  if (sale.code) globalNotificationService.markLocalSale(sale.code);
+  return result;
 }
 
 /**

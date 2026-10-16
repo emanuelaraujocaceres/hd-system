@@ -1598,6 +1598,17 @@ updateCategoryFromRemote(row: any) {
       notes: row.notes ?? existing?.notes ?? undefined,
     };
 
+    // ── Guard anti-eco (Comanda) ───────────────────────────────
+    if (mapped.status === 'pending' && existing) {
+      const sameSess = mapped.customerSessionId === existing.customerSessionId;
+      const sameTbl = mapped.tableId === existing.tableId;
+      const sameItm = (mapped.items?.length || 0) === (existing.items?.length || 0);
+      if (sameSess && sameTbl && sameItm && mapped.status === existing.status) {
+        console.log(`[HD-Sync] ⏭️ Eco suprimido: pending ${mapped.id} (sessão ${mapped.customerSessionId})`);
+        return; // Não modifica localStorage, não notifica, não recalcula caixa
+      }
+    }
+
     const idx = sales.findIndex((s) => s.id === mapped.id);
     if (idx >= 0) sales[idx] = mapped;
     else sales.unshift(mapped);

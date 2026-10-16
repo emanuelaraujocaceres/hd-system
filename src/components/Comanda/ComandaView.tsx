@@ -89,10 +89,25 @@ export const ComandaView: React.FC<ComandaViewProps> = ({
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates — com guard anti-eco:
+  // ignora eventos remotos de vendas 'pending' que já existem localmente
+  // com a mesma sessão/table (eco do operador na mesma comanda).
   useEffect(() => {
-    const unsub = storageService.subscribe(() => {
-      // Força re-render em qualquer mudança de storage (local ou remota)
+    const unsub = storageService.subscribe((key?: string, source?: string, payload?: any) => {
+      if (key?.includes('SALES') && source === 'remote' && payload) {
+        if (payload.status === 'pending') {
+          const sales = storageService.getSales();
+          const existingSale = sales.find((s) => s.id === payload.id);
+          if (existingSale &&
+              existingSale.customerSessionId === payload.customer_session_id &&
+              existingSale.tableId === payload.table_id &&
+              existingSale.status === 'pending') {
+            console.log(`[Comanda] ⏭️ Eco remoto ignorado: venda pending ${payload.id}`);
+            return; // Não força re-render
+          }
+        }
+      }
+      // Qualquer outra mudança (ou sem eco) → re-render normal
       setSearchTerm((prev) => prev);
     });
     return () => { unsub(); };
